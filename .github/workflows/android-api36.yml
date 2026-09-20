@@ -53,17 +53,12 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: ./gradlew --no-daemon connectedDebugAndroidTest
 
-      - name: Capture logcat
-        if: always()
-        run: adb logcat -d > api36-logcat.txt || true
-
       - name: Upload API 36 diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: api36-diagnostics-${{ github.sha }}
           path: |
-            api36-logcat.txt
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
           if-no-files-found: ignore
