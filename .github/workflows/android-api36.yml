@@ -51,7 +51,15 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: ./gradlew --no-daemon connectedDebugAndroidTest
+          script: |
+            adb shell wm size 412x915
+            adb shell settings put system font_scale 1.0
+            adb shell wm size
+            adb shell settings get system font_scale
+            ./gradlew --no-daemon connectedDebugAndroidTest
+            mkdir -p app/build/outputs/androidTest-results/compact-screen
+            adb exec-out screencap -p > app/build/outputs/androidTest-results/compact-screen/compact-412x915-normal-text.png
+            adb shell wm size reset
 
       - name: Upload API 36 diagnostics
         if: always()
