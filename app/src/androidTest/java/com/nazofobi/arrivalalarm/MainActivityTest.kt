@@ -16,17 +16,13 @@ class MainActivityTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
 
     private fun assertPhase(expected: String) {
-        rule.waitUntil(timeoutMillis = 5_000) {
-            runCatching {
-                rule.onNodeWithTag("phase").fetchSemanticsNode()
-                    .config.toString().contains(expected)
-            }.getOrDefault(false)
-        }
-        rule.onNodeWithTag("phase").assertTextContains(expected).assertIsDisplayed()
+        rule.waitForIdle()
+        rule.onNodeWithTag("phase")
+            .assertTextContains("Durum: $expected", substring = true)
+            .assertIsDisplayed()
     }
 
     @Test fun startDestinationArmedArrivedFlow() {
-        rule.waitForIdle()
         assertPhase("EMPTY")
         rule.onNodeWithTag("start").performClick()
         assertPhase("START_SELECTED")
