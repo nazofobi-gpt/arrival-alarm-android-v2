@@ -19,6 +19,7 @@ class MainActivityTest {
     private fun assertPhase(expected: String) {
         rule.waitForIdle()
         rule.onNodeWithTag("phase")
+            .performScrollTo()
             .assertTextContains("Durum: $expected", substring = true)
             .assertIsDisplayed()
     }
@@ -27,21 +28,22 @@ class MainActivityTest {
         assertPhase("EMPTY")
         rule.onNodeWithTag("start").performClick()
         assertPhase("START_SELECTED")
-        rule.onNodeWithTag("destination").assertIsEnabled().performClick()
+        rule.onNodeWithTag("destination").performScrollTo().assertIsEnabled().performClick()
         assertPhase("DESTINATION_SELECTED")
-        rule.onNodeWithTag("arm").assertIsEnabled().performClick()
+        rule.onNodeWithTag("arm").performScrollTo().assertIsEnabled().performClick()
         assertPhase("ARMED")
-        rule.onNodeWithTag("approach").assertIsEnabled().performClick()
+        rule.onNodeWithTag("approach").performScrollTo().assertIsEnabled().performClick()
         assertPhase("ARRIVED")
     }
 
     @Test fun staticTransitSearchItineraryAndOfflineRecreation() {
         rule.waitForIdle()
         rule.onNodeWithTag("transit-state")
+            .performScrollTo()
             .assertTextContains("READY", substring = true)
             .assertIsDisplayed()
 
-        rule.onNodeWithTag("start").performClick()
+        rule.onNodeWithTag("start").performScrollTo().performClick()
         assertPhase("START_SELECTED")
         rule.onNodeWithTag("search-airport").performScrollTo().performClick()
         rule.waitForIdle()
