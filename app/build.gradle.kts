@@ -45,6 +45,9 @@ dependencies {
     implementation(libs.androidx.compose.material3)
 
     testImplementation(libs.junit)
+    // JVM unit tests exercise the production org.json adapter. Android's compile-time
+    // org.json stubs are not executable on the host JVM, so provide the real JVM implementation.
+    testImplementation("org.json:json:20240303")
 
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.espresso.core)
