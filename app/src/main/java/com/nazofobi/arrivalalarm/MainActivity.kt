@@ -34,8 +34,11 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun ArrivalAlarmApp() {
     val controller = remember { JourneyController() }
+    val transitController = remember { TransitController() }
     var state by remember { mutableStateOf(controller.state) }
+    var transitState by remember { mutableStateOf(transitController.state) }
     fun act(block: JourneyController.() -> Unit) { controller.block(); state = controller.state }
+    fun transitAct(block: TransitController.() -> Unit) { transitController.block(); transitState = transitController.state }
 
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
         Surface(Modifier.fillMaxSize().padding(innerPadding)) {
@@ -70,6 +73,28 @@ fun ArrivalAlarmApp() {
                     enabled = state.phase == JourneyPhase.ARMED,
                     onClick = { act { onDistanceChanged(200.0) } },
                 ) { Text("Test: hedefe yaklaş") }
+
+                Text("Statik transit: ${transitState.loadState}", modifier = Modifier.testTag("transit-state"))
+                Button(
+                    modifier = Modifier.testTag("search-airport"),
+                    onClick = { transitAct { search("Flughafen") } },
+                ) { Text("Durak ara: Flughafen") }
+                if (transitState.matches.isNotEmpty()) {
+                    Text(transitState.matches.joinToString { it.name }, modifier = Modifier.testTag("stop-results"))
+                    Button(
+                        modifier = Modifier.testTag("plan-airport"),
+                        onClick = { transitAct { planFromFixtureStart("fixture-airport") } },
+                    ) { Text("Bremen Hbf → Flughafen rotası") }
+                }
+                transitState.journey?.let { journey ->
+                    val leg = journey.legs.single()
+                    Text("${leg.line} • ${leg.direction}", modifier = Modifier.testTag("itinerary-line"))
+                    Text(leg.stops.joinToString(" → ") { it.name }, modifier = Modifier.testTag("itinerary-stops"))
+                    Text(transitState.message.orEmpty(), modifier = Modifier.testTag("transit-message"))
+                }
+                if (transitState.loadState == TransitLoadState.EMPTY || transitState.loadState == TransitLoadState.DEGRADED) {
+                    Text(transitState.message.orEmpty(), modifier = Modifier.testTag("transit-message"))
+                }
             }
         }
     }
