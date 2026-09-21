@@ -15,15 +15,26 @@ import org.junit.runner.RunWith
 class MainActivityTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
 
+    private fun assertPhase(expected: String) {
+        rule.waitUntil(timeoutMillis = 5_000) {
+            runCatching {
+                rule.onNodeWithTag("phase").fetchSemanticsNode()
+                    .config.toString().contains(expected)
+            }.getOrDefault(false)
+        }
+        rule.onNodeWithTag("phase").assertTextContains(expected).assertIsDisplayed()
+    }
+
     @Test fun startDestinationArmedArrivedFlow() {
-        rule.onNodeWithTag("phase").assertTextContains("EMPTY").assertIsDisplayed()
+        rule.waitForIdle()
+        assertPhase("EMPTY")
         rule.onNodeWithTag("start").performClick()
-        rule.onNodeWithTag("phase").assertTextContains("START_SELECTED")
+        assertPhase("START_SELECTED")
         rule.onNodeWithTag("destination").assertIsEnabled().performClick()
-        rule.onNodeWithTag("phase").assertTextContains("DESTINATION_SELECTED")
+        assertPhase("DESTINATION_SELECTED")
         rule.onNodeWithTag("arm").assertIsEnabled().performClick()
-        rule.onNodeWithTag("phase").assertTextContains("ARMED")
+        assertPhase("ARMED")
         rule.onNodeWithTag("approach").assertIsEnabled().performClick()
-        rule.onNodeWithTag("phase").assertTextContains("ARRIVED")
+        assertPhase("ARRIVED")
     }
 }
