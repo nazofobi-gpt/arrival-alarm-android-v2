@@ -1,5 +1,6 @@
 package com.nazofobi.arrivalalarm
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -21,9 +22,38 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+
+class SharedPreferencesJourneyStateStore(context: Context) : JourneyStateStore {
+    private val prefs = context.getSharedPreferences("journey_state", Context.MODE_PRIVATE)
+
+    override fun load(): JourneyUiState? {
+        if (!prefs.contains("phase")) return null
+        fun point(prefix: String): GeoPoint? = if (prefs.contains("${prefix}_lat") && prefs.contains("${prefix}_lon")) {
+            GeoPoint(
+                Double.fromBits(prefs.getLong("${prefix}_lat", 0L)),
+                Double.fromBits(prefs.getLong("${prefix}_lon", 0L)),
+            )
+        } else null
+        val distance = if (prefs.contains("distance")) Double.fromBits(prefs.getLong("distance", 0L)) else null
+        val phase = runCatching { JourneyPhase.valueOf(prefs.getString("phase", JourneyPhase.EMPTY.name)!!) }
+            .getOrDefault(JourneyPhase.EMPTY)
+        return JourneyUiState(phase, point("start"), point("destination"), distance)
+    }
+
+    override fun save(state: JourneyUiState) {
+        prefs.edit().apply {
+            clear()
+            putString("phase", state.phase.name)
+            state.start?.let { putLong("start_lat", it.latitude.toBits()); putLong("start_lon", it.longitude.toBits()) }
+            state.destination?.let { putLong("destination_lat", it.latitude.toBits()); putLong("destination_lon", it.longitude.toBits()) }
+            state.distanceMeters?.let { putLong("distance", it.toBits()) }
+        }.apply()
+    }
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,7 +65,8 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun ArrivalAlarmApp() {
-    val controller = remember { JourneyController() }
+    val context = LocalContext.current.applicationContext
+    val controller = remember { JourneyController(stateStore = SharedPreferencesJourneyStateStore(context)) }
     val staticRepository = remember { FixtureStaticTransitRepository() }
     val transitController = remember { TransitController(staticRepository) }
     val realtimeRepository = remember {
