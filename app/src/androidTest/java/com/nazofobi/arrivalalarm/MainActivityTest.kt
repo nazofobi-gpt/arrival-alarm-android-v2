@@ -33,4 +33,44 @@ class MainActivityTest {
         rule.onNodeWithTag("approach").assertIsEnabled().performClick()
         assertPhase("ARRIVED")
     }
+
+    @Test fun staticTransitSearchItineraryAndOfflineRecreation() {
+        rule.waitForIdle()
+        rule.onNodeWithTag("transit-state")
+            .assertTextContains("READY", substring = true)
+            .assertIsDisplayed()
+
+        rule.onNodeWithTag("start").performClick()
+        assertPhase("START_SELECTED")
+        rule.onNodeWithTag("search-airport").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithTag("stop-results")
+            .assertTextContains("Flughafen", substring = true)
+            .assertIsDisplayed()
+        rule.onNodeWithTag("plan-airport").assertIsEnabled().performClick()
+        rule.waitForIdle()
+        rule.onNodeWithTag("itinerary-line")
+            .assertTextContains("6", substring = true)
+            .assertIsDisplayed()
+        rule.onNodeWithTag("itinerary-stops")
+            .assertTextContains("Bremen Hbf", substring = true)
+            .assertTextContains("Flughafen", substring = true)
+            .assertIsDisplayed()
+
+        rule.onNodeWithTag("destination").assertIsEnabled().performClick()
+        assertPhase("DESTINATION_SELECTED")
+        rule.onNodeWithTag("arm").assertIsEnabled().performClick()
+        assertPhase("ARMED")
+
+        rule.activityRule.scenario.recreate()
+        rule.waitForIdle()
+        rule.onNodeWithTag("transit-state")
+            .assertTextContains("READY", substring = true)
+            .assertIsDisplayed()
+        rule.onNodeWithTag("search-airport").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithTag("stop-results")
+            .assertTextContains("Flughafen", substring = true)
+            .assertIsDisplayed()
+    }
 }
