@@ -36,59 +36,42 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun ArrivalAlarmApp() {
     val controller = remember { JourneyController() }
-    val transitController = remember { TransitController() }
+    val staticRepository = remember { FixtureStaticTransitRepository() }
+    val transitController = remember { TransitController(staticRepository) }
+    val realtimeRepository = remember {
+        OverlayTransitRepository(staticRepository, VbnJsonRealtimeSource(), EpochClock { System.currentTimeMillis() / 1000 })
+    }
     var state by remember { mutableStateOf(controller.state) }
     var transitState by remember { mutableStateOf(transitController.state) }
+    var realtime by remember { mutableStateOf<TransitRealtimeOverlay?>(null) }
     fun act(block: JourneyController.() -> Unit) { controller.block(); state = controller.state }
     fun transitAct(block: TransitController.() -> Unit) { transitController.block(); transitState = transitController.state }
 
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
         Surface(Modifier.fillMaxSize().padding(innerPadding)) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text("Varış Alarmı", style = MaterialTheme.typography.headlineMedium)
                 Text("Durum: ${state.phase}", modifier = Modifier.testTag("phase"))
                 state.distanceMeters?.let { Text("Hedefe ${it.toInt()} m") }
                 state.error?.let { Text(it, modifier = Modifier.testTag("error")) }
-
-                Button(
-                    modifier = Modifier.testTag("start"),
-                    onClick = { act { selectStart(GeoPoint(52.2689, 10.5268)) } },
-                ) { Text("Başlangıcı belirle") }
-
-                Button(
-                    modifier = Modifier.testTag("destination"),
-                    enabled = state.start != null,
-                    onClick = { act { selectDestination(GeoPoint(52.2700, 10.5300)) } },
-                ) { Text("Hedefi seç") }
-
-                Button(
-                    modifier = Modifier.testTag("arm"),
-                    enabled = state.phase == JourneyPhase.DESTINATION_SELECTED,
-                    onClick = { act { arm() } },
-                ) { Text("Alarmı kur") }
-
-                Button(
-                    modifier = Modifier.testTag("approach"),
-                    enabled = state.phase == JourneyPhase.ARMED,
-                    onClick = { act { onDistanceChanged(200.0) } },
-                ) { Text("Test: hedefe yaklaş") }
+                Button(Modifier.testTag("start"), onClick = { act { selectStart(GeoPoint(52.2689, 10.5268)) } }) { Text("Başlangıcı belirle") }
+                Button(Modifier.testTag("destination"), enabled = state.start != null, onClick = { act { selectDestination(GeoPoint(52.2700, 10.5300)) } }) { Text("Hedefi seç") }
+                Button(Modifier.testTag("arm"), enabled = state.phase == JourneyPhase.DESTINATION_SELECTED, onClick = { act { arm() } }) { Text("Alarmı kur") }
+                Button(Modifier.testTag("approach"), enabled = state.phase == JourneyPhase.ARMED, onClick = { act { onDistanceChanged(200.0) } }) { Text("Test: hedefe yaklaş") }
 
                 Text("Statik transit: ${transitState.loadState}", modifier = Modifier.testTag("transit-state"))
-                Button(
-                    modifier = Modifier.testTag("search-airport"),
-                    onClick = { transitAct { search("Flughafen") } },
-                ) { Text("Durak ara: Flughafen") }
+                Button(Modifier.testTag("search-airport"), onClick = { transitAct { search("Flughafen") } }) { Text("Durak ara: Flughafen") }
                 if (transitState.matches.isNotEmpty()) {
                     Text(transitState.matches.joinToString { it.name }, modifier = Modifier.testTag("stop-results"))
                     Button(
                         modifier = Modifier.testTag("plan-airport"),
-                        onClick = { transitAct { planFromFixtureStart("fixture-airport") } },
+                        onClick = {
+                            transitAct { planFromFixtureStart("fixture-airport") }
+                            realtime = realtimeRepository.plan("fixture-bremen-hbf", "fixture-airport")?.realtime
+                        },
                     ) { Text("Bremen Hbf → Flughafen rotası") }
                 }
                 transitState.journey?.let { journey ->
@@ -96,6 +79,7 @@ fun ArrivalAlarmApp() {
                     Text("${leg.line} • ${leg.direction}", modifier = Modifier.testTag("itinerary-line"))
                     Text(leg.stops.joinToString(" → ") { it.name }, modifier = Modifier.testTag("itinerary-stops"))
                     Text(transitState.message.orEmpty(), modifier = Modifier.testTag("transit-message"))
+                    Text(realtime?.status ?: "Canlı veri bekleniyor • statik rota", modifier = Modifier.testTag("realtime-status"))
                 }
                 if (transitState.loadState == TransitLoadState.EMPTY || transitState.loadState == TransitLoadState.DEGRADED) {
                     Text(transitState.message.orEmpty(), modifier = Modifier.testTag("transit-message"))
