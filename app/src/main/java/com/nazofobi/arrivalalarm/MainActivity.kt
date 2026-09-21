@@ -8,12 +8,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
@@ -21,38 +27,49 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent {
-            MaterialTheme {
-                ArrivalAlarmApp()
-            }
-        }
+        setContent { MaterialTheme { ArrivalAlarmApp() } }
     }
 }
 
 @Composable
 fun ArrivalAlarmApp() {
+    val controller = remember { JourneyController() }
+    var state by remember { mutableStateOf(controller.state) }
+    fun act(block: JourneyController.() -> Unit) { controller.block(); state = controller.state }
+
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-        Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-        ) {
+        Surface(Modifier.fillMaxSize().padding(innerPadding)) {
             Column(
                 modifier = Modifier.padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(
-                    text = "Nereye gidiyoruz?",
-                    style = MaterialTheme.typography.headlineMedium,
-                )
-                Text(
-                    text = "Temiz V2 başlangıcı · Android 16 / API ${BuildContract.TARGET_SDK}",
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Text(
-                    text = "İlk kapı: GitHub Actions üzerinde tekrarlanabilir build ve API 36 emulator testi.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                Text("Varış Alarmı", style = MaterialTheme.typography.headlineMedium)
+                Text("Durum: ${state.phase}", modifier = Modifier.testTag("phase"))
+                state.distanceMeters?.let { Text("Hedefe ${it.toInt()} m") }
+                state.error?.let { Text(it, modifier = Modifier.testTag("error")) }
+
+                Button(
+                    modifier = Modifier.testTag("start"),
+                    onClick = { act { selectStart(GeoPoint(52.2689, 10.5268)) } },
+                ) { Text("Başlangıcı belirle") }
+
+                Button(
+                    modifier = Modifier.testTag("destination"),
+                    enabled = state.start != null,
+                    onClick = { act { selectDestination(GeoPoint(52.2700, 10.5300)) } },
+                ) { Text("Hedefi seç") }
+
+                Button(
+                    modifier = Modifier.testTag("arm"),
+                    enabled = state.phase == JourneyPhase.DESTINATION_SELECTED,
+                    onClick = { act { arm() } },
+                ) { Text("Alarmı kur") }
+
+                Button(
+                    modifier = Modifier.testTag("approach"),
+                    enabled = state.phase == JourneyPhase.ARMED,
+                    onClick = { act { onDistanceChanged(200.0) } },
+                ) { Text("Test: hedefe yaklaş") }
             }
         }
     }
@@ -60,8 +77,4 @@ fun ArrivalAlarmApp() {
 
 @Preview(showBackground = true)
 @Composable
-private fun ArrivalAlarmPreview() {
-    MaterialTheme {
-        ArrivalAlarmApp()
-    }
-}
+private fun ArrivalAlarmPreview() { MaterialTheme { ArrivalAlarmApp() } }
