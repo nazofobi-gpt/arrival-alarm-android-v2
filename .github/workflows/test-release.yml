@@ -1,0 +1,59 @@
+name: Publish V2 Test Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/test-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish test APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Test and build installable debug APK
+        run: ./gradlew --no-daemon lint testDebugUnitTest assembleDebug
+
+      - name: Prepare provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp app/build/outputs/apk/debug/app-debug.apk arrival-alarm-v2-0.1.0-test.apk
+          sha256sum arrival-alarm-v2-0.1.0-test.apk | tee SHA256SUMS.txt
+          printf 'source_commit=%s\n' "$GITHUB_SHA" | tee SOURCE_COMMIT.txt
+
+      - name: Publish GitHub test release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG='v0.1.0-v2-test'
+          gh release delete "$TAG" --cleanup-tag -y 2>/dev/null || true
+          gh release create "$TAG" \
+            arrival-alarm-v2-0.1.0-test.apk \
+            SHA256SUMS.txt \
+            SOURCE_COMMIT.txt \
+            --target "$GITHUB_SHA" \
+            --title 'Arrival Alarm V2 0.1.0 Test APK' \
+            --notes "Installable test APK for Arrival Alarm V2. Source commit: $GITHUB_SHA. Android target SDK 36. Unit/lint/build gates execute before publication. SHA256SUMS.txt is attached for integrity verification."
