@@ -15,6 +15,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -75,6 +76,9 @@ fun ArrivalAlarmApp() {
     var state by remember { mutableStateOf(controller.state) }
     var transitState by remember { mutableStateOf(transitController.state) }
     var realtime by remember { mutableStateOf<TransitRealtimeOverlay?>(null) }
+    var inferenceEnabled by remember { mutableStateOf(false) }
+    var inferenceResult by remember { mutableStateOf<TripInferenceResult?>(null) }
+    var confirmedTripId by remember { mutableStateOf<String?>(null) }
     fun act(block: JourneyController.() -> Unit) { controller.block(); state = controller.state }
     fun transitAct(block: TransitController.() -> Unit) { transitController.block(); transitState = transitController.state }
 
@@ -114,6 +118,78 @@ fun ArrivalAlarmApp() {
                 }
                 if (transitState.loadState == TransitLoadState.EMPTY || transitState.loadState == TransitLoadState.DEGRADED) {
                     Text(transitState.message.orEmpty(), modifier = Modifier.testTag("transit-message"))
+                }
+
+                Text("Sefer algılama (isteğe bağlı)", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (inferenceEnabled) "Açık • öneri hiçbir zaman alarmı otomatik kurmaz" else "Kapalı • konumdan sefer tahmini yapılmaz",
+                    modifier = Modifier.testTag("trip-inference-status"),
+                )
+                Switch(
+                    checked = inferenceEnabled,
+                    onCheckedChange = {
+                        inferenceEnabled = it
+                        inferenceResult = null
+                        confirmedTripId = null
+                    },
+                    modifier = Modifier.testTag("trip-inference-toggle"),
+                )
+                Button(
+                    onClick = {
+                        val now = System.currentTimeMillis() / 1000
+                        val observation = MovementObservation(
+                            point = GeoPoint(53.0831, 8.8131),
+                            speedMps = 8.0,
+                            bearingDegrees = 180.0,
+                            epochSeconds = now,
+                        )
+                        val candidates = listOf(
+                            TripCandidate(
+                                routeId = "fixture-6-south",
+                                line = "6",
+                                direction = "Flughafen Bremen",
+                                anchor = GeoPoint(53.0830, 8.8130),
+                                expectedBearingDegrees = 180.0,
+                                scheduledEpochSeconds = now,
+                                realtimeDelaySeconds = realtime?.delaySeconds,
+                            ),
+                            TripCandidate(
+                                routeId = "fixture-6-north",
+                                line = "6",
+                                direction = "Universität",
+                                anchor = GeoPoint(53.0830, 8.8130),
+                                expectedBearingDegrees = 0.0,
+                                scheduledEpochSeconds = now + 600,
+                            ),
+                        )
+                        inferenceResult = TripInferenceEngine(
+                            TripInferenceSettings(enabled = inferenceEnabled)
+                        ).infer(observation, candidates)
+                    },
+                    enabled = inferenceEnabled,
+                    modifier = Modifier.testTag("trip-inference-run"),
+                ) { Text("Sefer adayı hesapla") }
+                inferenceResult?.let { result ->
+                    val accepted = result.accepted
+                    if (accepted == null) {
+                        Text(result.reason, modifier = Modifier.testTag("trip-inference-result"))
+                    } else {
+                        Text(
+                            "${accepted.candidate.line} • ${accepted.candidate.direction} • güven %${(accepted.confidence * 100).toInt()}",
+                            modifier = Modifier.testTag("trip-inference-result"),
+                        )
+                        Text(accepted.explanation, modifier = Modifier.testTag("trip-inference-explanation"))
+                        Button(
+                            onClick = { confirmedTripId = accepted.candidate.routeId },
+                            modifier = Modifier.testTag("trip-inference-confirm"),
+                        ) { Text("Bu seferdeyim") }
+                    }
+                }
+                confirmedTripId?.let {
+                    Text(
+                        "Sefer onaylandı: $it • hedef/alarm ayrıca kullanıcı tarafından seçilmeli",
+                        modifier = Modifier.testTag("trip-inference-confirmed"),
+                    )
                 }
             }
         }
