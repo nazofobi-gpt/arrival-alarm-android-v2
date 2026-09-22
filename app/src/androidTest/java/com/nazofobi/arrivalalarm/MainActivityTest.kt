@@ -1,5 +1,6 @@
 package com.nazofobi.arrivalalarm
 
+import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextContains
@@ -8,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -15,6 +17,15 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class MainActivityTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
+
+    @Before fun resetPersistedJourneyState() {
+        rule.activityRule.scenario.onActivity { activity ->
+            activity.getSharedPreferences("journey_state", Context.MODE_PRIVATE).edit().clear().commit()
+        }
+        rule.activityRule.scenario.recreate()
+        rule.waitForIdle()
+    }
+
     private fun assertPhase(expected: String) {
         rule.waitForIdle(); rule.onNodeWithTag("phase").performScrollTo().assertTextContains("Durum: $expected", substring = true).assertIsDisplayed()
     }
@@ -38,6 +49,7 @@ class MainActivityTest {
         rule.onNodeWithTag("destination").performScrollTo().assertIsEnabled().performClick(); assertPhase("DESTINATION_SELECTED")
         rule.onNodeWithTag("arm").performScrollTo().assertIsEnabled().performClick(); assertPhase("ARMED")
         rule.activityRule.scenario.recreate(); rule.waitForIdle()
+        assertPhase("ARMED")
         rule.onNodeWithTag("transit-state").performScrollTo().assertTextContains("READY", substring = true).assertIsDisplayed()
         rule.onNodeWithTag("search-airport").performScrollTo().performClick(); rule.waitForIdle()
         rule.onNodeWithTag("stop-results").performScrollTo().assertTextContains("Flughafen", substring = true).assertIsDisplayed()
