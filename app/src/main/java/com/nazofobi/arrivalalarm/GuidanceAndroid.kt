@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.os.Build
 import android.speech.tts.TextToSpeech
 import java.util.Locale
@@ -93,4 +95,16 @@ object AndroidGuidancePermissions {
         if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
         if (Build.VERSION.SDK_INT >= 31) add(Manifest.permission.BLUETOOTH_CONNECT)
     }.toTypedArray()
+}
+
+object AndroidGuidanceAudio {
+    fun currentRoute(context: Context): GuidanceAudioRoute {
+        val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val bluetooth = audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any {
+            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                (Build.VERSION.SDK_INT >= 31 && it.type == AudioDeviceInfo.TYPE_BLE_HEADSET)
+        }
+        return if (bluetooth) GuidanceAudioRoute.BLUETOOTH_CONNECTED else GuidanceAudioRoute.DEVICE
+    }
 }
