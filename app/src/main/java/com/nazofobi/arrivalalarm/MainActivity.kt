@@ -4,6 +4,8 @@ import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,6 +20,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,6 +83,27 @@ fun ArrivalAlarmApp() {
     var inferenceEnabled by remember { mutableStateOf(false) }
     var inferenceResult by remember { mutableStateOf<TripInferenceResult?>(null) }
     var confirmedTripId by remember { mutableStateOf<String?>(null) }
+    val guidanceSpeaker = remember { AndroidTextToSpeechSpeaker(context) }
+    val guidanceController = remember {
+        GuidanceReliabilityController(
+            guidanceSpeaker,
+            SharedPreferencesGuidanceStateStore(context.getSharedPreferences("guidance_state", Context.MODE_PRIVATE)),
+        )
+    }
+    var guidanceState by remember { mutableStateOf(guidanceController.state) }
+    val guidancePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        guidanceController.onPermissions(AndroidGuidancePermissions.snapshot(context))
+        guidanceController.onAudioRoute(AndroidGuidanceAudio.currentRoute(context))
+        guidanceState = guidanceController.state
+    }
+    LaunchedEffect(Unit) {
+        guidanceController.onPermissions(AndroidGuidancePermissions.snapshot(context))
+        guidanceController.onAudioRoute(AndroidGuidanceAudio.currentRoute(context))
+        guidanceState = guidanceController.state
+    }
+    DisposableEffect(Unit) { onDispose { guidanceSpeaker.shutdown() } }
     fun act(block: JourneyController.() -> Unit) { controller.block(); state = controller.state }
     fun transitAct(block: TransitController.() -> Unit) { transitController.block(); transitState = transitController.state }
 
@@ -118,6 +143,46 @@ fun ArrivalAlarmApp() {
                 }
                 if (transitState.loadState == TransitLoadState.EMPTY || transitState.loadState == TransitLoadState.DEGRADED) {
                     Text(transitState.message.orEmpty(), modifier = Modifier.testTag("transit-message"))
+                }
+
+                Text("Sesli yönlendirme güvenilirliği", style = MaterialTheme.typography.titleMedium)
+                Text(guidanceState.status, modifier = Modifier.testTag("guidance-status"))
+                Button(
+                    onClick = { guidancePermissionLauncher.launch(AndroidGuidancePermissions.runtimePermissions()) },
+                    modifier = Modifier.testTag("guidance-permissions"),
+                ) { Text("Guidance izinlerini kontrol et") }
+                Button(
+                    onClick = {
+                        guidanceController.onPermissions(AndroidGuidancePermissions.snapshot(context))
+                        guidanceController.onAudioRoute(AndroidGuidanceAudio.currentRoute(context))
+                        guidanceState = guidanceController.state
+                    },
+                    modifier = Modifier.testTag("guidance-route-refresh"),
+                ) { Text("Ses rotasını yenile") }
+                transitState.journey?.let { journey ->
+                    val stops = journey.legs.single().stops
+                    val next = stops.getOrNull(1) ?: stops.last()
+                    val destination = stops.last()
+                    Button(
+                        onClick = {
+                            guidanceController.requestGuidance(
+                                GuidanceUtterance("stop:${next.id}", "Sıradaki durak ${next.name}", "tr-TR")
+                            )
+                            guidanceState = guidanceController.state
+                        },
+                        enabled = guidanceState.permissionState != GuidancePermissionState.DENIED,
+                        modifier = Modifier.testTag("guidance-next-stop"),
+                    ) { Text("Sıradaki durağı seslendir") }
+                    Button(
+                        onClick = {
+                            guidanceController.requestGuidance(
+                                GuidanceUtterance("destination:${destination.id}", "Hedef ${destination.name}", "tr-TR")
+                            )
+                            guidanceState = guidanceController.state
+                        },
+                        enabled = guidanceState.permissionState != GuidancePermissionState.DENIED,
+                        modifier = Modifier.testTag("guidance-destination"),
+                    ) { Text("Hedefi seslendir") }
                 }
 
                 Text("Sefer algılama (isteğe bağlı)", style = MaterialTheme.typography.titleMedium)
