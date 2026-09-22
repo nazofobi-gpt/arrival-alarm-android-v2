@@ -91,7 +91,8 @@ object AndroidGuidancePermissions {
     }
 
     fun runtimePermissions(): Array<String> = buildList {
-        add(Manifest.permission.ACCESS_COARSE_LOCATION)\n        add(Manifest.permission.ACCESS_FINE_LOCATION)
+        add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        add(Manifest.permission.ACCESS_FINE_LOCATION)
         if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
         if (Build.VERSION.SDK_INT >= 31) add(Manifest.permission.BLUETOOTH_CONNECT)
     }.toTypedArray()
