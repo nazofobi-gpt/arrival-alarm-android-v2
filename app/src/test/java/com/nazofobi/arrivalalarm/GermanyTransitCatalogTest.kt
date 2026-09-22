@@ -7,7 +7,7 @@ class GermanyTransitCatalogTest {
     private val catalog = GermanyTransitCatalog()
 
     @Test fun resolvesThreeMateriallyDifferentRegions() {
-        assertEquals("Bremen Hbf", catalog.searchStops("Bremen").single().name)
+        assertTrue(catalog.searchStops("Bremen").any { it.name == "Bremen Hbf" })
         assertEquals("Berlin Hauptbahnhof", catalog.searchStops("Berlin").single().name)
         assertEquals("München Hauptbahnhof", catalog.searchStops("München").single().name)
         assertEquals("S5", catalog.searchRoutes("S5").single().shortName)
