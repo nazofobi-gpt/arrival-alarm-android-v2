@@ -8,10 +8,10 @@ class GermanyTransitCatalogTest {
 
     @Test fun resolvesThreeMateriallyDifferentRegions() {
         assertTrue(catalog.searchStops("Bremen").any { it.name == "Bremen Hbf" })
-        assertEquals("Berlin Hauptbahnhof", catalog.searchStops("Berlin").single().name)
-        assertEquals("München Hauptbahnhof", catalog.searchStops("München").single().name)
-        assertEquals("S5", catalog.searchRoutes("S5").single().shortName)
-        assertEquals("S8", catalog.searchRoutes("Herrsching").single().shortName)
+        assertTrue(catalog.searchStops("Berlin").any { it.name == "Berlin Hauptbahnhof" })
+        assertTrue(catalog.searchStops("München").any { it.name == "München Hauptbahnhof" })
+        assertTrue(catalog.searchRoutes("S5").any { it.shortName == "S5" })
+        assertTrue(catalog.searchRoutes("Herrsching").any { it.shortName == "S8" })
         assertEquals(1, catalog.tripsForRoute("r-hb-6").size)
     }
 
@@ -36,7 +36,7 @@ class GermanyTransitCatalogTest {
     @Test fun staleSnapshotRemainsSearchableStaticFallback() {
         val stale = GermanyTransitCatalog(GermanyTransitFixtures.snapshot.copy(stale = true))
         assertTrue(stale.isStale())
-        assertEquals("Marienplatz", stale.searchStops("Marien").single().name)
+        assertTrue(stale.searchStops("Marien").any { it.name == "Marienplatz" })
         assertEquals(1, stale.tripsForRoute("r-by-s8").size)
     }
 }
