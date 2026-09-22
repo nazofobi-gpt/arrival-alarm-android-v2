@@ -66,4 +66,21 @@ class MainActivityTest {
         rule.onNodeWithTag("itinerary-stops").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("realtime-status").performScrollTo().assertIsDisplayed()
     }
+
+    @Test fun api36ArrivalSnapshotKeepsOneShotFinalAlarm() {
+        val route = listOf(
+            RouteCheckpoint("start", "Start", GeoPoint(53.0800, 8.8000)),
+            RouteCheckpoint("target", "Target", GeoPoint(53.0810, 8.8010)),
+        )
+        val first = ArrivalProgressEngine(finalConfirmations = 1)
+        first.arm(route, "target")
+        org.junit.Assert.assertTrue(
+            first.update(LocationFix(route[1].point, 4.0, 0.0)).shouldFireFinalAlarm
+        )
+        val recreated = ArrivalProgressEngine(finalConfirmations = 1)
+        recreated.arm(route, "target", first.snapshot())
+        val afterRecreation = recreated.update(LocationFix(route[1].point, 4.0, 0.0))
+        org.junit.Assert.assertEquals(ArrivalAlertState.ARRIVED, afterRecreation.state)
+        org.junit.Assert.assertFalse(afterRecreation.shouldFireFinalAlarm)
+    }
 }
