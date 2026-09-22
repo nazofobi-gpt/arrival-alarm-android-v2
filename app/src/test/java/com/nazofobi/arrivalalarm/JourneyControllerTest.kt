@@ -87,4 +87,80 @@ class JourneyControllerTest {
         assertEquals(ArrivalAlertState.IDLE, e.arm(emptyList(), "c").state)
         assertFalse(e.update(LocationFix(GeoPoint(53.0, 8.0), 5.0, 0.0)).shouldFireFinalAlarm)
     }
+
+    private class MemoryProgressStore : ArrivalProgressSnapshotStore {
+        var snapshot: ArrivalProgressSnapshot? = null
+        override fun load(): ArrivalProgressSnapshot? = snapshot
+        override fun save(snapshot: ArrivalProgressSnapshot) { this.snapshot = snapshot }
+        override fun clear() { snapshot = null }
+    }
+
+    private class RecordingAlertOutput : ArrivalAlertOutput {
+        var finalCount = 0
+        var approachCount = 0
+        var missedCount = 0
+        override fun onApproaching(result: ArrivalProgressResult) { approachCount += 1 }
+        override fun onFinalArrival(result: ArrivalProgressResult) { finalCount += 1 }
+        override fun onMissedStop(result: ArrivalProgressResult) { missedCount += 1 }
+    }
+
+    @Test fun staticItineraryBridgeAndSnapshotSurviveControllerRecreation() {
+        val journey = FixtureStaticTransitRepository()
+            .plan("fixture-bremen-hbf", "fixture-airport")!!
+        val geometry = mapOf(
+            "fixture-bremen-hbf" to GeoPoint(53.0838, 8.8138),
+            "fixture-am-brill" to GeoPoint(53.0806, 8.8015),
+            "fixture-airport" to GeoPoint(53.0474, 8.7867),
+        )
+        val checkpoints = journey.toArrivalCheckpoints { geometry[it.id] }
+        assertEquals(listOf("fixture-bremen-hbf", "fixture-am-brill", "fixture-airport"), checkpoints.map { it.id })
+
+        val store = MemoryProgressStore()
+        val firstOutput = RecordingAlertOutput()
+        val first = ArrivalTripController(
+            ArrivalProgressEngine(finalConfirmations = 1),
+            store,
+            firstOutput,
+        )
+        assertEquals(ArrivalAlertState.ARMED, first.arm(checkpoints, "fixture-airport").state)
+        val arrived = first.onLocation(LocationFix(checkpoints.last().point, 5.0, 0.0))
+        assertTrue(arrived.shouldFireFinalAlarm)
+        assertEquals(1, firstOutput.finalCount)
+        assertTrue(store.snapshot?.arrived == true)
+
+        val recreatedOutput = RecordingAlertOutput()
+        val recreated = ArrivalTripController(
+            ArrivalProgressEngine(finalConfirmations = 1),
+            store,
+            recreatedOutput,
+        )
+        assertEquals(ArrivalAlertState.ARRIVED, recreated.arm(checkpoints, "fixture-airport").state)
+        val next = recreated.onLocation(LocationFix(checkpoints.last().point, 5.0, 0.0))
+        assertFalse(next.shouldFireFinalAlarm)
+        assertEquals(0, recreatedOutput.finalCount)
+    }
+
+    @Test fun locationLifecycleStartStopIsIdempotent() {
+        class FakeSource : LocationFixSource {
+            var starts = 0
+            var stops = 0
+            override fun start(listener: (LocationFix) -> Unit) { starts += 1 }
+            override fun stop() { stops += 1 }
+        }
+        val source = FakeSource()
+        val store = MemoryProgressStore()
+        val controller = ArrivalTripController(
+            ArrivalProgressEngine(),
+            store,
+            RecordingAlertOutput(),
+        )
+        val lifecycle = ArrivalLocationLifecycle(source, controller)
+        lifecycle.start()
+        lifecycle.start()
+        lifecycle.stop()
+        lifecycle.stop()
+        assertEquals(1, source.starts)
+        assertEquals(1, source.stops)
+    }
+
 }
