@@ -31,7 +31,7 @@ class MainActivityTest {
     }
 
     @Test fun startDestinationArmedArrivedFlow() {
-        assertPhase("EMPTY"); rule.onNodeWithTag("start").performClick(); assertPhase("START_SELECTED")
+        assertPhase("EMPTY"); rule.onNodeWithTag("start").performScrollTo().performClick(); assertPhase("START_SELECTED")
         rule.onNodeWithTag("destination").performScrollTo().assertIsEnabled().performClick(); assertPhase("DESTINATION_SELECTED")
         rule.onNodeWithTag("arm").performScrollTo().assertIsEnabled().performClick(); assertPhase("ARMED")
         rule.onNodeWithTag("approach").performScrollTo().assertIsEnabled().performClick(); assertPhase("ARRIVED")
@@ -56,7 +56,7 @@ class MainActivityTest {
     }
 
     @Test fun compactScreenCriticalControlsAreScrollReachable() {
-        rule.waitForIdle(); rule.onNodeWithTag("start").assertIsDisplayed().performClick()
+        rule.waitForIdle(); rule.onNodeWithTag("start").performScrollTo().assertIsDisplayed().performClick()
         rule.onNodeWithTag("destination").performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
         rule.onNodeWithTag("arm").performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
         rule.onNodeWithTag("approach").performScrollTo().assertIsDisplayed().assertIsEnabled()
