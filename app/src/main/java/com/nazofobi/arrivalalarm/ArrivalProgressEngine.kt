@@ -260,3 +260,38 @@ internal fun haversineMeters(a: GeoPoint, b: GeoPoint): Double {
     val h = sin(dLat / 2).pow(2) + cos(lat1) * cos(lat2) * sin(dLon / 2).pow(2)
     return 2 * earthRadiusMeters * asin(sqrt(h.coerceIn(0.0, 1.0)))
 }
+
+
+/** Side-effect boundary implemented by the Android foreground notification/audio layer. */
+interface ArrivalAlertOutput {
+    fun onApproaching(result: ArrivalProgressResult)
+    fun onFinalArrival(result: ArrivalProgressResult)
+    fun onMissedStop(result: ArrivalProgressResult)
+}
+
+/**
+ * Persists pure engine state after every fix and emits only state-transition effects.
+ * A foreground-service adapter can own the real lock-screen notification/vibration.
+ */
+class ArrivalTrackingSession(
+    private val engine: ArrivalProgressEngine,
+    private val persist: (ArrivalProgressSnapshot) -> Unit,
+    private val output: ArrivalAlertOutput,
+) {
+    private var lastState: ArrivalAlertState? = null
+
+    fun onLocation(fix: LocationFix): ArrivalProgressResult {
+        val result = engine.update(fix)
+        persist(engine.snapshot())
+        if (result.state != lastState) {
+            when {
+                result.shouldFireFinalAlarm -> output.onFinalArrival(result)
+                result.state == ArrivalAlertState.MISSED_STOP -> output.onMissedStop(result)
+                result.state == ArrivalAlertState.APPROACHING ||
+                    result.state == ArrivalAlertState.FINAL_APPROACH -> output.onApproaching(result)
+            }
+        }
+        lastState = result.state
+        return result
+    }
+}
