@@ -36,11 +36,11 @@ data class TransitExperienceSnapshot(
 class TransitExperienceEngine(private val capabilities: TransitProviderCapabilities) {
     fun departureBoard(departures: List<Departure>, nowEpochSeconds: Long, limit: Int = 8): List<Departure> =
         departures.asSequence()
+            .map { if (capabilities.realtimeDepartures) it else it.copy(realtimeEpochSeconds = null) }
             .filterNot { it.cancelled }
             .filter { it.effectiveEpochSeconds >= nowEpochSeconds }
             .sortedBy { it.effectiveEpochSeconds }
             .take(limit.coerceAtLeast(0))
-            .map { if (capabilities.realtimeDepartures) it else it.copy(realtimeEpochSeconds = null) }
             .toList()
 
     fun alerts(values: List<ServiceAlert>): List<ServiceAlert> = if (capabilities.serviceAlerts) values else emptyList()
