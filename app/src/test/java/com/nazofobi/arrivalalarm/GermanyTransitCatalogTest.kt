@@ -4,7 +4,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class GermanyTransitCatalogTest {
-    private val catalog = GermanyTransitCatalog()
+    private val catalog = GermanyTransitCatalog(GermanyTransitFixtures.snapshot)
 
     @Test fun resolvesThreeMateriallyDifferentRegions() {
         assertTrue(catalog.searchStops("Bremen").any { it.name == "Bremen Hbf" })
