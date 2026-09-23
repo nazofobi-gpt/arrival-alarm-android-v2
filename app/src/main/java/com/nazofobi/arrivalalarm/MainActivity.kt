@@ -1,6 +1,8 @@
 package com.nazofobi.arrivalalarm
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -32,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 
 class SharedPreferencesJourneyStateStore(context: Context) : JourneyStateStore {
     private val prefs = context.getSharedPreferences("journey_state", Context.MODE_PRIVATE)
@@ -52,26 +55,36 @@ class MainActivity:ComponentActivity(){ override fun onCreate(savedInstanceState
     val controller=remember{JourneyController(stateStore=SharedPreferencesJourneyStateStore(context))}
     val staticRepository=remember{FixtureStaticTransitRepository()}; val transitController=remember{TransitController(staticRepository)}
     val catalog=remember{GermanyTransitCatalog()}; val planner=remember{SearchMapPlanner(catalog)}
+    val deviceLocation=remember{AndroidDeviceLocation(context)}
     val realtimeRepository=remember{OverlayTransitRepository(staticRepository,VbnJsonRealtimeSource(),EpochClock{System.currentTimeMillis()/1000})}
     var state by remember{mutableStateOf(controller.state)}; var transitState by remember{mutableStateOf(transitController.state)}; var realtime by remember{mutableStateOf<TransitRealtimeOverlay?>(null)}
-    var query by remember{mutableStateOf("")}; var searchResults by remember{mutableStateOf(emptyList<SearchResult>())}; var origin by remember{mutableStateOf<MapPoint?>(null)}; var destinationPoint by remember{mutableStateOf<MapPoint?>(null)}; var nearby by remember{mutableStateOf(emptyList<NearbyCandidate>())}; var routeOptions by remember{mutableStateOf(emptyList<RouteOption>())}
+    var query by remember{mutableStateOf("")}; var searchResults by remember{mutableStateOf(emptyList<SearchResult>())}; var origin by remember{mutableStateOf<MapPoint?>(null)}; var destinationPoint by remember{mutableStateOf<MapPoint?>(null)}; var nearby by remember{mutableStateOf(emptyList<NearbyCandidate>())}; var routeOptions by remember{mutableStateOf(emptyList<RouteOption>())}; var locationMessage by remember{mutableStateOf<String?>(null)}
     var inferenceEnabled by remember{mutableStateOf(false)}; var inferenceResult by remember{mutableStateOf<TripInferenceResult?>(null)}; var confirmedTripId by remember{mutableStateOf<String?>(null)}
     val guidanceSpeaker=remember{AndroidTextToSpeechSpeaker(context)}; val guidanceController=remember{GuidanceReliabilityController(guidanceSpeaker,SharedPreferencesGuidanceStateStore(context.getSharedPreferences("guidance_state",Context.MODE_PRIVATE)))}; var guidanceState by remember{mutableStateOf(guidanceController.state)}
+    fun refreshRoutes(){routeOptions=if(origin!=null&&destinationPoint!=null)planner.routeOptions(origin!!,destinationPoint!!) else emptyList()}
+    fun useLastKnownLocation(){
+        val fix=deviceLocation.lastKnownFix()
+        if(fix==null){locationMessage="Konum alınamadı. Konum servisinin açık olduğundan emin olun.";return}
+        val p=planner.arbitraryPoint(fix.latitude,fix.longitude,"Mevcut konum")
+        origin=p; nearby=planner.nearby(p); locationMessage="Konum alındı • ±${fix.accuracyMeters.toInt()} m"; refreshRoutes()
+    }
+    val locationPermissionLauncher=rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()){grants->
+        if(grants.values.any{it}) useLastKnownLocation() else locationMessage="Konum izni verilmedi."
+    }
     val guidancePermissionLauncher=rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()){guidanceController.onPermissions(AndroidGuidancePermissions.snapshot(context));guidanceController.onAudioRoute(AndroidGuidanceAudio.currentRoute(context));guidanceState=guidanceController.state}
     LaunchedEffect(Unit){guidanceController.onPermissions(AndroidGuidancePermissions.snapshot(context));guidanceController.onAudioRoute(AndroidGuidanceAudio.currentRoute(context));guidanceState=guidanceController.state}
     DisposableEffect(Unit){onDispose{guidanceSpeaker.shutdown()}}
     fun act(block:JourneyController.()->Unit){controller.block();state=controller.state}; fun transitAct(block:TransitController.()->Unit){transitController.block();transitState=transitController.state}
-    fun refreshRoutes(){routeOptions=if(origin!=null&&destinationPoint!=null)planner.routeOptions(origin!!,destinationPoint!!) else emptyList()}
 
     Scaffold(modifier=Modifier.fillMaxSize()){innerPadding->Surface(Modifier.fillMaxSize().padding(innerPadding)){Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
         Text("Varış Alarmı",style=MaterialTheme.typography.headlineMedium)
         Text("Almanya transit arama",style=MaterialTheme.typography.titleMedium)
         OutlinedTextField(value=query,onValueChange={query=it;searchResults=planner.search(it)},label={Text("Durak, hat veya sefer ara")},modifier=Modifier.testTag("catalog-search"))
         searchResults.take(6).forEachIndexed{index,result->Button(onClick={when(result){is SearchResult.Stop->{val p=planner.pointFor(result.value);if(origin==null)origin=p else destinationPoint=p;nearby=planner.nearby(p);refreshRoutes()};is SearchResult.Route->query=result.label;is SearchResult.Trip->query=result.label}},modifier=Modifier.testTag("search-result-$index")){Text(result.label)}}
-        Button(onClick={val p=planner.arbitraryPoint(53.0834,8.8137,"Mevcut konum (demo)");origin=p;nearby=planner.nearby(p);refreshRoutes()},modifier=Modifier.testTag("current-location-origin")){Text("Mevcut konumu başlangıç yap")}
+        Button(onClick={if(deviceLocation.hasPermission()) useLastKnownLocation() else locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION))},modifier=Modifier.testTag("current-location-origin")){Text("Mevcut konumu başlangıç yap")}
+        locationMessage?.let{Text(it,modifier=Modifier.testTag("location-status"))}
         origin?.let{Text("Başlangıç: ${it.label}",modifier=Modifier.testTag("origin-label"))}; destinationPoint?.let{Text("Varış: ${it.label}",modifier=Modifier.testTag("destination-label"))}
         if(nearby.isNotEmpty()){Text("En yakın duraklar",style=MaterialTheme.typography.titleSmall);nearby.take(5).forEachIndexed{index,c->Button(onClick={destinationPoint=planner.pointFor(c.stop);refreshRoutes()},modifier=Modifier.testTag("nearby-stop-$index")){Text("${c.stop.name} • ${c.distanceMeters} m • ${c.bearingDegrees}°")}}}
-        Button(onClick={val p=planner.arbitraryPoint(53.0531,8.7866,"Harita pini: Flughafen Bremen");destinationPoint=p;refreshRoutes()},modifier=Modifier.testTag("map-pin-destination")){Text("Harita pinini varış yap")}
         routeOptions.take(3).forEachIndexed{index,r->Text("${r.line} • ${r.direction} • ${r.departure} → ${r.arrival} • ${r.walkingMinutes} dk yürüme • ${r.transfers} aktarma",modifier=Modifier.testTag("route-option-$index"))}
 
         Text("Durum: ${state.phase}",modifier=Modifier.testTag("phase"));state.distanceMeters?.let{Text("Hedefe ${it.toInt()} m")};state.error?.let{Text(it,modifier=Modifier.testTag("error"))}
