@@ -22,10 +22,25 @@ class AndroidDeviceLocation(private val context: Context) {
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
     fun lastKnownFix(): Fix? {
-        if (!hasPermission()) return null
+        val fineGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        val coarseGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!fineGranted && !coarseGranted) return null
+
         val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         return manager.getProviders(true)
-            .mapNotNull { provider -> runCatching { manager.getLastKnownLocation(provider) }.getOrNull() }
+            .mapNotNull { provider ->
+                try {
+                    manager.getLastKnownLocation(provider)
+                } catch (_: SecurityException) {
+                    null
+                }
+            }
             .filter { it.latitude.isFinite() && it.longitude.isFinite() }
             .maxWithOrNull(compareBy<Location> { it.time }.thenBy { -it.accuracy })
             ?.let { location ->
