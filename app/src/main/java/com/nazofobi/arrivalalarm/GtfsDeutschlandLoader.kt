@@ -4,7 +4,10 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import java.time.Instant
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import java.util.zip.ZipInputStream
 
 /** Loads the nationwide DELFI GTFS feed instead of relying on demo fixtures. */
@@ -23,7 +26,7 @@ object GtfsDeutschlandLoader {
                 val revision = connection.getHeaderField("ETag")
                     ?: connection.getHeaderField("Last-Modified")
                     ?: "bytes-${bytes.size}"
-                parse(bytes, revision, Instant.now().toString())
+                parse(bytes, revision, nowUtcIso8601())
             }
         } finally {
             connection.disconnect()
@@ -65,6 +68,11 @@ object GtfsDeutschlandLoader {
         }
         return CatalogSnapshot(listOf(provider),stops,catalogRoutes,catalogTrips,fetchedAt,stale=false)
     }
+
+    private fun nowUtcIso8601(): String =
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }.format(Date())
 
     private fun parseCsv(lines:List<String>):List<Map<String,String>> { if(lines.isEmpty())return emptyList(); val header=csvLine(lines.first()).map{it.removePrefix("\uFEFF")}; return lines.drop(1).filter{it.isNotBlank()}.map{line->val values=csvLine(line);header.mapIndexed{index,key->key to values.getOrElse(index){""}}.toMap()} }
     private fun csvLine(line:String):List<String>{val out=mutableListOf<String>();val current=StringBuilder();var quoted=false;var i=0;while(i<line.length){val c=line[i];when{c=='"'&&quoted&&i+1<line.length&&line[i+1]=='"'->{current.append('"');i++};c=='"'->quoted=!quoted;c==','&&!quoted->{out+=current.toString();current.clear()};else->current.append(c)};i++};out+=current.toString();return out}
