@@ -6,7 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class TransitStaticTest {
-    private val repo = FixtureStaticTransitRepository()
+    private val repo = TestFixtureStaticTransitRepository()
 
     @Test fun searchIsBoundedAndOffline() {
         assertEquals(listOf("Bremen Hbf"), repo.searchStops("hbf").map { it.name })
@@ -32,7 +32,7 @@ class TransitStaticTest {
         val controller = TransitController(repo)
         controller.search("does-not-exist")
         assertEquals(TransitLoadState.EMPTY, controller.state.loadState)
-        controller.planFromFixtureStart("missing")
+        controller.plan("fixture-bremen-hbf", "missing")
         assertEquals(TransitLoadState.DEGRADED, controller.state.loadState)
     }
 }
