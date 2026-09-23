@@ -4,7 +4,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SearchMapPlannerTest {
-    private val planner = SearchMapPlanner(GermanyTransitCatalog())
+    private val planner = SearchMapPlanner(GermanyTransitCatalog(GermanyTransitFixtures.snapshot))
 
     @Test fun searchesStopsRoutesAndTripsAcrossRegions() {
         assertTrue(planner.search("Berlin").any { it.label.contains("Berlin") })
@@ -38,7 +38,7 @@ class SearchMapPlannerTest {
     }
 
     @Test fun geocoderIsProviderSwappable() {
-        val custom = SearchMapPlanner(GermanyTransitCatalog(), object : GeocodeProvider {
+        val custom = SearchMapPlanner(GermanyTransitCatalog(GermanyTransitFixtures.snapshot), object : GeocodeProvider {
             override fun search(query: String) = listOf(MapPoint(50.0, 8.0, "POI:$query"))
         })
         assertEquals("POI:Museum", custom.addressOrPoi("Museum").single().label)
