@@ -4,9 +4,11 @@ import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -30,6 +32,12 @@ class MainActivityTest {
         rule.onNodeWithTag("nationwide-data-state").assertIsDisplayed()
         rule.onNodeWithTag("current-location-origin").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("arm").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
+    }
+
+    @Test fun productionUiExposesNoLegacyFixtureControls() {
+        assertTrue(rule.onAllNodesWithTag("search-airport").fetchSemanticsNodes().isEmpty())
+        assertTrue(rule.onAllNodesWithTag("plan-airport").fetchSemanticsNodes().isEmpty())
+        assertTrue(rule.onAllNodesWithTag("approach").fetchSemanticsNodes().isEmpty())
     }
 
     @Test fun fullGermanyIndexDownloadControlIsReachableBeforeCacheExists() {

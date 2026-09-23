@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import org.json.JSONArray
+import org.json.JSONObject
 import java.io.BufferedInputStream
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -27,7 +28,7 @@ import kotlin.math.*
 sealed interface NationwideDataState {
     data object Idle : NationwideDataState
     data class Loading(val message: String) : NationwideDataState
-    data class Ready(val stopCount: Int, val fetchedAtEpochSeconds: Long) : NationwideDataState
+    data class Ready(val stopCount: Int, val fetchedAtEpochSeconds: Long, val sourceVersion: String) : NationwideDataState
     data class Error(val message: String) : NationwideDataState
 }
 
@@ -42,11 +43,11 @@ class NationwideTransitGateway(
     private val main = Handler(Looper.getMainLooper())
 
     fun currentState(): NationwideDataState =
-        if (store.isReady()) NationwideDataState.Ready(store.stopCount(), store.fetchedAt()) else NationwideDataState.Idle
+        if (store.isReady()) NationwideDataState.Ready(store.stopCount(), store.fetchedAt(), store.sourceVersion()) else NationwideDataState.Idle
 
     fun ensureNationwideIndex(callback: (NationwideDataState) -> Unit) {
         if (store.isReady()) {
-            callback(NationwideDataState.Ready(store.stopCount(), store.fetchedAt()))
+            callback(NationwideDataState.Ready(store.stopCount(), store.fetchedAt(), store.sourceVersion()))
             return
         }
         callback(NationwideDataState.Loading("Almanya tam durak verisi hazırlanıyor"))
@@ -57,7 +58,7 @@ class NationwideTransitGateway(
                         callback(NationwideDataState.Loading("Almanya durakları indeksleniyor: $count"))
                     }
                 }
-                NationwideDataState.Ready(store.stopCount(), store.fetchedAt())
+                NationwideDataState.Ready(store.stopCount(), store.fetchedAt(), store.sourceVersion())
             }.getOrElse { NationwideDataState.Error(it.message ?: "Durak verisi yüklenemedi") }
             main.post { callback(state) }
         }
@@ -94,6 +95,24 @@ class NationwideTransitGateway(
         }
     }
 
+    fun journeyOptions(
+        origin: MapPoint,
+        destination: MapPoint,
+        limit: Int = 3,
+        callback: (List<RouteOption>, String) -> Unit,
+    ) {
+        io.execute {
+            val result = runCatching { liveApi.journeys(origin, destination, limit) }
+            val options = result.getOrDefault(emptyList())
+            val status = when {
+                options.isNotEmpty() -> "transport.rest / DB profile • canlı/planlı rota"
+                result.isFailure -> "Canlı rota kullanılamıyor: ${result.exceptionOrNull()?.message ?: "bilinmeyen hata"}"
+                else -> "Bu başlangıç/varış için rota bulunamadı"
+            }
+            main.post { callback(options, status) }
+        }
+    }
+
     fun close() {
         io.shutdownNow()
         store.close()
@@ -118,6 +137,80 @@ class GermanyLiveTransitApi(
             .map { NearbyStop(it, haversineMeters(latitude, longitude, it.latitude, it.longitude).roundToInt()) }
             .sortedBy { it.distanceMeters }
             .take(limit)
+    }
+
+    fun journeys(origin: MapPoint, destination: MapPoint, limit: Int = 3): List<RouteOption> {
+        val fromLabel = URLEncoder.encode(origin.label, StandardCharsets.UTF_8.name())
+        val toLabel = URLEncoder.encode(destination.label, StandardCharsets.UTF_8.name())
+        val url = buildString {
+            append("$baseUrl/journeys?")
+            append("from.latitude=${origin.latitude}&from.longitude=${origin.longitude}&from.address=$fromLabel")
+            append("&to.latitude=${destination.latitude}&to.longitude=${destination.longitude}&to.address=$toLabel")
+            append("&results=${limit.coerceIn(1, 6)}&stopovers=false&language=de&pretty=false")
+        }
+        return parseJourneys(JSONObject(get(url)), origin, destination, limit)
+    }
+
+    internal fun parseJourneys(root: JSONObject, origin: MapPoint, destination: MapPoint, limit: Int): List<RouteOption> {
+        val journeys = root.optJSONArray("journeys") ?: return emptyList()
+        return buildList {
+            for (i in 0 until minOf(journeys.length(), limit.coerceIn(1, 6))) {
+                val journey = journeys.optJSONObject(i) ?: continue
+                val legs = journey.optJSONArray("legs") ?: continue
+                if (legs.length() == 0) continue
+                val lines = mutableListOf<String>()
+                var direction = destination.label
+                var walkingMinutes = 0
+                var transitLegs = 0
+                var departure = ""
+                var arrival = ""
+                for (j in 0 until legs.length()) {
+                    val leg = legs.optJSONObject(j) ?: continue
+                    val legDeparture = leg.optString("departure").ifBlank { leg.optString("plannedDeparture") }
+                    val legArrival = leg.optString("arrival").ifBlank { leg.optString("plannedArrival") }
+                    if (j == 0) departure = displayClock(legDeparture)
+                    if (j == legs.length() - 1) arrival = displayClock(legArrival)
+                    val line = leg.optJSONObject("line")
+                    if (line != null) {
+                        val name = line.optString("name").ifBlank { line.optString("id") }
+                        if (name.isNotBlank() && name !in lines) lines += name
+                        leg.optString("direction").takeIf { it.isNotBlank() }?.let { direction = it }
+                        transitLegs++
+                    } else {
+                        walkingMinutes += minutesBetween(legDeparture, legArrival)
+                    }
+                }
+                add(
+                    RouteOption(
+                        id = "journey-$i-$departure-$arrival",
+                        origin = origin,
+                        destination = destination,
+                        line = lines.ifEmpty { listOf("Yürüme") }.joinToString(" → "),
+                        direction = direction,
+                        departure = departure.ifBlank { "Şimdi" },
+                        arrival = arrival.ifBlank { "—" },
+                        walkingMinutes = walkingMinutes,
+                        transfers = (transitLegs - 1).coerceAtLeast(0),
+                    )
+                )
+            }
+        }
+    }
+
+    private fun displayClock(value: String): String =
+        value.substringAfter('T', value).take(5).ifBlank { value }
+
+    private fun minutesBetween(start: String, end: String): Int {
+        fun clock(value: String): Int? {
+            val time = value.substringAfter('T', value)
+            val hour = time.take(2).toIntOrNull() ?: return null
+            val minute = time.drop(3).take(2).toIntOrNull() ?: return null
+            return hour * 60 + minute
+        }
+        val a = clock(start) ?: return 0
+        val b = clock(end) ?: return 0
+        val delta = if (b >= a) b - a else b + 24 * 60 - a
+        return delta.coerceIn(0, 240)
     }
 
     internal fun parseStops(array: JSONArray, limit: Int): List<CatalogStop> = buildList {

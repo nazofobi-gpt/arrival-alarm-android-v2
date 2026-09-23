@@ -21,6 +21,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         private const val READY_KEY = "ready"
         private const val FETCHED_KEY = "fetched_at"
         private const val COUNT_KEY = "stop_count"
+        private const val VERSION_KEY = "source_version"
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -40,6 +41,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
     fun isReady(): Boolean = metadata(READY_KEY) == "1"
     fun fetchedAt(): Long = metadata(FETCHED_KEY)?.toLongOrNull() ?: 0L
     fun stopCount(): Int = metadata(COUNT_KEY)?.toIntOrNull() ?: 0
+    fun sourceVersion(): String = metadata(VERSION_KEY) ?: "unknown"
 
     fun importStops(url: String, onCount: (Int) -> Unit) {
         val db = writableDatabase
@@ -56,6 +58,9 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             error("GTFS indirme HTTP $code")
         }
 
+        val sourceVersion = connection.getHeaderField("ETag")
+            ?: connection.getHeaderField("Last-Modified")
+            ?: connection.url.toString()
         var imported = 0
         db.beginTransaction()
         try {
@@ -110,6 +115,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             putMetadata(db, READY_KEY, "1")
             putMetadata(db, FETCHED_KEY, (System.currentTimeMillis() / 1000).toString())
             putMetadata(db, COUNT_KEY, imported.toString())
+            putMetadata(db, VERSION_KEY, sourceVersion)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()

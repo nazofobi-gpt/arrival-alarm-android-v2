@@ -3,6 +3,9 @@ package com.nazofobi.arrivalalarm
 import android.Manifest
 import android.content.Context
 import android.os.Bundle
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -96,6 +99,10 @@ fun ArrivalAlarmApp() {
     var nearby by remember { mutableStateOf(emptyList<NearbyStop>()) }
     var nearbySource by remember { mutableStateOf<String?>(null) }
     var locationMessage by remember { mutableStateOf<String?>(null) }
+    var routeOptions by remember { mutableStateOf(emptyList<RouteOption>()) }
+    var routeStatus by remember { mutableStateOf<String?>(null) }
+    var routeBusy by remember { mutableStateOf(false) }
+    val routeCache = remember { OfflineTransitCache() }
     var guidanceState by remember { mutableStateOf(guidanceController.state) }
     var inferenceEnabled by remember { mutableStateOf(false) }
 
@@ -118,13 +125,36 @@ fun ArrivalAlarmApp() {
         loadNearby(point)
     }
 
+    fun routeKey(a: MapPoint, b: MapPoint) =
+        "${a.latitude},${a.longitude}->${b.latitude},${b.longitude}"
+
+    fun loadRoutes(a: MapPoint, b: MapPoint) {
+        routeBusy = true
+        routeStatus = "Rota hesaplanıyor…"
+        val key = routeKey(a, b)
+        transit.journeyOptions(a, b) { options, status ->
+            routeBusy = false
+            if (options.isNotEmpty()) {
+                routeOptions = options
+                routeStatus = status
+                routeCache.put(CachedTransitPlan(key, options, emptyList(), System.currentTimeMillis() / 1000))
+            } else {
+                val cached = routeCache.routeOptions(key)
+                routeOptions = cached
+                routeStatus = if (cached.isNotEmpty()) "Canlı rota yok • son başarılı çevrimdışı rota" else status
+            }
+        }
+    }
+
     fun setDestination(stop: CatalogStop) {
         val point = MapPoint(stop.latitude, stop.longitude, stop.name)
-        if (origin == null) {
+        val currentOrigin = origin
+        if (currentOrigin == null) {
             setOrigin(point)
         } else {
             destination = point
             act { selectDestination(GeoPoint(point.latitude, point.longitude)) }
+            loadRoutes(currentOrigin, point)
         }
     }
 
@@ -192,7 +222,7 @@ fun ArrivalAlarmApp() {
                 val dataText = when (val value = dataState) {
                     NationwideDataState.Idle -> "Almanya veri indeksi henüz hazır değil"
                     is NationwideDataState.Loading -> value.message
-                    is NationwideDataState.Ready -> "Almanya tam durak indeksi hazır • ${value.stopCount} durak • gtfs.de/DELFI"
+                    is NationwideDataState.Ready -> "Almanya tam durak indeksi hazır • ${value.stopCount} durak • gtfs.de/DELFI • sürüm ${value.sourceVersion} • ${formatEpoch(value.fetchedAtEpochSeconds)}"
                     is NationwideDataState.Error -> "Tam indeks yüklenemedi • canlı arama açık • ${value.message}"
                 }
                 Text(dataText, modifier = Modifier.testTag("nationwide-data-state"))
@@ -260,6 +290,21 @@ fun ArrivalAlarmApp() {
                     }
                 }
 
+                if (origin != null && destination != null) {
+                    Button(
+                        onClick = { loadRoutes(origin!!, destination!!) },
+                        enabled = !routeBusy,
+                        modifier = Modifier.testTag("route-refresh"),
+                    ) { Text(if (routeBusy) "Rota hesaplanıyor…" else "Rotaları yenile") }
+                }
+                routeStatus?.let { Text(it, modifier = Modifier.testTag("route-status")) }
+                routeOptions.take(3).forEachIndexed { index, option ->
+                    Text(
+                        "${option.line} • ${option.direction} • ${option.departure} → ${option.arrival} • ${option.walkingMinutes} dk yürüme • ${option.transfers} aktarma",
+                        modifier = Modifier.testTag("route-option-$index"),
+                    )
+                }
+
                 Text("Durum: ${journey.phase}", modifier = Modifier.testTag("phase"))
                 journey.error?.let { Text(it, modifier = Modifier.testTag("error")) }
                 Button(
@@ -310,6 +355,10 @@ fun ArrivalAlarmApp() {
         }
     }
 }
+
+private fun formatEpoch(epochSeconds: Long): String =
+    if (epochSeconds <= 0L) "zaman bilinmiyor"
+    else SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.GERMANY).format(Date(epochSeconds * 1000))
 
 @Preview(showBackground = true)
 @Composable

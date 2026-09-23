@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -11,6 +12,24 @@ class NationwideTransitDataTest {
         assertEquals("id", row[0])
         assertEquals("Berlin, Hauptbahnhof", row[1])
         assertEquals("A \"quoted\" value", row[4])
+    }
+
+    @Test fun journeyParserExposesLinesTransfersTimesAndWalking() {
+        val json = JSONObject(
+            """{"journeys":[{"legs":[
+              {"departure":"2026-09-24T08:00:00+02:00","arrival":"2026-09-24T08:05:00+02:00","walking":true},
+              {"departure":"2026-09-24T08:08:00+02:00","arrival":"2026-09-24T08:30:00+02:00","direction":"Bremen Hbf","line":{"name":"RE 1"},"tripId":"t1"},
+              {"departure":"2026-09-24T08:35:00+02:00","arrival":"2026-09-24T08:50:00+02:00","direction":"Hamburg Hbf","line":{"name":"ICE 618"},"tripId":"t2"}
+            ]}]}"""
+        )
+        val origin = MapPoint(52.66, 8.23, "Lohne")
+        val destination = MapPoint(53.55, 9.99, "Hamburg")
+        val option = GermanyLiveTransitApi().parseJourneys(json, origin, destination, 3).single()
+        assertEquals("RE 1 → ICE 618", option.line)
+        assertEquals("08:00", option.departure)
+        assertEquals("08:50", option.arrival)
+        assertEquals(5, option.walkingMinutes)
+        assertEquals(1, option.transfers)
     }
 
     @Test fun liveStopParserUsesActualProviderIdsAndCoordinates() {
