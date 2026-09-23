@@ -168,7 +168,6 @@ fun ArrivalAlarmApp() {
     }
 
     LaunchedEffect(Unit) {
-        transit.ensureNationwideIndex { dataState = it }
         guidanceController.onPermissions(AndroidGuidancePermissions.snapshot(context))
         guidanceController.onAudioRoute(AndroidGuidanceAudio.currentRoute(context))
         guidanceState = guidanceController.state
@@ -197,6 +196,12 @@ fun ArrivalAlarmApp() {
                     is NationwideDataState.Error -> "Tam indeks yüklenemedi • canlı arama açık • ${value.message}"
                 }
                 Text(dataText, modifier = Modifier.testTag("nationwide-data-state"))
+                if (dataState !is NationwideDataState.Ready && dataState !is NationwideDataState.Loading) {
+                    Button(
+                        onClick = { transit.ensureNationwideIndex { dataState = it } },
+                        modifier = Modifier.testTag("nationwide-index-download"),
+                    ) { Text("Tam Almanya durak indeksini indir") }
+                }
 
                 OutlinedTextField(
                     value = query,
