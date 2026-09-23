@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Instant
@@ -36,7 +37,14 @@ object GtfsDeutschlandLoader {
                 val entry = zip.nextEntry ?: break
                 val name = entry.name.substringAfterLast('/')
                 if (name in setOf("stops.txt", "routes.txt", "trips.txt", "stop_times.txt")) {
-                    files[name] = parseCsv(zip.bufferedReader().readLines())
+                    val entryBytes = ByteArrayOutputStream()
+                    val buffer = ByteArray(16 * 1024)
+                    while (true) {
+                        val count = zip.read(buffer)
+                        if (count < 0) break
+                        entryBytes.write(buffer, 0, count)
+                    }
+                    files[name] = parseCsv(entryBytes.toString(Charsets.UTF_8.name()).lineSequence().toList())
                 }
                 zip.closeEntry()
             }
