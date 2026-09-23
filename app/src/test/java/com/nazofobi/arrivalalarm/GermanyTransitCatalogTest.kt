@@ -4,7 +4,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class GermanyTransitCatalogTest {
-    private val catalog = GermanyTransitCatalog()
+    private val catalog = GermanyTransitCatalog(TestGermanyTransitFixtures.snapshot)
 
     @Test fun resolvesThreeMateriallyDifferentRegions() {
         assertTrue(catalog.searchStops("Bremen").any { it.name == "Bremen Hbf" })
@@ -34,7 +34,7 @@ class GermanyTransitCatalogTest {
     }
 
     @Test fun staleSnapshotRemainsSearchableStaticFallback() {
-        val stale = GermanyTransitCatalog(GermanyTransitFixtures.snapshot.copy(stale = true))
+        val stale = GermanyTransitCatalog(TestGermanyTransitFixtures.snapshot.copy(stale = true))
         assertTrue(stale.isStale())
         assertTrue(stale.searchStops("Marien").any { it.name == "Marienplatz" })
         assertEquals(1, stale.tripsForRoute("r-by-s8").size)

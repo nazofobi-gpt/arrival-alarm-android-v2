@@ -8,7 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TransitRealtimeTest {
-    private val staticRepo = FixtureStaticTransitRepository()
+    private val staticRepo = TestFixtureStaticTransitRepository()
     private val now = 2_000_000L
 
     private fun repo(snapshot: RealtimeSnapshot?, throws: Boolean = false) = OverlayTransitRepository(
