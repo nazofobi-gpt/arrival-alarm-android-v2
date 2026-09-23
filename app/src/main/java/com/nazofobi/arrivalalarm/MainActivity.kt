@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.os.Bundle
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import androidx.activity.ComponentActivity
@@ -105,6 +106,8 @@ fun ArrivalAlarmApp() {
     val routeCache = remember { OfflineTransitCache() }
     var guidanceState by remember { mutableStateOf(guidanceController.state) }
     var inferenceEnabled by remember { mutableStateOf(false) }
+    var inferenceResult by remember { mutableStateOf<TripInferenceResult?>(null) }
+    var confirmedTripId by remember { mutableStateOf<String?>(null) }
 
     fun act(block: JourneyController.() -> Unit) {
         controller.block()
@@ -343,17 +346,90 @@ fun ArrivalAlarmApp() {
                 Text("Sefer algılama (isteğe bağlı)", style = MaterialTheme.typography.titleMedium)
                 Switch(
                     checked = inferenceEnabled,
-                    onCheckedChange = { inferenceEnabled = it },
+                    onCheckedChange = {
+                        inferenceEnabled = it
+                        inferenceResult = null
+                        confirmedTripId = null
+                    },
                     modifier = Modifier.testTag("trip-inference-toggle"),
                 )
                 Text(
-                    if (inferenceEnabled) "Açık • kullanıcı onayı olmadan alarm/hedef kurulmaz"
+                    if (inferenceEnabled) "Açık • yalnız gerçek rota + cihaz konumundan öneri; kullanıcı onayı olmadan alarm/hedef kurulmaz"
                     else "Kapalı • otomatik sefer tahmini yapılmaz",
                     modifier = Modifier.testTag("trip-inference-status"),
                 )
+                Button(
+                    onClick = {
+                        val anchor = origin
+                        if (anchor == null || routeOptions.isEmpty()) {
+                            inferenceResult = TripInferenceResult(emptyList(), null, "Önce gerçek başlangıç ve rota gerekli")
+                        } else {
+                            currentLocation.request { location ->
+                                inferenceResult = location.fold(
+                                    onSuccess = { point ->
+                                        val now = System.currentTimeMillis() / 1000
+                                        val observation = MovementObservation(point, 0.0, null, now)
+                                        val candidates = routeOptions.map { option ->
+                                            TripCandidate(
+                                                routeId = option.id,
+                                                line = option.line,
+                                                direction = option.direction,
+                                                anchor = GeoPoint(anchor.latitude, anchor.longitude),
+                                                expectedBearingDegrees = null,
+                                                scheduledEpochSeconds = clockToEpoch(option.departure, now),
+                                            )
+                                        }
+                                        TripInferenceEngine(TripInferenceSettings(enabled = true)).infer(observation, candidates)
+                                    },
+                                    onFailure = {
+                                        TripInferenceResult(emptyList(), null, it.message ?: "Gerçek cihaz konumu alınamadı")
+                                    },
+                                )
+                            }
+                        }
+                    },
+                    enabled = inferenceEnabled && routeOptions.isNotEmpty() && origin != null,
+                    modifier = Modifier.testTag("trip-inference-run"),
+                ) { Text("Gerçek rotalardan sefer adayı hesapla") }
+                inferenceResult?.let { result ->
+                    val accepted = result.accepted
+                    if (accepted == null) {
+                        Text(result.reason, modifier = Modifier.testTag("trip-inference-result"))
+                    } else {
+                        Text(
+                            "${accepted.candidate.line} • ${accepted.candidate.direction} • güven %${(accepted.confidence * 100).toInt()}",
+                            modifier = Modifier.testTag("trip-inference-result"),
+                        )
+                        Text(accepted.explanation, modifier = Modifier.testTag("trip-inference-explanation"))
+                        Button(
+                            onClick = { confirmedTripId = accepted.candidate.routeId },
+                            modifier = Modifier.testTag("trip-inference-confirm"),
+                        ) { Text("Bu seferdeyim") }
+                    }
+                }
+                confirmedTripId?.let {
+                    Text(
+                        "Sefer onaylandı: $it • hedef/alarm ayrıca kullanıcı tarafından seçilmeli",
+                        modifier = Modifier.testTag("trip-inference-confirmed"),
+                    )
+                }
             }
         }
     }
+}
+
+private fun clockToEpoch(clock: String, nowEpochSeconds: Long): Long {
+    val hour = clock.take(2).toIntOrNull() ?: return nowEpochSeconds
+    val minute = clock.drop(3).take(2).toIntOrNull() ?: return nowEpochSeconds
+    val calendar = Calendar.getInstance().apply {
+        timeInMillis = nowEpochSeconds * 1000
+        set(Calendar.HOUR_OF_DAY, hour)
+        set(Calendar.MINUTE, minute)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+        if (timeInMillis / 1000 < nowEpochSeconds - 2 * 60 * 60) add(Calendar.DAY_OF_MONTH, 1)
+    }
+    return calendar.timeInMillis / 1000
 }
 
 private fun formatEpoch(epochSeconds: Long): String =
