@@ -5,15 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
 
-/**
- * Consent-first boundary for the screen-assist vertical slice.
- *
- * Android owns the capture permission dialog. Arrival Alarm never starts a
- * capture session without a fresh RESULT_OK grant and never persists the
- * returned projection token. Frame transport/AI interpretation deliberately
- * sits behind [ScreenAssistSession] so the UI can expose an honest state even
- * before a remote inference provider is wired.
- */
+/** Consent-first boundary for the screen-assist vertical slice. */
 class ScreenAssistPermission(private val context: Context) {
     private val manager = context.getSystemService(MediaProjectionManager::class.java)
 
@@ -33,6 +25,9 @@ enum class ScreenAssistPhase {
     CONSENT_REQUIRED,
     READY,
     ACTIVE,
+    PAUSED,
+    DEGRADED,
+    BLOCKED,
     STOPPED,
 }
 
@@ -41,6 +36,10 @@ data class ScreenAssistState(
     val message: String = "Ekran asistanı kapalı",
 )
 
+/**
+ * Pure session state machine. The MediaProjection grant is memory-only and is
+ * discarded on stop/revoke. Recovery events never silently restart capture.
+ */
 class ScreenAssistSession {
     var state: ScreenAssistState = ScreenAssistState()
         private set
@@ -73,6 +72,50 @@ class ScreenAssistSession {
             "Ekran asistanı etkin • yalnız açık oturum süresince",
         )
         return true
+    }
+
+    fun pause(): Boolean {
+        if (state.phase != ScreenAssistPhase.ACTIVE) return false
+        state = ScreenAssistState(
+            ScreenAssistPhase.PAUSED,
+            "Ekran asistanı duraklatıldı • kare gönderimi kapalı",
+        )
+        return true
+    }
+
+    fun resume(): Boolean {
+        if (state.phase != ScreenAssistPhase.PAUSED || grant == null) return false
+        state = ScreenAssistState(
+            ScreenAssistPhase.ACTIVE,
+            "Ekran asistanı etkin • yalnız açık oturum süresince",
+        )
+        return true
+    }
+
+    fun networkUnavailable() {
+        if (state.phase == ScreenAssistPhase.ACTIVE || state.phase == ScreenAssistPhase.PAUSED) {
+            state = ScreenAssistState(
+                ScreenAssistPhase.DEGRADED,
+                "Bağlantı yok • ekran kareleri gönderilmiyor",
+            )
+        }
+    }
+
+    fun networkRecovered(): Boolean {
+        if (state.phase != ScreenAssistPhase.DEGRADED || grant == null) return false
+        state = ScreenAssistState(
+            ScreenAssistPhase.READY,
+            "Bağlantı geri geldi • yeniden başlatma kullanıcı onayı bekliyor",
+        )
+        return true
+    }
+
+    fun projectionRevoked() {
+        grant = null
+        state = ScreenAssistState(
+            ScreenAssistPhase.BLOCKED,
+            "Ekran paylaşımı Android tarafından sonlandırıldı • yeniden izin gerekli",
+        )
     }
 
     fun stop() {
