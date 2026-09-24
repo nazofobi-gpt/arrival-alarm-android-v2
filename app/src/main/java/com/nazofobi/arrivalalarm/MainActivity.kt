@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 
 class SharedPreferencesJourneyStateStore(context: Context) : JourneyStateStore {
     private val prefs = context.getSharedPreferences("journey_state", Context.MODE_PRIVATE)
@@ -95,6 +96,8 @@ fun ArrivalAlarmApp() {
     var searchResults by remember { mutableStateOf(emptyList<CatalogStop>()) }
     var searchSource by remember { mutableStateOf<String?>(null) }
     var searchMessage by remember { mutableStateOf<String?>(null) }
+    var searchRequestId by remember { mutableStateOf(0L) }
+    var selectingOrigin by remember { mutableStateOf(true) }
     var origin by remember { mutableStateOf<MapPoint?>(null) }
     var destination by remember { mutableStateOf<MapPoint?>(null) }
     var nearby by remember { mutableStateOf(emptyList<NearbyStop>()) }
@@ -124,6 +127,9 @@ fun ArrivalAlarmApp() {
     fun setOrigin(point: MapPoint) {
         origin = point
         destination = null
+        routeOptions = emptyList()
+        routeStatus = null
+        selectingOrigin = false
         act { selectStart(GeoPoint(point.latitude, point.longitude)) }
         loadNearby(point)
     }
@@ -161,11 +167,15 @@ fun ArrivalAlarmApp() {
         }
     }
 
-    fun runSearch() {
-        val q = query.trim()
+    fun runSearch(rawQuery: String = query) {
+        val q = rawQuery.trim()
+        if (q.length < 2) return
+        val requestId = searchRequestId + 1
+        searchRequestId = requestId
         searchBusy = true
         searchMessage = null
-        transit.searchStops(q) { values, source ->
+        transit.searchStops(q) callback@{ values, source ->
+            if (requestId != searchRequestId) return@callback
             searchBusy = false
             searchResults = values
             searchSource = source
@@ -206,6 +216,19 @@ fun ArrivalAlarmApp() {
         guidanceState = guidanceController.state
     }
 
+    LaunchedEffect(query) {
+        val q = query.trim()
+        if (q.length < 2) {
+            searchResults = emptyList()
+            searchSource = null
+            searchMessage = null
+            searchBusy = false
+            return@LaunchedEffect
+        }
+        delay(1_000)
+        runSearch(q)
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             guidanceSpeaker.shutdown()
@@ -236,9 +259,28 @@ fun ArrivalAlarmApp() {
                     ) { Text("Tam Almanya durak indeksini indir") }
                 }
 
+                Text(
+                    if (selectingOrigin) "Arama sonucu başlangıç durağı olarak seçilecek"
+                    else "Arama sonucu varış durağı olarak seçilecek",
+                    modifier = Modifier.testTag("search-target-status"),
+                )
+                Button(
+                    onClick = { selectingOrigin = true },
+                    enabled = !selectingOrigin,
+                    modifier = Modifier.testTag("search-target-origin"),
+                ) { Text(if (selectingOrigin) "Başlangıç seçiliyor" else "Başlangıç seç") }
+                Button(
+                    onClick = { selectingOrigin = false },
+                    enabled = origin != null && selectingOrigin,
+                    modifier = Modifier.testTag("search-target-destination"),
+                ) { Text(if (!selectingOrigin) "Varış seçiliyor" else "Varış seç") }
+
                 OutlinedTextField(
                     value = query,
-                    onValueChange = { query = it },
+                    onValueChange = {
+                        query = it
+                        searchRequestId += 1
+                    },
                     label = { Text("Almanya'da durak ara") },
                     modifier = Modifier.fillMaxWidth().testTag("catalog-search"),
                     singleLine = true,
@@ -254,10 +296,13 @@ fun ArrivalAlarmApp() {
 
                 searchResults.take(12).forEachIndexed { index, stop ->
                     Button(
-                        onClick = { setDestination(stop) },
+                        onClick = {
+                            val point = MapPoint(stop.latitude, stop.longitude, stop.name)
+                            if (selectingOrigin) setOrigin(point) else setDestination(stop)
+                        },
                         modifier = Modifier.fillMaxWidth().testTag("search-result-$index"),
                     ) {
-                        val action = if (origin == null) "Başlangıç" else "Varış"
+                        val action = if (selectingOrigin) "Başlangıç" else "Varış"
                         Text("$action • ${stop.name}")
                     }
                 }
@@ -285,10 +330,18 @@ fun ArrivalAlarmApp() {
                     nearbySource?.let { Text("Kaynak: $it") }
                     nearby.take(8).forEachIndexed { index, candidate ->
                         Button(
-                            onClick = { setDestination(candidate.stop) },
+                            onClick = {
+                                val point = MapPoint(
+                                    candidate.stop.latitude,
+                                    candidate.stop.longitude,
+                                    candidate.stop.name,
+                                )
+                                if (selectingOrigin) setOrigin(point) else setDestination(candidate.stop)
+                            },
                             modifier = Modifier.fillMaxWidth().testTag("nearby-stop-$index"),
                         ) {
-                            Text("${candidate.stop.name} • ${candidate.distanceMeters} m")
+                            val action = if (selectingOrigin) "Başlangıç" else "Varış"
+                            Text("$action • ${candidate.stop.name} • ${candidate.distanceMeters} m")
                         }
                     }
                 }
