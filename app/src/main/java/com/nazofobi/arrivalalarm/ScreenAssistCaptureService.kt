@@ -18,14 +18,21 @@ import android.os.IBinder
 class ScreenAssistCaptureService : Service() {
     override fun onCreate() {
         super.onCreate()
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Ekran Asistanı", NotificationManager.IMPORTANCE_LOW),
-        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(
+                NotificationChannel(CHANNEL_ID, "Ekran Asistanı", NotificationManager.IMPORTANCE_LOW),
+            )
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val notification = Notification.Builder(this, CHANNEL_ID)
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, CHANNEL_ID)
+        } else {
+            Notification.Builder(this)
+        }
+        val notification = builder
             .setSmallIcon(android.R.drawable.ic_menu_view)
             .setContentTitle("Ekran Asistanı etkin")
             .setContentText("Ekran paylaşımı yalnız açık oturum süresince sürer")
