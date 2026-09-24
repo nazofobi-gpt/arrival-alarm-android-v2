@@ -29,6 +29,9 @@ class MainActivityTest {
     @Test fun launchExposesRealNationwideSearchAndLocationControls() {
         rule.onNodeWithTag("catalog-search").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("catalog-search-submit").performScrollTo().assertIsNotEnabled()
+        rule.onNodeWithTag("search-target-status").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("search-target-origin").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
+        rule.onNodeWithTag("search-target-destination").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
         rule.onNodeWithTag("nationwide-data-state").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("current-location-origin").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("arm").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
