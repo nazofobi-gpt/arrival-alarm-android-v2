@@ -23,6 +23,15 @@ class ScreenAssistRealtimeImageTest {
         assertTrue(image.getString("image_url").startsWith("data:image/jpeg;base64,"))
     }
 
+    @Test fun emitsExplicitGuidanceResponseRequest() {
+        val json = subject(maxFrameBytes = 16).buildGuidanceResponseRequest()
+        val root = JSONObject(json)
+        assertEquals("response.create", root.getString("type"))
+        val response = root.getJSONObject("response")
+        assertEquals("text", response.getJSONArray("output_modalities").getString(0))
+        assertTrue(response.getString("instructions").contains("latest shared screen"))
+    }
+
     @Test fun rejectsOversizedFrame() {
         var failed = false
         try { subject(2).buildConversationItem(byteArrayOf(1, 2, 3)) }
