@@ -4,7 +4,7 @@ package com.nazofobi.arrivalalarm
  * Single UI-facing recovery model for capture + Realtime. It deliberately
  * exposes no token, frame, or location payload.
  */
-enum class ScreenAssistUiPhase { READY, ACTIVE, PAUSED, DEGRADED, BLOCKED, STOPPED }
+enum class ScreenAssistUiPhase { READY, CONNECTING, ACTIVE, PAUSED, DEGRADED, BLOCKED, STOPPED }
 
 data class ScreenAssistUiState(
     val phase: ScreenAssistUiPhase,
@@ -17,6 +17,13 @@ data class ScreenAssistUiState(
 
 class ScreenAssistUiController {
     fun reduce(capture: ScreenAssistState, realtime: ScreenAssistRealtimePhase): ScreenAssistUiState {
+        if (realtime == ScreenAssistRealtimePhase.CONNECTING) {
+            return state(
+                ScreenAssistUiPhase.CONNECTING,
+                "Güvenli AI bağlantısı kuruluyor • ekran yakalama henüz başlamadı",
+                canStop = true,
+            )
+        }
         if (capture.phase == ScreenAssistPhase.BLOCKED) {
             return state(ScreenAssistUiPhase.BLOCKED, capture.message, canStart = true)
         }
@@ -26,7 +33,9 @@ class ScreenAssistUiController {
             return state(
                 ScreenAssistUiPhase.BLOCKED,
                 "Realtime oturumu hazır değil • yeniden bağlantı gerekli",
-                canStart = capture.phase == ScreenAssistPhase.READY,
+                canStart = capture.phase == ScreenAssistPhase.READY ||
+                    capture.phase == ScreenAssistPhase.STOPPED ||
+                    capture.phase == ScreenAssistPhase.IDLE,
             )
         }
         if (capture.phase == ScreenAssistPhase.DEGRADED ||
