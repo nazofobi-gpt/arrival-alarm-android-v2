@@ -37,6 +37,13 @@ class MainActivityTest {
         rule.onNodeWithTag("arm").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
     }
 
+    @Test fun productionUiExposesScreenAssistConsentControls() {
+        rule.onNodeWithTag("screen-assist-panel").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("screen-assist-privacy").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("screen-assist-status").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("screen-assist-start").performScrollTo().assertIsDisplayed()
+    }
+
     @Test fun productionUiExposesNoLegacyFixtureControls() {
         assertTrue(rule.onAllNodesWithTag("search-airport").fetchSemanticsNodes().isEmpty())
         assertTrue(rule.onAllNodesWithTag("plan-airport").fetchSemanticsNodes().isEmpty())
