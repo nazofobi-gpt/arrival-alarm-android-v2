@@ -96,6 +96,19 @@ fun ArrivalAlarmApp() {
     val screenAssistUiController = remember { ScreenAssistUiController() }
     val screenAssistRuntime = remember { ScreenAssistCaptureRuntime(context) }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    val screenAssistRealtimeRuntime = remember {
+        ScreenAssistRealtimeRuntime(
+            session = screenAssistRealtimeSession,
+            brokerTokenResponse = {
+                val brokerUrl = BuildConfig.SCREEN_ASSIST_BROKER_URL.trim()
+                check(brokerUrl.isNotEmpty()) {
+                    "Screen Assist token broker is not configured"
+                }
+                ScreenAssistBrokerTransport(brokerUrl).requestTokenResponse()
+            },
+            socketFactory = { ScreenAssistOpenAiWebRtcSocket(context) },
+        )
+    }
 
     var journey by remember { mutableStateOf(controller.state) }
     var dataState by remember { mutableStateOf(transit.currentState()) }
@@ -119,6 +132,7 @@ fun ArrivalAlarmApp() {
     var inferenceEnabled by remember { mutableStateOf(false) }
     var inferenceResult by remember { mutableStateOf<TripInferenceResult?>(null) }
     var confirmedTripId by remember { mutableStateOf<String?>(null) }
+    var screenAssistGuidance by remember { mutableStateOf<String?>(null) }
     var screenAssistUiState by remember {
         mutableStateOf(
             screenAssistUiController.reduce(
@@ -242,21 +256,51 @@ fun ArrivalAlarmApp() {
             refreshScreenAssistUi()
         } else {
             screenAssistSession.acceptGrant(grant)
-            val metrics = context.resources.displayMetrics
-            val started = runCatching {
-                screenAssistRuntime.start(
-                    grant = grant,
-                    width = metrics.widthPixels,
-                    height = metrics.heightPixels,
-                    densityDpi = metrics.densityDpi,
-                )
-            }.isSuccess
-            if (started && screenAssistSession.start()) {
-                refreshScreenAssistUi()
-            } else {
-                screenAssistSession.captureFailed()
-                refreshScreenAssistUi()
-            }
+            screenAssistGuidance = null
+            screenAssistRealtimeRuntime.connect(
+                onConnected = { sender ->
+                    mainHandler.post {
+                        if (screenAssistSession.state.phase != ScreenAssistPhase.READY) {
+                            sender.stop()
+                            return@post
+                        }
+
+                        ScreenAssistRuntimeBridge.attach(sender)
+                        val metrics = context.resources.displayMetrics
+                        val started = runCatching {
+                            screenAssistRuntime.start(
+                                grant = grant,
+                                width = metrics.widthPixels,
+                                height = metrics.heightPixels,
+                                densityDpi = metrics.densityDpi,
+                            )
+                        }.isSuccess
+
+                        if (started && screenAssistSession.start()) {
+                            refreshScreenAssistUi()
+                        } else {
+                            ScreenAssistRuntimeBridge.detach(sender)
+                            screenAssistRealtimeRuntime.stop()
+                            screenAssistSession.captureFailed()
+                            refreshScreenAssistUi()
+                        }
+                    }
+                },
+                onGuidanceDelta = { delta ->
+                    mainHandler.post {
+                        val current = screenAssistGuidance.orEmpty()
+                        screenAssistGuidance = (current + delta).takeLast(2_000)
+                    }
+                },
+                onFailure = {
+                    mainHandler.post {
+                        ScreenAssistRuntimeBridge.detach()
+                        screenAssistSession.stop()
+                        refreshScreenAssistUi()
+                    }
+                },
+            )
+            refreshScreenAssistUi()
         }
     }
 
@@ -283,12 +327,16 @@ fun ArrivalAlarmApp() {
         ScreenAssistRuntimeBridge.observe(
             onProjectionStopped = {
                 mainHandler.post {
+                    ScreenAssistRuntimeBridge.detach()
+                    screenAssistRealtimeRuntime.stop()
                     screenAssistSession.projectionRevoked()
                     refreshScreenAssistUi()
                 }
             },
             onCaptureError = {
                 mainHandler.post {
+                    ScreenAssistRuntimeBridge.detach()
+                    screenAssistRealtimeRuntime.stop()
                     screenAssistSession.captureFailed()
                     refreshScreenAssistUi()
                 }
@@ -296,13 +344,9 @@ fun ArrivalAlarmApp() {
         )
         onDispose {
             ScreenAssistRuntimeBridge.clearObserver()
-            if (
-                screenAssistSession.state.phase == ScreenAssistPhase.ACTIVE ||
-                screenAssistSession.state.phase == ScreenAssistPhase.PAUSED ||
-                screenAssistSession.state.phase == ScreenAssistPhase.DEGRADED
-            ) {
-                screenAssistRuntime.stop()
-            }
+            ScreenAssistRuntimeBridge.detach()
+            screenAssistRealtimeRuntime.close()
+            screenAssistRuntime.stop()
             guidanceSpeaker.shutdown()
             transit.close()
         }
@@ -319,6 +363,9 @@ fun ArrivalAlarmApp() {
                 ScreenAssistPanel(
                     state = screenAssistUiState,
                     onStart = {
+                        ScreenAssistRuntimeBridge.detach()
+                        screenAssistRealtimeRuntime.stop()
+                        screenAssistGuidance = null
                         screenAssistSession.requestConsent()
                         refreshScreenAssistUi()
                         screenAssistConsentLauncher.launch(screenAssistPermission.createCaptureIntent())
@@ -336,10 +383,14 @@ fun ArrivalAlarmApp() {
                         }
                     },
                     onStop = {
+                        ScreenAssistRuntimeBridge.detach()
+                        screenAssistRealtimeRuntime.stop()
                         screenAssistRuntime.stop()
                         screenAssistSession.stop()
+                        screenAssistGuidance = null
                         refreshScreenAssistUi()
                     },
+                    guidanceText = screenAssistGuidance,
                     modifier = Modifier.testTag("screen-assist-panel"),
                 )
 
