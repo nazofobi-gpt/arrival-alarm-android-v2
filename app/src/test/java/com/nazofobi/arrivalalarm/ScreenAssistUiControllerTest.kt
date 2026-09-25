@@ -39,6 +39,25 @@ class ScreenAssistUiControllerTest {
         assertFalse(state.canResume)
     }
 
+    @Test fun connectingStateDoesNotStartCaptureAndAllowsCancel() {
+        val state = controller.reduce(
+            ScreenAssistState(ScreenAssistPhase.READY, "ready"),
+            ScreenAssistRealtimePhase.CONNECTING,
+        )
+        assertEquals(ScreenAssistUiPhase.CONNECTING, state.phase)
+        assertFalse(state.canStart)
+        assertTrue(state.canStop)
+    }
+
+    @Test fun blockedRealtimeAllowsFreshRetryAfterGrantWasForgotten() {
+        val state = controller.reduce(
+            ScreenAssistState(ScreenAssistPhase.STOPPED, "stopped"),
+            ScreenAssistRealtimePhase.BLOCKED,
+        )
+        assertEquals(ScreenAssistUiPhase.BLOCKED, state.phase)
+        assertTrue(state.canStart)
+    }
+
     @Test fun tokenRequiredIsBlocked() {
         val state = controller.reduce(
             ScreenAssistState(ScreenAssistPhase.READY, "ready"),
