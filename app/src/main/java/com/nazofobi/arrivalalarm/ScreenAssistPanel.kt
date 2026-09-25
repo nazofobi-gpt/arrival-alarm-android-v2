@@ -20,6 +20,7 @@ fun ScreenAssistPanel(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
+    guidanceText: String? = null,
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier.fillMaxWidth()) {
@@ -38,6 +39,13 @@ fun ScreenAssistPanel(
                 state.message,
                 modifier = Modifier.testTag("screen-assist-status"),
             )
+            guidanceText?.takeIf { it.isNotBlank() }?.let { guidance ->
+                Text(
+                    guidance,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.testTag("screen-assist-guidance"),
+                )
+            }
 
             if (state.canStart) {
                 Button(
