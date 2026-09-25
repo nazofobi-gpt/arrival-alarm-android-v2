@@ -110,6 +110,22 @@ class ScreenAssistSession {
         return true
     }
 
+    fun consentDenied() {
+        grant = null
+        state = ScreenAssistState(
+            ScreenAssistPhase.BLOCKED,
+            "Ekran paylaşımı izni verilmedi • yeniden başlatmak için tekrar deneyin",
+        )
+    }
+
+    fun captureFailed() {
+        grant = null
+        state = ScreenAssistState(
+            ScreenAssistPhase.BLOCKED,
+            "Ekran yakalama başlatılamadı • yeniden izin gerekli",
+        )
+    }
+
     fun projectionRevoked() {
         grant = null
         state = ScreenAssistState(
