@@ -52,6 +52,26 @@ class ScreenAssistSessionTest {
     }
 
     @Test
+    fun deniedConsentIsBlockedAndFreshRetryIsRequired() {
+        val session = ScreenAssistSession()
+        session.requestConsent()
+        session.consentDenied()
+        assertEquals(ScreenAssistPhase.BLOCKED, session.state.phase)
+        assertFalse(session.start())
+        assertEquals(ScreenAssistPhase.CONSENT_REQUIRED, session.state.phase)
+    }
+
+    @Test
+    fun captureFailureForgetsGrantAndFailsClosed() {
+        val session = ScreenAssistSession()
+        session.acceptGrant(grant())
+        session.captureFailed()
+        assertEquals(ScreenAssistPhase.BLOCKED, session.state.phase)
+        assertFalse(session.start())
+        assertEquals(ScreenAssistPhase.CONSENT_REQUIRED, session.state.phase)
+    }
+
+    @Test
     fun projectionRevokeForgetsGrantAndRequiresFreshConsent() {
         val session = ScreenAssistSession()
         session.acceptGrant(grant())
