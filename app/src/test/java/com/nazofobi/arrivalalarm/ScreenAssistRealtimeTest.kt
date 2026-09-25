@@ -17,6 +17,29 @@ class ScreenAssistRealtimeTest {
     }
 
     @Test
+    fun parsesCurrentTopLevelEphemeralClientSecret() {
+        val token = ScreenAssistBrokerResponseParser().parse(
+            """{"value":"ek_current","expires_at":2120}"""
+        )
+        assertEquals("ek_current", token.value)
+        assertEquals(2120L, token.expiresAtEpochSeconds)
+        assertTrue(token.isUsable(2000))
+    }
+
+    @Test
+    fun rejectsBrokerResponseThatLeaksStandardApiKey() {
+        var failed = false
+        try {
+            ScreenAssistBrokerResponseParser().parse(
+                """{"value":"ek_current","expires_at":2120,"api_key":"sk-proj-do-not-ship"}"""
+            )
+        } catch (_: IllegalStateException) {
+            failed = true
+        }
+        assertTrue(failed)
+    }
+
+    @Test
     fun nearExpiryTokenFailsClosed() {
         val session = ScreenAssistRealtimeSession(minimumTokenLifetimeSeconds = 30)
         assertFalse(session.acceptToken(ScreenAssistEphemeralToken("ephemeral_test", 1029), 1000))
