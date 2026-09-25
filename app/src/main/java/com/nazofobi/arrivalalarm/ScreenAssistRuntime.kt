@@ -48,11 +48,10 @@ object ScreenAssistRuntimeBridge {
             return
         }
         try {
-            active.sendFrame(frame.jpegBytes)
+            active.sendFrame(frame.jpegBytes, complete)
         } catch (error: Throwable) {
-            captureError?.invoke(error)
-        } finally {
             complete()
+            captureError?.invoke(error)
         }
     }
 
