@@ -55,6 +55,7 @@ class ScreenAssistCaptureEngine(
 
         val mediaProjection =
             projectionManager.getMediaProjection(grant.resultCode, grant.data)
+                ?: error("MediaProjection grant could not create a capture session")
         val callback = object : MediaProjection.Callback() {
             override fun onStop() {
                 handler.post {
