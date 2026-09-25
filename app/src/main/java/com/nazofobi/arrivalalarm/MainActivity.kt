@@ -3,6 +3,8 @@ package com.nazofobi.arrivalalarm
 import android.Manifest
 import android.content.Context
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -88,6 +90,12 @@ fun ArrivalAlarmApp() {
             SharedPreferencesGuidanceStateStore(context.getSharedPreferences("guidance_state", Context.MODE_PRIVATE)),
         )
     }
+    val screenAssistPermission = remember { ScreenAssistPermission(context) }
+    val screenAssistSession = remember { ScreenAssistSession() }
+    val screenAssistRealtimeSession = remember { ScreenAssistRealtimeSession() }
+    val screenAssistUiController = remember { ScreenAssistUiController() }
+    val screenAssistRuntime = remember { ScreenAssistCaptureRuntime(context) }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
     var journey by remember { mutableStateOf(controller.state) }
     var dataState by remember { mutableStateOf(transit.currentState()) }
@@ -111,6 +119,21 @@ fun ArrivalAlarmApp() {
     var inferenceEnabled by remember { mutableStateOf(false) }
     var inferenceResult by remember { mutableStateOf<TripInferenceResult?>(null) }
     var confirmedTripId by remember { mutableStateOf<String?>(null) }
+    var screenAssistUiState by remember {
+        mutableStateOf(
+            screenAssistUiController.reduce(
+                screenAssistSession.state,
+                screenAssistRealtimeSession.phase,
+            )
+        )
+    }
+
+    fun refreshScreenAssistUi() {
+        screenAssistUiState = screenAssistUiController.reduce(
+            screenAssistSession.state,
+            screenAssistRealtimeSession.phase,
+        )
+    }
 
     fun act(block: JourneyController.() -> Unit) {
         controller.block()
@@ -210,6 +233,33 @@ fun ArrivalAlarmApp() {
         guidanceState = guidanceController.state
     }
 
+    val screenAssistConsentLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val grant = screenAssistPermission.granted(result.resultCode, result.data)
+        if (grant == null) {
+            screenAssistSession.consentDenied()
+            refreshScreenAssistUi()
+        } else {
+            screenAssistSession.acceptGrant(grant)
+            val metrics = context.resources.displayMetrics
+            val started = runCatching {
+                screenAssistRuntime.start(
+                    grant = grant,
+                    width = metrics.widthPixels,
+                    height = metrics.heightPixels,
+                    densityDpi = metrics.densityDpi,
+                )
+            }.isSuccess
+            if (started && screenAssistSession.start()) {
+                refreshScreenAssistUi()
+            } else {
+                screenAssistSession.captureFailed()
+                refreshScreenAssistUi()
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         guidanceController.onPermissions(AndroidGuidancePermissions.snapshot(context))
         guidanceController.onAudioRoute(AndroidGuidanceAudio.currentRoute(context))
@@ -230,7 +280,29 @@ fun ArrivalAlarmApp() {
     }
 
     DisposableEffect(Unit) {
+        ScreenAssistRuntimeBridge.observe(
+            onProjectionStopped = {
+                mainHandler.post {
+                    screenAssistSession.projectionRevoked()
+                    refreshScreenAssistUi()
+                }
+            },
+            onCaptureError = {
+                mainHandler.post {
+                    screenAssistSession.captureFailed()
+                    refreshScreenAssistUi()
+                }
+            },
+        )
         onDispose {
+            ScreenAssistRuntimeBridge.clearObserver()
+            if (
+                screenAssistSession.state.phase == ScreenAssistPhase.ACTIVE ||
+                screenAssistSession.state.phase == ScreenAssistPhase.PAUSED ||
+                screenAssistSession.state.phase == ScreenAssistPhase.DEGRADED
+            ) {
+                screenAssistRuntime.stop()
+            }
             guidanceSpeaker.shutdown()
             transit.close()
         }
@@ -243,6 +315,34 @@ fun ArrivalAlarmApp() {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text("Varış Alarmı", style = MaterialTheme.typography.headlineMedium)
+
+                ScreenAssistPanel(
+                    state = screenAssistUiState,
+                    onStart = {
+                        screenAssistSession.requestConsent()
+                        refreshScreenAssistUi()
+                        screenAssistConsentLauncher.launch(screenAssistPermission.createCaptureIntent())
+                    },
+                    onPause = {
+                        if (screenAssistSession.pause()) {
+                            screenAssistRuntime.pause()
+                            refreshScreenAssistUi()
+                        }
+                    },
+                    onResume = {
+                        if (screenAssistSession.resume()) {
+                            screenAssistRuntime.resume()
+                            refreshScreenAssistUi()
+                        }
+                    },
+                    onStop = {
+                        screenAssistRuntime.stop()
+                        screenAssistSession.stop()
+                        refreshScreenAssistUi()
+                    },
+                    modifier = Modifier.testTag("screen-assist-panel"),
+                )
+
                 Text("Almanya transit arama", style = MaterialTheme.typography.titleMedium)
 
                 val dataText = when (val value = dataState) {
