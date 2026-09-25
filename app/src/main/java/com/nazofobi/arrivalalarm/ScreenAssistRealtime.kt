@@ -52,6 +52,7 @@ class ScreenAssistBrokerResponseParser {
 
 enum class ScreenAssistRealtimePhase {
     IDLE,
+    CONNECTING,
     TOKEN_REQUIRED,
     READY,
     CONNECTED,
@@ -73,10 +74,22 @@ class ScreenAssistRealtimeSession(
         private set
     private var token: ScreenAssistEphemeralToken? = null
 
+    fun beginConnecting() {
+        token = null
+        phase = ScreenAssistRealtimePhase.CONNECTING
+        status = "Güvenli Realtime bağlantısı kuruluyor"
+    }
+
     fun requireToken() {
         token = null
         phase = ScreenAssistRealtimePhase.TOKEN_REQUIRED
         status = "Kısa ömürlü oturum anahtarı gerekli"
+    }
+
+    fun connectionFailed() {
+        token = null
+        phase = ScreenAssistRealtimePhase.BLOCKED
+        status = "Realtime bağlantısı kurulamadı"
     }
 
     fun acceptToken(candidate: ScreenAssistEphemeralToken, nowEpochSeconds: Long): Boolean {
