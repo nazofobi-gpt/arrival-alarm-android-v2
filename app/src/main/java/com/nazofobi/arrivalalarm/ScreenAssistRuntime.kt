@@ -18,22 +18,27 @@ object ScreenAssistRuntimeBridge {
     @Volatile
     private var captureError: ((Throwable) -> Unit)? = null
 
-    fun attach(
-        realtimeSender: ScreenAssistRealtimeSender,
-        onProjectionStopped: () -> Unit = {},
-        onCaptureError: (Throwable) -> Unit = {},
-    ) {
+    fun attach(realtimeSender: ScreenAssistRealtimeSender) {
         sender = realtimeSender
-        projectionStopped = onProjectionStopped
-        captureError = onCaptureError
     }
 
     fun detach(realtimeSender: ScreenAssistRealtimeSender? = null) {
         if (realtimeSender == null || sender === realtimeSender) {
             sender = null
-            projectionStopped = null
-            captureError = null
         }
+    }
+
+    fun observe(
+        onProjectionStopped: () -> Unit,
+        onCaptureError: (Throwable) -> Unit,
+    ) {
+        projectionStopped = onProjectionStopped
+        captureError = onCaptureError
+    }
+
+    fun clearObserver() {
+        projectionStopped = null
+        captureError = null
     }
 
     internal fun dispatch(frame: ScreenAssistEncodedFrame, complete: () -> Unit) {
