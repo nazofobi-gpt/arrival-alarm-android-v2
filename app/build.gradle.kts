@@ -43,6 +43,7 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation("io.github.webrtc-sdk:android:150.7871.01")
 
     testImplementation(libs.junit)
     // JVM unit tests exercise the production org.json adapter. Android's compile-time
