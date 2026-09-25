@@ -91,7 +91,9 @@ class ScreenAssistCaptureRuntime(private val context: Context) {
 
     fun resume() = launch(command(ACTION_RESUME))
 
-    fun stop() = launch(command(ACTION_STOP))
+    fun stop() {
+        context.stopService(Intent(context, ScreenAssistCaptureService::class.java))
+    }
 
     private fun command(action: String) =
         Intent(context, ScreenAssistCaptureService::class.java).setAction(action)
