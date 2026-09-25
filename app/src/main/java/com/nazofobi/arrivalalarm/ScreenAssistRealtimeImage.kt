@@ -20,4 +20,18 @@ class ScreenAssistRealtimeImage(
         val item = JSONObject().put("type", "message").put("role", "user").put("content", content)
         return JSONObject().put("type", "conversation.item.create").put("item", item).toString()
     }
+
+    fun buildGuidanceResponseRequest(): String {
+        val response = JSONObject()
+            .put("output_modalities", JSONArray().put("text"))
+            .put(
+                "instructions",
+                "Inspect the latest shared screen image and give one concise, actionable next step. " +
+                    "Do not claim to control the device. If the screen is ambiguous, ask the user to confirm.",
+            )
+        return JSONObject()
+            .put("type", "response.create")
+            .put("response", response)
+            .toString()
+    }
 }
