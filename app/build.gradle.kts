@@ -1,3 +1,8 @@
+val screenAssistBrokerUrl = providers.gradleProperty("SCREEN_ASSIST_BROKER_URL")
+    .orElse(providers.environmentVariable("SCREEN_ASSIST_BROKER_URL"))
+    .orElse("")
+    .get()
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -15,10 +20,16 @@ android {
         versionName = "0.1.0-v2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField(
+            "String",
+            "SCREEN_ASSIST_BROKER_URL",
+            "\"" + screenAssistBrokerUrl.replace("\\", "\\\\").replace("\"", "\\\"") + "\"",
+        )
     }
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     compileOptions {
