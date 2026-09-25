@@ -40,6 +40,17 @@ class ScreenAssistRealtimeTest {
     }
 
     @Test
+    fun connectingAndConnectionFailureAreExplicitFailClosedStates() {
+        val session = ScreenAssistRealtimeSession()
+        session.beginConnecting()
+        assertEquals(ScreenAssistRealtimePhase.CONNECTING, session.phase)
+        session.connectionFailed()
+        assertEquals(ScreenAssistRealtimePhase.BLOCKED, session.phase)
+        assertFalse(session.connect(1000))
+        assertEquals(ScreenAssistRealtimePhase.TOKEN_REQUIRED, session.phase)
+    }
+
+    @Test
     fun nearExpiryTokenFailsClosed() {
         val session = ScreenAssistRealtimeSession(minimumTokenLifetimeSeconds = 30)
         assertFalse(session.acceptToken(ScreenAssistEphemeralToken("ephemeral_test", 1029), 1000))
