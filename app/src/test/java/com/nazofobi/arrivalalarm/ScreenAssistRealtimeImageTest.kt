@@ -1,13 +1,19 @@
 package com.nazofobi.arrivalalarm
 
+import java.util.Base64
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ScreenAssistRealtimeImageTest {
+    private fun subject(maxFrameBytes: Int) = ScreenAssistRealtimeImage(
+        maxFrameBytes = maxFrameBytes,
+        base64Encoder = { Base64.getEncoder().encodeToString(it) }
+    )
+
     @Test fun emitsRealtimeImageConversationItem() {
-        val json = ScreenAssistRealtimeImage(maxFrameBytes = 16).buildConversationItem(byteArrayOf(1, 2, 3))
+        val json = subject(maxFrameBytes = 16).buildConversationItem(byteArrayOf(1, 2, 3))
         val root = JSONObject(json)
         assertEquals("conversation.item.create", root.getString("type"))
         val item = root.getJSONObject("item")
@@ -19,21 +25,15 @@ class ScreenAssistRealtimeImageTest {
 
     @Test fun rejectsOversizedFrame() {
         var failed = false
-        try {
-            ScreenAssistRealtimeImage(maxFrameBytes = 2).buildConversationItem(byteArrayOf(1, 2, 3))
-        } catch (_: IllegalArgumentException) {
-            failed = true
-        }
+        try { subject(2).buildConversationItem(byteArrayOf(1, 2, 3)) }
+        catch (_: IllegalArgumentException) { failed = true }
         assertTrue(failed)
     }
 
     @Test fun rejectsEmptyFrame() {
         var failed = false
-        try {
-            ScreenAssistRealtimeImage(maxFrameBytes = 16).buildConversationItem(byteArrayOf())
-        } catch (_: IllegalArgumentException) {
-            failed = true
-        }
+        try { subject(16).buildConversationItem(byteArrayOf()) }
+        catch (_: IllegalArgumentException) { failed = true }
         assertTrue(failed)
     }
 }
