@@ -22,7 +22,7 @@ class ScreenAssistRealtimeEventParser {
  */
 class ScreenAssistRealtimeRuntime(
     private val session: ScreenAssistRealtimeSession,
-    private val brokerTransportFactory: () -> ScreenAssistBrokerTransport,
+    private val brokerTokenResponse: () -> String,
     private val socketFactory: () -> ScreenAssistRealtimeSocket,
     private val responseParser: ScreenAssistBrokerResponseParser = ScreenAssistBrokerResponseParser(),
     private val eventParser: ScreenAssistRealtimeEventParser = ScreenAssistRealtimeEventParser(),
@@ -50,7 +50,7 @@ class ScreenAssistRealtimeRuntime(
         executor.execute {
             var candidate: ScreenAssistRealtimeSender? = null
             try {
-                val brokerResponse = brokerTransportFactory().requestTokenResponse()
+                val brokerResponse = brokerTokenResponse()
                 val token = responseParser.parse(brokerResponse)
                 val socket = socketFactory()
                 candidate = ScreenAssistRealtimeSender(
