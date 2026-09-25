@@ -23,6 +23,7 @@ class ScreenAssistBrokerResponseParser {
         check(!root.has("apiKey")) { "Broker response must not expose a standard API key" }
 
         val secret = when {
+            root.has("value") -> root
             root.has("client_secret") -> root.get("client_secret")
             root.has("clientSecret") -> root.get("clientSecret")
             else -> error("Missing client secret")
@@ -32,7 +33,13 @@ class ScreenAssistBrokerResponseParser {
         val expiresAt: Long
         if (secret is JSONObject) {
             value = secret.optString("value")
-            expiresAt = secret.optLong("expires_at", secret.optLong("expiresAt", 0L))
+            expiresAt = secret.optLong(
+                "expires_at",
+                secret.optLong(
+                    "expiresAt",
+                    root.optLong("expires_at", root.optLong("expiresAt", 0L)),
+                ),
+            )
         } else {
             value = secret.toString()
             expiresAt = root.optLong("expires_at", root.optLong("expiresAt", 0L))
