@@ -41,6 +41,9 @@ const writeAnnotations = {
   idempotentHint: true,
 };
 
+const readSecuritySchemes = [{ type: "oauth2", scopes: ["arrival.read"] }];
+const writeSecuritySchemes = [{ type: "oauth2", scopes: ["arrival.write"] }];
+
 function ok(data, message) {
   return {
     structuredContent: data,
@@ -71,6 +74,32 @@ export function createArrivalAlarmMcpServer({ service, userId }) {
   );
 
   server.registerTool(
+    "get_profile",
+    {
+      title: "Get connected Arrival Alarm profile",
+      description:
+        "Return the stable profile identity represented by this authenticated Arrival Alarm connection.",
+      inputSchema: {},
+      outputSchema: {
+        id: z.string().min(1),
+      },
+      annotations: readAnnotations,
+      securitySchemes: readSecuritySchemes,
+      _meta: {
+        "openai/profile": true,
+      },
+    },
+    async () => {
+      const profile = { id: userId };
+      return {
+        isError: false,
+        structuredContent: profile,
+        content: [{ type: "text", text: JSON.stringify(profile) }],
+      };
+    }
+  );
+
+  server.registerTool(
     "get_current_journey",
     {
       title: "Get current journey",
@@ -79,6 +108,7 @@ export function createArrivalAlarmMcpServer({ service, userId }) {
         "Use for questions such as which trip the user is on or where they are going.",
       inputSchema: {},
       annotations: readAnnotations,
+      securitySchemes: readSecuritySchemes,
     },
     async () => {
       try {
@@ -98,6 +128,7 @@ export function createArrivalAlarmMcpServer({ service, userId }) {
         "Use for questions such as next stop, current stop, or which stop was just passed.",
       inputSchema: {},
       annotations: readAnnotations,
+      securitySchemes: readSecuritySchemes,
     },
     async () => {
       try {
@@ -116,6 +147,7 @@ export function createArrivalAlarmMcpServer({ service, userId }) {
         "Read whether the Arrival Alarm app currently has an armed arrival alarm and its remaining distance when available.",
       inputSchema: {},
       annotations: readAnnotations,
+      securitySchemes: readSecuritySchemes,
     },
     async () => {
       try {
@@ -135,6 +167,7 @@ export function createArrivalAlarmMcpServer({ service, userId }) {
       inputSchema: { ...writeBaseInput, ...pointInput },
       outputSchema: writeOutput,
       annotations: writeAnnotations,
+      securitySchemes: writeSecuritySchemes,
     },
     async (args) => {
       try {
@@ -164,6 +197,7 @@ export function createArrivalAlarmMcpServer({ service, userId }) {
       inputSchema: { ...writeBaseInput, ...pointInput },
       outputSchema: writeOutput,
       annotations: writeAnnotations,
+      securitySchemes: writeSecuritySchemes,
     },
     async (args) => {
       try {
@@ -197,6 +231,7 @@ export function createArrivalAlarmMcpServer({ service, userId }) {
       },
       outputSchema: writeOutput,
       annotations: writeAnnotations,
+      securitySchemes: writeSecuritySchemes,
     },
     async (args) => {
       try {
@@ -228,6 +263,7 @@ export function createArrivalAlarmMcpServer({ service, userId }) {
       },
       outputSchema: writeOutput,
       annotations: writeAnnotations,
+      securitySchemes: writeSecuritySchemes,
     },
     async (args) => {
       try {
@@ -256,6 +292,7 @@ export function createArrivalAlarmMcpServer({ service, userId }) {
       inputSchema: writeBaseInput,
       outputSchema: writeOutput,
       annotations: writeAnnotations,
+      securitySchemes: writeSecuritySchemes,
     },
     async (args) => {
       try {
@@ -283,6 +320,7 @@ export function createArrivalAlarmMcpServer({ service, userId }) {
       inputSchema: writeBaseInput,
       outputSchema: writeOutput,
       annotations: writeAnnotations,
+      securitySchemes: writeSecuritySchemes,
     },
     async (args) => {
       try {
@@ -311,6 +349,7 @@ export function createArrivalAlarmMcpServer({ service, userId }) {
         idempotency_key: z.string().min(8).max(200),
       },
       annotations: readAnnotations,
+      securitySchemes: readSecuritySchemes,
     },
     async ({ idempotency_key }) => {
       const result = service.getCommandResult(userId, idempotency_key);
