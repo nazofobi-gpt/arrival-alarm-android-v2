@@ -17,9 +17,6 @@ function valid(overrides = {}) {
     DEVICE_OAUTH_CLIENT_ID: "arrival-alarm-android",
     DEVICE_OAUTH_SCOPES: "arrival.device offline_access",
     DEVICE_OAUTH_RESOURCE: "https://connector.example/device",
-    DEVICE_OAUTH_ISSUER: "https://auth.example",
-    DEVICE_OAUTH_AUDIENCE: "https://arrival-alarm-api",
-    DEVICE_OAUTH_JWKS_URL: "https://auth.example/.well-known/jwks.json",
     DEVICE_OAUTH_DEVICE_ID_PARAMETER: "device_id",
     ...overrides,
   };
@@ -89,7 +86,7 @@ test("device OAuth metadata is a public PKCE client contract with fixed app redi
   assert.deepEqual(metadata.scopes, ["arrival.device", "offline_access"]);
   assert.equal(metadata.redirect_uri, "com.nazofobi.arrivalalarm://oauth/callback");
   assert.equal(metadata.resource, "https://connector.example/device");
-  assert.equal(metadata.audience, "https://arrival-alarm-api");
+  assert.equal(metadata.audience, "arrival-alarm");
   assert.equal(metadata.device_id_parameter, "device_id");
 });
 
