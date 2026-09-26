@@ -18,7 +18,6 @@ function env() {
     DEVICE_OAUTH_REVOCATION_ENDPOINT: "https://tenant.example/oauth/revoke",
     DEVICE_OAUTH_CLIENT_ID: "arrival-android",
     DEVICE_OAUTH_SCOPES: "arrival.device offline_access",
-    DEVICE_OAUTH_RESOURCE: "https://arrival-alarm-api",
     DEVICE_OAUTH_DEVICE_ID_PARAMETER: "ext-device_id",
     DEVICE_OAUTH_DEVICE_ID_CLAIM: "https://arrival-alarm.app/device_id",
   };
@@ -68,5 +67,6 @@ test("free Worker publishes Android Auth0-compatible public client metadata", as
   assert.equal(body.client_id, "arrival-android");
   assert.equal(body.redirect_uri, "com.nazofobi.arrivalalarm://oauth/callback");
   assert.equal(body.device_id_parameter, "ext-device_id");
+  assert.equal(body.audience, "https://arrival-alarm-api");
   assert.ok(body.scopes.includes("arrival.device"));
 });
