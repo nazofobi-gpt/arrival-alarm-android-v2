@@ -58,11 +58,16 @@ jobs:
 
             adb shell wm size 412x915
             adb shell settings put system font_scale 1.0
+            adb shell rm -rf /sdcard/Download/arrival-alarm-ui-qa
             adb shell wm size
             adb shell settings get system font_scale
             ./gradlew --no-daemon connectedDebugAndroidTest
             mkdir -p app/build/outputs/androidTest-results/ui-qa
-            adb pull /sdcard/Android/data/com.nazofobi.arrivalalarm/files/ui-qa/. app/build/outputs/androidTest-results/ui-qa/ || true
+            adb shell ls -l /sdcard/Download/arrival-alarm-ui-qa
+            adb pull /sdcard/Download/arrival-alarm-ui-qa/. app/build/outputs/androidTest-results/ui-qa/
+            for screen in home search journey departures settings; do
+              test -s "app/build/outputs/androidTest-results/ui-qa/$screen.png"
+            done
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell pm clear com.nazofobi.arrivalalarm || true
             adb shell am start -W -n com.nazofobi.arrivalalarm/.MainActivity
