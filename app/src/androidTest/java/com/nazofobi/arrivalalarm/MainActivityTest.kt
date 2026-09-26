@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import android.content.Context
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
@@ -86,7 +87,11 @@ class MainActivityTest {
     }
 
     @Test fun productionUiExposesInteractiveMapSurface() {
-        rule.onNodeWithTag("transit-map").performScrollTo().assertIsDisplayed()
+        val mapLabel = rule.activity.getString(R.string.map_point_label)
+        rule.onNodeWithTag("transit-map")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .assertContentDescriptionEquals(mapLabel)
         rule.onNodeWithTag("map-instruction").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("map-provider").performScrollTo().assertIsDisplayed()
     }
