@@ -31,7 +31,7 @@ function publicBaseUrl(req) {
 
 function resourceMetadata(req) {
   const base = publicBaseUrl(req);
-  const authorizationServer = process.env.OAUTH_AUTHORIZATION_SERVER?.replace(/\/$/, "");
+  const authorizationServer = process.env.OAUTH_AUTHORIZATION_SERVER?.trim();
   if (process.env.NODE_ENV === "production" && !authorizationServer) {
     throw new Error("production_oauth_not_configured");
   }
