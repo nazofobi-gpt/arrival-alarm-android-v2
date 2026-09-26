@@ -11,6 +11,8 @@ class JourneyConnectorActionPort(
     private val nowEpochSeconds: () -> Long = { System.currentTimeMillis() / 1_000 },
     private val staleAfterSeconds: Long = 120,
     private val progressTracker: RouteStopProgressTracker = RouteStopProgressTracker(),
+    private val onAlarmArmed: () -> Boolean = { true },
+    private val onAlarmCancelled: () -> Unit = {},
 ) : ConnectorActionPort {
     private var stateVersion = 1L
     private var sourceUpdatedAtEpochSeconds = nowEpochSeconds()
@@ -121,6 +123,13 @@ class JourneyConnectorActionPort(
         if (controller.state.phase != JourneyPhase.ARMED) {
             return ConnectorActionOutcome(false, controller.state.error ?: "Alarm kurulamadı")
         }
+        if (!onAlarmArmed()) {
+            controller.cancelAlarm()
+            return ConnectorActionOutcome(
+                false,
+                "Arka plan konum takibi başlatılamadı; alarm kurulmadı",
+            )
+        }
         markChanged()
         return ConnectorActionOutcome(true, "Varış alarmı kuruldu")
     }
@@ -134,6 +143,7 @@ class JourneyConnectorActionPort(
         if (controller.state.phase != JourneyPhase.DESTINATION_SELECTED) {
             return ConnectorActionOutcome(false, controller.state.error ?: "Alarm iptal edilemedi")
         }
+        onAlarmCancelled()
         markChanged()
         return ConnectorActionOutcome(true, "Varış alarmı iptal edildi")
     }
