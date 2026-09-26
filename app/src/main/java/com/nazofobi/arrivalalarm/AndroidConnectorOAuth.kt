@@ -298,6 +298,9 @@ class HttpConnectorOAuthTransport(
                 resource = if (json.isNull("resource")) null else {
                     json.optString("resource").takeIf { it.isNotBlank() }
                 },
+                audience = if (json.isNull("audience")) null else {
+                    json.optString("audience").takeIf { it.isNotBlank() }
+                },
                 deviceIdParameter = json.optString("device_id_parameter", "device_id"),
             )
         }
