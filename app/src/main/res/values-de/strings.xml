@@ -127,4 +127,13 @@
     <string name="min_two_chars">Mindestens 2 Zeichen eingeben</string>
     <string name="unknown_error">unbekannter Fehler</string>
     <string name="unknown_time">Zeit unbekannt</string>
+
+    <string name="map_title">Auf der Karte wählen</string>
+    <string name="map_instruction_origin">Tippen Sie auf die Karte, um den Start zu wählen; nahe Haltestellenmarker sind ebenfalls auswählbar.</string>
+    <string name="map_instruction_destination">Tippen Sie auf die Karte, um das Ziel zu wählen; nahe Haltestellenmarker sind ebenfalls auswählbar.</string>
+    <string name="map_point_label">Kartenpunkt</string>
+    <string name="map_provider_note">Karte: OpenFreeMap • MapLibre</string>
+    <string name="location_kind_stop">Haltestelle</string>
+    <string name="location_kind_address">Adresse</string>
+    <string name="location_kind_poi">Ort/POI</string>
 </resources>
