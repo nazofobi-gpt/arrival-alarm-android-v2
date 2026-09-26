@@ -116,11 +116,28 @@ data class ConnectorCommandReceipt(
  * Write commands always require explicit user confirmation. A stale snapshot or an optional
  * optimistic state-version mismatch fails closed. Successful writes are idempotent.
  */
+interface ConnectorReceiptStore {
+    fun get(idempotencyKey: String): ConnectorCommandReceipt?
+    fun put(receipt: ConnectorCommandReceipt)
+}
+
+class InMemoryConnectorReceiptStore(private val maxReceipts: Int = 128) : ConnectorReceiptStore {
+    private val receipts = LinkedHashMap<String, ConnectorCommandReceipt>()
+
+    override fun get(idempotencyKey: String): ConnectorCommandReceipt? = receipts[idempotencyKey]
+
+    override fun put(receipt: ConnectorCommandReceipt) {
+        receipts[receipt.idempotencyKey] = receipt
+        while (receipts.size > maxReceipts.coerceAtLeast(1)) {
+            receipts.remove(receipts.keys.first())
+        }
+    }
+}
+
 class ConnectorCommandProcessor(
     private val port: ConnectorActionPort,
-    private val maxReceipts: Int = 128,
+    private val receiptStore: ConnectorReceiptStore = InMemoryConnectorReceiptStore(),
 ) {
-    private val successfulReceipts = LinkedHashMap<String, ConnectorCommandReceipt>()
 
     fun snapshot(): ArrivalAlarmConnectorSnapshot = port.readSnapshot()
 
@@ -130,7 +147,7 @@ class ConnectorCommandProcessor(
         expectedStateVersion: Long? = null,
         nowEpochSeconds: Long,
     ): ConnectorCommandReceipt {
-        successfulReceipts[command.idempotencyKey]?.let {
+        receiptStore.get(command.idempotencyKey)?.let {
             return it.copy(duplicate = true)
         }
 
@@ -178,7 +195,7 @@ class ConnectorCommandProcessor(
             stateVersionAfter = after.stateVersion,
             actionId = outcome.actionId,
         )
-        if (outcome.applied) remember(receipt)
+        if (outcome.applied) receiptStore.put(receipt)
         return receipt
     }
 
@@ -196,10 +213,4 @@ class ConnectorCommandProcessor(
         stateVersionAfter = snapshot.stateVersion,
     )
 
-    private fun remember(receipt: ConnectorCommandReceipt) {
-        successfulReceipts[receipt.idempotencyKey] = receipt
-        while (successfulReceipts.size > maxReceipts.coerceAtLeast(1)) {
-            successfulReceipts.remove(successfulReceipts.keys.first())
-        }
-    }
 }
