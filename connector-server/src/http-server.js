@@ -4,6 +4,9 @@ import { bearerToken, createJwtAccessVerifier } from "./auth.js";
 import { createGatewayStoreFromEnv } from "./gateway-store.js";
 import { GatewayService } from "./gateway-service.js";
 import { createArrivalAlarmMcpServer } from "./mcp-server.js";
+import { validateProductionEnvironment } from "./production-config.js";
+
+validateProductionEnvironment(process.env);
 
 const store = createGatewayStoreFromEnv();
 const service = new GatewayService(store);

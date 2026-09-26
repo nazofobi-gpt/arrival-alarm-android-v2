@@ -45,6 +45,10 @@ jobs:
           node --check src/gateway-service.js
           node --check src/mcp-server.js
           node --check src/http-server.js
+          node --check src/production-config.js
 
       - name: Test
         run: npm test
+
+      - name: Build production container
+        run: docker build --tag arrival-alarm-connector-ci .
