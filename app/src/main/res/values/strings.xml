@@ -83,6 +83,16 @@
     <string name="nearby_stop_format">%1$s • %2$s • %3$d m</string>
 
     <string name="route_calculating">Rota hesaplanıyor…</string>
+    <string name="route_results_title">Rota Sonuçları</string>
+    <string name="route_points_format">%1$s → %2$s</string>
+    <string name="route_offline_badge">Çevrimdışı önbellek</string>
+    <string name="route_duration_minutes">%1$d dk</string>
+    <string name="route_walk_transfer_format">%1$d dk yürüme • %2$d aktarma</string>
+    <string name="route_realtime_badge">Canlı güncelleme</string>
+    <string name="route_planned_badge">Planlı saat</string>
+    <string name="route_select_action">Bu rotayı seç</string>
+    <string name="route_selected_action">Rota seçildi</string>
+    <string name="journey_detail_title">Yolculuk Detayı</string>
     <string name="route_live_static">transport.rest / DB profile • canlı/planlı rota</string>
     <string name="route_live_unavailable">Canlı rota kullanılamıyor: %1$s</string>
     <string name="route_not_found">Bu başlangıç/varış için rota bulunamadı</string>
