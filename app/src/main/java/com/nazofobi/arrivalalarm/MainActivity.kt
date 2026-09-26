@@ -628,7 +628,52 @@ fun ArrivalAlarmApp(
         }
     }
 
-    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+    val activeScreen = runCatching {
+        ArrivalScreen.valueOf(activeScreenName)
+    }.getOrDefault(ArrivalScreen.HOME)
+    val readinessState = remember(
+        readinessRefreshTick,
+        themeMode,
+        dataState,
+        guidanceState,
+        journey.phase,
+        connectorConnected,
+        connectorBaseUrl,
+    ) {
+        SettingsReadinessState.from(
+            context = context,
+            themeMode = themeMode,
+            dataState = dataState,
+            guidanceState = guidanceState,
+            backgroundJourneyActive = journey.phase == JourneyPhase.ARMED,
+            connectorConfigured = connectorBaseUrl.isNotBlank(),
+            connectorConnected = connectorConnected,
+        )
+    }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        bottomBar = {
+            if (onboardingComplete) {
+                ArrivalNavigationBar(
+                    currentScreen = activeScreen,
+                    onScreenSelected = { requested ->
+                        val resolved = if (requested == ArrivalScreen.JOURNEY) {
+                            when {
+                                journey.phase == JourneyPhase.ARMED -> ArrivalScreen.LIVE
+                                selectedRouteId != null -> ArrivalScreen.JOURNEY
+                                origin != null && destination != null -> ArrivalScreen.ROUTES
+                                else -> ArrivalScreen.HOME
+                            }
+                        } else {
+                            requested
+                        }
+                        activeScreenName = resolved.name
+                    },
+                )
+            }
+        },
+    ) { innerPadding ->
         Surface(Modifier.fillMaxSize().padding(innerPadding)) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -640,382 +685,550 @@ fun ArrivalAlarmApp(
                         .widthIn(max = 840.dp)
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
-                        .padding(24.dp)
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
                         .testTag("adaptive-content"),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
-                Text(stringResource(R.string.subtitle), style = MaterialTheme.typography.titleMedium)
-
-                if (!onboardingComplete) {
-                    FirstRunOnboarding(
-                        onContinue = {
-                            appPreferences.edit()
-                                .putBoolean("onboarding_complete", true)
-                                .apply()
-                            onboardingComplete = true
-                        },
-                    )
-                }
-
-                val readinessState = remember(
-                    readinessRefreshTick,
-                    themeMode,
-                    dataState,
-                    guidanceState,
-                    journey.phase,
-                    connectorConnected,
-                    connectorBaseUrl,
-                ) {
-                    SettingsReadinessState.from(
-                        context = context,
-                        themeMode = themeMode,
-                        dataState = dataState,
-                        guidanceState = guidanceState,
-                        backgroundJourneyActive = journey.phase == JourneyPhase.ARMED,
-                        connectorConfigured = connectorBaseUrl.isNotBlank(),
-                        connectorConnected = connectorConnected,
-                    )
-                }
-                SettingsReadinessPanel(
-                    state = readinessState,
-                    connectorBusy = connectorSetupBusy,
-                    connectorStatus = connectorSetupStatus,
-                    onThemeModeChange = onThemeModeChange,
-                    onRequestJourneyPermissions = {
-                        readinessPermissionLauncher.launch(
-                            ActiveJourneyPermissions.runtimePermissions()
+                    if (!onboardingComplete) {
+                        FirstRunOnboarding(
+                            onContinue = {
+                                appPreferences.edit()
+                                    .putBoolean("onboarding_complete", true)
+                                    .apply()
+                                onboardingComplete = true
+                                activeScreenName = ArrivalScreen.HOME.name
+                            },
                         )
-                    },
-                    onRequestGuidancePermissions = {
-                        guidancePermissionLauncher.launch(
-                            AndroidGuidancePermissions.runtimePermissions()
-                        )
-                    },
-                    onRefreshReadiness = { refreshReadiness() },
-                    onOpenAppSettings = { openArrivalAlarmAppSettings(context) },
-                    onRetryData = {
-                        transit.ensureNationwideIndex { dataState = it }
-                    },
-                    onConnectorAction = {
-                        if (connectorConnected) disconnectConnector()
-                        else beginConnectorAuthorization()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                HomeSearchPanel(
-                    selectingOrigin = selectingOrigin,
-                    query = query,
-                    searchBusy = searchBusy,
-                    searchResults = searchResults,
-                    searchSource = searchSource,
-                    searchMessage = searchMessage,
-                    locationMessage = locationMessage,
-                    origin = origin,
-                    destination = destination,
-                    mapMessage = mapMessage,
-                    nearby = nearby,
-                    nearbySource = nearbySource,
-                    recentSearches = recentSearches,
-                    favoriteStopIds = favoriteStopIds,
-                    onSelectOriginTarget = { selectingOrigin = true },
-                    onSelectDestinationTarget = { selectingOrigin = false },
-                    onQueryChange = {
-                        query = it
-                        searchRequestId += 1
-                    },
-                    onSearch = { runSearch(recordRecent = true) },
-                    onSearchResultSelected = { result ->
-                        if (selectingOrigin) {
-                            setOrigin(result.point)
-                        } else if (result.stop != null) {
-                            setDestination(result.stop)
-                        } else {
-                            setDestinationPoint(result.point)
-                        }
-                    },
-                    onRecentSearchSelected = { recent ->
-                        query = recent
-                        runSearch(recent, recordRecent = true)
-                    },
-                    onClearRecentSearches = {
-                        recentSearches = emptyList()
-                        searchRecentsPreferences.edit().remove("queries").apply()
-                    },
-                    onUseCurrentLocation = {
-                        if (currentLocation.hasPermission()) {
-                            useCurrentLocation()
-                        } else {
-                            locationPermissionLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION,
-                                )
-                            )
-                        }
-                    },
-                    onMapStopSelected = { stop ->
-                        if (selectingOrigin) {
-                            setOrigin(MapPoint(stop.latitude, stop.longitude, stop.name))
-                        } else {
-                            setDestination(stop)
-                        }
-                    },
-                    onMapPointSelected = { point ->
-                        if (selectingOrigin) {
-                            setOrigin(point)
-                        } else {
-                            setDestinationPoint(point)
-                        }
-                    },
-                    onMapError = {
-                        mapMessage = context.getString(R.string.map_load_failed)
-                    },
-                    onNearbyStopSelected = { candidate ->
-                        val point = MapPoint(
-                            candidate.stop.latitude,
-                            candidate.stop.longitude,
-                            candidate.stop.name,
-                        )
-                        if (selectingOrigin) {
-                            setOrigin(point)
-                        } else {
-                            setDestination(candidate.stop)
-                        }
-                    },
-                )
-
-                RouteJourneyPanel(
-                    origin = origin,
-                    destination = destination,
-                    routeOptions = routeOptions,
-                    routeBusy = routeBusy,
-                    routeStatus = routeStatus,
-                    routeOffline = routeOffline,
-                    selectedRouteId = selectedRouteId,
-                    journey = journey,
-                    onRefreshRoutes = {
-                        val from = origin
-                        val to = destination
-                        if (from != null && to != null) {
-                            loadRoutes(from, to)
-                        }
-                    },
-                    onSelectRoute = { option ->
-                        selectRouteOption(option)
-                    },
-                    onArmAlarm = {
-                        if (ActiveJourneyPermissions.hasRequired(context)) {
-                            armAndStartTracking()
-                        } else {
-                            alarmPermissionLauncher.launch(
-                                ActiveJourneyPermissions.runtimePermissions()
-                            )
-                        }
-                    },
-                    onCancelAlarm = {
-                        val outcome = connectorPort.cancelArrivalAlarm()
-                        journey = controller.state
-                        if (outcome.applied) {
-                            routeStatus = context.getString(R.string.alarm_cancelled)
-                        } else {
-                            routeStatus = localizedDomainMessage(context, outcome.message)
-                        }
-                    },
-                )
-
-                routeOptions.firstOrNull { it.id == selectedRouteId }?.let { selectedRoute ->
-                    if (
-                        journey.phase == JourneyPhase.DESTINATION_SELECTED ||
-                        journey.phase == JourneyPhase.ARMED ||
-                        journey.phase == JourneyPhase.ARRIVED
-                    ) {
-                        LiveTripPanel(
-                            selectedRoute = selectedRoute,
-                            journey = journey,
-                            guidanceState = guidanceState,
-                            routeOffline = routeOffline,
-                            nowEpochSeconds = liveNowEpochSeconds,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                }
-
-                val destinationPoint = destination
-                if (routeOptions.isNotEmpty() && destinationPoint != null) {
-                    val boardNow = System.currentTimeMillis() / 1_000
-                    val departures = routeOptions.map { option ->
-                        Departure(
-                            tripId = option.tripIds.firstOrNull() ?: option.id,
-                            line = option.line,
-                            direction = option.direction,
-                            scheduledEpochSeconds = clockToEpoch(option.departure, boardNow),
-                            routeId = option.id,
-                        )
-                    }
-                    val selectedRoute = routeOptions.firstOrNull { it.id == selectedRouteId }
-                        ?: routeOptions.first()
-                    val boardDepartures = if (stationResolved) stationDepartures else departures
-                    val boardAlerts = if (stationResolved) stationAlerts else emptyList()
-                    TransitExperiencePanel(
-                        stopId = destinationStopId
-                            ?: "coord:${destinationPoint.latitude},${destinationPoint.longitude}",
-                        stopName = destinationPoint.label,
-                        lineName = selectedRoute.line,
-                        direction = selectedRoute.direction,
-                        departures = boardDepartures,
-                        alerts = boardAlerts,
-                        isOfflineCache = !stationResolved && routeOffline,
-                        nowEpochSeconds = boardNow,
-                        providerCapabilities = TransitProviderCapabilities(
-                            realtimeDepartures = stationResolved &&
-                                stationDepartures.any { it.isRealtime },
-                            serviceAlerts = stationResolved && stationAlerts.isNotEmpty(),
-                        ),
-                        onSelectJourney = { routeId ->
-                            routeOptions.firstOrNull { it.id == routeId }
-                                ?.let { selectRouteOption(it) }
-                        },
-                        statusMessage = stationStatus
-                            ?: if (!stationResolved && !stationLoading) {
-                                context.getString(R.string.departures_route_fallback)
-                            } else null,
-                        sourceLabel = if (stationResolved) stationSource else null,
-                        loading = stationLoading,
-                        modifier = Modifier.fillMaxWidth().testTag("transit-experience-panel"),
-                    )
-                }
-
-                Text(stringResource(R.string.guidance_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-                Text(guidanceStatusText(guidanceState), modifier = Modifier.testTag("guidance-status"))
-                Text(stringResource(R.string.guidance_language_title), style = MaterialTheme.typography.titleSmall)
-                Text(
-                    stringResource(R.string.guidance_language_status, guidanceLanguage.displayName),
-                    modifier = Modifier.testTag("guidance-language-status"),
-                )
-                GuidanceLanguage.values().forEach { language ->
-                    Button(
-                        onClick = { selectGuidanceLanguage(language) },
-                        enabled = guidanceLanguage != language,
-                        modifier = Modifier.fillMaxWidth().testTag("guidance-language-${language.localeTag}"),
-                    ) {
+                    } else {
                         Text(
-                            if (guidanceLanguage == language) stringResource(R.string.guidance_language_selected, language.displayName)
-                            else language.displayName
+                            stringResource(R.string.app_name),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                            modifier = Modifier.semantics { heading() },
                         )
-                    }
-                }
-                Button(
-                    onClick = { guidancePermissionLauncher.launch(AndroidGuidancePermissions.runtimePermissions()) },
-                    modifier = Modifier.testTag("guidance-permissions"),
-                ) { Text(stringResource(R.string.guidance_permissions)) }
-                Button(
-                    onClick = {
-                        guidanceController.onPermissions(AndroidGuidancePermissions.snapshot(context))
-                        guidanceController.onAudioRoute(AndroidGuidanceAudio.currentRoute(context))
-                        guidanceState = guidanceController.state
-                    },
-                    modifier = Modifier.testTag("guidance-route-refresh"),
-                ) { Text(stringResource(R.string.guidance_refresh_route)) }
-                destination?.let { target ->
-                    Button(
-                        onClick = {
-                            guidanceController.requestGuidance(
-                                GuidanceUtterance(
-                                    key = "destination:${target.label}:${guidanceLanguage.localeTag}",
-                                    text = guidanceLanguage.destinationText(target.label),
-                                    localeTag = guidanceLanguage.localeTag,
-                                )
+                        if (activeScreen == ArrivalScreen.HOME) {
+                            Text(
+                                stringResource(R.string.subtitle),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            guidanceState = guidanceController.state
-                        },
-                        enabled = guidanceState.permissionState != GuidancePermissionState.DENIED,
-                        modifier = Modifier.testTag("guidance-destination"),
-                    ) { Text(stringResource(R.string.guidance_speak_destination)) }
-                }
+                        }
 
-                val inferenceTitle = stringResource(R.string.inference_title)
-                Text(inferenceTitle, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-                Switch(
-                    checked = inferenceEnabled,
-                    onCheckedChange = {
-                        inferenceEnabled = it
-                        inferenceResult = null
-                        confirmedTripId = null
-                    },
-                    modifier = Modifier
-                        .semantics { contentDescription = inferenceTitle }
-                        .testTag("trip-inference-toggle"),
-                )
-                Text(
-                    if (inferenceEnabled) stringResource(R.string.inference_enabled)
-                    else stringResource(R.string.inference_disabled),
-                    modifier = Modifier.testTag("trip-inference-status"),
-                )
-                Button(
-                    onClick = {
-                        val anchor = origin
-                        if (anchor == null || routeOptions.isEmpty()) {
-                            inferenceResult = TripInferenceResult(emptyList(), null, context.getString(R.string.inference_prerequisite))
-                        } else {
-                            currentLocation.request { location ->
-                                inferenceResult = location.fold(
-                                    onSuccess = { point ->
-                                        val now = System.currentTimeMillis() / 1000
-                                        val observation = MovementObservation(point, 0.0, null, now)
-                                        val candidates = routeOptions.map { option ->
-                                            TripCandidate(
-                                                routeId = option.id,
-                                                line = option.line,
-                                                direction = option.direction,
-                                                anchor = GeoPoint(anchor.latitude, anchor.longitude),
-                                                expectedBearingDegrees = null,
-                                                scheduledEpochSeconds = clockToEpoch(option.departure, now),
+                        when (activeScreen) {
+                            ArrivalScreen.HOME,
+                            ArrivalScreen.SEARCH -> {
+                                HomeSearchPanel(
+                                    selectingOrigin = selectingOrigin,
+                                    query = query,
+                                    searchBusy = searchBusy,
+                                    searchResults = searchResults,
+                                    searchSource = searchSource,
+                                    searchMessage = searchMessage,
+                                    locationMessage = locationMessage,
+                                    origin = origin,
+                                    destination = destination,
+                                    mapMessage = mapMessage,
+                                    nearby = nearby,
+                                    nearbySource = nearbySource,
+                                    recentSearches = recentSearches,
+                                    favoriteStopIds = favoriteStopIds,
+                                    onSelectOriginTarget = {
+                                        selectingOrigin = true
+                                        activeScreenName = ArrivalScreen.SEARCH.name
+                                    },
+                                    onSelectDestinationTarget = {
+                                        selectingOrigin = false
+                                        activeScreenName = ArrivalScreen.SEARCH.name
+                                    },
+                                    onQueryChange = {
+                                        query = it
+                                        searchRequestId += 1
+                                    },
+                                    onSearch = { runSearch(recordRecent = true) },
+                                    onSearchResultSelected = { result ->
+                                        if (selectingOrigin) {
+                                            setOrigin(result.point)
+                                            activeScreenName = ArrivalScreen.HOME.name
+                                        } else if (result.stop != null) {
+                                            setDestination(result.stop)
+                                        } else {
+                                            setDestinationPoint(result.point)
+                                        }
+                                    },
+                                    onRecentSearchSelected = { recent ->
+                                        query = recent
+                                        runSearch(recent, recordRecent = true)
+                                    },
+                                    onClearRecentSearches = {
+                                        recentSearches = emptyList()
+                                        searchRecentsPreferences.edit().remove("queries").apply()
+                                    },
+                                    onUseCurrentLocation = {
+                                        if (currentLocation.hasPermission()) {
+                                            useCurrentLocation()
+                                        } else {
+                                            locationPermissionLauncher.launch(
+                                                arrayOf(
+                                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                                                )
                                             )
                                         }
-                                        TripInferenceEngine(TripInferenceSettings(enabled = true)).infer(observation, candidates)
                                     },
-                                    onFailure = {
-                                        TripInferenceResult(emptyList(), null, localizedDomainMessage(context, it.message))
+                                    onMapStopSelected = { stop ->
+                                        if (selectingOrigin) {
+                                            setOrigin(MapPoint(stop.latitude, stop.longitude, stop.name))
+                                        } else {
+                                            setDestination(stop)
+                                        }
+                                    },
+                                    onMapPointSelected = { point ->
+                                        if (selectingOrigin) {
+                                            setOrigin(point)
+                                        } else {
+                                            setDestinationPoint(point)
+                                        }
+                                    },
+                                    onMapError = {
+                                        mapMessage = context.getString(R.string.map_load_failed)
+                                    },
+                                    onNearbyStopSelected = { candidate ->
+                                        val point = MapPoint(
+                                            candidate.stop.latitude,
+                                            candidate.stop.longitude,
+                                            candidate.stop.name,
+                                        )
+                                        if (selectingOrigin) {
+                                            setOrigin(point)
+                                        } else {
+                                            setDestination(candidate.stop)
+                                        }
+                                    },
+                                    mode = if (activeScreen == ArrivalScreen.HOME) {
+                                        HomeSearchMode.HOME
+                                    } else {
+                                        HomeSearchMode.SEARCH
                                     },
                                 )
                             }
-                        }
-                    },
-                    enabled = inferenceEnabled && routeOptions.isNotEmpty() && origin != null,
-                    modifier = Modifier.testTag("trip-inference-run"),
-                ) { Text(stringResource(R.string.inference_run)) }
-                inferenceResult?.let { result ->
-                    val accepted = result.accepted
-                    if (accepted == null) {
-                        Text(result.reason, modifier = Modifier.testTag("trip-inference-result"))
-                    } else {
-                        Text(
-                            stringResource(R.string.inference_result, accepted.candidate.line, accepted.candidate.direction, (accepted.confidence * 100).toInt()),
-                            modifier = Modifier.testTag("trip-inference-result"),
-                        )
-                        Text(accepted.explanation, modifier = Modifier.testTag("trip-inference-explanation"))
-                        Button(
-                            onClick = {
-                                val selected = connectorPort.selectJourney(accepted.candidate.routeId)
-                                if (selected.applied) {
-                                    confirmedTripId = accepted.candidate.routeId
-                                    journey = controller.state
+
+                            ArrivalScreen.ROUTES,
+                            ArrivalScreen.JOURNEY -> {
+                                RouteJourneyPanel(
+                                    origin = origin,
+                                    destination = destination,
+                                    routeOptions = routeOptions,
+                                    routeBusy = routeBusy,
+                                    routeStatus = routeStatus,
+                                    routeOffline = routeOffline,
+                                    selectedRouteId = selectedRouteId,
+                                    journey = journey,
+                                    onRefreshRoutes = {
+                                        val from = origin
+                                        val to = destination
+                                        if (from != null && to != null) {
+                                            loadRoutes(from, to)
+                                        }
+                                    },
+                                    onSelectRoute = { option ->
+                                        selectRouteOption(option)
+                                    },
+                                    onArmAlarm = {
+                                        if (ActiveJourneyPermissions.hasRequired(context)) {
+                                            armAndStartTracking()
+                                        } else {
+                                            alarmPermissionLauncher.launch(
+                                                ActiveJourneyPermissions.runtimePermissions()
+                                            )
+                                        }
+                                    },
+                                    onCancelAlarm = {
+                                        val outcome = connectorPort.cancelArrivalAlarm()
+                                        journey = controller.state
+                                        if (outcome.applied) {
+                                            routeStatus = context.getString(R.string.alarm_cancelled)
+                                        } else {
+                                            routeStatus = localizedDomainMessage(context, outcome.message)
+                                        }
+                                    },
+                                    mode = if (activeScreen == ArrivalScreen.ROUTES) {
+                                        RouteJourneyMode.RESULTS
+                                    } else {
+                                        RouteJourneyMode.DETAIL
+                                    },
+                                )
+                            }
+
+                            ArrivalScreen.LIVE -> {
+                                val selectedRoute = routeOptions.firstOrNull { it.id == selectedRouteId }
+                                if (selectedRoute == null) {
+                                    Text(
+                                        text = stringResource(R.string.error_trip_required),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.testTag("live-trip-empty"),
+                                    )
                                 } else {
-                                    routeStatus = localizedDomainMessage(context, selected.message)
+                                    LiveTripPanel(
+                                        selectedRoute = selectedRoute,
+                                        journey = journey,
+                                        guidanceState = guidanceState,
+                                        routeOffline = routeOffline,
+                                        nowEpochSeconds = liveNowEpochSeconds,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                    RouteJourneyPanel(
+                                        origin = origin,
+                                        destination = destination,
+                                        routeOptions = routeOptions,
+                                        routeBusy = routeBusy,
+                                        routeStatus = routeStatus,
+                                        routeOffline = routeOffline,
+                                        selectedRouteId = selectedRouteId,
+                                        journey = journey,
+                                        onRefreshRoutes = {},
+                                        onSelectRoute = {},
+                                        onArmAlarm = {
+                                            if (ActiveJourneyPermissions.hasRequired(context)) {
+                                                armAndStartTracking()
+                                            } else {
+                                                alarmPermissionLauncher.launch(
+                                                    ActiveJourneyPermissions.runtimePermissions()
+                                                )
+                                            }
+                                        },
+                                        onCancelAlarm = {
+                                            val outcome = connectorPort.cancelArrivalAlarm()
+                                            journey = controller.state
+                                            routeStatus = if (outcome.applied) {
+                                                context.getString(R.string.alarm_cancelled)
+                                            } else {
+                                                localizedDomainMessage(context, outcome.message)
+                                            }
+                                            if (outcome.applied) {
+                                                activeScreenName = ArrivalScreen.JOURNEY.name
+                                            }
+                                        },
+                                        mode = RouteJourneyMode.DETAIL,
+                                    )
                                 }
-                            },
-                            modifier = Modifier.testTag("trip-inference-confirm"),
-                        ) { Text(stringResource(R.string.inference_confirm)) }
+                            }
+
+                            ArrivalScreen.STATION -> {
+                                val destinationPoint = destination
+                                if (routeOptions.isNotEmpty() && destinationPoint != null) {
+                                    val boardNow = System.currentTimeMillis() / 1_000
+                                    val departures = routeOptions.map { option ->
+                                        Departure(
+                                            tripId = option.tripIds.firstOrNull() ?: option.id,
+                                            line = option.line,
+                                            direction = option.direction,
+                                            scheduledEpochSeconds = clockToEpoch(option.departure, boardNow),
+                                            routeId = option.id,
+                                        )
+                                    }
+                                    val selectedRoute = routeOptions.firstOrNull { it.id == selectedRouteId }
+                                        ?: routeOptions.first()
+                                    val boardDepartures = if (stationResolved) stationDepartures else departures
+                                    val boardAlerts = if (stationResolved) stationAlerts else emptyList()
+                                    TransitExperiencePanel(
+                                        stopId = destinationStopId
+                                            ?: "coord:${destinationPoint.latitude},${destinationPoint.longitude}",
+                                        stopName = destinationPoint.label,
+                                        lineName = selectedRoute.line,
+                                        direction = selectedRoute.direction,
+                                        departures = boardDepartures,
+                                        alerts = boardAlerts,
+                                        isOfflineCache = !stationResolved && routeOffline,
+                                        nowEpochSeconds = boardNow,
+                                        providerCapabilities = TransitProviderCapabilities(
+                                            realtimeDepartures = stationResolved &&
+                                                stationDepartures.any { it.isRealtime },
+                                            serviceAlerts = stationResolved && stationAlerts.isNotEmpty(),
+                                        ),
+                                        onSelectJourney = { routeId ->
+                                            routeOptions.firstOrNull { it.id == routeId }
+                                                ?.let { selectRouteOption(it) }
+                                        },
+                                        statusMessage = stationStatus
+                                            ?: if (!stationResolved && !stationLoading) {
+                                                context.getString(R.string.departures_route_fallback)
+                                            } else null,
+                                        sourceLabel = if (stationResolved) stationSource else null,
+                                        loading = stationLoading,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("transit-experience-panel"),
+                                    )
+                                } else {
+                                    Text(
+                                        text = stringResource(R.string.departures_empty),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.testTag("departures-empty-screen"),
+                                    )
+                                }
+                            }
+
+                            ArrivalScreen.SETTINGS -> {
+                                SettingsReadinessPanel(
+                                    state = readinessState,
+                                    connectorBusy = connectorSetupBusy,
+                                    connectorStatus = connectorSetupStatus,
+                                    onThemeModeChange = onThemeModeChange,
+                                    onRequestJourneyPermissions = {
+                                        readinessPermissionLauncher.launch(
+                                            ActiveJourneyPermissions.runtimePermissions()
+                                        )
+                                    },
+                                    onRequestGuidancePermissions = {
+                                        guidancePermissionLauncher.launch(
+                                            AndroidGuidancePermissions.runtimePermissions()
+                                        )
+                                    },
+                                    onRefreshReadiness = { refreshReadiness() },
+                                    onOpenAppSettings = { openArrivalAlarmAppSettings(context) },
+                                    onRetryData = {
+                                        transit.ensureNationwideIndex { dataState = it }
+                                    },
+                                    onConnectorAction = {
+                                        if (connectorConnected) disconnectConnector()
+                                        else beginConnectorAuthorization()
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+
+                                Text(
+                                    stringResource(R.string.guidance_title),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.semantics { heading() },
+                                )
+                                Text(
+                                    guidanceStatusText(guidanceState),
+                                    modifier = Modifier.testTag("guidance-status"),
+                                )
+                                Text(
+                                    stringResource(R.string.guidance_language_title),
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                Text(
+                                    stringResource(
+                                        R.string.guidance_language_status,
+                                        guidanceLanguage.displayName,
+                                    ),
+                                    modifier = Modifier.testTag("guidance-language-status"),
+                                )
+                                GuidanceLanguage.values().forEach { language ->
+                                    Button(
+                                        onClick = { selectGuidanceLanguage(language) },
+                                        enabled = guidanceLanguage != language,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("guidance-language-${language.localeTag}"),
+                                    ) {
+                                        Text(
+                                            if (guidanceLanguage == language) {
+                                                stringResource(
+                                                    R.string.guidance_language_selected,
+                                                    language.displayName,
+                                                )
+                                            } else {
+                                                language.displayName
+                                            }
+                                        )
+                                    }
+                                }
+                                Button(
+                                    onClick = {
+                                        guidancePermissionLauncher.launch(
+                                            AndroidGuidancePermissions.runtimePermissions()
+                                        )
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("guidance-permissions"),
+                                ) {
+                                    Text(stringResource(R.string.guidance_permissions))
+                                }
+                                Button(
+                                    onClick = {
+                                        guidanceController.onPermissions(
+                                            AndroidGuidancePermissions.snapshot(context)
+                                        )
+                                        guidanceController.onAudioRoute(
+                                            AndroidGuidanceAudio.currentRoute(context)
+                                        )
+                                        guidanceState = guidanceController.state
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("guidance-route-refresh"),
+                                ) {
+                                    Text(stringResource(R.string.guidance_refresh_route))
+                                }
+                                destination?.let { target ->
+                                    Button(
+                                        onClick = {
+                                            guidanceController.requestGuidance(
+                                                GuidanceUtterance(
+                                                    key = "destination:${target.label}:${guidanceLanguage.localeTag}",
+                                                    text = guidanceLanguage.destinationText(target.label),
+                                                    localeTag = guidanceLanguage.localeTag,
+                                                )
+                                            )
+                                            guidanceState = guidanceController.state
+                                        },
+                                        enabled = guidanceState.permissionState != GuidancePermissionState.DENIED,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("guidance-destination"),
+                                    ) {
+                                        Text(stringResource(R.string.guidance_speak_destination))
+                                    }
+                                }
+
+                                val inferenceTitle = stringResource(R.string.inference_title)
+                                Text(
+                                    inferenceTitle,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.semantics { heading() },
+                                )
+                                Switch(
+                                    checked = inferenceEnabled,
+                                    onCheckedChange = {
+                                        inferenceEnabled = it
+                                        inferenceResult = null
+                                        confirmedTripId = null
+                                    },
+                                    modifier = Modifier
+                                        .semantics { contentDescription = inferenceTitle }
+                                        .testTag("trip-inference-toggle"),
+                                )
+                                Text(
+                                    if (inferenceEnabled) {
+                                        stringResource(R.string.inference_enabled)
+                                    } else {
+                                        stringResource(R.string.inference_disabled)
+                                    },
+                                    modifier = Modifier.testTag("trip-inference-status"),
+                                )
+                                Button(
+                                    onClick = {
+                                        val anchor = origin
+                                        if (anchor == null || routeOptions.isEmpty()) {
+                                            inferenceResult = TripInferenceResult(
+                                                emptyList(),
+                                                null,
+                                                context.getString(R.string.inference_prerequisite),
+                                            )
+                                        } else {
+                                            currentLocation.request { location ->
+                                                inferenceResult = location.fold(
+                                                    onSuccess = { point ->
+                                                        val now = System.currentTimeMillis() / 1_000
+                                                        val observation = MovementObservation(
+                                                            point,
+                                                            0.0,
+                                                            null,
+                                                            now,
+                                                        )
+                                                        val candidates = routeOptions.map { option ->
+                                                            TripCandidate(
+                                                                routeId = option.id,
+                                                                line = option.line,
+                                                                direction = option.direction,
+                                                                anchor = GeoPoint(
+                                                                    anchor.latitude,
+                                                                    anchor.longitude,
+                                                                ),
+                                                                expectedBearingDegrees = null,
+                                                                scheduledEpochSeconds = clockToEpoch(
+                                                                    option.departure,
+                                                                    now,
+                                                                ),
+                                                            )
+                                                        }
+                                                        TripInferenceEngine(
+                                                            TripInferenceSettings(enabled = true)
+                                                        ).infer(observation, candidates)
+                                                    },
+                                                    onFailure = {
+                                                        TripInferenceResult(
+                                                            emptyList(),
+                                                            null,
+                                                            localizedDomainMessage(
+                                                                context,
+                                                                it.message,
+                                                            ),
+                                                        )
+                                                    },
+                                                )
+                                            }
+                                        }
+                                    },
+                                    enabled = inferenceEnabled &&
+                                        routeOptions.isNotEmpty() &&
+                                        origin != null,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("trip-inference-run"),
+                                ) {
+                                    Text(stringResource(R.string.inference_run))
+                                }
+                                inferenceResult?.let { result ->
+                                    val accepted = result.accepted
+                                    if (accepted == null) {
+                                        Text(
+                                            result.reason,
+                                            modifier = Modifier.testTag("trip-inference-result"),
+                                        )
+                                    } else {
+                                        Text(
+                                            stringResource(
+                                                R.string.inference_result,
+                                                accepted.candidate.line,
+                                                accepted.candidate.direction,
+                                                (accepted.confidence * 100).toInt(),
+                                            ),
+                                            modifier = Modifier.testTag("trip-inference-result"),
+                                        )
+                                        Text(
+                                            accepted.explanation,
+                                            modifier = Modifier.testTag(
+                                                "trip-inference-explanation"
+                                            ),
+                                        )
+                                        Button(
+                                            onClick = {
+                                                val selected = connectorPort.selectJourney(
+                                                    accepted.candidate.routeId
+                                                )
+                                                if (selected.applied) {
+                                                    confirmedTripId = accepted.candidate.routeId
+                                                    journey = controller.state
+                                                    activeScreenName = ArrivalScreen.JOURNEY.name
+                                                } else {
+                                                    routeStatus = localizedDomainMessage(
+                                                        context,
+                                                        selected.message,
+                                                    )
+                                                }
+                                            },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .testTag("trip-inference-confirm"),
+                                        ) {
+                                            Text(stringResource(R.string.inference_confirm))
+                                        }
+                                    }
+                                }
+                                confirmedTripId?.let {
+                                    Text(
+                                        stringResource(R.string.inference_confirmed, it),
+                                        modifier = Modifier.testTag("trip-inference-confirmed"),
+                                    )
+                                }
+                            }
+                        }
                     }
-                }
-                confirmedTripId?.let {
-                    Text(
-                        stringResource(R.string.inference_confirmed, it),
-                        modifier = Modifier.testTag("trip-inference-confirmed"),
-                    )
-                }
                 }
             }
         }
