@@ -46,6 +46,7 @@ jobs:
           node --check src/mcp-server.js
           node --check src/http-server.js
           node --check src/production-config.js
+          node --check scripts/production-preflight.js
 
       - name: Test
         run: npm test
