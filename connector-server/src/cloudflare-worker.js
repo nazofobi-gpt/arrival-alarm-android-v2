@@ -11,8 +11,8 @@ const DEVICE_SCOPE = "arrival.device";
 const MAX_BODY_BYTES = 256 * 1024;
 const verifierCache = new Map();
 
-function normalizedHttps(value, name) {
-  const raw = typeof value === "string" ? value.trim().replace(/\/$/, "") : "";
+function normalizedHttps(value, name, { preserveTrailingSlash = false } = {}) {
+  const raw = typeof value === "string" ? value.trim() : "";
   let parsed;
   try {
     parsed = new URL(raw);
@@ -22,7 +22,8 @@ function normalizedHttps(value, name) {
   if (parsed.protocol !== "https:" || !parsed.hostname) {
     throw new Error("worker_https_required_" + name);
   }
-  return raw;
+  const canonical = parsed.toString();
+  return preserveTrailingSlash ? canonical : canonical.replace(/\/$/, "");
 }
 
 function publicBaseUrl(request, env) {
@@ -36,7 +37,8 @@ function resourceMetadata(request, env) {
   const base = publicBaseUrl(request, env);
   const authorizationServer = normalizedHttps(
     env.OAUTH_AUTHORIZATION_SERVER,
-    "authorization_server"
+    "authorization_server",
+    { preserveTrailingSlash: true }
   );
   return {
     resource: base + MCP_PATH,
@@ -53,7 +55,8 @@ function resourceMetadataUrl(request, env) {
 function verifierFor(env, { device = false } = {}) {
   const issuer = normalizedHttps(
     (device ? env.DEVICE_OAUTH_ISSUER : null) || env.OAUTH_ISSUER,
-    device ? "device_oauth_issuer" : "oauth_issuer"
+    device ? "device_oauth_issuer" : "oauth_issuer",
+    { preserveTrailingSlash: true }
   );
   const audience =
     ((device ? env.DEVICE_OAUTH_AUDIENCE : null) || env.OAUTH_AUDIENCE || "").trim();
