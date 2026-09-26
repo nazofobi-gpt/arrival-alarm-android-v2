@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { bearerToken, createJwtAccessVerifier } from "./auth.js";
 import { InMemoryGatewayStore } from "./gateway-store.js";
 import { GatewayService } from "./gateway-service.js";
 import { createArrivalAlarmMcpServer } from "./mcp-server.js";
@@ -10,6 +11,10 @@ const port = Number(process.env.PORT ?? 8787);
 const MCP_PATH = "/mcp";
 const MAX_BODY_BYTES = 256 * 1024;
 const CONNECTOR_SCOPES = ["arrival.read", "arrival.write"];
+const DEVICE_SCOPE = "arrival.device";
+
+let mcpVerifier = null;
+let deviceVerifier = null;
 
 function publicBaseUrl(req) {
   const configured = process.env.MCP_PUBLIC_BASE_URL?.replace(/\/$/, "");
@@ -39,31 +44,62 @@ function resourceMetadataUrl(req) {
   return publicBaseUrl(req) + "/.well-known/oauth-protected-resource";
 }
 
-function bearer(req) {
-  const value = req.headers.authorization ?? "";
-  return value.startsWith("Bearer ") ? value.slice(7) : null;
+function oauthConfig({ device = false } = {}) {
+  const issuer = (device ? process.env.DEVICE_OAUTH_ISSUER : null) ?? process.env.OAUTH_ISSUER;
+  const audience = (device ? process.env.DEVICE_OAUTH_AUDIENCE : null) ?? process.env.OAUTH_AUDIENCE;
+  const jwksUrl = (device ? process.env.DEVICE_OAUTH_JWKS_URL : null) ?? process.env.OAUTH_JWKS_URL;
+  return { issuer, audience, jwksUrl };
 }
 
-function resolveMcpUser(req) {
+function getMcpVerifier() {
+  if (!mcpVerifier) mcpVerifier = createJwtAccessVerifier(oauthConfig());
+  return mcpVerifier;
+}
+
+function getDeviceVerifier() {
+  if (!deviceVerifier) {
+    deviceVerifier = createJwtAccessVerifier(oauthConfig({ device: true }));
+  }
+  return deviceVerifier;
+}
+
+async function resolveMcpAuth(req) {
   if (process.env.NODE_ENV === "production") {
     resourceMetadata(req);
-    throw new Error("production_token_verification_not_configured");
+    return getMcpVerifier()(bearerToken(req), {
+      requiredAnyScopes: CONNECTOR_SCOPES,
+    });
   }
   if (process.env.ALLOW_UNAUTHENTICATED_DEV === "true") {
-    return process.env.DEV_USER_ID ?? "dev-user";
+    return {
+      userId: process.env.DEV_USER_ID ?? "dev-user",
+      deviceId: null,
+      scopes: new Set(CONNECTOR_SCOPES),
+    };
   }
   const expected = process.env.DEV_USER_BEARER_TOKEN;
-  if (!expected || bearer(req) !== expected) throw new Error("unauthorized");
-  return process.env.DEV_USER_ID ?? "dev-user";
+  if (!expected || bearerToken(req) !== expected) throw new Error("unauthorized");
+  return {
+    userId: process.env.DEV_USER_ID ?? "dev-user",
+    deviceId: null,
+    scopes: new Set(CONNECTOR_SCOPES),
+  };
 }
 
-function resolveDeviceUser(req) {
+async function resolveDeviceAuth(req) {
   if (process.env.NODE_ENV === "production") {
-    throw new Error("production_device_auth_not_configured");
+    return getDeviceVerifier()(bearerToken(req), {
+      requiredScopes: [DEVICE_SCOPE],
+      requireDeviceId: true,
+    });
   }
   const expected = process.env.DEV_DEVICE_BEARER_TOKEN;
-  if (!expected || bearer(req) !== expected) throw new Error("unauthorized");
-  return process.env.DEV_USER_ID ?? "dev-user";
+  if (!expected || bearerToken(req) !== expected) throw new Error("unauthorized");
+  return {
+    userId: process.env.DEV_USER_ID ?? "dev-user",
+    deviceId: "dev-device",
+    scopes: new Set([DEVICE_SCOPE]),
+  };
 }
 
 async function readJson(req) {
@@ -87,13 +123,15 @@ function sendJson(res, status, value) {
 function sendAuthError(req, res, error) {
   const message = error instanceof Error ? error.message : "unauthorized";
   const authFailure = message === "unauthorized";
-  const status = authFailure ? 401 : 503;
-  if (authFailure) {
+  const scopeFailure = message === "insufficient_scope";
+  const status = authFailure ? 401 : scopeFailure ? 403 : 503;
+  if (authFailure || scopeFailure) {
     try {
+      const oauthError = scopeFailure ? "insufficient_scope" : "invalid_token";
       res.setHeader(
         "WWW-Authenticate",
         'Bearer resource_metadata="' + resourceMetadataUrl(req) +
-          '", error="invalid_token", error_description="Authentication required"'
+          '", error="' + oauthError + '"'
       );
     } catch {
       // Preserve the original authentication error if metadata cannot be built.
@@ -122,17 +160,16 @@ const httpServer = createServer(async (req, res) => {
     sendJson(res, 200, {
       service: "arrival-alarm-connector",
       status: "ok",
-      auth_mode: process.env.NODE_ENV === "production" ? "oauth-required" : "development",
+      auth_mode: process.env.NODE_ENV === "production" ? "oauth-jwt" : "development",
     });
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/device/state") {
-    let userId;
     try {
-      userId = resolveDeviceUser(req);
+      const auth = await resolveDeviceAuth(req);
       const snapshot = await readJson(req);
-      sendJson(res, 200, store.putSnapshot(userId, snapshot));
+      sendJson(res, 200, store.putSnapshot(auth.userId, snapshot));
     } catch (error) {
       sendAuthError(req, res, error);
     }
@@ -141,8 +178,8 @@ const httpServer = createServer(async (req, res) => {
 
   if (req.method === "GET" && url.pathname === "/device/commands") {
     try {
-      const userId = resolveDeviceUser(req);
-      sendJson(res, 200, { commands: store.pendingCommands(userId) });
+      const auth = await resolveDeviceAuth(req);
+      sendJson(res, 200, { commands: store.pendingCommands(auth.userId) });
     } catch (error) {
       sendAuthError(req, res, error);
     }
@@ -151,9 +188,9 @@ const httpServer = createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/device/receipt") {
     try {
-      const userId = resolveDeviceUser(req);
+      const auth = await resolveDeviceAuth(req);
       const receipt = await readJson(req);
-      sendJson(res, 200, store.submitReceipt(userId, receipt));
+      sendJson(res, 200, store.submitReceipt(auth.userId, receipt));
     } catch (error) {
       sendAuthError(req, res, error);
     }
@@ -173,9 +210,9 @@ const httpServer = createServer(async (req, res) => {
 
   const MCP_METHODS = new Set(["POST", "GET", "DELETE"]);
   if (url.pathname === MCP_PATH && req.method && MCP_METHODS.has(req.method)) {
-    let userId;
+    let auth;
     try {
-      userId = resolveMcpUser(req);
+      auth = await resolveMcpAuth(req);
     } catch (error) {
       sendAuthError(req, res, error);
       return;
@@ -184,7 +221,11 @@ const httpServer = createServer(async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id");
 
-    const mcpServer = createArrivalAlarmMcpServer({ service, userId });
+    const mcpServer = createArrivalAlarmMcpServer({
+      service,
+      userId: auth.userId,
+      scopes: auth.scopes,
+    });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
