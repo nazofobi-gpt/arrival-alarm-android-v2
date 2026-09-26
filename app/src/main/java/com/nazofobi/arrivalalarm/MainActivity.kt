@@ -190,6 +190,13 @@ fun ArrivalAlarmApp(
     var routeStatus by remember { mutableStateOf<String?>(null) }
     var routeOffline by remember { mutableStateOf(false) }
     var routeBusy by remember { mutableStateOf(false) }
+    var stationDepartures by remember { mutableStateOf(emptyList<Departure>()) }
+    var stationAlerts by remember { mutableStateOf(emptyList<ServiceAlert>()) }
+    var stationSource by remember { mutableStateOf<String?>(null) }
+    var stationStatus by remember { mutableStateOf<String?>(null) }
+    var stationLoading by remember { mutableStateOf(false) }
+    var stationResolved by remember { mutableStateOf(false) }
+    var liveNowEpochSeconds by remember { mutableStateOf(System.currentTimeMillis() / 1_000) }
     val routeCache = remember(context) {
         OfflineTransitCache(backingStore = SharedPreferencesTransitCacheStore(context))
     }
@@ -286,6 +293,12 @@ fun ArrivalAlarmApp(
         graph.routeRegistry.clear()
         routeStatus = null
         routeOffline = false
+        stationDepartures = emptyList()
+        stationAlerts = emptyList()
+        stationSource = null
+        stationStatus = null
+        stationLoading = false
+        stationResolved = false
         selectingOrigin = false
         connectorPort.setOrigin(point)
         journey = controller.state
@@ -323,32 +336,65 @@ fun ArrivalAlarmApp(
         }
     }
 
-    fun setDestinationPoint(point: MapPoint, stopId: String? = null) {
-        val currentOrigin = origin
-        if (currentOrigin == null) {
-            setOrigin(point)
-        } else {
-            val outcome = connectorPort.setDestination(point)
-            journey = controller.state
-            if (!outcome.applied) {
-                routeStatus = localizedDomainMessage(context, outcome.message)
-                return
+    fun loadStationDepartures(stop: CatalogStop) {
+        stationLoading = true
+        stationResolved = false
+        stationDepartures = emptyList()
+        stationAlerts = emptyList()
+        stationSource = null
+        stationStatus = null
+        transit.stationDepartures(stop) { snapshot ->
+            stationLoading = false
+            if (snapshot.error == null) {
+                stationResolved = true
+                stationDepartures = snapshot.departures
+                stationAlerts = snapshot.alerts
+                stationSource = snapshot.sourceLabel
+                stationStatus = null
+            } else {
+                stationResolved = false
+                stationStatus = context.getString(R.string.departures_live_unavailable)
             }
-            destination = point
-            destinationStopId = stopId
-            routeOffline = false
-            routeOptions = emptyList()
-            selectedRouteId = null
-            graph.routeRegistry.clear()
-            loadRoutes(currentOrigin, point)
         }
     }
 
+    fun setDestinationPoint(point: MapPoint, stopId: String? = null): Boolean {
+        val currentOrigin = origin
+        if (currentOrigin == null) {
+            setOrigin(point)
+            return false
+        }
+        val outcome = connectorPort.setDestination(point)
+        journey = controller.state
+        if (!outcome.applied) {
+            routeStatus = localizedDomainMessage(context, outcome.message)
+            return false
+        }
+        destination = point
+        destinationStopId = stopId
+        routeOffline = false
+        routeOptions = emptyList()
+        selectedRouteId = null
+        stationDepartures = emptyList()
+        stationAlerts = emptyList()
+        stationSource = null
+        stationStatus = null
+        stationLoading = false
+        stationResolved = false
+        graph.routeRegistry.clear()
+        loadRoutes(currentOrigin, point)
+        return true
+    }
+
     fun setDestination(stop: CatalogStop) {
-        setDestinationPoint(
-            point = MapPoint(stop.latitude, stop.longitude, stop.name),
-            stopId = stop.id,
-        )
+        if (
+            setDestinationPoint(
+                point = MapPoint(stop.latitude, stop.longitude, stop.name),
+                stopId = stop.id,
+            )
+        ) {
+            loadStationDepartures(stop)
+        }
     }
 
     fun saveRecentSearch(rawQuery: String) {
@@ -414,6 +460,7 @@ fun ArrivalAlarmApp(
         journey = controller.state
         if (outcome.applied) {
             selectedRouteId = option.id
+            liveNowEpochSeconds = System.currentTimeMillis() / 1_000
             routeStatus = context.getString(
                 R.string.route_selected,
                 option.line,
@@ -447,6 +494,21 @@ fun ArrivalAlarmApp(
         guidanceController.onPermissions(AndroidGuidancePermissions.snapshot(context))
         guidanceController.onAudioRoute(AndroidGuidanceAudio.currentRoute(context))
         guidanceState = guidanceController.state
+    }
+
+    LaunchedEffect(journey.phase, selectedRouteId) {
+        liveNowEpochSeconds = System.currentTimeMillis() / 1_000
+        if (journey.phase == JourneyPhase.ARMED) {
+            while (controller.state.phase == JourneyPhase.ARMED) {
+                delay(1_000)
+                journey = controller.state
+                guidanceState = guidanceController.state
+                liveNowEpochSeconds = System.currentTimeMillis() / 1_000
+            }
+            journey = controller.state
+            guidanceState = guidanceController.state
+            liveNowEpochSeconds = System.currentTimeMillis() / 1_000
+        }
     }
 
     LaunchedEffect(oauthCallbackUri) {
@@ -616,7 +678,8 @@ fun ArrivalAlarmApp(
                         if (selectingOrigin) {
                             setOrigin(result.point)
                         } else {
-                            setDestinationPoint(result.point, result.stop?.id)
+                            result.stop?.let(::setDestination)
+                                ?: setDestinationPoint(result.point)
                         }
                     },
                     onRecentSearchSelected = { recent ->
@@ -709,6 +772,23 @@ fun ArrivalAlarmApp(
                     },
                 )
 
+                routeOptions.firstOrNull { it.id == selectedRouteId }?.let { selectedRoute ->
+                    if (
+                        journey.phase == JourneyPhase.DESTINATION_SELECTED ||
+                        journey.phase == JourneyPhase.ARMED ||
+                        journey.phase == JourneyPhase.ARRIVED
+                    ) {
+                        LiveTripPanel(
+                            selectedRoute = selectedRoute,
+                            journey = journey,
+                            guidanceState = guidanceState,
+                            routeOffline = routeOffline,
+                            nowEpochSeconds = liveNowEpochSeconds,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+
                 val destinationPoint = destination
                 if (routeOptions.isNotEmpty() && destinationPoint != null) {
                     val boardNow = System.currentTimeMillis() / 1_000
@@ -721,25 +801,35 @@ fun ArrivalAlarmApp(
                             routeId = option.id,
                         )
                     }
-                    val firstRoute = routeOptions.first()
+                    val selectedRoute = routeOptions.firstOrNull { it.id == selectedRouteId }
+                        ?: routeOptions.first()
+                    val boardDepartures = if (stationResolved) stationDepartures else departures
+                    val boardAlerts = if (stationResolved) stationAlerts else emptyList()
                     TransitExperiencePanel(
                         stopId = destinationStopId
                             ?: "coord:${destinationPoint.latitude},${destinationPoint.longitude}",
                         stopName = destinationPoint.label,
-                        lineName = firstRoute.line,
-                        direction = firstRoute.direction,
-                        departures = departures,
-                        alerts = emptyList(),
-                        isOfflineCache = routeOffline,
+                        lineName = selectedRoute.line,
+                        direction = selectedRoute.direction,
+                        departures = boardDepartures,
+                        alerts = boardAlerts,
+                        isOfflineCache = !stationResolved && routeOffline,
                         nowEpochSeconds = boardNow,
                         providerCapabilities = TransitProviderCapabilities(
-                            realtimeDepartures = false,
-                            serviceAlerts = false,
+                            realtimeDepartures = stationResolved &&
+                                stationDepartures.any { it.isRealtime },
+                            serviceAlerts = stationResolved && stationAlerts.isNotEmpty(),
                         ),
                         onSelectJourney = { routeId ->
                             routeOptions.firstOrNull { it.id == routeId }
                                 ?.let { selectRouteOption(it) }
                         },
+                        statusMessage = stationStatus
+                            ?: if (!stationResolved && !stationLoading) {
+                                context.getString(R.string.departures_route_fallback)
+                            } else null,
+                        sourceLabel = if (stationResolved) stationSource else null,
+                        loading = stationLoading,
                         modifier = Modifier.fillMaxWidth().testTag("transit-experience-panel"),
                     )
                 }
