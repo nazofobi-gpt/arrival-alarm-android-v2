@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -356,6 +357,7 @@ private fun ThemeModeChoice(
             onClick = { onSelect(mode) },
             modifier = Modifier
                 .fillMaxWidth()
+                .semantics { this.selected = selected }
                 .testTag(testTag),
         ) {
             Text(stringResource(R.string.theme_selected_format, label))
@@ -365,6 +367,7 @@ private fun ThemeModeChoice(
             onClick = { onSelect(mode) },
             modifier = Modifier
                 .fillMaxWidth()
+                .semantics { this.selected = selected }
                 .testTag(testTag),
         ) {
             Text(label)
