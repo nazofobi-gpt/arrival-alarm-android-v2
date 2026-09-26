@@ -47,4 +47,25 @@ class TransitExperienceTest {
         store.recordTrip("a"); store.recordTrip("b"); store.recordTrip("a"); store.recordTrip("c")
         assertEquals(listOf("c","a"),store.recents())
     }
+
+    @Test fun favoritesAndRecentsCanSeedAndPublishPersistentState() {
+        var savedFavorites = emptyList<String>()
+        var savedRecents = emptyList<String>()
+        val store = TransitRecentsStore(
+            maxItems = 2,
+            favoriteIds = listOf("stop-a"),
+            recentTripIds = listOf("old-2", "old-1"),
+        ) { favorites, recents ->
+            savedFavorites = favorites
+            savedRecents = recents
+        }
+
+        assertTrue(store.isFavorite("stop-a"))
+        assertFalse(store.isFavorite("stop-b"))
+        assertTrue(store.toggleFavorite("stop-b"))
+        store.recordTrip("new")
+
+        assertEquals(listOf("stop-a", "stop-b"), savedFavorites)
+        assertEquals(listOf("new", "old-2"), savedRecents)
+    }
 }
