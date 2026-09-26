@@ -13,9 +13,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -100,7 +100,17 @@ class MainActivityTest {
 
     @Test fun wideWindowKeepsPrimaryContentAtReadableWidth() {
         val widthDp = rule.activity.resources.configuration.screenWidthDp
-        assumeTrue("Wide-window fixture requires >= 900dp, was $widthDp", widthDp >= 900)
+        val requireWide = InstrumentationRegistry.getArguments()
+            .getString("requireWide")
+            .equals("true", ignoreCase = true)
+
+        if (widthDp < 900) {
+            assertTrue(
+                "Wide-window fixture was requested but screenWidthDp=$widthDp",
+                !requireWide,
+            )
+            return
+        }
 
         val density = rule.activity.resources.displayMetrics.density
         val contentWidthPx = rule.onNodeWithTag("adaptive-content")
@@ -183,6 +193,36 @@ class MainActivityTest {
         rule.onNodeWithTag("theme-mode-status")
             .performScrollTo()
             .assertTextContains(darkLabel, substring = true)
+    }
+
+    @Test fun tripInferenceSwitchHasTalkBackLabel() {
+        val label = rule.activity.getString(R.string.inference_title)
+        rule.onNodeWithTag("trip-inference-toggle")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .assertContentDescriptionEquals(label)
+    }
+
+    @Test fun criticalActionsMeet48DpTouchTargetFloor() {
+        val minPixels = 48f * rule.activity.resources.displayMetrics.density
+        listOf(
+            "onboarding-complete",
+            "theme-system",
+            "theme-light",
+            "theme-dark",
+            "current-location-origin",
+            "arm",
+            "readiness-refresh",
+        ).forEach { tag ->
+            val node = rule.onNodeWithTag(tag)
+                .performScrollTo()
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+            assertTrue(
+                "$tag height=${node.boundsInRoot.height}px, required>=$minPixels",
+                node.boundsInRoot.height + 0.5f >= minPixels,
+            )
+        }
     }
 
     @Test fun themeControlsExposeSelectionSemantics() {
