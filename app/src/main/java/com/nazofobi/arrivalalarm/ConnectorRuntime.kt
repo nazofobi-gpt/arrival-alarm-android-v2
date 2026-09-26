@@ -45,8 +45,8 @@ interface ConnectorRuntimeControl {
  *
  * It never owns or persists credentials. Each cycle asks [ConnectorSessionProvider] for the
  * current device-bound session, performs one deterministic sync, and fails closed when the
- * session is absent or expired. The scheduler runs only while the app process/UI lifecycle
- * keeps this runtime started; a future foreground-service slice can reuse the same class.
+ * session is absent or expired. Lifecycle owners coordinate this runtime so the visible UI
+ * and an active-journey foreground service can share one serialized sync loop.
  */
 class ConnectorRuntime(
     private val processor: ConnectorCommandProcessor,
@@ -82,6 +82,7 @@ class ConnectorRuntime(
         )
     }
 
+    @Synchronized
     override fun syncNow(): ConnectorRuntimeStatus {
         val now = nowEpochSeconds()
         val session = sessionProvider.currentSession()
