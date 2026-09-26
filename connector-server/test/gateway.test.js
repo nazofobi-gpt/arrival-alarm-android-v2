@@ -139,3 +139,33 @@ test("snapshot validation rejects unsupported wire versions", () => {
     /unsupported_schema_version/
   );
 });
+
+
+test("queued command is pinned to the device that published current state", () => {
+  const store = new InMemoryGatewayStore({ nowEpochSeconds: () => 1000 });
+  const service = new GatewayService(store, { nowEpochSeconds: () => 1000 });
+  store.putSnapshot("user-1", snapshot(), "phone-a");
+
+  service.queueWrite(
+    "user-1",
+    { type: "arm_arrival_alarm", idempotency_key: "command-device-bound" },
+    7
+  );
+
+  assert.equal(store.pendingCommands("user-1", "phone-a").length, 1);
+  assert.equal(store.pendingCommands("user-1", "phone-b").length, 0);
+  assert.throws(
+    () =>
+      store.submitReceipt(
+        "user-1",
+        {
+          idempotency_key: "command-device-bound",
+          status: "APPLIED",
+          state_version_before: 7,
+          state_version_after: 8,
+        },
+        "phone-b"
+      ),
+    /device_mismatch/
+  );
+});
