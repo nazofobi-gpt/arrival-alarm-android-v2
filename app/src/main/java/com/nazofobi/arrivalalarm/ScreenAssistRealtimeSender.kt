@@ -13,6 +13,8 @@ class ScreenAssistRealtimeSender(
     private val session: ScreenAssistRealtimeSession,
     private val socket: ScreenAssistRealtimeSocket,
     private val imageBuilder: ScreenAssistRealtimeImage = ScreenAssistRealtimeImage(),
+    private val toolHandler: ScreenAssistRealtimeToolHandler? = null,
+    private val onToolConfirmationRequired: (ScreenAssistPendingToolCall) -> Unit = {},
     private val onServerEvent: (String) -> Unit = {},
 ) {
     private var pendingFrameComplete: (() -> Unit)? = null
@@ -26,6 +28,7 @@ class ScreenAssistRealtimeSender(
         if (!session.connect(nowEpochSeconds)) return false
         return try {
             socket.connect(token.value)
+            toolHandler?.let { socket.send(it.sessionUpdateEvent()) }
             true
         } catch (_: Exception) {
             session.networkLost()
@@ -60,6 +63,17 @@ class ScreenAssistRealtimeSender(
         }
     }
 
+    fun resolveToolConfirmation(
+        pending: ScreenAssistPendingToolCall,
+        confirmed: Boolean,
+    ): Boolean {
+        val handler = toolHandler ?: return false
+        return sendToolOutputs(
+            outcomes = listOf(handler.resolvePending(pending, confirmed)),
+            requestFollowUp = true,
+        )
+    }
+
     fun stop() {
         finishPendingFrame()
         try {
@@ -72,15 +86,60 @@ class ScreenAssistRealtimeSender(
     private fun handleServerEvent(raw: String) {
         onServerEvent(raw)
         val type = runCatching { JSONObject(raw).optString("type") }.getOrDefault("")
-        if (
-            type == "response.done" ||
-            type == "error" ||
-            type == "session.closed"
-        ) {
+
+        if (type == "response.done") {
+            val outcomes = toolHandler?.handleServerEvent(raw).orEmpty()
+            if (outcomes.isEmpty()) {
+                finishPendingFrame()
+            } else {
+                val immediate = outcomes.filterIsInstance<ScreenAssistToolOutcome.Immediate>()
+                val pending = outcomes.filterIsInstance<ScreenAssistToolOutcome.AwaitConfirmation>()
+
+                val sent = sendToolOutputs(
+                    outcomes = immediate,
+                    requestFollowUp = pending.isEmpty(),
+                )
+                if (!sent) return
+
+                pending.forEach { onToolConfirmationRequired(it.pending) }
+            }
+        } else if (type == "error" || type == "session.closed") {
             finishPendingFrame()
         }
+
         if (type == "error") {
             session.networkLost()
+        }
+    }
+
+    private fun sendToolOutputs(
+        outcomes: List<ScreenAssistToolOutcome.Immediate>,
+        requestFollowUp: Boolean,
+    ): Boolean {
+        if (outcomes.isEmpty() && !requestFollowUp) return true
+        return try {
+            outcomes.forEach { outcome ->
+                socket.send(
+                    JSONObject()
+                        .put("type", "conversation.item.create")
+                        .put(
+                            "item",
+                            JSONObject()
+                                .put("type", "function_call_output")
+                                .put("call_id", outcome.callId)
+                                .put("output", outcome.outputJson),
+                        )
+                        .toString(),
+                )
+            }
+            if (requestFollowUp) {
+                socket.send(JSONObject().put("type", "response.create").toString())
+            }
+            true
+        } catch (_: Exception) {
+            finishPendingFrame()
+            session.networkLost()
+            false
         }
     }
 
