@@ -17,16 +17,16 @@ enum class ArrivalThemeMode {
     DARK,
 }
 
-private val MatteLightColors = lightColorScheme(
+internal val MatteLightColors = lightColorScheme(
     primary = Color(0xFF355F7C),
     onPrimary = Color(0xFFF7FBFD),
     primaryContainer = Color(0xFFDCE8F0),
     onPrimaryContainer = Color(0xFF173446),
-    secondary = Color(0xFF647F70),
+    secondary = Color(0xFF596F63),
     onSecondary = Color(0xFFF8FBF8),
     secondaryContainer = Color(0xFFDFE9E2),
     onSecondaryContainer = Color(0xFF263B30),
-    tertiary = Color(0xFFA46F5C),
+    tertiary = Color(0xFF925D4C),
     onTertiary = Color(0xFFFFF8F5),
     tertiaryContainer = Color(0xFFF1E2DA),
     onTertiaryContainer = Color(0xFF4B2D23),
@@ -36,13 +36,13 @@ private val MatteLightColors = lightColorScheme(
     onSurface = Color(0xFF17212A),
     surfaceVariant = Color(0xFFE9E7E1),
     onSurfaceVariant = Color(0xFF56616A),
-    outline = Color(0xFFA7ADB1),
+    outline = Color(0xFF7A8288),
     outlineVariant = Color(0xFFD3D2CD),
-    error = Color(0xFFB85E5E),
+    error = Color(0xFFA94E4E),
     onError = Color(0xFFFFF7F7),
 )
 
-private val MatteDarkColors = darkColorScheme(
+internal val MatteDarkColors = darkColorScheme(
     primary = Color(0xFF91B4CD),
     onPrimary = Color(0xFF102838),
     primaryContainer = Color(0xFF27475D),
