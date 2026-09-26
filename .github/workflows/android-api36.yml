@@ -60,8 +60,13 @@ jobs:
             adb shell settings put system font_scale 1.0
             adb shell wm size
             adb shell settings get system font_scale
+            adb shell rm -rf /sdcard/Android/data/com.nazofobi.arrivalalarm/files/g166-screenshots || true
             ./gradlew --no-daemon connectedDebugAndroidTest
             mkdir -p app/build/outputs/androidTest-results/compact-screen
+            mkdir -p app/build/outputs/androidTest-results/g166-visual
+            adb pull /sdcard/Android/data/com.nazofobi.arrivalalarm/files/g166-screenshots/. app/build/outputs/androidTest-results/g166-visual/ || true
+            adb shell am start -W -n com.nazofobi.arrivalalarm/.MainActivity
+            sleep 2
             adb exec-out screencap -p > app/build/outputs/androidTest-results/compact-screen/compact-412x915-normal-text.png
 
             adb shell settings put system font_scale 2.0
@@ -69,6 +74,9 @@ jobs:
             adb shell settings get system font_scale
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.MainActivityTest#largeFontKeepsCriticalJourneyControlsReachable
             mkdir -p app/build/outputs/androidTest-results/large-font
+            adb pull /sdcard/Android/data/com.nazofobi.arrivalalarm/files/g166-screenshots/. app/build/outputs/androidTest-results/g166-visual/ || true
+            adb shell am start -W -n com.nazofobi.arrivalalarm/.MainActivity
+            sleep 2
             adb exec-out screencap -p > app/build/outputs/androidTest-results/large-font/compact-412x915-font-200.png
 
             adb shell settings put system font_scale 1.0
