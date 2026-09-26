@@ -55,6 +55,11 @@
     <string name="selecting_destination">Varış seçiliyor</string>
     <string name="select_destination">Varış seç</string>
     <string name="search_stops_label">Durak, adres veya yer ara</string>
+    <string name="search_supporting_text">Durak adı, adres veya POI yazın.</string>
+    <string name="journey_points_title">Yolculuk noktaları</string>
+    <string name="journey_points_empty">Önce başlangıç noktasını seçin.</string>
+    <string name="search_recents_title">Son aramalar</string>
+    <string name="search_recents_clear">Son aramaları temizle</string>
     <string name="searching">Aranıyor…</string>
     <string name="search_action">Ara</string>
     <string name="source_format">Kaynak: %1$s</string>

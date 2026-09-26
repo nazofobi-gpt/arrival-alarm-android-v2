@@ -23,7 +23,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -122,6 +121,12 @@ fun ArrivalAlarmApp(
     val appPreferences = remember(context) {
         context.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
     }
+    val searchRecentsPreferences = remember(context) {
+        context.getSharedPreferences("search_recents", Context.MODE_PRIVATE)
+    }
+    val transitExperiencePreferences = remember(context) {
+        context.getSharedPreferences("transit_experience", Context.MODE_PRIVATE)
+    }
     val guidanceSpeaker = remember { AndroidTextToSpeechSpeaker(context) }
     val guidancePreferences = remember(context) {
         context.getSharedPreferences("guidance_state", Context.MODE_PRIVATE)
@@ -139,6 +144,22 @@ fun ArrivalAlarmApp(
     }
     var dataState by remember { mutableStateOf(transit.currentState()) }
     var query by remember { mutableStateOf("") }
+    var lastSearchedQuery by remember { mutableStateOf("") }
+    var recentSearches by remember {
+        mutableStateOf(
+            searchRecentsPreferences.getString("queries", "").orEmpty()
+                .split('\u001F')
+                .filter { it.isNotBlank() }
+                .take(5)
+        )
+    }
+    var favoriteStopIds by remember {
+        mutableStateOf(
+            transitExperiencePreferences.getStringSet("favorite_stop_ids", emptySet())
+                .orEmpty()
+                .toSet()
+        )
+    }
     var searchBusy by remember { mutableStateOf(false) }
     var searchResults by remember { mutableStateOf(emptyList<TransitLocationResult>()) }
     var searchSource by remember { mutableStateOf<String?>(null) }
@@ -321,9 +342,22 @@ fun ArrivalAlarmApp(
         )
     }
 
-    fun runSearch(rawQuery: String = query) {
+    fun saveRecentSearch(rawQuery: String) {
         val q = rawQuery.trim()
         if (q.length < 2) return
+        val next = (listOf(q) + recentSearches.filterNot { it.equals(q, ignoreCase = true) })
+            .take(5)
+        recentSearches = next
+        searchRecentsPreferences.edit()
+            .putString("queries", next.joinToString("\u001F"))
+            .apply()
+    }
+
+    fun runSearch(rawQuery: String = query, recordRecent: Boolean = false) {
+        val q = rawQuery.trim()
+        if (q.length < 2) return
+        if (recordRecent) saveRecentSearch(q)
+        lastSearchedQuery = q
         val requestId = searchRequestId + 1
         searchRequestId = requestId
         searchBusy = true
@@ -440,6 +474,10 @@ fun ArrivalAlarmApp(
         while (true) {
             journey = controller.state
             connectorConnected = connectorSessionStore.hasUsableSession()
+            favoriteStopIds = transitExperiencePreferences
+                .getStringSet("favorite_stop_ids", emptySet())
+                .orEmpty()
+                .toSet()
             delay(1_000)
         }
     }
@@ -454,7 +492,9 @@ fun ArrivalAlarmApp(
             return@LaunchedEffect
         }
         delay(1_000)
-        runSearch(q)
+        if (q != lastSearchedQuery) {
+            runSearch(q)
+        }
     }
 
     DisposableEffect(connectorRuntimeCoordinator) {
@@ -526,108 +566,56 @@ fun ArrivalAlarmApp(
                     ) { Text(stringResource(R.string.download_germany_index)) }
                 }
 
-                Text(
-                    if (selectingOrigin) stringResource(R.string.search_target_origin_status)
-                    else stringResource(R.string.search_target_destination_status),
-                    modifier = Modifier.testTag("search-target-status"),
-                )
-                Button(
-                    onClick = { selectingOrigin = true },
-                    enabled = !selectingOrigin,
-                    modifier = Modifier.testTag("search-target-origin"),
-                ) { Text(if (selectingOrigin) stringResource(R.string.selecting_origin) else stringResource(R.string.select_origin)) }
-                Button(
-                    onClick = { selectingOrigin = false },
-                    enabled = origin != null && selectingOrigin,
-                    modifier = Modifier.testTag("search-target-destination"),
-                ) { Text(if (!selectingOrigin) stringResource(R.string.selecting_destination) else stringResource(R.string.select_destination)) }
-
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = {
+                HomeSearchPanel(
+                    selectingOrigin = selectingOrigin,
+                    query = query,
+                    searchBusy = searchBusy,
+                    searchResults = searchResults,
+                    searchSource = searchSource,
+                    searchMessage = searchMessage,
+                    locationMessage = locationMessage,
+                    origin = origin,
+                    destination = destination,
+                    mapMessage = mapMessage,
+                    nearby = nearby,
+                    nearbySource = nearbySource,
+                    recentSearches = recentSearches,
+                    favoriteStopIds = favoriteStopIds,
+                    onSelectOriginTarget = { selectingOrigin = true },
+                    onSelectDestinationTarget = { selectingOrigin = false },
+                    onQueryChange = {
                         query = it
                         searchRequestId += 1
                     },
-                    label = { Text(stringResource(R.string.search_stops_label)) },
-                    modifier = Modifier.fillMaxWidth().testTag("catalog-search"),
-                    singleLine = true,
-                )
-                Button(
-                    onClick = { runSearch() },
-                    enabled = !searchBusy && query.trim().length >= 2,
-                    modifier = Modifier.testTag("catalog-search-submit"),
-                ) { Text(if (searchBusy) stringResource(R.string.searching) else stringResource(R.string.search_action)) }
-
-                searchSource?.let { Text(stringResource(R.string.source_format, it), modifier = Modifier.testTag("search-source")) }
-                searchMessage?.let { Text(it, modifier = Modifier.testTag("search-message")) }
-
-                searchResults.take(12).forEachIndexed { index, result ->
-                    Button(
-                        onClick = {
-                            if (selectingOrigin) {
-                                setOrigin(result.point)
-                            } else {
-                                setDestinationPoint(result.point, result.stop?.id)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth().testTag("search-result-$index"),
-                    ) {
-                        val action = if (selectingOrigin) {
-                            stringResource(R.string.select_origin)
+                    onSearch = { runSearch(recordRecent = true) },
+                    onSearchResultSelected = { result ->
+                        if (selectingOrigin) {
+                            setOrigin(result.point)
                         } else {
-                            stringResource(R.string.select_destination)
+                            setDestinationPoint(result.point, result.stop?.id)
                         }
-                        Text(
-                            stringResource(
-                                R.string.search_location_result_format,
-                                action,
-                                transitLocationKindText(result.kind),
-                                result.label,
-                            )
-                        )
-                    }
-                }
-
-                Button(
-                    onClick = {
-                        if (currentLocation.hasPermission()) useCurrentLocation()
-                        else locationPermissionLauncher.launch(
-                            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-                        )
                     },
-                    modifier = Modifier.testTag("current-location-origin"),
-                ) { Text(stringResource(R.string.current_location_origin)) }
-                locationMessage?.let { Text(it, modifier = Modifier.testTag("location-status")) }
-
-                origin?.let {
-                    Text(stringResource(R.string.origin_format, it.label), modifier = Modifier.testTag("origin-label"))
-                }
-                destination?.let {
-                    Text(stringResource(R.string.destination_format, it.label), modifier = Modifier.testTag("destination-label"))
-                }
-
-                Text(
-                    stringResource(R.string.map_title),
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.semantics { heading() },
-                )
-                Text(
-                    if (selectingOrigin) stringResource(R.string.map_instruction_origin)
-                    else stringResource(R.string.map_instruction_destination),
-                    modifier = Modifier.testTag("map-instruction"),
-                )
-                val mapCenter = origin ?: destination ?: MapPoint(
-                    latitude = 51.1657,
-                    longitude = 10.4515,
-                    label = "Deutschland",
-                )
-                TransitSelectionMap(
-                    center = mapCenter,
-                    nearbyStops = nearby,
-                    origin = origin,
-                    destination = destination,
-                    mapPointLabel = stringResource(R.string.map_point_label),
-                    onStopSelected = { stop ->
+                    onRecentSearchSelected = { recent ->
+                        query = recent
+                        runSearch(recent, recordRecent = true)
+                    },
+                    onClearRecentSearches = {
+                        recentSearches = emptyList()
+                        searchRecentsPreferences.edit().remove("queries").apply()
+                    },
+                    onUseCurrentLocation = {
+                        if (currentLocation.hasPermission()) {
+                            useCurrentLocation()
+                        } else {
+                            locationPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                                )
+                            )
+                        }
+                    },
+                    onMapStopSelected = { stop ->
                         if (selectingOrigin) {
                             setOrigin(MapPoint(stop.latitude, stop.longitude, stop.name))
                         } else {
@@ -635,42 +623,28 @@ fun ArrivalAlarmApp(
                         }
                     },
                     onMapPointSelected = { point ->
-                        if (selectingOrigin) setOrigin(point)
-                        else setDestinationPoint(point)
+                        if (selectingOrigin) {
+                            setOrigin(point)
+                        } else {
+                            setDestinationPoint(point)
+                        }
                     },
                     onMapError = {
                         mapMessage = context.getString(R.string.map_load_failed)
                     },
-                )
-                mapMessage?.let {
-                    Text(it, modifier = Modifier.testTag("map-status"))
-                }
-                Text(
-                    stringResource(R.string.map_provider_note),
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.testTag("map-provider"),
-                )
-
-                if (nearby.isNotEmpty()) {
-                    Text(stringResource(R.string.nearby_stops), style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
-                    nearbySource?.let { Text(stringResource(R.string.source_format, it)) }
-                    nearby.take(8).forEachIndexed { index, candidate ->
-                        Button(
-                            onClick = {
-                                val point = MapPoint(
-                                    candidate.stop.latitude,
-                                    candidate.stop.longitude,
-                                    candidate.stop.name,
-                                )
-                                if (selectingOrigin) setOrigin(point) else setDestination(candidate.stop)
-                            },
-                            modifier = Modifier.fillMaxWidth().testTag("nearby-stop-$index"),
-                        ) {
-                            val action = if (selectingOrigin) stringResource(R.string.select_origin) else stringResource(R.string.select_destination)
-                            Text(stringResource(R.string.nearby_stop_format, action, candidate.stop.name, candidate.distanceMeters))
+                    onNearbyStopSelected = { candidate ->
+                        val point = MapPoint(
+                            candidate.stop.latitude,
+                            candidate.stop.longitude,
+                            candidate.stop.name,
+                        )
+                        if (selectingOrigin) {
+                            setOrigin(point)
+                        } else {
+                            setDestination(candidate.stop)
                         }
-                    }
-                }
+                    },
+                )
 
                 if (origin != null && destination != null) {
                     Button(

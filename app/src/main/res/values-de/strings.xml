@@ -52,6 +52,11 @@
     <string name="selecting_destination">Ziel wird gewählt</string>
     <string name="select_destination">Ziel wählen</string>
     <string name="search_stops_label">Haltestelle, Adresse oder Ort suchen</string>
+    <string name="search_supporting_text">Haltestelle, Adresse oder POI eingeben.</string>
+    <string name="journey_points_title">Fahrtpunkte</string>
+    <string name="journey_points_empty">Wählen Sie zuerst einen Startpunkt.</string>
+    <string name="search_recents_title">Letzte Suchen</string>
+    <string name="search_recents_clear">Letzte Suchen löschen</string>
     <string name="searching">Suche…</string>
     <string name="search_action">Suchen</string>
     <string name="source_format">Quelle: %1$s</string>
