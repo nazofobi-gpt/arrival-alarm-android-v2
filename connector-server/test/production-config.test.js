@@ -106,3 +106,14 @@ test("production rejects device OAuth without required device scope or HTTPS end
     /https_required/
   );
 });
+
+
+test("production rejects device binding parameter names that shadow OAuth state", () => {
+  assert.throws(
+    () =>
+      validateProductionEnvironment(
+        valid({ DEVICE_OAUTH_DEVICE_ID_PARAMETER: "state" })
+      ),
+    /device_oauth_parameter_reserved/
+  );
+});
