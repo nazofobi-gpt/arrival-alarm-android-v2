@@ -25,7 +25,9 @@ import androidx.compose.ui.unit.dp
 enum class ArrivalAppScreen {
     HOME,
     SEARCH,
+    ROUTES,
     JOURNEY,
+    LIVE,
     DEPARTURES,
     SETTINGS,
 }
@@ -52,8 +54,15 @@ fun ArrivalBottomNavigation(
 
     NavigationBar(modifier = Modifier.testTag("bottom-navigation")) {
         items.forEach { item ->
+            val selected = if (item.screen == ArrivalAppScreen.JOURNEY) {
+                current == ArrivalAppScreen.ROUTES ||
+                    current == ArrivalAppScreen.JOURNEY ||
+                    current == ArrivalAppScreen.LIVE
+            } else {
+                current == item.screen
+            }
             NavigationBarItem(
-                selected = current == item.screen,
+                selected = selected,
                 onClick = { onSelect(item.screen) },
                 icon = { Text(item.glyph) },
                 label = { Text(item.label, maxLines = 1) },
