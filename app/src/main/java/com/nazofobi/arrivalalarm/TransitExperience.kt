@@ -15,7 +15,8 @@ data class Departure(
     val scheduledEpochSeconds: Long,
     val realtimeEpochSeconds: Long? = null,
     val cancelled: Boolean = false,
-    val platform: String? = null
+    val platform: String? = null,
+    val routeId: String? = null,
 ) {
     val effectiveEpochSeconds: Long get() = realtimeEpochSeconds ?: scheduledEpochSeconds
     val isRealtime: Boolean get() = realtimeEpochSeconds != null
