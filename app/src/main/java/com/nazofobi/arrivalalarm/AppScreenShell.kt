@@ -192,6 +192,7 @@ fun HomeOverviewPanel(
                     text = stringResource(R.string.map_provider_note),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("home-map-provider"),
                 )
             }
         }
