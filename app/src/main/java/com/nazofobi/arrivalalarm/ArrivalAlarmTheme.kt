@@ -22,11 +22,11 @@ private val MatteLightColors = lightColorScheme(
     onPrimary = Color(0xFFF7FBFD),
     primaryContainer = Color(0xFFDCE8F0),
     onPrimaryContainer = Color(0xFF173446),
-    secondary = Color(0xFF647F70),
+    secondary = Color(0xFF567061),
     onSecondary = Color(0xFFF8FBF8),
     secondaryContainer = Color(0xFFDFE9E2),
     onSecondaryContainer = Color(0xFF263B30),
-    tertiary = Color(0xFFA46F5C),
+    tertiary = Color(0xFF8F5B49),
     onTertiary = Color(0xFFFFF8F5),
     tertiaryContainer = Color(0xFFF1E2DA),
     onTertiaryContainer = Color(0xFF4B2D23),
@@ -38,7 +38,7 @@ private val MatteLightColors = lightColorScheme(
     onSurfaceVariant = Color(0xFF56616A),
     outline = Color(0xFFA7ADB1),
     outlineVariant = Color(0xFFD3D2CD),
-    error = Color(0xFFB85E5E),
+    error = Color(0xFF9F4B4B),
     onError = Color(0xFFFFF7F7),
 )
 
@@ -75,16 +75,21 @@ private val ArrivalShapes = Shapes(
     extraLarge = RoundedCornerShape(30.dp),
 )
 
+internal fun resolveArrivalDarkTheme(
+    mode: ArrivalThemeMode,
+    systemDark: Boolean,
+): Boolean = when (mode) {
+    ArrivalThemeMode.SYSTEM -> systemDark
+    ArrivalThemeMode.LIGHT -> false
+    ArrivalThemeMode.DARK -> true
+}
+
 @Composable
 fun ArrivalAlarmTheme(
     mode: ArrivalThemeMode = ArrivalThemeMode.SYSTEM,
     content: @Composable () -> Unit,
 ) {
-    val darkTheme = when (mode) {
-        ArrivalThemeMode.SYSTEM -> isSystemInDarkTheme()
-        ArrivalThemeMode.LIGHT -> false
-        ArrivalThemeMode.DARK -> true
-    }
+    val darkTheme = resolveArrivalDarkTheme(mode, isSystemInDarkTheme())
 
     MaterialTheme(
         colorScheme = if (darkTheme) MatteDarkColors else MatteLightColors,
