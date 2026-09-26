@@ -720,6 +720,7 @@ fun ArrivalAlarmApp(
                         nearby = nearby,
                         nearbySource = nearbySource,
                         favoriteStopIds = favoriteStopIds,
+                        mapMessage = mapMessage,
                         onUseCurrentLocation = {
                             if (currentLocation.hasPermission()) {
                                 useCurrentLocation()
@@ -734,6 +735,23 @@ fun ArrivalAlarmApp(
                         },
                         onOpenSearch = { activeScreen = ArrivalAppScreen.SEARCH },
                         onOpenJourney = { activeScreen = ArrivalAppScreen.JOURNEY },
+                        onMapStopSelected = { stop ->
+                            if (origin == null) {
+                                setOrigin(MapPoint(stop.latitude, stop.longitude, stop.name))
+                            } else {
+                                setDestination(stop)
+                            }
+                        },
+                        onMapPointSelected = { point ->
+                            if (origin == null) {
+                                setOrigin(point)
+                            } else {
+                                setDestinationPoint(point)
+                            }
+                        },
+                        onMapError = {
+                            mapMessage = context.getString(R.string.map_load_failed)
+                        },
                         onNearbyStopSelected = { candidate ->
                             if (origin == null) {
                                 setOrigin(
