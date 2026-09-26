@@ -8,3 +8,6 @@ captures/
 .externalNativeBuild/
 .cxx/
 **/build/
+
+# Local free-tier Cloudflare account configuration
+connector-server/wrangler.free.jsonc
