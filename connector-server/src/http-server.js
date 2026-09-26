@@ -225,6 +225,7 @@ const httpServer = createServer(async (req, res) => {
       service,
       userId: auth.userId,
       scopes: auth.scopes,
+      resourceMetadataUrl: resourceMetadataUrl(req),
     });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
