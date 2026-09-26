@@ -21,6 +21,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
+enum class RouteJourneyMode {
+    RESULTS,
+    DETAIL,
+}
+
 @Composable
 fun RouteJourneyPanel(
     origin: MapPoint?,
@@ -35,13 +40,14 @@ fun RouteJourneyPanel(
     onSelectRoute: (RouteOption) -> Unit,
     onArmAlarm: () -> Unit,
     onCancelAlarm: () -> Unit,
+    mode: RouteJourneyMode = RouteJourneyMode.RESULTS,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (origin != null && destination != null) {
+        if (mode == RouteJourneyMode.RESULTS) {
             Text(
                 text = stringResource(R.string.route_results_title),
                 style = MaterialTheme.typography.headlineSmall,
@@ -49,80 +55,111 @@ fun RouteJourneyPanel(
                 modifier = Modifier.semantics { heading() },
             )
 
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+            if (origin == null || destination == null) {
+                Text(
+                    text = stringResource(R.string.error_start_destination_required),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("route-results-empty"),
+                )
+            } else {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                 ) {
-                    Text(
-                        text = stringResource(
-                            R.string.route_points_format,
-                            origin.label,
-                            destination.label,
-                        ),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    routeStatus?.let {
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.testTag("route-status"),
-                        )
-                    }
-                    if (routeOffline) {
-                        Text(
-                            text = stringResource(R.string.route_offline_badge),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier.testTag("route-offline-badge"),
-                        )
-                    }
-                    Button(
-                        onClick = onRefreshRoutes,
-                        enabled = !routeBusy,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("route-refresh"),
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Text(
-                            if (routeBusy) {
-                                stringResource(R.string.route_calculating)
-                            } else {
-                                stringResource(R.string.refresh_routes)
-                            }
+                            text = stringResource(
+                                R.string.route_points_format,
+                                origin.label,
+                                destination.label,
+                            ),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
                         )
+                        routeStatus?.let {
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.testTag("route-status"),
+                            )
+                        }
+                        if (routeOffline) {
+                            Text(
+                                text = stringResource(R.string.route_offline_badge),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier.testTag("route-offline-badge"),
+                            )
+                        }
+                        Button(
+                            onClick = onRefreshRoutes,
+                            enabled = !routeBusy,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("route-refresh"),
+                        ) {
+                            Text(
+                                if (routeBusy) {
+                                    stringResource(R.string.route_calculating)
+                                } else {
+                                    stringResource(R.string.refresh_routes)
+                                }
+                            )
+                        }
                     }
                 }
-            }
 
-            routeOptions.take(3).forEachIndexed { index, option ->
-                RouteOptionCard(
-                    option = option,
-                    selected = selectedRouteId == option.id,
-                    onSelect = { onSelectRoute(option) },
-                    modifier = Modifier.testTag("route-option-" + index),
-                )
-            }
-
-            selectedRouteId
-                ?.let { id -> routeOptions.firstOrNull { it.id == id } }
-                ?.let { selected ->
-                    JourneyDetailCard(selected)
+                routeOptions.take(3).forEachIndexed { index, option ->
+                    RouteOptionCard(
+                        option = option,
+                        selected = selectedRouteId == option.id,
+                        onSelect = { onSelectRoute(option) },
+                        modifier = Modifier.testTag("route-option-" + index),
+                    )
                 }
-        }
 
-        JourneyAlarmControls(
-            journey = journey,
-            onArmAlarm = onArmAlarm,
-            onCancelAlarm = onCancelAlarm,
-        )
+                if (!routeBusy && routeOptions.isEmpty()) {
+                    Text(
+                        text = routeStatus ?: stringResource(R.string.route_not_found),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("route-results-empty"),
+                    )
+                }
+            }
+        } else {
+            val selected = selectedRouteId
+                ?.let { id -> routeOptions.firstOrNull { it.id == id } }
+            if (selected == null) {
+                Text(
+                    text = stringResource(R.string.journey_detail_title),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.semantics { heading() },
+                )
+                Text(
+                    text = stringResource(R.string.error_trip_required),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("journey-detail-empty"),
+                )
+            } else {
+                JourneyDetailCard(selected)
+            }
+
+            JourneyAlarmControls(
+                journey = journey,
+                onArmAlarm = onArmAlarm,
+                onCancelAlarm = onCancelAlarm,
+            )
+        }
     }
 }
 
