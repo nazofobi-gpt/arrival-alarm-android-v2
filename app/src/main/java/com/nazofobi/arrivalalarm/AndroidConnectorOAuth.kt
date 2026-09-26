@@ -280,7 +280,9 @@ class HttpConnectorOAuthTransport(
             val scopes = when (val raw = json.opt("scopes")) {
                 is JSONArray -> buildList {
                     for (index in 0 until raw.length()) {
-                        raw.optString(index).takeIf { it.isNotBlank() }?.let(::add)
+                        raw.optString(index).takeIf { it.isNotBlank() }?.let { value ->
+                            add(value)
+                        }
                     }
                 }
                 is String -> raw.split(Regex("\\s+")).filter { it.isNotBlank() }
@@ -293,7 +295,9 @@ class HttpConnectorOAuthTransport(
                 clientId = json.getString("client_id"),
                 scopes = scopes,
                 redirectUri = json.getString("redirect_uri"),
-                resource = json.optString("resource").takeIf { it.isNotBlank() },
+                resource = if (json.isNull("resource")) null else {
+                    json.optString("resource").takeIf { it.isNotBlank() }
+                },
                 deviceIdParameter = json.optString("device_id_parameter", "device_id"),
             )
         }
