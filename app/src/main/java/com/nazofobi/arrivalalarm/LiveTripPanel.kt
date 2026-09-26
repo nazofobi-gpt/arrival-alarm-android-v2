@@ -170,9 +170,7 @@ private fun LiveTripFact(
     tag: String,
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(tag),
+        modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Text(
@@ -184,6 +182,7 @@ private fun LiveTripFact(
             text = value,
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Medium,
+            modifier = Modifier.testTag(tag),
         )
     }
 }
