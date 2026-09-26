@@ -97,6 +97,7 @@ enum class ConnectorCommandStatus {
     REJECTED_STALE_STATE,
     REJECTED_STATE_VERSION,
     REJECTED_EXPIRED_COMMAND,
+    REJECTED_IDEMPOTENCY_RECOVERY_REQUIRED,
     REJECTED_DOMAIN,
 }
 
@@ -119,10 +120,10 @@ data class ConnectorCommandReceipt(
  */
 class ConnectorCommandProcessor(
     private val port: ConnectorActionPort,
-    private val maxReceipts: Int = 128,
+    maxReceipts: Int = 128,
+    private val idempotencyStore: ConnectorIdempotencyStore =
+        InMemoryConnectorIdempotencyStore(maxReceipts),
 ) {
-    private val successfulReceipts = LinkedHashMap<String, ConnectorCommandReceipt>()
-
     fun snapshot(): ArrivalAlarmConnectorSnapshot = port.readSnapshot()
 
     fun execute(
@@ -131,8 +132,18 @@ class ConnectorCommandProcessor(
         expectedStateVersion: Long? = null,
         nowEpochSeconds: Long,
     ): ConnectorCommandReceipt {
-        successfulReceipts[command.idempotencyKey]?.let {
-            return it.copy(duplicate = true)
+        val commandType = command::class.simpleName ?: "UnknownCommand"
+        idempotencyStore.get(command.idempotencyKey)?.let { existing ->
+            existing.receipt?.let { return it.copy(duplicate = true) }
+            val current = port.readSnapshot()
+            return ConnectorCommandReceipt(
+                idempotencyKey = command.idempotencyKey,
+                commandType = existing.commandType,
+                status = ConnectorCommandStatus.REJECTED_IDEMPOTENCY_RECOVERY_REQUIRED,
+                message = "Önceki komutun sonucu belirsiz; aynı side-effect yeniden çalıştırılmadı",
+                stateVersionBefore = existing.stateVersionBefore,
+                stateVersionAfter = current.stateVersion,
+            )
         }
 
         val before = port.readSnapshot()
@@ -161,6 +172,14 @@ class ConnectorCommandProcessor(
             )
         }
 
+        idempotencyStore.begin(
+            ConnectorIdempotencyEntry(
+                idempotencyKey = command.idempotencyKey,
+                commandType = commandType,
+                stateVersionBefore = before.stateVersion,
+            )
+        )
+
         val outcome = when (command) {
             is ArrivalAlarmConnectorCommand.SetOrigin -> port.setOrigin(command.point)
             is ArrivalAlarmConnectorCommand.SetDestination -> port.setDestination(command.point)
@@ -172,14 +191,14 @@ class ConnectorCommandProcessor(
         val after = port.readSnapshot()
         val receipt = ConnectorCommandReceipt(
             idempotencyKey = command.idempotencyKey,
-            commandType = command::class.simpleName ?: "UnknownCommand",
+            commandType = commandType,
             status = if (outcome.applied) ConnectorCommandStatus.APPLIED else ConnectorCommandStatus.REJECTED_DOMAIN,
             message = outcome.message,
             stateVersionBefore = before.stateVersion,
             stateVersionAfter = after.stateVersion,
             actionId = outcome.actionId,
         )
-        if (outcome.applied) remember(receipt)
+        idempotencyStore.complete(receipt)
         return receipt
     }
 
@@ -196,11 +215,4 @@ class ConnectorCommandProcessor(
         stateVersionBefore = snapshot.stateVersion,
         stateVersionAfter = snapshot.stateVersion,
     )
-
-    private fun remember(receipt: ConnectorCommandReceipt) {
-        successfulReceipts[receipt.idempotencyKey] = receipt
-        while (successfulReceipts.size > maxReceipts.coerceAtLeast(1)) {
-            successfulReceipts.remove(successfulReceipts.keys.first())
-        }
-    }
 }
