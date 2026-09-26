@@ -72,6 +72,7 @@ export function deviceOAuthMetadataFromEnv(env = process.env) {
     scopes,
     redirect_uri: DEVICE_OAUTH_REDIRECT_URI,
     resource,
+    audience: env.DEVICE_OAUTH_AUDIENCE?.trim() || null,
     device_id_parameter: deviceIdParameter,
   };
 }
