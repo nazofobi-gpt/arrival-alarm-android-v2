@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCloudflareWorker } from "../src/cloudflare-worker.js";
-import { FakeD1 } from "./d1-gateway.test.js";
+import { FakeD1 } from "./support/fake-d1.js";
 
 function env() {
   return {
