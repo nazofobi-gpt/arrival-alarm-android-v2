@@ -2,6 +2,8 @@ package com.nazofobi.arrivalalarm
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -32,13 +34,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SharedPreferencesJourneyStateStore(context: Context) : JourneyStateStore {
     private val prefs = context.getSharedPreferences("journey_state", Context.MODE_PRIVATE)
@@ -68,20 +74,46 @@ class SharedPreferencesJourneyStateStore(context: Context) : JourneyStateStore {
 }
 
 class MainActivity : ComponentActivity() {
+    private var oauthCallbackUri by mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        oauthCallbackUri = intent?.dataString
         enableEdgeToEdge()
-        setContent { MaterialTheme { ArrivalAlarmApp() } }
+        setContent {
+            MaterialTheme {
+                ArrivalAlarmApp(
+                    oauthCallbackUri = oauthCallbackUri,
+                    onOAuthCallbackConsumed = {
+                        oauthCallbackUri = null
+                        setIntent(Intent(intent).setData(null))
+                    },
+                )
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        oauthCallbackUri = intent.dataString
     }
 }
 
 @Composable
-fun ArrivalAlarmApp() {
+fun ArrivalAlarmApp(
+    oauthCallbackUri: String? = null,
+    onOAuthCallbackConsumed: () -> Unit = {},
+) {
     val context = LocalContext.current.applicationContext
     val graph = remember(context) { ArrivalAlarmRuntimeGraph.get(context) }
     val controller = graph.controller
     val connectorPort = graph.connectorPort
     val connectorRuntimeCoordinator = graph.connectorRuntimeCoordinator
+    val connectorOAuth = graph.connectorOAuth
+    val connectorSessionStore = graph.connectorSessionStore
+    val connectorBaseUrl = BuildConfig.CONNECTOR_BASE_URL.trim().trimEnd('/')
+    val coroutineScope = rememberCoroutineScope()
     val transit = remember { NationwideTransitGateway(context) }
     val currentLocation = remember { AndroidCurrentLocation(context) }
     val guidanceSpeaker = remember { AndroidTextToSpeechSpeaker(context) }
@@ -114,6 +146,71 @@ fun ArrivalAlarmApp() {
     var inferenceEnabled by remember { mutableStateOf(false) }
     var inferenceResult by remember { mutableStateOf<TripInferenceResult?>(null) }
     var confirmedTripId by remember { mutableStateOf<String?>(null) }
+    var connectorSetupBusy by remember { mutableStateOf(false) }
+    var connectorConnected by remember {
+        mutableStateOf(connectorSessionStore.hasUsableSession())
+    }
+    var connectorSetupStatus by remember {
+        mutableStateOf(
+            when {
+                connectorConnected -> "ChatGPT cihaz bağlantısı hazır"
+                connectorBaseUrl.isBlank() -> "Connector URL release yapılandırmasında ayarlı değil"
+                else -> "ChatGPT cihaz bağlantısı kurulmadı"
+            }
+        )
+    }
+
+    fun connectorStatusText(status: ConnectorRuntimeStatus): String = when (status.state) {
+        ConnectorRuntimeState.CONNECTED -> "ChatGPT cihaz bağlantısı aktif"
+        ConnectorRuntimeState.SYNCING -> "ChatGPT bağlantısı senkronize ediliyor"
+        ConnectorRuntimeState.AUTH_EXPIRED -> "ChatGPT cihaz oturumu süresi doldu"
+        ConnectorRuntimeState.DISCONNECTED -> "ChatGPT cihaz oturumu bulunamadı"
+        ConnectorRuntimeState.ERROR -> "Connector gateway senkronizasyonu başarısız"
+        ConnectorRuntimeState.STOPPED -> "Connector beklemede"
+    }
+
+    fun beginConnectorAuthorization() {
+        if (connectorBaseUrl.isBlank() || connectorSetupBusy) return
+        connectorSetupBusy = true
+        connectorSetupStatus = "Güvenli bağlantı hazırlanıyor…"
+        coroutineScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { connectorOAuth.beginAuthorization(connectorBaseUrl) }
+            }
+            result.onSuccess { authorizationUrl ->
+                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(authorizationUrl))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                runCatching { context.startActivity(browserIntent) }
+                    .onSuccess {
+                        connectorSetupStatus = "Tarayıcıdaki yetkilendirmeyi tamamlayın"
+                    }
+                    .onFailure {
+                        connectorSetupStatus = "Yetkilendirme tarayıcısı açılamadı"
+                    }
+            }.onFailure {
+                connectorSetupStatus = "OAuth yapılandırması doğrulanamadı"
+            }
+            connectorSetupBusy = false
+        }
+    }
+
+    fun disconnectConnector() {
+        if (connectorSetupBusy) return
+        connectorSetupBusy = true
+        connectorSetupStatus = "ChatGPT bağlantısı kesiliyor…"
+        coroutineScope.launch {
+            val remotelyRevoked = withContext(Dispatchers.IO) {
+                connectorOAuth.disconnect()
+            }
+            connectorConnected = false
+            connectorSetupStatus = if (remotelyRevoked) {
+                "ChatGPT cihaz bağlantısı kesildi ve token iptal edildi"
+            } else {
+                "Yerel bağlantı kesildi; uzak token iptali doğrulanamadı"
+            }
+            connectorSetupBusy = false
+        }
+    }
 
     fun loadNearby(point: MapPoint) {
         transit.nearbyStops(point.latitude, point.longitude) { values, source ->
@@ -239,6 +336,27 @@ fun ArrivalAlarmApp() {
         guidanceState = guidanceController.state
     }
 
+    LaunchedEffect(oauthCallbackUri) {
+        val callback = oauthCallbackUri?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        connectorSetupBusy = true
+        connectorSetupStatus = "OAuth yanıtı doğrulanıyor…"
+        val result = withContext(Dispatchers.IO) {
+            runCatching {
+                connectorOAuth.completeAuthorization(callback)
+                connectorRuntimeCoordinator.syncNow()
+            }
+        }
+        result.onSuccess { runtimeStatus ->
+            connectorConnected = connectorSessionStore.hasUsableSession()
+            connectorSetupStatus = connectorStatusText(runtimeStatus)
+        }.onFailure {
+            connectorConnected = connectorSessionStore.hasUsableSession()
+            connectorSetupStatus = "OAuth yanıtı reddedildi; bağlantı kurulmadı"
+        }
+        connectorSetupBusy = false
+        onOAuthCallbackConsumed()
+    }
+
     LaunchedEffect(Unit) {
         guidanceController.onPermissions(AndroidGuidancePermissions.snapshot(context))
         guidanceController.onAudioRoute(AndroidGuidanceAudio.currentRoute(context))
@@ -248,6 +366,7 @@ fun ArrivalAlarmApp() {
     LaunchedEffect(controller) {
         while (true) {
             journey = controller.state
+            connectorConnected = connectorSessionStore.hasUsableSession()
             delay(1_000)
         }
     }
@@ -285,6 +404,29 @@ fun ArrivalAlarmApp() {
             ) {
                 Text("Varış Alarmı", style = MaterialTheme.typography.headlineMedium)
                 Text("Almanya transit arama", style = MaterialTheme.typography.titleMedium)
+
+                Text("ChatGPT bağlantısı", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    connectorSetupStatus,
+                    modifier = Modifier.testTag("connector-setup-status"),
+                )
+                if (connectorConnected) {
+                    Button(
+                        onClick = { disconnectConnector() },
+                        enabled = !connectorSetupBusy,
+                        modifier = Modifier.testTag("connector-disconnect"),
+                    ) {
+                        Text(if (connectorSetupBusy) "İşleniyor…" else "ChatGPT bağlantısını kes")
+                    }
+                } else {
+                    Button(
+                        onClick = { beginConnectorAuthorization() },
+                        enabled = !connectorSetupBusy && connectorBaseUrl.isNotBlank(),
+                        modifier = Modifier.testTag("connector-connect"),
+                    ) {
+                        Text(if (connectorSetupBusy) "İşleniyor…" else "ChatGPT bağlantısını kur")
+                    }
+                }
 
                 val dataText = when (val value = dataState) {
                     NationwideDataState.Idle -> "Almanya veri indeksi henüz hazır değil"

@@ -23,6 +23,7 @@ class AndroidConnectorSessionStoreInstrumentedTest {
                 baseUrl = "https://connector.example/",
                 accessToken = "device-secret-token",
                 expiresAtEpochSeconds = 2_000,
+                refreshToken = "device-refresh-secret",
             )
         )
 
@@ -30,6 +31,7 @@ class AndroidConnectorSessionStoreInstrumentedTest {
         assertEquals("https://connector.example", loaded?.baseUrl)
         assertEquals("device-secret-token", loaded?.accessToken)
         assertEquals(2_000L, loaded?.expiresAtEpochSeconds)
+        assertEquals("device-refresh-secret", loaded?.refreshToken)
         assertTrue(store.hasUsableSession())
 
         val rawPreferences = context.getSharedPreferences(
@@ -37,6 +39,7 @@ class AndroidConnectorSessionStoreInstrumentedTest {
             android.content.Context.MODE_PRIVATE,
         ).all.toString()
         assertFalse(rawPreferences.contains("device-secret-token"))
+        assertFalse(rawPreferences.contains("device-refresh-secret"))
 
         store.clear()
         assertNull(store.currentSession())

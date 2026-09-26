@@ -9,6 +9,7 @@ data class ConnectorDeviceSession(
     val baseUrl: String,
     val accessToken: String,
     val expiresAtEpochSeconds: Long? = null,
+    val refreshToken: String? = null,
 ) {
     fun isExpired(nowEpochSeconds: Long, clockSkewSeconds: Long = 30): Boolean =
         expiresAtEpochSeconds?.let { nowEpochSeconds >= it - clockSkewSeconds } ?: false

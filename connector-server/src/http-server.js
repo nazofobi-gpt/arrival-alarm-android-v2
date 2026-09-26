@@ -4,7 +4,7 @@ import { bearerToken, createJwtAccessVerifier } from "./auth.js";
 import { createGatewayStoreFromEnv } from "./gateway-store.js";
 import { GatewayService } from "./gateway-service.js";
 import { createArrivalAlarmMcpServer } from "./mcp-server.js";
-import { validateProductionEnvironment } from "./production-config.js";
+import { deviceOAuthMetadataFromEnv, validateProductionEnvironment } from "./production-config.js";
 
 validateProductionEnvironment(process.env);
 
@@ -149,6 +149,16 @@ const httpServer = createServer(async (req, res) => {
     return;
   }
   const url = new URL(req.url, "http://" + (req.headers.host ?? "localhost"));
+
+  if (req.method === "GET" && url.pathname === "/.well-known/arrival-alarm-device-oauth") {
+    try {
+      sendJson(res, 200, deviceOAuthMetadataFromEnv(process.env));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "device_oauth_not_configured";
+      sendJson(res, 503, { error: message });
+    }
+    return;
+  }
 
   if (req.method === "GET" && url.pathname === "/.well-known/oauth-protected-resource") {
     try {

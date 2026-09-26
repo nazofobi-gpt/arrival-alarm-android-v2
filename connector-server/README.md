@@ -66,3 +66,18 @@ Production startup validates the required configuration before listening. Use `.
 A persistent volume must back `/data` so `GATEWAY_SQLITE_PATH=/data/arrival-alarm.db` survives restarts. The image exposes port 8787 and includes a local health check. TLS should terminate at the hosting platform/reverse proxy; `MCP_PUBLIC_BASE_URL`, OAuth issuer/authorization/JWKS endpoints must still be public HTTPS URLs.
 
 The container does not include an authorization server. Production still needs an OAuth 2.1 provider that supports the MCP/ChatGPT authorization-code + PKCE flow and a device-token issuance/refresh/revoke path.
+
+
+## Android device OAuth provisioning
+
+The Android app is a public OAuth client. It never contains a client secret. Set the public connector URL at build time with either the Gradle property or environment variable `CONNECTOR_BASE_URL`; production values must be HTTPS.
+
+The app fetches `/.well-known/arrival-alarm-device-oauth` from that gateway, opens the provider authorization endpoint in the system browser, uses Authorization Code + PKCE S256 + state, and receives the callback at:
+
+`com.nazofobi.arrivalalarm://oauth/callback`
+
+Register that redirect URI for `DEVICE_OAUTH_CLIENT_ID`. The provider integration must issue an access token with scope `arrival.device`, a stable user `sub` matching the ChatGPT-side identity, and the app-supplied device identifier in the configured `device_id` claim. The app requests `offline_access` by default so expired device access tokens can be refreshed without storing credentials in the APK.
+
+Required public-client deployment variables are documented in `.env.example`: authorization, token and revocation endpoints, client ID, scopes, and the optional RFC 8707 resource indicator. Access tokens, refresh tokens and the pending PKCE verifier are encrypted with Android Keystore before persistence. Disconnect attempts RFC 7009 revocation before clearing the local session.
+
+A verified HTTPS Android App Link should replace the private-use callback after the final production domain and signing certificate are fixed; until then the package-based callback remains protected by PKCE and transaction-bound state.

@@ -34,6 +34,8 @@ class MainActivityTest {
         rule.onNodeWithTag("search-target-origin").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
         rule.onNodeWithTag("search-target-destination").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
         rule.onNodeWithTag("nationwide-data-state").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("connector-setup-status").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("connector-connect").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("current-location-origin").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("arm").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
         rule.onNodeWithTag("cancel-alarm").performScrollTo().assertIsDisplayed().assertIsNotEnabled()

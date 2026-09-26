@@ -3,6 +3,14 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+val connectorBaseUrl = providers.gradleProperty("CONNECTOR_BASE_URL")
+    .orElse(providers.environmentVariable("CONNECTOR_BASE_URL"))
+    .orNull
+    .orEmpty()
+val escapedConnectorBaseUrl = connectorBaseUrl
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
+
 android {
     namespace = "com.nazofobi.arrivalalarm"
     compileSdk = 36
@@ -15,10 +23,12 @@ android {
         versionName = "0.1.0-v2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "CONNECTOR_BASE_URL", "\"" + escapedConnectorBaseUrl + "\"")
     }
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     compileOptions {
