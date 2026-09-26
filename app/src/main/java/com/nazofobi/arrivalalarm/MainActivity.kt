@@ -186,6 +186,7 @@ fun ArrivalAlarmApp(
     var locationMessage by remember { mutableStateOf<String?>(null) }
     var mapMessage by remember { mutableStateOf<String?>(null) }
     var routeOptions by remember { mutableStateOf(emptyList<RouteOption>()) }
+    var selectedRouteId by remember { mutableStateOf<String?>(null) }
     var routeStatus by remember { mutableStateOf<String?>(null) }
     var routeOffline by remember { mutableStateOf(false) }
     var routeBusy by remember { mutableStateOf(false) }
@@ -281,6 +282,7 @@ fun ArrivalAlarmApp(
         destination = null
         destinationStopId = null
         routeOptions = emptyList()
+        selectedRouteId = null
         graph.routeRegistry.clear()
         routeStatus = null
         routeOffline = false
@@ -302,6 +304,9 @@ fun ArrivalAlarmApp(
             if (options.isNotEmpty()) {
                 routeOffline = false
                 routeOptions = options
+                if (selectedRouteId !in options.map { it.id }) {
+                    selectedRouteId = null
+                }
                 graph.routeRegistry.replace(options)
                 routeStatus = status
                 routeCache.put(CachedTransitPlan(key, options, emptyList(), System.currentTimeMillis() / 1000))
@@ -309,6 +314,9 @@ fun ArrivalAlarmApp(
                 val cached = routeCache.routeOptions(key)
                 routeOffline = cached.isNotEmpty()
                 routeOptions = cached
+                if (selectedRouteId !in cached.map { it.id }) {
+                    selectedRouteId = null
+                }
                 graph.routeRegistry.replace(cached)
                 routeStatus = if (cached.isNotEmpty()) context.getString(R.string.route_offline_fallback) else status
             }
@@ -330,6 +338,7 @@ fun ArrivalAlarmApp(
             destinationStopId = stopId
             routeOffline = false
             routeOptions = emptyList()
+            selectedRouteId = null
             graph.routeRegistry.clear()
             loadRoutes(currentOrigin, point)
         }
@@ -398,6 +407,21 @@ fun ArrivalAlarmApp(
             return
         }
         routeStatus = context.getString(R.string.alarm_active)
+    }
+
+    fun selectRouteOption(option: RouteOption) {
+        val outcome = connectorPort.selectJourney(option.id)
+        journey = controller.state
+        if (outcome.applied) {
+            selectedRouteId = option.id
+            routeStatus = context.getString(
+                R.string.route_selected,
+                option.line,
+                option.direction,
+            )
+        } else {
+            routeStatus = localizedDomainMessage(context, outcome.message)
+        }
     }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -646,20 +670,45 @@ fun ArrivalAlarmApp(
                     },
                 )
 
-                if (origin != null && destination != null) {
-                    Button(
-                        onClick = { loadRoutes(origin!!, destination!!) },
-                        enabled = !routeBusy,
-                        modifier = Modifier.testTag("route-refresh"),
-                    ) { Text(if (routeBusy) stringResource(R.string.route_calculating) else stringResource(R.string.refresh_routes)) }
-                }
-                routeStatus?.let { Text(it, modifier = Modifier.testTag("route-status")) }
-                routeOptions.take(3).forEachIndexed { index, option ->
-                    Text(
-                        stringResource(R.string.route_option_format, option.line, option.direction, option.departure, option.arrival, option.walkingMinutes, option.transfers),
-                        modifier = Modifier.testTag("route-option-$index"),
-                    )
-                }
+                RouteJourneyPanel(
+                    origin = origin,
+                    destination = destination,
+                    routeOptions = routeOptions,
+                    routeBusy = routeBusy,
+                    routeStatus = routeStatus,
+                    routeOffline = routeOffline,
+                    selectedRouteId = selectedRouteId,
+                    journey = journey,
+                    onRefreshRoutes = {
+                        val from = origin
+                        val to = destination
+                        if (from != null && to != null) {
+                            loadRoutes(from, to)
+                        }
+                    },
+                    onSelectRoute = { option ->
+                        selectRouteOption(option)
+                    },
+                    onArmAlarm = {
+                        if (ActiveJourneyPermissions.hasRequired(context)) {
+                            armAndStartTracking()
+                        } else {
+                            alarmPermissionLauncher.launch(
+                                ActiveJourneyPermissions.runtimePermissions()
+                            )
+                        }
+                    },
+                    onCancelAlarm = {
+                        val outcome = connectorPort.cancelArrivalAlarm()
+                        journey = controller.state
+                        if (outcome.applied) {
+                            routeStatus = context.getString(R.string.alarm_cancelled)
+                        } else {
+                            routeStatus = localizedDomainMessage(context, outcome.message)
+                        }
+                    },
+                )
+
                 val destinationPoint = destination
                 if (routeOptions.isNotEmpty() && destinationPoint != null) {
                     val boardNow = System.currentTimeMillis() / 1_000
@@ -688,45 +737,12 @@ fun ArrivalAlarmApp(
                             serviceAlerts = false,
                         ),
                         onSelectJourney = { routeId ->
-                            val outcome = connectorPort.selectJourney(routeId)
-                            journey = controller.state
-                            val selectedRoute = routeOptions.firstOrNull { it.id == routeId }
-                            routeStatus = if (outcome.applied && selectedRoute != null) {
-                                context.getString(R.string.route_selected, selectedRoute.line, selectedRoute.direction)
-                            } else {
-                                outcome.message
-                            }
+                            routeOptions.firstOrNull { it.id == routeId }
+                                ?.let { selectRouteOption(it) }
                         },
                         modifier = Modifier.fillMaxWidth().testTag("transit-experience-panel"),
                     )
                 }
-
-                Text(stringResource(R.string.phase_format, journeyPhaseText(journey.phase)), modifier = Modifier.testTag("phase"))
-                journey.error?.let { Text(localizedDomainMessage(context, it), modifier = Modifier.testTag("error")) }
-                Button(
-                    onClick = {
-                        if (ActiveJourneyPermissions.hasRequired(context)) {
-                            armAndStartTracking()
-                        } else {
-                            alarmPermissionLauncher.launch(ActiveJourneyPermissions.runtimePermissions())
-                        }
-                    },
-                    enabled = journey.phase == JourneyPhase.DESTINATION_SELECTED,
-                    modifier = Modifier.testTag("arm"),
-                ) { Text(stringResource(R.string.arm_alarm)) }
-                Button(
-                    onClick = {
-                        val outcome = connectorPort.cancelArrivalAlarm()
-                        journey = controller.state
-                        if (outcome.applied) {
-                            routeStatus = context.getString(R.string.alarm_cancelled)
-                        } else {
-                            routeStatus = localizedDomainMessage(context, outcome.message)
-                        }
-                    },
-                    enabled = journey.phase == JourneyPhase.ARMED || journey.phase == JourneyPhase.ARRIVED,
-                    modifier = Modifier.testTag("cancel-alarm"),
-                ) { Text(stringResource(R.string.cancel_alarm)) }
 
                 Text(stringResource(R.string.guidance_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
                 Text(guidanceStatusText(guidanceState), modifier = Modifier.testTag("guidance-status"))
