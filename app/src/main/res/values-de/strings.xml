@@ -79,6 +79,16 @@
     <string name="nearby_stops">Nächste Haltestellen</string>
     <string name="nearby_stop_format">%1$s • %2$s • %3$d m</string>
     <string name="route_calculating">Verbindung wird berechnet…</string>
+    <string name="route_results_title">Verbindungen</string>
+    <string name="route_points_format">%1$s → %2$s</string>
+    <string name="route_offline_badge">Offline-Cache</string>
+    <string name="route_duration_minutes">%1$d Min.</string>
+    <string name="route_walk_transfer_format">%1$d Min. Fußweg • %2$d Umstiege</string>
+    <string name="route_realtime_badge">Echtzeit-Update</string>
+    <string name="route_planned_badge">Fahrplanzeit</string>
+    <string name="route_select_action">Diese Verbindung wählen</string>
+    <string name="route_selected_action">Verbindung gewählt</string>
+    <string name="journey_detail_title">Fahrtdetails</string>
     <string name="route_live_static">transport.rest / DB-Profil • Echtzeit/Fahrplan</string>
     <string name="route_live_unavailable">Live-Verbindung nicht verfügbar: %1$s</string>
     <string name="route_not_found">Für diesen Start und dieses Ziel wurde keine Verbindung gefunden</string>
