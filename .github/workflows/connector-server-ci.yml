@@ -43,6 +43,9 @@ jobs:
           node --check src/auth.js
           node --check src/gateway-store.js
           node --check src/gateway-service.js
+          node --check src/async-gateway-service.js
+          node --check src/d1-gateway-store.js
+          node --check src/cloudflare-worker.js
           node --check src/mcp-server.js
           node --check src/http-server.js
           node --check src/production-config.js
@@ -51,5 +54,8 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Build production container
+      - name: Bundle free Cloudflare Worker
+        run: npm run check:worker
+
+      - name: Build portable Node container
         run: docker build --tag arrival-alarm-connector-ci .
