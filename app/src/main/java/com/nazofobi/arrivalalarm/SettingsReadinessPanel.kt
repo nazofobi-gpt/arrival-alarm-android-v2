@@ -11,6 +11,7 @@ import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -25,6 +26,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -356,6 +358,8 @@ private fun ThemeModeChoice(
             onClick = { onSelect(mode) },
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .semantics { this.selected = selected }
                 .testTag(testTag),
         ) {
             Text(stringResource(R.string.theme_selected_format, label))
@@ -365,6 +369,8 @@ private fun ThemeModeChoice(
             onClick = { onSelect(mode) },
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .semantics { this.selected = selected }
                 .testTag(testTag),
         ) {
             Text(label)

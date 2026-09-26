@@ -15,10 +15,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -35,10 +38,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
@@ -618,10 +623,20 @@ fun ArrivalAlarmApp(
 
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
         Surface(Modifier.fillMaxSize().padding(innerPadding)) {
-            Column(
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.TopCenter,
             ) {
+                Column(
+                    Modifier
+                        .fillMaxHeight()
+                        .widthIn(max = 840.dp)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(24.dp)
+                        .testTag("adaptive-content"),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
                 Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
                 Text(stringResource(R.string.subtitle), style = MaterialTheme.typography.titleMedium)
 
@@ -913,7 +928,8 @@ fun ArrivalAlarmApp(
                     ) { Text(stringResource(R.string.guidance_speak_destination)) }
                 }
 
-                Text(stringResource(R.string.inference_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+                val inferenceTitle = stringResource(R.string.inference_title)
+                Text(inferenceTitle, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
                 Switch(
                     checked = inferenceEnabled,
                     onCheckedChange = {
@@ -921,7 +937,9 @@ fun ArrivalAlarmApp(
                         inferenceResult = null
                         confirmedTripId = null
                     },
-                    modifier = Modifier.testTag("trip-inference-toggle"),
+                    modifier = Modifier
+                        .semantics { contentDescription = inferenceTitle }
+                        .testTag("trip-inference-toggle"),
                 )
                 Text(
                     if (inferenceEnabled) stringResource(R.string.inference_enabled)
@@ -990,6 +1008,7 @@ fun ArrivalAlarmApp(
                         stringResource(R.string.inference_confirmed, it),
                         modifier = Modifier.testTag("trip-inference-confirmed"),
                     )
+                }
                 }
             }
         }

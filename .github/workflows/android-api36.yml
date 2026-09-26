@@ -61,13 +61,36 @@ jobs:
             adb shell wm size
             adb shell settings get system font_scale
             ./gradlew --no-daemon connectedDebugAndroidTest
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell pm clear com.nazofobi.arrivalalarm || true
+            adb shell am start -W -n com.nazofobi.arrivalalarm/.MainActivity
+            sleep 1
             mkdir -p app/build/outputs/androidTest-results/compact-screen
             adb exec-out screencap -p > app/build/outputs/androidTest-results/compact-screen/compact-412x915-normal-text.png
 
+            adb shell wm size 1600x1000
+            adb shell wm density 160
+            adb shell am force-stop com.nazofobi.arrivalalarm || true
+            adb shell wm size
+            adb shell wm density
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.MainActivityTest#wideWindowKeepsPrimaryContentAtReadableWidth -Pandroid.testInstrumentationRunnerArguments.requireWide=true
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell pm clear com.nazofobi.arrivalalarm || true
+            adb shell am start -W -n com.nazofobi.arrivalalarm/.MainActivity
+            sleep 1
+            mkdir -p app/build/outputs/androidTest-results/wide-window
+            adb exec-out screencap -p > app/build/outputs/androidTest-results/wide-window/wide-1600x1000-readable-content.png
+
+            adb shell wm density reset
+            adb shell wm size 412x915
             adb shell settings put system font_scale 2.0
             adb shell am force-stop com.nazofobi.arrivalalarm || true
             adb shell settings get system font_scale
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.MainActivityTest#largeFontKeepsCriticalJourneyControlsReachable
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell pm clear com.nazofobi.arrivalalarm || true
+            adb shell am start -W -n com.nazofobi.arrivalalarm/.MainActivity
+            sleep 1
             mkdir -p app/build/outputs/androidTest-results/large-font
             adb exec-out screencap -p > app/build/outputs/androidTest-results/large-font/compact-412x915-font-200.png
 
