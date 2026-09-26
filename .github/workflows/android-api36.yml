@@ -20,8 +20,10 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - name: Checkout
+      - name: Checkout exact source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -52,7 +54,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            set -euo pipefail
+            set -eu
 
             adb shell wm size 412x915
             adb shell settings put system font_scale 1.0
@@ -111,7 +113,8 @@ jobs:
               exit 1
             fi
 
-            printf 'source_commit=%s\nvariant=release\nsigning=ephemeral_ci_field_test_not_production\n' "$GITHUB_SHA" > "$RC_DIR/BUILD_PROVENANCE.txt"
+            SOURCE_SHA="$(git rev-parse HEAD)"
+            printf 'source_commit=%s\nvariant=release\nsigning=ephemeral_ci_field_test_not_production\n' "$SOURCE_SHA" > "$RC_DIR/BUILD_PROVENANCE.txt"
             sha256sum "$RC_APK" | tee "$RC_DIR/SHA256SUMS.txt"
 
             adb uninstall com.nazofobi.arrivalalarm >/dev/null 2>&1 || true
@@ -125,7 +128,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: api36-diagnostics-${{ github.sha }}
+          name: api36-diagnostics-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
@@ -141,7 +144,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: arrival-alarm-v2-field-rc-${{ github.sha }}
+          name: arrival-alarm-v2-field-rc-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             app/build/outputs/field-rc/arrival-alarm-v2-field-rc.apk
             app/build/outputs/field-rc/SHA256SUMS.txt
