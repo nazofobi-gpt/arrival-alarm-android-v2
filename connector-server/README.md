@@ -81,3 +81,20 @@ Register that redirect URI for `DEVICE_OAUTH_CLIENT_ID`. The provider integratio
 Required public-client deployment variables are documented in `.env.example`: authorization, token and revocation endpoints, client ID, scopes, and the optional RFC 8707 resource indicator. Access tokens, refresh tokens and the pending PKCE verifier are encrypted with Android Keystore before persistence. Disconnect attempts RFC 7009 revocation before clearing the local session.
 
 A verified HTTPS Android App Link should replace the private-use callback after the final production domain and signing certificate are fixed; until then the package-based callback remains protected by PKCE and transaction-bound state.
+
+
+## Render Blueprint
+
+The repository root now includes `render.yaml` for the production connector. It is intentionally not auto-provisioned from ChatGPT because the Blueprint creates paid compute plus a persistent disk.
+
+The Blueprint uses:
+- Frankfurt region.
+- Node native runtime with `connector-server` as the root directory.
+- `0.5c-512mb` paid compute, one instance.
+- A 1 GB persistent disk mounted at `/var/data`.
+- `GATEWAY_SQLITE_PATH=/var/data/arrival-alarm.db`.
+- `MCP_PUBLIC_BASE_URL` copied from Render's own `RENDER_EXTERNAL_URL`.
+- `autoDeployTrigger: checksPass`, so main-branch deploys wait for linked CI checks.
+- `sync: false` for provider-specific OAuth values so credentials/config are supplied during Blueprint creation instead of committed to git.
+
+Creating the Blueprint is a billing action. Review the current Render price before provisioning. Persistent disk is required for the SQLite gateway; do not downgrade this Blueprint to a free web service unless the gateway is migrated to another durable datastore.
