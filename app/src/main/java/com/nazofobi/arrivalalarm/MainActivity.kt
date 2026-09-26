@@ -164,6 +164,7 @@ fun ArrivalAlarmApp(
     var nearby by remember { mutableStateOf(emptyList<NearbyStop>()) }
     var nearbySource by remember { mutableStateOf<String?>(null) }
     var locationMessage by remember { mutableStateOf<String?>(null) }
+    var mapMessage by remember { mutableStateOf<String?>(null) }
     var routeOptions by remember { mutableStateOf(emptyList<RouteOption>()) }
     var routeStatus by remember { mutableStateOf<String?>(null) }
     var routeOffline by remember { mutableStateOf(false) }
@@ -657,7 +658,13 @@ fun ArrivalAlarmApp(
                         if (selectingOrigin) setOrigin(point)
                         else setDestinationPoint(point)
                     },
+                    onMapError = {
+                        mapMessage = context.getString(R.string.map_load_failed)
+                    },
                 )
+                mapMessage?.let {
+                    Text(it, modifier = Modifier.testTag("map-status"))
+                }
                 Text(
                     stringResource(R.string.map_provider_note),
                     style = MaterialTheme.typography.bodySmall,
