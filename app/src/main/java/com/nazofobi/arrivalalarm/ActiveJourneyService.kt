@@ -28,7 +28,9 @@ object ActiveJourneyPermissions {
         val hasNotifications =
             Build.VERSION.SDK_INT < 33 ||
                 context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-        return hasLocation && hasNotifications
+        val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val hasProvider = runCatching { manager.getProviders(true).isNotEmpty() }.getOrDefault(false)
+        return hasLocation && hasNotifications && hasProvider
     }
 
     fun runtimePermissions(): Array<String> = buildList {
@@ -266,10 +268,18 @@ class ActiveJourneyService : Service(), LocationListener {
         private const val MIN_UPDATE_METERS = 25f
         private const val STATE_MONITOR_MILLIS = 5_000L
 
-        fun start(context: Context) {
+        fun tryStart(context: Context): Boolean {
+            if (!ActiveJourneyPermissions.hasRequired(context)) return false
             val intent = Intent(context, ActiveJourneyService::class.java).setAction(ACTION_START)
-            if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent)
-            else context.startService(intent)
+            return try {
+                if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent)
+                else context.startService(intent)
+                true
+            } catch (_: SecurityException) {
+                false
+            } catch (_: IllegalStateException) {
+                false
+            }
         }
 
         fun stop(context: Context) {
