@@ -30,13 +30,26 @@ class MainActivityTest {
             ArrivalAlarmRuntimeGraph.resetForTests()
             activity.getSharedPreferences("journey_state", Context.MODE_PRIVATE).edit().clear().commit()
             activity.getSharedPreferences("guidance_state", Context.MODE_PRIVATE).edit().clear().commit()
-            activity.getSharedPreferences("app_preferences", Context.MODE_PRIVATE).edit().clear().commit()
+            activity.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+                .edit()
+                .clear()
+                .putBoolean("onboarding_complete", true)
+                .commit()
         }
         rule.activityRule.scenario.recreate()
         rule.waitForIdle()
     }
 
     @Test fun firstRunOnboardingExplainsConsentAndPersistsCompletion() {
+        rule.activityRule.scenario.onActivity { activity ->
+            activity.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("onboarding_complete", false)
+                .commit()
+        }
+        rule.activityRule.scenario.recreate()
+        rule.waitForIdle()
+
         rule.onNodeWithTag("first-run-onboarding")
             .performScrollTo()
             .assertIsDisplayed()
@@ -49,6 +62,7 @@ class MainActivityTest {
             .performClick()
 
         assertTrue(rule.onAllNodesWithTag("first-run-onboarding").fetchSemanticsNodes().isEmpty())
+        rule.onNodeWithTag("bottom-navigation").assertIsDisplayed()
 
         rule.activityRule.scenario.recreate()
         rule.waitForIdle()
@@ -57,17 +71,24 @@ class MainActivityTest {
     }
 
     @Test fun launchExposesRealNationwideSearchAndLocationControls() {
+        rule.onNodeWithTag("home-overview").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("bottom-navigation").assertIsDisplayed()
+
+        navigateTo("nav-search")
         rule.onNodeWithTag("catalog-search").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("catalog-search-submit").performScrollTo().assertIsNotEnabled()
         rule.onNodeWithTag("search-target-status").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("search-target-origin").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
         rule.onNodeWithTag("search-target-destination").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
+        rule.onNodeWithTag("current-location-origin").performScrollTo().assertIsDisplayed()
+
+        navigateTo("nav-settings")
         rule.onNodeWithTag("nationwide-data-state").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("connector-setup-status").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("connector-connect").performScrollTo().assertIsDisplayed()
-        rule.onNodeWithTag("current-location-origin").performScrollTo().assertIsDisplayed()
-        rule.onNodeWithTag("arm").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
-        rule.onNodeWithTag("cancel-alarm").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
+
+        navigateTo("nav-journey")
+        rule.onNodeWithTag("journey-empty-state").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun journeyCoordinatesRestoreIntoProductionUiAfterRecreation() {
@@ -85,15 +106,19 @@ class MainActivityTest {
         rule.activityRule.scenario.recreate()
         rule.waitForIdle()
 
+        navigateTo("nav-search")
         rule.onNodeWithTag("origin-label").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("destination-label").performScrollTo().assertIsDisplayed()
+        navigateTo("nav-journey")
         rule.onNodeWithTag("arm").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun largeFontKeepsCriticalJourneyControlsReachable() {
+        rule.onNodeWithTag("home-overview").performScrollTo().assertIsDisplayed()
+        navigateTo("nav-search")
         rule.onNodeWithTag("catalog-search").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("transit-map").performScrollTo().assertIsDisplayed()
-        rule.onNodeWithTag("arm").performScrollTo().assertIsDisplayed()
+        navigateTo("nav-settings")
         rule.onNodeWithTag("guidance-permissions").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("trip-inference-toggle").performScrollTo().assertIsDisplayed()
     }
@@ -126,6 +151,7 @@ class MainActivityTest {
     }
 
     @Test fun productionUiExposesInteractiveMapSurface() {
+        navigateTo("nav-search")
         val mapLabel = rule.activity.getString(R.string.map_point_label)
         rule.onNodeWithTag("transit-map")
             .performScrollTo()
@@ -142,10 +168,12 @@ class MainActivityTest {
     }
 
     @Test fun fullGermanyIndexDownloadControlIsReachableBeforeCacheExists() {
+        navigateTo("nav-settings")
         rule.onNodeWithTag("nationwide-index-download").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun settingsReadinessExposesExplicitRecoveryActions() {
+        navigateTo("nav-settings")
         rule.onNodeWithTag("settings-readiness-panel")
             .performScrollTo()
             .assertIsDisplayed()
@@ -170,6 +198,7 @@ class MainActivityTest {
     }
 
     @Test fun manualDarkThemePersistsAcrossActivityRecreation() {
+        navigateTo("nav-settings")
         val darkLabel = rule.activity.getString(R.string.theme_dark)
         rule.onNodeWithTag("theme-dark")
             .performScrollTo()
@@ -189,6 +218,7 @@ class MainActivityTest {
 
         rule.activityRule.scenario.recreate()
         rule.waitForIdle()
+        navigateTo("nav-settings")
 
         rule.onNodeWithTag("theme-mode-status")
             .performScrollTo()
@@ -196,6 +226,7 @@ class MainActivityTest {
     }
 
     @Test fun tripInferenceSwitchHasTalkBackLabel() {
+        navigateTo("nav-settings")
         val label = rule.activity.getString(R.string.inference_title)
         rule.onNodeWithTag("trip-inference-toggle")
             .performScrollTo()
@@ -206,14 +237,23 @@ class MainActivityTest {
     @Test fun criticalActionsMeet48DpTouchTargetFloor() {
         val minPixels = 48f * rule.activity.resources.displayMetrics.density
         listOf(
-            "onboarding-complete",
-            "theme-system",
-            "theme-light",
-            "theme-dark",
-            "current-location-origin",
-            "arm",
-            "readiness-refresh",
+            "nav-home",
+            "nav-search",
+            "nav-journey",
+            "nav-departures",
+            "nav-settings",
+            "home-current-location",
         ).forEach { tag ->
+            val node = rule.onNodeWithTag(tag)
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+            assertTrue(
+                "$tag height=${node.boundsInRoot.height}px, required>=$minPixels",
+                node.boundsInRoot.height + 0.5f >= minPixels,
+            )
+        }
+        navigateTo("nav-settings")
+        listOf("theme-system", "theme-light", "theme-dark", "readiness-refresh").forEach { tag ->
             val node = rule.onNodeWithTag(tag)
                 .performScrollTo()
                 .assertIsDisplayed()
@@ -226,6 +266,7 @@ class MainActivityTest {
     }
 
     @Test fun themeControlsExposeSelectionSemantics() {
+        navigateTo("nav-settings")
         rule.onNodeWithTag("theme-system")
             .performScrollTo()
             .assertIsDisplayed()
@@ -245,7 +286,21 @@ class MainActivityTest {
             .assertIsNotSelected()
     }
 
+    @Test fun primaryScreensAreSeparatedByBottomNavigation() {
+        rule.onNodeWithTag("home-overview").assertIsDisplayed()
+        assertTrue(rule.onAllNodesWithTag("settings-readiness-panel").fetchSemanticsNodes().isEmpty())
+
+        navigateTo("nav-search")
+        rule.onNodeWithTag("catalog-search").performScrollTo().assertIsDisplayed()
+        assertTrue(rule.onAllNodesWithTag("home-overview").fetchSemanticsNodes().isEmpty())
+
+        navigateTo("nav-settings")
+        rule.onNodeWithTag("settings-readiness-panel").performScrollTo().assertIsDisplayed()
+        assertTrue(rule.onAllNodesWithTag("catalog-search").fetchSemanticsNodes().isEmpty())
+    }
+
     @Test fun guidanceLanguageChoicePersistsAcrossActivityRecreation() {
+        navigateTo("nav-settings")
         rule.onNodeWithTag("guidance-language-de-DE")
             .performScrollTo()
             .assertIsDisplayed()
@@ -256,9 +311,15 @@ class MainActivityTest {
 
         rule.activityRule.scenario.recreate()
         rule.waitForIdle()
+        navigateTo("nav-settings")
 
         rule.onNodeWithTag("guidance-language-status")
             .performScrollTo()
             .assertTextContains("Deutsch", substring = true)
+    }
+
+    private fun navigateTo(tag: String) {
+        rule.onNodeWithTag(tag).assertIsDisplayed().performClick()
+        rule.waitForIdle()
     }
 }
