@@ -11,13 +11,33 @@ data class CachedTransitPlan(
     val savedAtEpochSeconds: Long,
 )
 
-class OfflineTransitCache(private val maxEntries: Int = 8) {
+interface TransitCacheBackingStore {
+    fun load(): List<CachedTransitPlan>
+    fun save(plans: List<CachedTransitPlan>)
+}
+
+object NoOpTransitCacheBackingStore : TransitCacheBackingStore {
+    override fun load(): List<CachedTransitPlan> = emptyList()
+    override fun save(plans: List<CachedTransitPlan>) = Unit
+}
+
+class OfflineTransitCache(
+    private val maxEntries: Int = 8,
+    private val backingStore: TransitCacheBackingStore = NoOpTransitCacheBackingStore,
+) {
     private val entries = LinkedHashMap<String, CachedTransitPlan>()
+
+    init {
+        backingStore.load().takeLast(maxEntries.coerceAtLeast(1)).forEach { plan ->
+            entries[plan.key] = plan
+        }
+    }
 
     fun put(plan: CachedTransitPlan) {
         entries.remove(plan.key)
         entries[plan.key] = plan
         while (entries.size > maxEntries.coerceAtLeast(1)) entries.remove(entries.keys.first())
+        backingStore.save(entries.values.toList())
     }
 
     fun get(key: String): CachedTransitPlan? = entries[key]
