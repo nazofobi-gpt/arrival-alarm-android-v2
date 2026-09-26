@@ -45,12 +45,13 @@
     <string name="select_origin">Başlangıç seç</string>
     <string name="selecting_destination">Varış seçiliyor</string>
     <string name="select_destination">Varış seç</string>
-    <string name="search_stops_label">Almanya\'da durak ara</string>
+    <string name="search_stops_label">Durak, adres veya yer ara</string>
     <string name="searching">Aranıyor…</string>
     <string name="search_action">Ara</string>
     <string name="source_format">Kaynak: %1$s</string>
     <string name="no_stop_found">Durak bulunamadı</string>
     <string name="search_result_format">%1$s • %2$s</string>
+    <string name="search_location_result_format">%1$s • %2$s • %3$s</string>
     <string name="current_location_origin">Mevcut konumu başlangıç yap</string>
     <string name="current_location_label">Mevcut konum</string>
     <string name="getting_location">Konum alınıyor…</string>
