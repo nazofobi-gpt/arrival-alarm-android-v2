@@ -1,11 +1,11 @@
 import { createServer } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { bearerToken, createJwtAccessVerifier } from "./auth.js";
-import { InMemoryGatewayStore } from "./gateway-store.js";
+import { createGatewayStoreFromEnv } from "./gateway-store.js";
 import { GatewayService } from "./gateway-service.js";
 import { createArrivalAlarmMcpServer } from "./mcp-server.js";
 
-const store = new InMemoryGatewayStore();
+const store = createGatewayStoreFromEnv();
 const service = new GatewayService(store);
 const port = Number(process.env.PORT ?? 8787);
 const MCP_PATH = "/mcp";
@@ -252,3 +252,13 @@ const httpServer = createServer(async (req, res) => {
 httpServer.listen(port, () => {
   console.log("Arrival Alarm connector listening on http://localhost:" + port + MCP_PATH);
 });
+
+function shutdown() {
+  httpServer.close(() => {
+    store.close?.();
+    process.exit(0);
+  });
+}
+
+process.once("SIGTERM", shutdown);
+process.once("SIGINT", shutdown);
