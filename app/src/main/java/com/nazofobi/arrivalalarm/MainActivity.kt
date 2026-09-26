@@ -37,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -155,6 +156,9 @@ fun ArrivalAlarmApp(
     var journey by remember { mutableStateOf(controller.state) }
     var onboardingComplete by remember {
         mutableStateOf(appPreferences.getBoolean("onboarding_complete", false))
+    }
+    var activeScreenName by rememberSaveable {
+        mutableStateOf(ArrivalScreen.HOME.name)
     }
     var dataState by remember { mutableStateOf(transit.currentState()) }
     var query by remember { mutableStateOf("") }
