@@ -48,7 +48,7 @@ test("free Worker publishes exact protected-resource metadata from request origi
 
   assert.equal(response.status, 200);
   assert.equal(body.resource, "https://free.example/mcp");
-  assert.deepEqual(body.authorization_servers, ["https://tenant.example"]);
+  assert.deepEqual(body.authorization_servers, ["https://tenant.example/"]);
   assert.deepEqual(body.scopes_supported, ["arrival.read", "arrival.write"]);
 });
 
