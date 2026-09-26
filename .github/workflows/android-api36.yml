@@ -64,14 +64,14 @@ jobs:
             mkdir -p app/build/outputs/androidTest-results/compact-screen
             adb exec-out screencap -p > app/build/outputs/androidTest-results/compact-screen/compact-412x915-normal-text.png
 
-            adb shell wm size 1280x800
+            adb shell wm size 1600x1000
             adb shell wm density 160
             adb shell am force-stop com.nazofobi.arrivalalarm || true
             adb shell wm size
             adb shell wm density
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.MainActivityTest#wideWindowKeepsPrimaryContentAtReadableWidth
             mkdir -p app/build/outputs/androidTest-results/wide-window
-            adb exec-out screencap -p > app/build/outputs/androidTest-results/wide-window/wide-1280x800-readable-content.png
+            adb exec-out screencap -p > app/build/outputs/androidTest-results/wide-window/wide-1600x1000-readable-content.png
 
             adb shell wm density reset
             adb shell wm size 412x915
