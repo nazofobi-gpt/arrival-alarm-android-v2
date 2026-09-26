@@ -21,6 +21,8 @@ class MainActivityTest {
     @Before fun resetPersistedJourneyState() {
         rule.activityRule.scenario.onActivity { activity ->
             activity.getSharedPreferences("journey_state", Context.MODE_PRIVATE).edit().clear().commit()
+            activity.getSharedPreferences("screen_assist_broker_credentials", Context.MODE_PRIVATE)
+                .edit().clear().commit()
         }
         rule.activityRule.scenario.recreate()
         rule.waitForIdle()
@@ -41,7 +43,9 @@ class MainActivityTest {
         rule.onNodeWithTag("screen-assist-panel").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("screen-assist-privacy").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("screen-assist-status").performScrollTo().assertIsDisplayed()
-        rule.onNodeWithTag("screen-assist-start").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("screen-assist-broker-status").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("screen-assist-broker-token").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("screen-assist-start").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
     }
 
     @Test fun productionUiExposesNoLegacyFixtureControls() {
