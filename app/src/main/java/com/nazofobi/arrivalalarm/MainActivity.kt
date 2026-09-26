@@ -615,6 +615,7 @@ fun ArrivalAlarmApp(
                             line = option.line,
                             direction = option.direction,
                             scheduledEpochSeconds = clockToEpoch(option.departure, boardNow),
+                            routeId = option.id,
                         )
                     }
                     val firstRoute = routeOptions.first()
@@ -632,6 +633,16 @@ fun ArrivalAlarmApp(
                             realtimeDepartures = false,
                             serviceAlerts = false,
                         ),
+                        onSelectJourney = { routeId ->
+                            val outcome = connectorPort.selectJourney(routeId)
+                            journey = controller.state
+                            val selectedRoute = routeOptions.firstOrNull { it.id == routeId }
+                            routeStatus = if (outcome.applied && selectedRoute != null) {
+                                "Sefer seçildi • ${selectedRoute.line} • ${selectedRoute.direction}"
+                            } else {
+                                outcome.message
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth().testTag("transit-experience-panel"),
                     )
                 }
