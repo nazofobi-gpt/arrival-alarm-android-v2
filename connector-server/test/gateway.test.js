@@ -43,8 +43,8 @@ test("read tools can derive current journey and stop progress from one snapshot"
   assert.equal(journey.stale, false);
 });
 
-test("write queue rejects stale device state", () => {
-  const store = new InMemoryGatewayStore({ nowEpochSeconds: () => 5000 });
+test("write queue rejects stale device heartbeat", () => {
+  const store = new InMemoryGatewayStore({ nowEpochSeconds: () => 1000 });
   const service = new GatewayService(store, { nowEpochSeconds: () => 5000 });
   store.putSnapshot("user-1", snapshot({ source_updated_at_epoch_seconds: 1000 }));
 
@@ -58,6 +58,21 @@ test("write queue rejects stale device state", () => {
     /stale_device_state/
   );
   assert.equal(store.pendingCommands("user-1").length, 0);
+});
+
+test("recent device heartbeat keeps unchanged domain state writable", () => {
+  const store = new InMemoryGatewayStore({ nowEpochSeconds: () => 5000 });
+  const service = new GatewayService(store, { nowEpochSeconds: () => 5000 });
+  store.putSnapshot("user-1", snapshot({ source_updated_at_epoch_seconds: 1000 }));
+
+  const queued = service.queueWrite(
+    "user-1",
+    { type: "arm_arrival_alarm", idempotency_key: "command-heartbeat" },
+    7
+  );
+
+  assert.equal(queued.status, "queued");
+  assert.equal(store.pendingCommands("user-1").length, 1);
 });
 
 test("write queue rejects optimistic state-version mismatch", () => {

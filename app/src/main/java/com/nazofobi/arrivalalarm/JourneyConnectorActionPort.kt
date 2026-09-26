@@ -23,6 +23,10 @@ class JourneyConnectorActionPort(
 
     override fun readSnapshot(): ArrivalAlarmConnectorSnapshot {
         val now = nowEpochSeconds()
+        // Reading the local controller is an authoritative device-side observation.
+        // Refresh freshness without changing stateVersion so an idle-but-connected app
+        // can still accept a version-matched remote command.
+        sourceUpdatedAtEpochSeconds = maxOf(sourceUpdatedAtEpochSeconds, now)
         val state = controller.state
         val trip = activeTrip?.copy(
             origin = activeTrip?.origin ?: origin,
