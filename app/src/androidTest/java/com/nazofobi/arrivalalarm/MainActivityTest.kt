@@ -1,8 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import android.content.Context
-import java.io.File
-import java.io.FileOutputStream
+import android.os.ParcelFileDescriptor
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -337,14 +336,21 @@ class MainActivityTest {
 
     private fun captureScreen(name: String) {
         rule.waitForIdle()
-        val root = rule.activity.getExternalFilesDir(null) ?: return
-        val dir = File(root, "ui-qa").apply { mkdirs() }
-        val file = File(dir, "$name.png")
-        val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-        FileOutputStream(file).use { output ->
-            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output)
+        val outputDir = "/sdcard/Download/arrival-alarm-ui-qa"
+        runShell("mkdir -p $outputDir")
+        runShell("screencap -p $outputDir/$name.png")
+    }
+
+    private fun runShell(command: String) {
+        val descriptor = InstrumentationRegistry.getInstrumentation()
+            .uiAutomation
+            .executeShellCommand(command)
+        ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { stream ->
+            val buffer = ByteArray(4096)
+            while (stream.read(buffer) != -1) {
+                // Drain stdout so the shell command has completed before the test continues.
+            }
         }
-        bitmap.recycle()
     }
 
     private fun navigateTo(tag: String) {
