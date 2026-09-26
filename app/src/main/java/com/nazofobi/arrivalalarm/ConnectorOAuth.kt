@@ -127,14 +127,14 @@ class ConnectorOAuthCoordinator(
         val callback = URI(callbackUri)
         requireSameRedirect(callback, URI(CONNECTOR_OAUTH_REDIRECT_URI))
         val query = parseQuery(callback.rawQuery)
+        val returnedState = query["state"].orEmpty()
+        if (!constantTimeEquals(transaction.state, returnedState)) {
+            // Do not consume the real pending authorization for an untrusted forged callback.
+            throw IllegalStateException("connector_oauth_state_mismatch")
+        }
         query["error"]?.let { error ->
             transactionStore.clear()
             throw IllegalStateException("connector_oauth_" + error)
-        }
-        val returnedState = query["state"].orEmpty()
-        if (!constantTimeEquals(transaction.state, returnedState)) {
-            transactionStore.clear()
-            throw IllegalStateException("connector_oauth_state_mismatch")
         }
         val code = query["code"].orEmpty()
         if (code.isBlank()) {
