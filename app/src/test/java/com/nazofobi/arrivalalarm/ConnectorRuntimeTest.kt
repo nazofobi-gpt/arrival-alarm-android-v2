@@ -95,6 +95,6 @@ class ConnectorRuntimeTest {
         assertEquals(ConnectorRuntimeState.CONNECTED, status.state)
         assertEquals(1, transport.snapshotCount)
         assertEquals(0, status.lastResult?.processedCommands)
-        assertEquals(4, status.lastResult?.snapshotStateVersionAfter)
+        assertEquals(4L, status.lastResult?.snapshotStateVersionAfter)
     }
 }
