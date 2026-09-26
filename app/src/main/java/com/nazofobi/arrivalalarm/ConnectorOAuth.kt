@@ -8,7 +8,7 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 
 const val CONNECTOR_DEVICE_SCOPE = "arrival.device"
-const val CONNECTOR_OAUTH_REDIRECT_URI = "com.nazofobi.arrivalalarm:/oauth2redirect"
+const val CONNECTOR_OAUTH_REDIRECT_URI = "com.nazofobi.arrivalalarm://oauth/callback"
 
 data class ConnectorOAuthMetadata(
     val authorizationEndpoint: String,
