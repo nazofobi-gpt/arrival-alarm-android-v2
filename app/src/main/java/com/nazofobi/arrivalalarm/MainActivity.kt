@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -97,23 +98,7 @@ fun ArrivalAlarmApp() {
     val screenAssistRuntime = remember { ScreenAssistCaptureRuntime(context) }
     val screenAssistBrokerCredentials = remember { ScreenAssistBrokerCredentialStore(context) }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
-    val screenAssistRealtimeRuntime = remember {
-        ScreenAssistRealtimeRuntime(
-            session = screenAssistRealtimeSession,
-            brokerTokenResponse = {
-                val brokerUrl = BuildConfig.SCREEN_ASSIST_BROKER_URL.trim()
-                check(brokerUrl.isNotEmpty()) {
-                    "Screen Assist token broker is not configured"
-                }
-                ScreenAssistBrokerTransport(
-                    brokerUrl = brokerUrl,
-                    authTokenProvider = { screenAssistBrokerCredentials.read() },
-                ).requestTokenResponse()
-            },
-            socketFactory = { ScreenAssistOpenAiWebRtcSocket(context) },
-        )
-    }
-
+    val screenAssistAppBridge = remember { ScreenAssistMainThreadAppBridge(mainHandler) }
     var journey by remember { mutableStateOf(controller.state) }
     var dataState by remember { mutableStateOf(transit.currentState()) }
     var query by remember { mutableStateOf("") }
@@ -136,6 +121,8 @@ fun ArrivalAlarmApp() {
     var inferenceEnabled by remember { mutableStateOf(false) }
     var inferenceResult by remember { mutableStateOf<TripInferenceResult?>(null) }
     var confirmedTripId by remember { mutableStateOf<String?>(null) }
+    var lastDeviceLocation by remember { mutableStateOf<ScreenAssistLocation?>(null) }
+    var screenAssistPendingToolCall by remember { mutableStateOf<ScreenAssistPendingToolCall?>(null) }
     var screenAssistBrokerConfigured by remember {
         mutableStateOf(screenAssistBrokerCredentials.hasCredential())
     }
@@ -147,6 +134,30 @@ fun ArrivalAlarmApp() {
                 screenAssistSession.state,
                 screenAssistRealtimeSession.phase,
             )
+        )
+    }
+
+    val screenAssistToolHandler = remember {
+        ScreenAssistRealtimeToolHandler(
+            contextReader = screenAssistAppBridge,
+            commandGateway = screenAssistAppBridge,
+        )
+    }
+    val screenAssistRealtimeRuntime = remember {
+        ScreenAssistRealtimeRuntime(
+            session = screenAssistRealtimeSession,
+            brokerTokenResponse = {
+                val brokerUrl = BuildConfig.SCREEN_ASSIST_BROKER_URL.trim()
+                check(brokerUrl.startsWith("https://")) {
+                    "Screen Assist HTTPS token broker is not configured"
+                }
+                ScreenAssistBrokerTransport(
+                    brokerUrl = brokerUrl,
+                    authTokenProvider = { screenAssistBrokerCredentials.read() },
+                ).requestTokenResponse()
+            },
+            socketFactory = { ScreenAssistOpenAiWebRtcSocket(context) },
+            toolHandler = screenAssistToolHandler,
         )
     }
 
@@ -233,11 +244,120 @@ fun ArrivalAlarmApp() {
         currentLocation.request { result ->
             result.onSuccess { point ->
                 locationMessage = null
+                lastDeviceLocation = ScreenAssistLocation(
+                    latitude = point.latitude,
+                    longitude = point.longitude,
+                    freshnessEpochMs = System.currentTimeMillis(),
+                    source = "device_location",
+                )
                 setOrigin(MapPoint(point.latitude, point.longitude, "Mevcut konum"))
             }.onFailure {
                 locationMessage = it.message ?: "Konum alınamadı"
             }
         }
+    }
+
+    fun screenStopId(stop: CatalogStop): String =
+        "${stop.name}|${stop.latitude}|${stop.longitude}"
+
+    fun knownScreenStops(): List<CatalogStop> =
+        (searchResults + nearby.map { it.stop }).distinctBy(::screenStopId)
+
+    fun stopByScreenId(stopId: String): CatalogStop? =
+        knownScreenStops().firstOrNull { screenStopId(it) == stopId }
+
+    fun catalogStopFor(point: MapPoint?): CatalogStop? {
+        if (point == null) return null
+        return knownScreenStops().firstOrNull {
+            it.name == point.label && it.latitude == point.latitude && it.longitude == point.longitude
+        }
+    }
+
+    fun asScreenStop(stop: CatalogStop): ScreenAssistStop =
+        ScreenAssistStop(screenStopId(stop), stop.name, stop.latitude, stop.longitude)
+
+    fun commandDescription(command: ScreenAssistCommand): String = when (command) {
+        is ScreenAssistCommand.SelectJourney -> "Seferi seç: ${command.journeyId}"
+        is ScreenAssistCommand.SetAlarmTarget ->
+            "Varış alarm hedefini değiştir: ${stopByScreenId(command.stopId)?.name ?: command.stopId}"
+        else -> "Uygulama durumunu değiştir"
+    }
+
+    SideEffect {
+        screenAssistAppBridge.bind(
+            ScreenAssistMainThreadAppBridge.Bindings(
+                read = {
+                    val selectedRoute = confirmedTripId?.let { id -> routeOptions.firstOrNull { it.id == id } }
+                    val nowMs = System.currentTimeMillis()
+                    ScreenAssistAppContext(
+                        location = lastDeviceLocation,
+                        journey = ScreenAssistJourneyContext(
+                            journeyId = selectedRoute?.id,
+                            line = selectedRoute?.line,
+                            tripId = selectedRoute?.id,
+                            boardingStop = catalogStopFor(origin)?.let(::asScreenStop),
+                            targetStop = catalogStopFor(destination)?.let(::asScreenStop),
+                            etaEpochMs = selectedRoute?.let { clockToEpoch(it.arrival, nowMs / 1_000L) * 1_000L },
+                            realtime = false,
+                            serviceAlert = null,
+                            freshnessEpochMs = nowMs,
+                            source = "arrival_alarm_v2_app_state",
+                        ),
+                    )
+                },
+                validate = { command ->
+                    when (command) {
+                        is ScreenAssistCommand.SetOrigin -> stopByScreenId(command.stopId) != null
+                        is ScreenAssistCommand.SetDestination -> origin != null && stopByScreenId(command.stopId) != null
+                        is ScreenAssistCommand.SetBoardingStop -> stopByScreenId(command.stopId) != null
+                        is ScreenAssistCommand.SelectJourney -> routeOptions.any { it.id == command.journeyId }
+                        is ScreenAssistCommand.FillSearch -> command.query.trim().length >= 2
+                        is ScreenAssistCommand.RequestRoute ->
+                            stopByScreenId(command.destinationStopId) != null &&
+                                (command.originStopId?.let(::stopByScreenId) != null ||
+                                    (command.originStopId == null && origin != null))
+                        is ScreenAssistCommand.SetAlarmTarget ->
+                            origin != null && stopByScreenId(command.stopId) != null
+                    }
+                },
+                apply = { command ->
+                    val applied = when (command) {
+                        is ScreenAssistCommand.SetOrigin -> stopByScreenId(command.stopId)?.let { stop ->
+                            setOrigin(MapPoint(stop.latitude, stop.longitude, stop.name)); true
+                        } ?: false
+                        is ScreenAssistCommand.SetDestination -> stopByScreenId(command.stopId)?.let { stop ->
+                            if (origin == null) false else { setDestination(stop); true }
+                        } ?: false
+                        is ScreenAssistCommand.SetBoardingStop -> stopByScreenId(command.stopId)?.let { stop ->
+                            setOrigin(MapPoint(stop.latitude, stop.longitude, stop.name)); true
+                        } ?: false
+                        is ScreenAssistCommand.SelectJourney -> if (routeOptions.any { it.id == command.journeyId }) {
+                            confirmedTripId = command.journeyId; true
+                        } else false
+                        is ScreenAssistCommand.FillSearch -> {
+                            query = command.query.trim(); runSearch(command.query); true
+                        }
+                        is ScreenAssistCommand.RequestRoute -> {
+                            val target = stopByScreenId(command.destinationStopId)
+                            val requestedOrigin = command.originStopId?.let(::stopByScreenId)
+                            val startPoint = requestedOrigin?.let { MapPoint(it.latitude, it.longitude, it.name) } ?: origin
+                            if (target == null || startPoint == null) false else {
+                                if (requestedOrigin != null) setOrigin(startPoint)
+                                val targetPoint = MapPoint(target.latitude, target.longitude, target.name)
+                                destination = targetPoint
+                                act { selectDestination(GeoPoint(target.latitude, target.longitude)) }
+                                loadRoutes(startPoint, targetPoint)
+                                true
+                            }
+                        }
+                        is ScreenAssistCommand.SetAlarmTarget -> stopByScreenId(command.stopId)?.let { stop ->
+                            if (origin == null) false else { setDestination(stop); act { arm() }; true }
+                        } ?: false
+                    }
+                    ScreenAssistCommandResult(applied, false, if (applied) "applied" else "state_rejected")
+                },
+            ),
+        )
     }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -300,6 +420,12 @@ fun ArrivalAlarmApp() {
                         screenAssistGuidance = (current + delta).takeLast(2_000)
                     }
                 },
+                onToolConfirmationRequired = { pending ->
+                    mainHandler.post {
+                        screenAssistPendingToolCall = pending
+                        screenAssistGuidance = "Uygulama eylemi kullanıcı onayı bekliyor."
+                    }
+                },
                 onFailure = {
                     mainHandler.post {
                         ScreenAssistRuntimeBridge.detach()
@@ -351,6 +477,7 @@ fun ArrivalAlarmApp() {
             },
         )
         onDispose {
+            screenAssistAppBridge.clear()
             ScreenAssistRuntimeBridge.clearObserver()
             ScreenAssistRuntimeBridge.detach()
             screenAssistRealtimeRuntime.close()
@@ -423,6 +550,25 @@ fun ArrivalAlarmApp() {
                         screenAssistBrokerCredentialDraft = ""
                         screenAssistGuidance = null
                         refreshScreenAssistUi()
+                    },
+                    pendingConfirmationText = screenAssistPendingToolCall?.let {
+                        commandDescription(it.command)
+                    },
+                    onApprovePendingCommand = {
+                        screenAssistPendingToolCall?.let { pending ->
+                            if (screenAssistRealtimeRuntime.resolveToolConfirmation(pending, true)) {
+                                screenAssistPendingToolCall = null
+                                screenAssistGuidance = "Uygulama eylemi onaylandı."
+                            }
+                        }
+                    },
+                    onRejectPendingCommand = {
+                        screenAssistPendingToolCall?.let { pending ->
+                            if (screenAssistRealtimeRuntime.resolveToolConfirmation(pending, false)) {
+                                screenAssistPendingToolCall = null
+                                screenAssistGuidance = "Uygulama eylemi reddedildi."
+                            }
+                        }
                     },
                     guidanceText = screenAssistGuidance,
                     modifier = Modifier.testTag("screen-assist-panel"),
