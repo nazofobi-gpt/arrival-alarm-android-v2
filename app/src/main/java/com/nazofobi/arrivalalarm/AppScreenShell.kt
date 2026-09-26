@@ -224,7 +224,7 @@ fun HomeOverviewPanel(
                     nearby.take(4).forEachIndexed { index, candidate ->
                         OutlinedButton(
                             onClick = { onNearbyStopSelected(candidate) },
-                            modifier = Modifier.fillMaxWidth().testTag("home-nearby-$index"),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("home-nearby-$index"),
                         ) {
                             Text(
                                 stringResource(
@@ -276,7 +276,7 @@ fun ScreenEmptyState(
             )
             Button(
                 onClick = onAction,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             ) {
                 Text(actionLabel)
             }
