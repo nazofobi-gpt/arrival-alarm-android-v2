@@ -84,7 +84,10 @@ class MainActivity : ComponentActivity() {
             MaterialTheme {
                 ArrivalAlarmApp(
                     oauthCallbackUri = oauthCallbackUri,
-                    onOAuthCallbackConsumed = { oauthCallbackUri = null },
+                    onOAuthCallbackConsumed = {
+                        oauthCallbackUri = null
+                        setIntent(Intent(intent).setData(null))
+                    },
                 )
             }
         }
