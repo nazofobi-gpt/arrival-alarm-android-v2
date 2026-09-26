@@ -86,6 +86,14 @@ class MainActivityTest {
         rule.onNodeWithTag("arm").performScrollTo().assertIsDisplayed()
     }
 
+    @Test fun largeFontKeepsCriticalJourneyControlsReachable() {
+        rule.onNodeWithTag("catalog-search").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("transit-map").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("arm").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("guidance-permissions").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("trip-inference-toggle").performScrollTo().assertIsDisplayed()
+    }
+
     @Test fun productionUiExposesInteractiveMapSurface() {
         val mapLabel = rule.activity.getString(R.string.map_point_label)
         rule.onNodeWithTag("transit-map")
