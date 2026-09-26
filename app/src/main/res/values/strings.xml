@@ -200,5 +200,21 @@
     <string name="departure_platform">Peron %1$s</string>
     <string name="departure_select">Bu kalkışı seç</string>
     <string name="departure_cancelled">Sefer iptal edildi</string>
-
+    <string name="nav_home">Ana</string>
+    <string name="nav_search">Ara</string>
+    <string name="nav_journey">Rota</string>
+    <string name="nav_departures">Kalkış</string>
+    <string name="nav_settings">Ayar</string>
+    <string name="home_overview_title">Yolculuğunu başlat</string>
+    <string name="home_overview_body">Mevcut konumunu kullan, yakındaki gerçek duraklardan seçim yap veya ayrıntılı aramaya geç.</string>
+    <string name="home_origin_missing">Başlangıç henüz seçilmedi</string>
+    <string name="home_destination_missing">Varış henüz seçilmedi</string>
+    <string name="home_search_action">Durak, adres veya yer ara</string>
+    <string name="home_journey_action">Rota seçeneklerini aç</string>
+    <string name="journey_empty_title">Rota henüz hazır değil</string>
+    <string name="journey_empty_body">Önce başlangıç ve varış noktalarını seç.</string>
+    <string name="journey_empty_action">Aramaya git</string>
+    <string name="departures_empty_title">Kalkış panosu henüz hazır değil</string>
+    <string name="departures_empty_body">Önce bir rota veya hedef durak seç.</string>
+    <string name="departures_empty_action">Rota planla</string>
 </resources>

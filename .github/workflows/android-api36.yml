@@ -61,6 +61,8 @@ jobs:
             adb shell wm size
             adb shell settings get system font_scale
             ./gradlew --no-daemon connectedDebugAndroidTest
+            mkdir -p app/build/outputs/androidTest-results/ui-qa
+            adb pull /sdcard/Android/data/com.nazofobi.arrivalalarm/files/ui-qa/. app/build/outputs/androidTest-results/ui-qa/ || true
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell pm clear com.nazofobi.arrivalalarm || true
             adb shell am start -W -n com.nazofobi.arrivalalarm/.MainActivity
