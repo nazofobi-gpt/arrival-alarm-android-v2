@@ -7,6 +7,15 @@
     <string name="onboarding_permission_note">Konum izni yalnız konum/aktif yolculuk özellikleri için istenir. ChatGPT bağlantısı isteğe bağlıdır ve ayrıca kurulabilir.</string>
     <string name="onboarding_background_note">Alarm kurulmadan arka plan yolculuk takibi başlatılmaz.</string>
     <string name="continue_action">Anladım, devam et</string>
+    <string name="onboarding_tagline">Almanya’da daha sakin ve kontrollü yolculuk.</string>
+    <string name="onboarding_route_title">Rota planla</string>
+    <string name="onboarding_route_body">Durak, adres veya yerden uygun güzergâhı bul.</string>
+    <string name="onboarding_live_title">Canlı seferler</string>
+    <string name="onboarding_live_body">Kalkış, platform ve gecikme bilgisini tek yerde izle.</string>
+    <string name="onboarding_alarm_title">Varış alarmı</string>
+    <string name="onboarding_alarm_body">Hedefine yaklaşırken ses, titreşim ve bildirimle uyarıl.</string>
+    <string name="onboarding_privacy_title">Kontrol sende</string>
+    <string name="onboarding_start_action">Hemen başla</string>
 
     <string name="connector_title">ChatGPT bağlantısı</string>
     <string name="connector_ready">ChatGPT cihaz bağlantısı hazır</string>
