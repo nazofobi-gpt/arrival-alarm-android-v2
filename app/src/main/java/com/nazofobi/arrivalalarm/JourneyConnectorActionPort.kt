@@ -10,6 +10,7 @@ class JourneyConnectorActionPort(
     private val routeResolver: (String) -> RouteOption? = { null },
     private val nowEpochSeconds: () -> Long = { System.currentTimeMillis() / 1_000 },
     private val staleAfterSeconds: Long = 120,
+    private val progressTracker: RouteStopProgressTracker = RouteStopProgressTracker(),
 ) : ConnectorActionPort {
     private var stateVersion = 1L
     private var sourceUpdatedAtEpochSeconds = nowEpochSeconds()
@@ -19,11 +20,14 @@ class JourneyConnectorActionPort(
     private var destination: ConnectorStopState? = controller.state.destination?.let {
         ConnectorStopState(name = "Varış", latitude = it.latitude, longitude = it.longitude)
     }
+    private var selectedRoute: RouteOption? = null
     private var activeTrip: ConnectorTripState? = null
 
     override fun readSnapshot(): ArrivalAlarmConnectorSnapshot {
         val now = nowEpochSeconds()
+        sourceUpdatedAtEpochSeconds = now
         val state = controller.state
+        refreshTimedTripProgress(now)
         val trip = activeTrip?.copy(
             origin = activeTrip?.origin ?: origin,
             destination = activeTrip?.destination ?: destination,
@@ -45,6 +49,7 @@ class JourneyConnectorActionPort(
         controller.selectStart(GeoPoint(point.latitude, point.longitude))
         origin = point.toConnectorStop()
         destination = null
+        selectedRoute = null
         activeTrip = null
         markChanged()
         return ConnectorActionOutcome(true, "Başlangıç güncellendi")
@@ -59,19 +64,24 @@ class JourneyConnectorActionPort(
             return ConnectorActionOutcome(false, controller.state.error ?: "Varış güncellenemedi")
         }
         destination = point.toConnectorStop()
-        activeTrip = activeTrip?.copy(destination = destination)
+        selectedRoute = null
+        activeTrip = null
         markChanged()
         return ConnectorActionOutcome(true, "Varış güncellendi")
     }
 
     override fun selectJourney(routeId: String): ConnectorActionOutcome {
+        if (controller.state.start == null || controller.state.destination == null) {
+            return ConnectorActionOutcome(false, "Önce başlangıç ve varış seçilmeli")
+        }
         val route = routeResolver(routeId)
             ?: return ConnectorActionOutcome(false, "Rota artık mevcut değil; güncel rota seçilmeli")
         val currentOrigin = origin ?: route.origin.toConnectorStop()
         val currentDestination = destination ?: route.destination.toConnectorStop()
+        selectedRoute = route
         activeTrip = ConnectorTripState(
             journeyId = route.id,
-            tripId = route.id,
+            tripId = route.tripIds.firstOrNull() ?: route.id,
             routeId = route.id,
             line = route.line,
             direction = route.direction,
@@ -80,6 +90,7 @@ class JourneyConnectorActionPort(
         )
         origin = currentOrigin
         destination = currentDestination
+        refreshTimedTripProgress(nowEpochSeconds())
         markChanged()
         return ConnectorActionOutcome(true, "Sefer seçildi")
     }
@@ -127,6 +138,18 @@ class JourneyConnectorActionPort(
         return ConnectorActionOutcome(true, "Sefer ilerlemesi güncellendi")
     }
 
+    private fun refreshTimedTripProgress(now: Long) {
+        val route = selectedRoute ?: return
+        val progress = progressTracker.resolve(route.stops, now)
+        if (!progress.resolvedByRealtimeOrSchedule) return
+        val trip = activeTrip ?: return
+        activeTrip = trip.copy(
+            previousStop = progress.previous?.toConnectorStop(),
+            currentStop = progress.current?.toConnectorStop(),
+            nextStop = progress.next?.toConnectorStop(),
+        )
+    }
+
     private fun markChanged() {
         stateVersion += 1
         sourceUpdatedAtEpochSeconds = nowEpochSeconds()
@@ -134,6 +157,13 @@ class JourneyConnectorActionPort(
 
     private fun MapPoint.toConnectorStop() = ConnectorStopState(
         name = label,
+        latitude = latitude,
+        longitude = longitude,
+    )
+
+    private fun RouteStop.toConnectorStop() = ConnectorStopState(
+        id = id,
+        name = name,
         latitude = latitude,
         longitude = longitude,
     )
