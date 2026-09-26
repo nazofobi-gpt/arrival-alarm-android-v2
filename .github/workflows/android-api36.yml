@@ -80,6 +80,14 @@ jobs:
             adb exec-out screencap -p > app/build/outputs/androidTest-results/large-font/compact-412x915-font-200.png
 
             adb shell settings put system font_scale 1.0
+            adb shell wm size 1280x800
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.MainActivityTest#largeWindowConstrainsContentAndKeepsCoreControlsReachable
+            mkdir -p app/build/outputs/androidTest-results/large-window
+            adb pull /sdcard/Android/data/com.nazofobi.arrivalalarm/files/g166-screenshots/. app/build/outputs/androidTest-results/g166-visual/ || true
+            adb shell am start -W -n com.nazofobi.arrivalalarm/.MainActivity
+            sleep 2
+            adb exec-out screencap -p > app/build/outputs/androidTest-results/large-window/large-window-1280x800.png
+
             adb shell wm size reset
 
             bash .github/scripts/build-field-rc.sh
