@@ -28,13 +28,16 @@ class TripInferenceUiTest {
 
     @Test fun inferenceIsOptInVisibleAndConfirmationDoesNotArmAlarm() {
         rule.onNodeWithTag("trip-inference-status").performScrollTo()
-            .assertTextContains("Kapalı", substring = true).assertIsDisplayed()
+            .assertTextContains(rule.activity.getString(R.string.inference_disabled), substring = true).assertIsDisplayed()
         rule.onNodeWithTag("trip-inference-run").performScrollTo().assertIsNotEnabled()
         rule.onNodeWithTag("trip-inference-toggle").performScrollTo().performClick()
         rule.onNodeWithTag("trip-inference-status").performScrollTo()
-            .assertTextContains("Açık", substring = true)
+            .assertTextContains(rule.activity.getString(R.string.inference_enabled), substring = true)
         rule.onNodeWithTag("trip-inference-run").performScrollTo().assertIsNotEnabled()
         rule.onNodeWithTag("phase").performScrollTo()
-            .assertTextContains("EMPTY", substring = true)
+            .assertTextContains(
+                rule.activity.getString(R.string.phase_format, rule.activity.getString(R.string.phase_empty)),
+                substring = true,
+            )
     }
 }
