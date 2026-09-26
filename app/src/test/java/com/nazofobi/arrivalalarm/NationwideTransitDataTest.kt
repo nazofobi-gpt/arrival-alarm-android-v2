@@ -103,4 +103,29 @@ class NationwideTransitDataTest {
         assertEquals("Frankfurt(Main)Hbf", values.single().name)
         assertTrue(values.single().latitude > 50.0)
     }
+    @Test fun stationDepartureParserPreservesRealtimePlatformCancellationAndRemarks() {
+        val json = JSONArray(
+            """[
+              {"tripId":"trip-1","direction":"Bremen Hbf","line":{"name":"RE 9"},
+               "when":"2026-09-26T18:06:00+02:00","plannedWhen":"2026-09-26T18:02:00+02:00",
+               "platform":"2","plannedPlatform":"1","cancelled":false,
+               "remarks":[{"code":"delay","text":"Verspätung wegen vorausfahrender Fahrt"}]},
+              {"tripId":"trip-2","direction":"Osnabrück Hbf","line":{"name":"RE 18"},
+               "when":"2026-09-26T18:10:00+02:00","plannedWhen":"2026-09-26T18:10:00+02:00",
+               "plannedPlatform":"3","cancelled":true,"remarks":[]}
+            ]"""
+        )
+
+        val snapshot = GermanyLiveTransitApi(nowEpochSeconds = { 999L })
+            .parseDepartures(json, 8)
+
+        assertEquals(2, snapshot.departures.size)
+        assertTrue(snapshot.departures[0].isRealtime)
+        assertEquals("2", snapshot.departures[0].platform)
+        assertTrue(snapshot.departures[1].cancelled)
+        assertEquals(1, snapshot.alerts.size)
+        assertEquals("v6.db.transport.rest", snapshot.sourceLabel)
+        assertEquals(999L, snapshot.fetchedAtEpochSeconds)
+    }
+
 }
