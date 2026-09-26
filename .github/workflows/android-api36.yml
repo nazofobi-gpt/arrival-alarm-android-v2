@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: android-api36-global
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   api36:
@@ -74,55 +74,7 @@ jobs:
             adb shell settings put system font_scale 1.0
             adb shell wm size reset
 
-            ./gradlew --no-daemon assembleRelease
-
-            BUILD_TOOLS_VERSION="$(ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
-            BUILD_TOOLS="$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION"
-            UNSIGNED_APK="app/build/outputs/apk/release/app-release-unsigned.apk"
-            RC_DIR="app/build/outputs/field-rc"
-            ALIGNED_APK="$RC_DIR/app-release-aligned.apk"
-            RC_APK="$RC_DIR/arrival-alarm-v2-field-rc.apk"
-            KEYSTORE="$RUNNER_TEMP/arrival-alarm-field-rc.jks"
-
-            test -f "$UNSIGNED_APK"
-            mkdir -p "$RC_DIR"
-
-            keytool -genkeypair -noprompt \
-              -keystore "$KEYSTORE" \
-              -storepass changeit \
-              -keypass changeit \
-              -alias fieldrc \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 2 \
-              -dname "CN=Arrival Alarm Field RC,O=Ephemeral CI Test,C=DE"
-
-            "$BUILD_TOOLS/zipalign" -f -v 4 "$UNSIGNED_APK" "$ALIGNED_APK"
-            "$BUILD_TOOLS/apksigner" sign \
-              --ks "$KEYSTORE" \
-              --ks-pass pass:changeit \
-              --key-pass pass:changeit \
-              --out "$RC_APK" \
-              "$ALIGNED_APK"
-
-            "$BUILD_TOOLS/zipalign" -c -v 4 "$RC_APK"
-            "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$RC_APK" | tee "$RC_DIR/apksigner-verify.txt"
-            "$BUILD_TOOLS/aapt" dump badging "$RC_APK" | tee "$RC_DIR/manifest-badging.txt"
-            if grep -q '^application-debuggable' "$RC_DIR/manifest-badging.txt"; then
-              echo "Field RC must not be debuggable" >&2
-              exit 1
-            fi
-
-            SOURCE_SHA="$(git rev-parse HEAD)"
-            printf 'source_commit=%s\nvariant=release\nsigning=ephemeral_ci_field_test_not_production\n' "$SOURCE_SHA" > "$RC_DIR/BUILD_PROVENANCE.txt"
-            sha256sum "$RC_APK" | tee "$RC_DIR/SHA256SUMS.txt"
-
-            adb uninstall com.nazofobi.arrivalalarm >/dev/null 2>&1 || true
-            adb install "$RC_APK"
-            adb shell am start -W -n com.nazofobi.arrivalalarm/.MainActivity | tee "$RC_DIR/api36-launch.txt"
-            adb shell pidof com.nazofobi.arrivalalarm | tee "$RC_DIR/api36-pid.txt"
-            test -s "$RC_DIR/api36-pid.txt"
-            adb exec-out screencap -p > "$RC_DIR/api36-field-rc-launch.png"
+            bash .github/scripts/build-field-rc.sh
 
       - name: Upload API 36 diagnostics
         if: always()
