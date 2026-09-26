@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_readiness_title">Settings and readiness</string>
+    <string name="theme_mode_title">Appearance</string>
+    <string name="theme_mode_status">Theme: %1$s</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_selected_format">%1$s • selected</string>
+    <string name="readiness_summary_ready">Ready for a journey</string>
+    <string name="readiness_summary_degraded">Some features are limited; review the status below</string>
+    <string name="readiness_summary_blocked">A required setting for the arrival alarm is missing</string>
+    <string name="readiness_location">Location</string>
+    <string name="readiness_notifications">Notifications</string>
+    <string name="readiness_data">Transit data</string>
+    <string name="readiness_audio">Audio and Bluetooth</string>
+    <string name="readiness_background">Background journey</string>
+    <string name="readiness_connector">ChatGPT connection</string>
+    <string name="readiness_ready">Ready</string>
+    <string name="readiness_permission_required">Permission required</string>
+    <string name="readiness_location_services_off">Location services are off</string>
+    <string name="readiness_data_not_ready">Local index is not ready yet; live search remains available</string>
+    <string name="readiness_data_loading">Preparing transit data</string>
+    <string name="readiness_data_ready">%1$d stops ready in the local index</string>
+    <string name="readiness_data_unavailable">Local index unavailable; live search remains available</string>
+    <string name="readiness_background_active">Active journey tracking is running</string>
+    <string name="readiness_background_inactive">Starts only after you arm an arrival alarm</string>
+    <string name="readiness_connector_connected">Connected • optional</string>
+    <string name="readiness_connector_optional_unconfigured">Optional • not configured</string>
+    <string name="readiness_connector_optional_disconnected">Optional • not connected</string>
+    <string name="readiness_review_journey_permissions">Review journey permissions</string>
+    <string name="readiness_review_guidance_permissions">Review audio and Bluetooth permissions</string>
+    <string name="readiness_refresh">Refresh readiness status</string>
+    <string name="readiness_open_app_settings">Open app settings</string>
+    <string name="readiness_accessibility_title">Accessibility</string>
+    <string name="readiness_accessibility_body">TalkBack, system font scaling, and light/dark themes are supported. Critical actions are not communicated by color alone.</string>
+    <string name="readiness_privacy_title">Privacy</string>
+    <string name="readiness_privacy_body">Location is used only for location and active-journey features you choose. The ChatGPT connection is optional and does not block the arrival alarm.</string>
+</resources>
