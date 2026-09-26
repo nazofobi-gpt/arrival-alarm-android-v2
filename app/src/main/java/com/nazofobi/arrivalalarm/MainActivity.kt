@@ -889,7 +889,7 @@ private fun clockToEpoch(clock: String, nowEpochSeconds: Long): Long {
     return calendar.timeInMillis / 1000
 }
 
-private fun localizedDomainMessage(context: Context, raw: String?): String {
+internal fun localizedDomainMessage(context: Context, raw: String?): String {
     if (raw.isNullOrBlank()) return context.getString(R.string.unknown_error)
     return when (raw) {
         "Önce başlangıç seçilmeli" -> context.getString(R.string.error_start_required)
@@ -916,7 +916,7 @@ private fun transitLocationKindText(kind: TransitLocationKind): String = stringR
 )
 
 @Composable
-private fun journeyPhaseText(phase: JourneyPhase): String = stringResource(
+internal fun journeyPhaseText(phase: JourneyPhase): String = stringResource(
     when (phase) {
         JourneyPhase.EMPTY -> R.string.phase_empty
         JourneyPhase.START_SELECTED -> R.string.phase_start_selected
