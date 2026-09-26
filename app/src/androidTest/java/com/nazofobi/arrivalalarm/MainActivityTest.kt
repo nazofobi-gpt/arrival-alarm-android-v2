@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -95,6 +96,23 @@ class MainActivityTest {
         rule.onNodeWithTag("arm").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("guidance-permissions").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("trip-inference-toggle").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun wideWindowKeepsPrimaryContentAtReadableWidth() {
+        val widthDp = rule.activity.resources.configuration.screenWidthDp
+        assumeTrue("Wide-window fixture requires >= 900dp, was $widthDp", widthDp >= 900)
+
+        val density = rule.activity.resources.displayMetrics.density
+        val contentWidthPx = rule.onNodeWithTag("adaptive-content")
+            .fetchSemanticsNode()
+            .boundsInRoot
+            .width
+        val contentWidthDp = contentWidthPx / density
+
+        assertTrue(
+            "Adaptive content width was $contentWidthDp dp; expected <= 840dp",
+            contentWidthDp <= 840.5f,
+        )
     }
 
     @Test fun productionUiExposesInteractiveMapSurface() {
