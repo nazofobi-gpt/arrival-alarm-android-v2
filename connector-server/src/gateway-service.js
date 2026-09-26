@@ -32,6 +32,11 @@ export class GatewayService {
       previous_stop: trip.previous_stop ?? null,
       current_stop: trip.current_stop ?? null,
       next_stop: trip.next_stop ?? null,
+      timing_basis: trip.timing_basis ?? null,
+      progress_source: trip.progress_source ?? null,
+      progress_updated_at_epoch_seconds: trip.progress_updated_at_epoch_seconds ?? null,
+      scheduled_arrival_epoch_seconds: trip.scheduled_arrival_epoch_seconds ?? null,
+      estimated_arrival_epoch_seconds: trip.estimated_arrival_epoch_seconds ?? null,
     };
   }
 
