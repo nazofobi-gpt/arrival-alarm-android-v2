@@ -22,6 +22,7 @@ class JourneyController(
     private val arrivalRadiusMeters: Double = 250.0,
     private val stateStore: JourneyStateStore? = null,
 ) {
+    @Volatile
     var state: JourneyUiState = stateStore?.load() ?: JourneyUiState()
         private set
 

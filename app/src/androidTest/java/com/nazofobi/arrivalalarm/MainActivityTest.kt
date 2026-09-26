@@ -20,6 +20,7 @@ class MainActivityTest {
 
     @Before fun resetPersistedJourneyState() {
         rule.activityRule.scenario.onActivity { activity ->
+            ArrivalAlarmRuntimeGraph.resetForTests()
             activity.getSharedPreferences("journey_state", Context.MODE_PRIVATE).edit().clear().commit()
         }
         rule.activityRule.scenario.recreate()
@@ -35,6 +36,7 @@ class MainActivityTest {
         rule.onNodeWithTag("nationwide-data-state").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("current-location-origin").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("arm").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
+        rule.onNodeWithTag("cancel-alarm").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
     }
 
     @Test fun productionUiExposesNoLegacyFixtureControls() {

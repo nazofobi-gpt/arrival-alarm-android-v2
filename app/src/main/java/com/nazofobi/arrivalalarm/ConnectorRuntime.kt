@@ -34,13 +34,19 @@ data class ConnectorRuntimeStatus(
     val errorCode: String? = null,
 )
 
+interface ConnectorRuntimeControl {
+    fun start()
+    fun syncNow(): ConnectorRuntimeStatus
+    fun stop()
+}
+
 /**
  * App-process connector runtime.
  *
  * It never owns or persists credentials. Each cycle asks [ConnectorSessionProvider] for the
  * current device-bound session, performs one deterministic sync, and fails closed when the
- * session is absent or expired. The scheduler runs only while the app process/UI lifecycle
- * keeps this runtime started; a future foreground-service slice can reuse the same class.
+ * session is absent or expired. Lifecycle owners coordinate this runtime so the visible UI
+ * and an active-journey foreground service can share one serialized sync loop.
  */
 class ConnectorRuntime(
     private val processor: ConnectorCommandProcessor,
@@ -54,7 +60,7 @@ class ConnectorRuntime(
     private val nowEpochSeconds: () -> Long = { System.currentTimeMillis() / 1_000 },
     private val syncIntervalSeconds: Long = 15,
     private val onStatus: (ConnectorRuntimeStatus) -> Unit = {},
-) : Closeable {
+) : Closeable, ConnectorRuntimeControl {
     @Volatile
     var status: ConnectorRuntimeStatus = ConnectorRuntimeStatus(ConnectorRuntimeState.STOPPED)
         private set
@@ -62,7 +68,7 @@ class ConnectorRuntime(
     private var executor: ScheduledExecutorService? = null
 
     @Synchronized
-    fun start() {
+    override fun start() {
         if (executor != null) return
         val created = Executors.newSingleThreadScheduledExecutor { runnable ->
             Thread(runnable, "arrival-connector-sync").apply { isDaemon = true }
@@ -76,7 +82,8 @@ class ConnectorRuntime(
         )
     }
 
-    fun syncNow(): ConnectorRuntimeStatus {
+    @Synchronized
+    override fun syncNow(): ConnectorRuntimeStatus {
         val now = nowEpochSeconds()
         val session = sessionProvider.currentSession()
         if (session == null || session.accessToken.isBlank()) {
@@ -127,7 +134,7 @@ class ConnectorRuntime(
     }
 
     @Synchronized
-    fun stop() {
+    override fun stop() {
         executor?.shutdownNow()
         executor = null
         publish(

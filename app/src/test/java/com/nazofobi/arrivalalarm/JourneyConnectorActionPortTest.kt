@@ -191,4 +191,74 @@ class JourneyConnectorActionPortTest {
         assertFalse(alarm.applied)
         assertEquals(JourneyPhase.EMPTY, port.readSnapshot().journeyPhase)
     }
+
+    @Test fun liveLocationDistanceUpdatesSnapshotAndArrivalPhase() {
+        var now = 50_000L
+        val controller = JourneyController(arrivalRadiusMeters = 250.0)
+        val port = JourneyConnectorActionPort(
+            controller = controller,
+            nowEpochSeconds = { now },
+        )
+        port.setOrigin(MapPoint(52.66, 8.23, "Lohne"))
+        port.setDestination(MapPoint(52.67, 8.24, "Hedef"))
+        port.armArrivalAlarm()
+        val before = port.readSnapshot()
+
+        now += 5
+        val tracking = port.updateDistanceToDestination(900.0)
+        val during = port.readSnapshot()
+
+        assertTrue(tracking.applied)
+        assertEquals(JourneyPhase.ARMED, during.journeyPhase)
+        assertEquals(900.0, during.distanceToDestinationMeters ?: -1.0, 0.001)
+        assertTrue(during.stateVersion > before.stateVersion)
+
+        now += 5
+        val arrived = port.updateDistanceToDestination(120.0)
+        val final = port.readSnapshot()
+
+        assertTrue(arrived.applied)
+        assertEquals(JourneyPhase.ARRIVED, final.journeyPhase)
+        assertEquals(120.0, final.distanceToDestinationMeters ?: -1.0, 0.001)
+        assertTrue(final.stateVersion > during.stateVersion)
+    }
+
+
+    @Test fun failedForegroundLifecycleRollsBackRemoteArm() {
+        val controller = JourneyController()
+        val port = JourneyConnectorActionPort(
+            controller = controller,
+            nowEpochSeconds = { 60_000L },
+            onAlarmArmed = { false },
+        )
+        port.setOrigin(MapPoint(52.66, 8.23, "Lohne"))
+        port.setDestination(MapPoint(53.08, 8.81, "Bremen Hbf"))
+        val before = port.readSnapshot()
+
+        val outcome = port.armArrivalAlarm()
+        val after = port.readSnapshot()
+
+        assertFalse(outcome.applied)
+        assertEquals(JourneyPhase.DESTINATION_SELECTED, after.journeyPhase)
+        assertFalse(after.alarmArmed)
+        assertEquals(before.stateVersion, after.stateVersion)
+    }
+
+    @Test fun cancellingAlarmReleasesForegroundLifecycle() {
+        var cancelled = 0
+        val controller = JourneyController()
+        val port = JourneyConnectorActionPort(
+            controller = controller,
+            nowEpochSeconds = { 70_000L },
+            onAlarmArmed = { true },
+            onAlarmCancelled = { cancelled += 1 },
+        )
+        port.setOrigin(MapPoint(52.66, 8.23, "Lohne"))
+        port.setDestination(MapPoint(53.08, 8.81, "Bremen Hbf"))
+        assertTrue(port.armArrivalAlarm().applied)
+
+        assertTrue(port.cancelArrivalAlarm().applied)
+        assertEquals(1, cancelled)
+    }
+
 }
