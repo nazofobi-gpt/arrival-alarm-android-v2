@@ -263,7 +263,17 @@ class MainActivityTest {
             )
         }
         navigateTo("nav-settings")
-        listOf("theme-system", "theme-light", "theme-dark", "readiness-refresh").forEach { tag ->
+        listOf(
+            "theme-system",
+            "theme-light",
+            "theme-dark",
+            "readiness-permissions",
+            "readiness-guidance-permissions",
+            "readiness-refresh",
+            "readiness-app-settings",
+            "nationwide-index-download",
+            "connector-connect",
+        ).forEach { tag ->
             val node = rule.onNodeWithTag(tag)
                 .performScrollTo()
                 .assertIsDisplayed()
