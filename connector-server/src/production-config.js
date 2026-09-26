@@ -45,6 +45,19 @@ export function deviceOAuthMetadataFromEnv(env = process.env) {
   if (!/^[A-Za-z0-9_.-]{1,64}$/.test(deviceIdParameter)) {
     throw new Error("production_config_device_oauth_parameter_invalid");
   }
+  const reservedAuthorizationParameters = new Set([
+    "response_type",
+    "client_id",
+    "redirect_uri",
+    "scope",
+    "state",
+    "code_challenge",
+    "code_challenge_method",
+    "resource",
+  ]);
+  if (reservedAuthorizationParameters.has(deviceIdParameter)) {
+    throw new Error("production_config_device_oauth_parameter_reserved");
+  }
 
   const rawResource = env.DEVICE_OAUTH_RESOURCE?.trim();
   const resource = rawResource
