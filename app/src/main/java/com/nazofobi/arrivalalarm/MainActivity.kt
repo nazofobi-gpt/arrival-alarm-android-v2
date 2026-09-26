@@ -116,6 +116,18 @@ fun ArrivalAlarmApp() {
             },
         )
     }
+    val connectorRuntime = remember(connectorPort, context) {
+        val idempotencyStore = SharedPreferencesConnectorIdempotencyStore(
+            context.getSharedPreferences("connector_idempotency", Context.MODE_PRIVATE)
+        )
+        ConnectorRuntime(
+            processor = ConnectorCommandProcessor(
+                port = connectorPort,
+                idempotencyStore = idempotencyStore,
+            ),
+            sessionProvider = AndroidConnectorSessionStore(context),
+        )
+    }
     val routeCache = remember { OfflineTransitCache() }
     var guidanceState by remember { mutableStateOf(guidanceController.state) }
     var inferenceEnabled by remember { mutableStateOf(false) }
@@ -238,6 +250,11 @@ fun ArrivalAlarmApp() {
         }
         delay(1_000)
         runSearch(q)
+    }
+
+    DisposableEffect(connectorRuntime) {
+        connectorRuntime.start()
+        onDispose { connectorRuntime.close() }
     }
 
     DisposableEffect(Unit) {
