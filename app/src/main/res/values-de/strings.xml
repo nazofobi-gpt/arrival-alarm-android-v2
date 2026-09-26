@@ -7,6 +7,15 @@
     <string name="onboarding_permission_note">Der Standortzugriff wird nur für Standort- und aktive Fahrtfunktionen angefordert. Die ChatGPT-Verbindung ist optional und wird separat eingerichtet.</string>
     <string name="onboarding_background_note">Ohne aktivierten Alarm startet keine Hintergrundverfolgung der Fahrt.</string>
     <string name="continue_action">Verstanden, weiter</string>
+    <string name="onboarding_tagline">Entspannter und kontrollierter unterwegs in Deutschland.</string>
+    <string name="onboarding_route_title">Route planen</string>
+    <string name="onboarding_route_body">Passende Verbindungen ab Haltestelle, Adresse oder Ort finden.</string>
+    <string name="onboarding_live_title">Live-Abfahrten</string>
+    <string name="onboarding_live_body">Abfahrt, Gleis und Verspätungen an einem Ort verfolgen.</string>
+    <string name="onboarding_alarm_title">Ankunftsalarm</string>
+    <string name="onboarding_alarm_body">Kurz vor dem Ziel per Ton, Vibration und Benachrichtigung erinnern lassen.</string>
+    <string name="onboarding_privacy_title">Sie behalten die Kontrolle</string>
+    <string name="onboarding_start_action">Jetzt starten</string>
     <string name="connector_title">ChatGPT-Verbindung</string>
     <string name="connector_ready">ChatGPT-Geräteverbindung ist bereit</string>
     <string name="connector_url_missing">Connector-URL ist in der Release-Konfiguration nicht gesetzt</string>
