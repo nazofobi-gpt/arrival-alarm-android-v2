@@ -108,7 +108,10 @@ test("MCP tool annotations and OAuth scopes match real side effects", async () =
 
   for (const tool of tools) {
     const annotations = tool.annotations ?? {};
-    const schemes = tool.securitySchemes ?? [];
+    const schemes =
+      tool.securitySchemes?.length > 0
+        ? tool.securitySchemes
+        : tool._meta?.securitySchemes ?? [];
 
     assert.equal(annotations.openWorldHint, false);
     assert.equal(annotations.idempotentHint, true);
