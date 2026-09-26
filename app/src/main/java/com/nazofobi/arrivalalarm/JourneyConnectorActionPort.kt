@@ -1,0 +1,140 @@
+package com.nazofobi.arrivalalarm
+
+/**
+ * Adapter from the connector contract to the app's existing journey state machine.
+ * It owns only connector-facing metadata; authoritative journey phase/start/destination/alarm
+ * transitions remain in [JourneyController].
+ */
+class JourneyConnectorActionPort(
+    private val controller: JourneyController,
+    private val routeResolver: (String) -> RouteOption? = { null },
+    private val nowEpochSeconds: () -> Long = { System.currentTimeMillis() / 1_000 },
+    private val staleAfterSeconds: Long = 120,
+) : ConnectorActionPort {
+    private var stateVersion = 1L
+    private var sourceUpdatedAtEpochSeconds = nowEpochSeconds()
+    private var origin: ConnectorStopState? = controller.state.start?.let {
+        ConnectorStopState(name = "Başlangıç", latitude = it.latitude, longitude = it.longitude)
+    }
+    private var destination: ConnectorStopState? = controller.state.destination?.let {
+        ConnectorStopState(name = "Varış", latitude = it.latitude, longitude = it.longitude)
+    }
+    private var activeTrip: ConnectorTripState? = null
+
+    override fun readSnapshot(): ArrivalAlarmConnectorSnapshot {
+        val now = nowEpochSeconds()
+        val state = controller.state
+        val trip = activeTrip?.copy(
+            origin = activeTrip?.origin ?: origin,
+            destination = activeTrip?.destination ?: destination,
+        )
+        return ArrivalAlarmConnectorSnapshot(
+            stateVersion = stateVersion,
+            capturedAtEpochSeconds = now,
+            sourceUpdatedAtEpochSeconds = sourceUpdatedAtEpochSeconds,
+            staleAfterSeconds = staleAfterSeconds,
+            source = "arrival-alarm-domain",
+            journeyPhase = state.phase,
+            activeTrip = trip,
+            distanceToDestinationMeters = state.distanceMeters,
+            alarmArmed = state.phase == JourneyPhase.ARMED,
+        )
+    }
+
+    override fun setOrigin(point: MapPoint): ConnectorActionOutcome {
+        controller.selectStart(GeoPoint(point.latitude, point.longitude))
+        origin = point.toConnectorStop()
+        destination = null
+        activeTrip = null
+        markChanged()
+        return ConnectorActionOutcome(true, "Başlangıç güncellendi")
+    }
+
+    override fun setDestination(point: MapPoint): ConnectorActionOutcome {
+        if (controller.state.start == null) {
+            return ConnectorActionOutcome(false, "Önce başlangıç seçilmeli")
+        }
+        controller.selectDestination(GeoPoint(point.latitude, point.longitude))
+        if (controller.state.phase != JourneyPhase.DESTINATION_SELECTED) {
+            return ConnectorActionOutcome(false, controller.state.error ?: "Varış güncellenemedi")
+        }
+        destination = point.toConnectorStop()
+        activeTrip = activeTrip?.copy(destination = destination)
+        markChanged()
+        return ConnectorActionOutcome(true, "Varış güncellendi")
+    }
+
+    override fun selectJourney(routeId: String): ConnectorActionOutcome {
+        val route = routeResolver(routeId)
+            ?: return ConnectorActionOutcome(false, "Rota artık mevcut değil; güncel rota seçilmeli")
+        val currentOrigin = origin ?: route.origin.toConnectorStop()
+        val currentDestination = destination ?: route.destination.toConnectorStop()
+        activeTrip = ConnectorTripState(
+            journeyId = route.id,
+            tripId = route.id,
+            routeId = route.id,
+            line = route.line,
+            direction = route.direction,
+            origin = currentOrigin,
+            destination = currentDestination,
+        )
+        origin = currentOrigin
+        destination = currentDestination
+        markChanged()
+        return ConnectorActionOutcome(true, "Sefer seçildi")
+    }
+
+    override fun setBoardingStop(stop: ConnectorStopState): ConnectorActionOutcome {
+        val trip = activeTrip ?: return ConnectorActionOutcome(false, "Önce sefer seçilmeli")
+        activeTrip = trip.copy(boardingStop = stop)
+        markChanged()
+        return ConnectorActionOutcome(true, "Biniş durağı güncellendi")
+    }
+
+    override fun armArrivalAlarm(): ConnectorActionOutcome {
+        controller.arm()
+        if (controller.state.phase != JourneyPhase.ARMED) {
+            return ConnectorActionOutcome(false, controller.state.error ?: "Alarm kurulamadı")
+        }
+        markChanged()
+        return ConnectorActionOutcome(true, "Varış alarmı kuruldu")
+    }
+
+    override fun cancelArrivalAlarm(): ConnectorActionOutcome {
+        if (controller.state.phase != JourneyPhase.ARMED && controller.state.phase != JourneyPhase.ARRIVED) {
+            return ConnectorActionOutcome(false, "Kurulu varış alarmı yok")
+        }
+        controller.cancelAlarm()
+        if (controller.state.phase != JourneyPhase.DESTINATION_SELECTED) {
+            return ConnectorActionOutcome(false, controller.state.error ?: "Alarm iptal edilemedi")
+        }
+        markChanged()
+        return ConnectorActionOutcome(true, "Varış alarmı iptal edildi")
+    }
+
+    fun updateTripProgress(
+        previousStop: ConnectorStopState?,
+        currentStop: ConnectorStopState?,
+        nextStop: ConnectorStopState?,
+    ): ConnectorActionOutcome {
+        val trip = activeTrip ?: return ConnectorActionOutcome(false, "Aktif sefer yok")
+        activeTrip = trip.copy(
+            previousStop = previousStop,
+            currentStop = currentStop,
+            nextStop = nextStop,
+        )
+        markChanged()
+        return ConnectorActionOutcome(true, "Sefer ilerlemesi güncellendi")
+    }
+
+    private fun markChanged() {
+        stateVersion += 1
+        sourceUpdatedAtEpochSeconds = nowEpochSeconds()
+    }
+
+    private fun MapPoint.toConnectorStop() = ConnectorStopState(
+        name = label,
+        latitude = latitude,
+        longitude = longitude,
+    )
+}
