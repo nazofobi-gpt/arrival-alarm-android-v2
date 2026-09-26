@@ -632,7 +632,19 @@ fun ArrivalAlarmApp(
             if (onboardingComplete) {
                 ArrivalBottomNavigation(
                     current = activeScreen,
-                    onSelect = { activeScreen = it },
+                    onSelect = { requested ->
+                        activeScreen = if (requested == ArrivalAppScreen.JOURNEY) {
+                            when {
+                                journey.phase == JourneyPhase.ARMED ||
+                                    journey.phase == JourneyPhase.ARRIVED -> ArrivalAppScreen.LIVE
+                                selectedRouteId != null -> ArrivalAppScreen.JOURNEY
+                                origin != null && destination != null -> ArrivalAppScreen.ROUTES
+                                else -> ArrivalAppScreen.JOURNEY
+                            }
+                        } else {
+                            requested
+                        }
+                    },
                 )
             }
         },
@@ -648,13 +660,10 @@ fun ArrivalAlarmApp(
                         .widthIn(max = 840.dp)
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
-                        .padding(24.dp)
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
                         .testTag("adaptive-content"),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
-                Text(stringResource(R.string.subtitle), style = MaterialTheme.typography.titleMedium)
-
                 if (!onboardingComplete) {
                     FirstRunOnboarding(
                         onContinue = {
@@ -668,6 +677,19 @@ fun ArrivalAlarmApp(
                 }
 
                 if (onboardingComplete) {
+                Text(
+                    stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    modifier = Modifier.semantics { heading() },
+                )
+                if (activeScreen == ArrivalAppScreen.HOME) {
+                    Text(
+                        stringResource(R.string.subtitle),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 val readinessState = remember(
                     readinessRefreshTick,
                     themeMode,
@@ -737,7 +759,15 @@ fun ArrivalAlarmApp(
                             }
                         },
                         onOpenSearch = { activeScreen = ArrivalAppScreen.SEARCH },
-                        onOpenJourney = { activeScreen = ArrivalAppScreen.JOURNEY },
+                        onOpenJourney = {
+                            activeScreen = when {
+                                journey.phase == JourneyPhase.ARMED ||
+                                    journey.phase == JourneyPhase.ARRIVED -> ArrivalAppScreen.LIVE
+                                selectedRouteId != null -> ArrivalAppScreen.JOURNEY
+                                origin != null && destination != null -> ArrivalAppScreen.ROUTES
+                                else -> ArrivalAppScreen.SEARCH
+                            }
+                        },
                         onMapStopSelected = { stop ->
                             if (origin == null) {
                                 setOrigin(MapPoint(stop.latitude, stop.longitude, stop.name))
@@ -852,6 +882,7 @@ fun ArrivalAlarmApp(
                             setDestination(candidate.stop)
                         }
                     },
+                    mode = HomeSearchMode.SEARCH,
                 )
                 }
 
