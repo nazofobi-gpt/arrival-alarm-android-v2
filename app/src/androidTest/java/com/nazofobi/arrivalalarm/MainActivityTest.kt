@@ -3,9 +3,11 @@ package com.nazofobi.arrivalalarm
 import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertTrue
@@ -22,6 +24,7 @@ class MainActivityTest {
         rule.activityRule.scenario.onActivity { activity ->
             ArrivalAlarmRuntimeGraph.resetForTests()
             activity.getSharedPreferences("journey_state", Context.MODE_PRIVATE).edit().clear().commit()
+            activity.getSharedPreferences("guidance_state", Context.MODE_PRIVATE).edit().clear().commit()
         }
         rule.activityRule.scenario.recreate()
         rule.waitForIdle()
@@ -49,5 +52,22 @@ class MainActivityTest {
 
     @Test fun fullGermanyIndexDownloadControlIsReachableBeforeCacheExists() {
         rule.onNodeWithTag("nationwide-index-download").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun guidanceLanguageChoicePersistsAcrossActivityRecreation() {
+        rule.onNodeWithTag("guidance-language-de-DE")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        rule.onNodeWithTag("guidance-language-status")
+            .performScrollTo()
+            .assertTextContains("Deutsch", substring = true)
+
+        rule.activityRule.scenario.recreate()
+        rule.waitForIdle()
+
+        rule.onNodeWithTag("guidance-language-status")
+            .performScrollTo()
+            .assertTextContains("Deutsch", substring = true)
     }
 }

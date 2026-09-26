@@ -117,10 +117,13 @@ fun ArrivalAlarmApp(
     val transit = remember { NationwideTransitGateway(context) }
     val currentLocation = remember { AndroidCurrentLocation(context) }
     val guidanceSpeaker = remember { AndroidTextToSpeechSpeaker(context) }
+    val guidancePreferences = remember(context) {
+        context.getSharedPreferences("guidance_state", Context.MODE_PRIVATE)
+    }
     val guidanceController = remember {
         GuidanceReliabilityController(
             guidanceSpeaker,
-            SharedPreferencesGuidanceStateStore(context.getSharedPreferences("guidance_state", Context.MODE_PRIVATE)),
+            SharedPreferencesGuidanceStateStore(guidancePreferences),
         )
     }
 
@@ -143,6 +146,13 @@ fun ArrivalAlarmApp(
     var routeBusy by remember { mutableStateOf(false) }
     val routeCache = remember { OfflineTransitCache() }
     var guidanceState by remember { mutableStateOf(guidanceController.state) }
+    var guidanceLanguage by remember {
+        mutableStateOf(
+            GuidanceLanguage.fromLocaleTag(
+                guidancePreferences.getString("preferred_locale", null),
+            )
+        )
+    }
     var inferenceEnabled by remember { mutableStateOf(false) }
     var inferenceResult by remember { mutableStateOf<TripInferenceResult?>(null) }
     var confirmedTripId by remember { mutableStateOf<String?>(null) }
@@ -299,6 +309,13 @@ fun ArrivalAlarmApp(
                 locationMessage = it.message ?: "Konum alınamadı"
             }
         }
+    }
+
+    fun selectGuidanceLanguage(language: GuidanceLanguage) {
+        guidanceLanguage = language
+        guidancePreferences.edit()
+            .putString("preferred_locale", language.localeTag)
+            .apply()
     }
 
     fun armAndStartTracking() {
@@ -573,6 +590,23 @@ fun ArrivalAlarmApp(
 
                 Text("Sesli yönlendirme", style = MaterialTheme.typography.titleMedium)
                 Text(guidanceState.status, modifier = Modifier.testTag("guidance-status"))
+                Text("Anons dili", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Seçili anons dili: ${guidanceLanguage.displayName}",
+                    modifier = Modifier.testTag("guidance-language-status"),
+                )
+                GuidanceLanguage.values().forEach { language ->
+                    Button(
+                        onClick = { selectGuidanceLanguage(language) },
+                        enabled = guidanceLanguage != language,
+                        modifier = Modifier.fillMaxWidth().testTag("guidance-language-${language.localeTag}"),
+                    ) {
+                        Text(
+                            if (guidanceLanguage == language) "${language.displayName} seçili"
+                            else language.displayName
+                        )
+                    }
+                }
                 Button(
                     onClick = { guidancePermissionLauncher.launch(AndroidGuidancePermissions.runtimePermissions()) },
                     modifier = Modifier.testTag("guidance-permissions"),
@@ -589,7 +623,11 @@ fun ArrivalAlarmApp(
                     Button(
                         onClick = {
                             guidanceController.requestGuidance(
-                                GuidanceUtterance("destination", "Hedef ${target.label}", "tr-TR")
+                                GuidanceUtterance(
+                                    key = "destination:${target.label}:${guidanceLanguage.localeTag}",
+                                    text = guidanceLanguage.destinationText(target.label),
+                                    localeTag = guidanceLanguage.localeTag,
+                                )
                             )
                             guidanceState = guidanceController.state
                         },
