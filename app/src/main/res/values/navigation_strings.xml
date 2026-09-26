@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_home">Ana Sayfa</string>
+    <string name="nav_search">Ara</string>
+    <string name="nav_journey">Yolculuk</string>
+    <string name="nav_departures">Kalkışlar</string>
+    <string name="nav_settings">Ayarlar</string>
+</resources>
