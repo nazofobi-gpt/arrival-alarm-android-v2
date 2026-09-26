@@ -26,6 +26,7 @@ class ConnectorSyncClient(
     private val processor: ConnectorCommandProcessor,
     private val transport: ConnectorGatewayTransport,
     private val nowEpochSeconds: () -> Long = { System.currentTimeMillis() / 1_000 },
+    private val maxCommandAgeSeconds: Long = 120,
 ) {
     @Synchronized
     fun syncOnce(): ConnectorSyncResult {
@@ -36,12 +37,26 @@ class ConnectorSyncClient(
             transport.fetchPendingCommands()
         )
         val receipts = envelopes.map { envelope ->
-            val receipt = processor.execute(
-                command = envelope.command,
-                userConfirmed = envelope.userConfirmed,
-                expectedStateVersion = envelope.expectedStateVersion,
-                nowEpochSeconds = nowEpochSeconds(),
-            )
+            val now = nowEpochSeconds()
+            val queuedAt = envelope.queuedAtEpochSeconds
+            val receipt = if (queuedAt != null && now - queuedAt > maxCommandAgeSeconds) {
+                val current = processor.snapshot()
+                ConnectorCommandReceipt(
+                    idempotencyKey = envelope.command.idempotencyKey,
+                    commandType = envelope.command::class.simpleName ?: "UnknownCommand",
+                    status = ConnectorCommandStatus.REJECTED_EXPIRED_COMMAND,
+                    message = "Connector command expired before device execution",
+                    stateVersionBefore = current.stateVersion,
+                    stateVersionAfter = current.stateVersion,
+                )
+            } else {
+                processor.execute(
+                    command = envelope.command,
+                    userConfirmed = envelope.userConfirmed,
+                    expectedStateVersion = envelope.expectedStateVersion,
+                    nowEpochSeconds = now,
+                )
+            }
             transport.publishReceipt(ConnectorJsonCodec.encodeReceipt(receipt))
             receipt
         }
@@ -54,7 +69,9 @@ class ConnectorSyncClient(
         return ConnectorSyncResult(
             snapshotStateVersionBefore = before.stateVersion,
             processedCommands = receipts.size,
-            appliedCommands = receipts.count { it.status == ConnectorCommandStatus.APPLIED },
+            appliedCommands = receipts.count {
+                it.status == ConnectorCommandStatus.APPLIED && !it.duplicate
+            },
             snapshotStateVersionAfter = after.stateVersion,
         )
     }
