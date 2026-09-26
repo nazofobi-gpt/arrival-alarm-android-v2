@@ -65,6 +65,29 @@ class NationwideTransitDataTest {
         assertTrue(option.stops[1].latitude != null)
     }
 
+    @Test fun liveLocationParserKeepsStopsAddressesAndPois() {
+        val json = JSONArray(
+            """[
+              {"type":"stop","id":"8000105","name":"Frankfurt(Main)Hbf",
+               "location":{"latitude":50.1071,"longitude":8.6638}},
+              {"type":"location","name":"Messe Frankfurt","poi":true,
+               "location":{"latitude":50.1122,"longitude":8.6420}},
+              {"type":"location","address":"Taunusanlage 12, Frankfurt",
+               "latitude":50.1130,"longitude":8.6690}
+            ]"""
+        )
+
+        val values = GermanyLiveTransitApi().parseLocations(json, 10)
+
+        assertEquals(
+            listOf(TransitLocationKind.STOP, TransitLocationKind.POI, TransitLocationKind.ADDRESS),
+            values.map { it.kind },
+        )
+        assertEquals("db:8000105", values.first().stop?.id)
+        assertEquals("Messe Frankfurt", values[1].label)
+        assertEquals("Taunusanlage 12, Frankfurt", values[2].label)
+    }
+
     @Test fun liveStopParserUsesActualProviderIdsAndCoordinates() {
         val json = JSONArray(
             """[

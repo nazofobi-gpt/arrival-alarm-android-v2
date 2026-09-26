@@ -32,6 +32,19 @@ sealed interface NationwideDataState {
     data class Error(val message: String) : NationwideDataState
 }
 
+enum class TransitLocationKind { STOP, ADDRESS, POI }
+
+data class TransitLocationResult(
+    val key: String,
+    val kind: TransitLocationKind,
+    val label: String,
+    val latitude: Double,
+    val longitude: Double,
+    val stop: CatalogStop? = null,
+) {
+    val point: MapPoint get() = MapPoint(latitude, longitude, label)
+}
+
 class NationwideTransitGateway(
     context: Context,
     private val feedUrl: String = "https://download.gtfs.de/germany/free/latest.zip",
@@ -79,6 +92,51 @@ class NationwideTransitGateway(
                 else -> null
             }
             main.post { callback(result, source) }
+        }
+    }
+
+    fun searchLocations(
+        query: String,
+        limit: Int = 20,
+        callback: (List<TransitLocationResult>, String?) -> Unit,
+    ) {
+        val q = query.trim()
+        if (q.length < 2) {
+            callback(emptyList(), appContext.getString(R.string.min_two_chars))
+            return
+        }
+        io.execute {
+            val localStops = if (store.isReady()) store.search(q, limit) else emptyList()
+            val local = localStops.map { stop ->
+                TransitLocationResult(
+                    key = "stop:${stop.id}",
+                    kind = TransitLocationKind.STOP,
+                    label = stop.name,
+                    latitude = stop.latitude,
+                    longitude = stop.longitude,
+                    stop = stop,
+                )
+            }
+            val live = runCatching { liveApi.searchLocations(q, limit) }.getOrDefault(emptyList())
+            val merged = (local + live)
+                .distinctBy { result ->
+                    if (result.kind == TransitLocationKind.STOP && result.stop != null) {
+                        "stop:${result.stop.id}"
+                    } else {
+                        "${result.kind}:${result.label.lowercase(Locale.ROOT)}:" +
+                            "${"%.5f".format(Locale.ROOT, result.latitude)}:" +
+                            "${"%.5f".format(Locale.ROOT, result.longitude)}"
+                    }
+                }
+                .take(limit)
+            val source = when {
+                local.isNotEmpty() && live.isNotEmpty() ->
+                    "${appContext.getString(R.string.source_gtfs_local)} + ${appContext.getString(R.string.source_live_germany)}"
+                local.isNotEmpty() -> appContext.getString(R.string.source_gtfs_local)
+                live.isNotEmpty() -> appContext.getString(R.string.source_live_germany)
+                else -> null
+            }
+            main.post { callback(merged, source) }
         }
     }
 
@@ -132,6 +190,14 @@ class GermanyLiveTransitApi(
         val encoded = URLEncoder.encode(query, StandardCharsets.UTF_8.name())
         val json = get("$baseUrl/locations?query=$encoded&results=$limit&stops=true&addresses=false&poi=false")
         return parseStops(JSONArray(json), limit)
+    }
+
+    fun searchLocations(query: String, limit: Int): List<TransitLocationResult> {
+        val encoded = URLEncoder.encode(query, StandardCharsets.UTF_8.name())
+        val json = get(
+            "$baseUrl/locations?query=$encoded&results=$limit&stops=true&addresses=true&poi=true&language=de&pretty=false"
+        )
+        return parseLocations(JSONArray(json), limit)
     }
 
     fun nearbyStops(latitude: Double, longitude: Double, limit: Int): List<NearbyStop> {
@@ -264,6 +330,49 @@ class GermanyLiveTransitApi(
             val id = item.optString("id").ifBlank { location.optString("id") }
             if (name.isBlank() || id.isBlank() || !lat.isFinite() || !lon.isFinite()) continue
             add(CatalogStop("db:$id", "db-live", name, lat, lon))
+            if (size >= limit) break
+        }
+    }
+
+    internal fun parseLocations(array: JSONArray, limit: Int): List<TransitLocationResult> = buildList {
+        for (i in 0 until array.length()) {
+            val item = array.optJSONObject(i) ?: continue
+            val type = item.optString("type").lowercase(Locale.ROOT)
+            val location = item.optJSONObject("location") ?: item
+            val latitude = location.optDouble("latitude", Double.NaN)
+            val longitude = location.optDouble("longitude", Double.NaN)
+            if (!latitude.isFinite() || !longitude.isFinite()) continue
+
+            val rawName = item.optString("name").trim()
+            val rawAddress = item.optString("address").trim()
+                .ifBlank { location.optString("address").trim() }
+            val kind = when (type) {
+                "stop", "station" -> TransitLocationKind.STOP
+                "poi" -> TransitLocationKind.POI
+                "address" -> TransitLocationKind.ADDRESS
+                "location" -> if (item.optBoolean("poi", false)) TransitLocationKind.POI else TransitLocationKind.ADDRESS
+                else -> continue
+            }
+            val label = rawName.ifBlank { rawAddress }.ifBlank { continue }
+            val providerId = item.optString("id").ifBlank { location.optString("id") }
+            val stop = if (kind == TransitLocationKind.STOP && providerId.isNotBlank()) {
+                CatalogStop("db:$providerId", "db-live", label, latitude, longitude)
+            } else null
+            val key = when {
+                stop != null -> "stop:${stop.id}"
+                providerId.isNotBlank() -> "${kind.name.lowercase(Locale.ROOT)}:$providerId"
+                else -> "${kind.name.lowercase(Locale.ROOT)}:$label:$latitude:$longitude"
+            }
+            add(
+                TransitLocationResult(
+                    key = key,
+                    kind = kind,
+                    label = label,
+                    latitude = latitude,
+                    longitude = longitude,
+                    stop = stop,
+                )
+            )
             if (size >= limit) break
         }
     }
