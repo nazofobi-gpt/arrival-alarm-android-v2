@@ -60,6 +60,8 @@ class ArrivalAlarmProcessGraph private constructor(context: Context) {
     val connectorPort = JourneyConnectorActionPort(
         controller = controller,
         routeResolver = routeRegistry::resolve,
+        onAlarmArmed = { ActiveJourneyService.tryStart(appContext) },
+        onAlarmCancelled = { ActiveJourneyService.stop(appContext) },
     )
     private val connectorRuntime = ConnectorRuntime(
         processor = ConnectorCommandProcessor(
