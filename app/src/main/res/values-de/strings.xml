@@ -162,4 +162,34 @@
     <string name="location_kind_stop">Haltestelle</string>
     <string name="location_kind_address">Adresse</string>
     <string name="location_kind_poi">Ort/POI</string>
+
+    <string name="live_trip_title">Aktive Fahrt</string>
+    <string name="live_trip_route_format">%1$s • %2$s</string>
+    <string name="live_trip_timing_label">Haltestellenfortschritt: %1$s</string>
+    <string name="live_trip_timing_offline">Offline-Fahrplandaten</string>
+    <string name="live_trip_timing_unknown">keine Anbieterzeit verfügbar</string>
+    <string name="live_trip_timing_realtime">Echtzeit des Anbieters</string>
+    <string name="live_trip_timing_scheduled">Fahrplanzeit des Anbieters</string>
+    <string name="live_trip_previous">Passierte Haltestelle</string>
+    <string name="live_trip_current">Aktuelle Haltestelle laut Anbieterzeit</string>
+    <string name="live_trip_between_stops">Zwischen Haltestellen • physische Haltestellenposition nicht bestätigt</string>
+    <string name="live_trip_progress_unavailable">Keine Anbieterzeit für den Haltestellenfortschritt verfügbar</string>
+    <string name="live_trip_next">Nächste Haltestelle</string>
+    <string name="live_trip_target">Zielhaltestelle</string>
+    <string name="live_trip_target_time">Zielzeit</string>
+    <string name="live_trip_gps_distance">Echte GPS-Distanz zum Ziel</string>
+    <string name="live_trip_distance_meters">%1$d m</string>
+    <string name="live_trip_alarm">Alarmstatus</string>
+    <string name="live_trip_audio">Audio / Bluetooth</string>
+    <string name="live_trip_audio_device_fallback">Bluetooth getrennt • Geräteaudio als Fallback</string>
+    <string name="departures_loading">Abfahrten werden geladen…</string>
+    <string name="departures_source">Quelle: %1$s</string>
+    <string name="departures_empty">Keine kommenden Abfahrten gefunden</string>
+    <string name="departures_live_unavailable">Live-Abfahrten nicht verfügbar • stattdessen Verbindungszeiten</string>
+    <string name="departures_route_fallback">Keine Abfahrtstafel • Fahrplanzeiten der gewählten Verbindungen werden angezeigt</string>
+    <string name="departure_time_source">%1$s • %2$s</string>
+    <string name="departure_platform">Gleis/Steig %1$s</string>
+    <string name="departure_select">Diese Abfahrt wählen</string>
+    <string name="departure_cancelled">Fahrt fällt aus</string>
+
 </resources>

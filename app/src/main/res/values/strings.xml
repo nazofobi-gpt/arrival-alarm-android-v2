@@ -171,4 +171,34 @@
     <string name="location_kind_stop">Durak</string>
     <string name="location_kind_address">Adres</string>
     <string name="location_kind_poi">Nokta/POI</string>
+
+    <string name="live_trip_title">Canlı yolculuk</string>
+    <string name="live_trip_route_format">%1$s • %2$s</string>
+    <string name="live_trip_timing_label">Durak ilerlemesi: %1$s</string>
+    <string name="live_trip_timing_offline">çevrimdışı planlı veri</string>
+    <string name="live_trip_timing_unknown">sağlayıcı zamanı yok</string>
+    <string name="live_trip_timing_realtime">sağlayıcı canlı zamanları</string>
+    <string name="live_trip_timing_scheduled">sağlayıcı planlı zamanları</string>
+    <string name="live_trip_previous">Geçilen durak</string>
+    <string name="live_trip_current">Saat verisine göre mevcut durak</string>
+    <string name="live_trip_between_stops">Duraklar arasında • fiziksel durak konumu doğrulanmadı</string>
+    <string name="live_trip_progress_unavailable">Durak ilerlemesi için sağlayıcı zamanı yok</string>
+    <string name="live_trip_next">Sıradaki durak</string>
+    <string name="live_trip_target">Hedef durak</string>
+    <string name="live_trip_target_time">Hedef zamanı</string>
+    <string name="live_trip_gps_distance">Hedefe kalan gerçek GPS mesafesi</string>
+    <string name="live_trip_distance_meters">%1$d m</string>
+    <string name="live_trip_alarm">Alarm durumu</string>
+    <string name="live_trip_audio">Ses / Bluetooth</string>
+    <string name="live_trip_audio_device_fallback">Bluetooth ayrıldı • cihaz sesi fallback</string>
+    <string name="departures_loading">Kalkışlar yükleniyor…</string>
+    <string name="departures_source">Kaynak: %1$s</string>
+    <string name="departures_empty">Yaklaşan kalkış bulunamadı</string>
+    <string name="departures_live_unavailable">Canlı istasyon kalkışları alınamadı • rota saatleri gösteriliyor</string>
+    <string name="departures_route_fallback">İstasyon panosu yok • seçili rotaların planlı saatleri gösteriliyor</string>
+    <string name="departure_time_source">%1$s • %2$s</string>
+    <string name="departure_platform">Peron %1$s</string>
+    <string name="departure_select">Bu kalkışı seç</string>
+    <string name="departure_cancelled">Sefer iptal edildi</string>
+
 </resources>

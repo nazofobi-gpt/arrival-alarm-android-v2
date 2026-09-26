@@ -162,4 +162,34 @@
     <string name="location_kind_stop">Stop</string>
     <string name="location_kind_address">Address</string>
     <string name="location_kind_poi">Place/POI</string>
+
+    <string name="live_trip_title">Live trip</string>
+    <string name="live_trip_route_format">%1$s • %2$s</string>
+    <string name="live_trip_timing_label">Stop progress: %1$s</string>
+    <string name="live_trip_timing_offline">offline scheduled data</string>
+    <string name="live_trip_timing_unknown">provider timing unavailable</string>
+    <string name="live_trip_timing_realtime">provider realtime timing</string>
+    <string name="live_trip_timing_scheduled">provider scheduled timing</string>
+    <string name="live_trip_previous">Passed stop</string>
+    <string name="live_trip_current">Current stop by provider time</string>
+    <string name="live_trip_between_stops">Between stops • physical stop position is not confirmed</string>
+    <string name="live_trip_progress_unavailable">Provider timing is unavailable for stop progress</string>
+    <string name="live_trip_next">Next stop</string>
+    <string name="live_trip_target">Target stop</string>
+    <string name="live_trip_target_time">Target time</string>
+    <string name="live_trip_gps_distance">Real GPS distance to target</string>
+    <string name="live_trip_distance_meters">%1$d m</string>
+    <string name="live_trip_alarm">Alarm status</string>
+    <string name="live_trip_audio">Audio / Bluetooth</string>
+    <string name="live_trip_audio_device_fallback">Bluetooth disconnected • device audio fallback</string>
+    <string name="departures_loading">Loading departures…</string>
+    <string name="departures_source">Source: %1$s</string>
+    <string name="departures_empty">No upcoming departures found</string>
+    <string name="departures_live_unavailable">Live station departures unavailable • route times shown instead</string>
+    <string name="departures_route_fallback">No station board • scheduled times from selected routes are shown</string>
+    <string name="departure_time_source">%1$s • %2$s</string>
+    <string name="departure_platform">Platform %1$s</string>
+    <string name="departure_select">Select this departure</string>
+    <string name="departure_cancelled">Service cancelled</string>
+
 </resources>
