@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -112,6 +113,56 @@ class MainActivityTest {
 
     @Test fun fullGermanyIndexDownloadControlIsReachableBeforeCacheExists() {
         rule.onNodeWithTag("nationwide-index-download").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun settingsReadinessExposesExplicitRecoveryActions() {
+        rule.onNodeWithTag("settings-readiness-panel")
+            .performScrollTo()
+            .assertIsDisplayed()
+        rule.onNodeWithTag("readiness-summary")
+            .performScrollTo()
+            .assertIsDisplayed()
+        rule.onNodeWithTag("readiness-permissions")
+            .performScrollTo()
+            .assertIsDisplayed()
+        rule.onNodeWithTag("readiness-guidance-permissions")
+            .performScrollTo()
+            .assertIsDisplayed()
+        rule.onNodeWithTag("readiness-refresh")
+            .performScrollTo()
+            .assertIsDisplayed()
+        rule.onNodeWithTag("readiness-app-settings")
+            .performScrollTo()
+            .assertIsDisplayed()
+        rule.onNodeWithTag("readiness-privacy")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test fun manualDarkThemePersistsAcrossActivityRecreation() {
+        val darkLabel = rule.activity.getString(R.string.theme_dark)
+        rule.onNodeWithTag("theme-dark")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+
+        rule.onNodeWithTag("theme-mode-status")
+            .performScrollTo()
+            .assertTextContains(darkLabel, substring = true)
+
+        rule.activityRule.scenario.onActivity { activity ->
+            val persisted = activity
+                .getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+                .getString(ArrivalUiPreferences.KEY_THEME_MODE, null)
+            assertEquals(ArrivalThemeMode.DARK.name, persisted)
+        }
+
+        rule.activityRule.scenario.recreate()
+        rule.waitForIdle()
+
+        rule.onNodeWithTag("theme-mode-status")
+            .performScrollTo()
+            .assertTextContains(darkLabel, substring = true)
     }
 
     @Test fun guidanceLanguageChoicePersistsAcrossActivityRecreation() {

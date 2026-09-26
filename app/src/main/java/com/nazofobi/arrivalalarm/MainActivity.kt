@@ -83,12 +83,19 @@ class MainActivity : ComponentActivity() {
         oauthCallbackUri = intent?.dataString
         enableEdgeToEdge()
         setContent {
-            ArrivalAlarmTheme {
+            val uiPreferences = remember { ArrivalUiPreferences(applicationContext) }
+            var themeMode by remember { mutableStateOf(uiPreferences.loadThemeMode()) }
+            ArrivalAlarmTheme(mode = themeMode) {
                 ArrivalAlarmApp(
                     oauthCallbackUri = oauthCallbackUri,
                     onOAuthCallbackConsumed = {
                         oauthCallbackUri = null
                         setIntent(Intent(intent).setData(null))
+                    },
+                    themeMode = themeMode,
+                    onThemeModeChange = { mode ->
+                        uiPreferences.saveThemeMode(mode)
+                        themeMode = mode
                     },
                 )
             }
@@ -106,6 +113,8 @@ class MainActivity : ComponentActivity() {
 fun ArrivalAlarmApp(
     oauthCallbackUri: String? = null,
     onOAuthCallbackConsumed: () -> Unit = {},
+    themeMode: ArrivalThemeMode = ArrivalThemeMode.SYSTEM,
+    onThemeModeChange: (ArrivalThemeMode) -> Unit = {},
 ) {
     val context = LocalContext.current.applicationContext
     val graph = remember(context) { ArrivalAlarmRuntimeGraph.get(context) }
@@ -197,6 +206,7 @@ fun ArrivalAlarmApp(
     var stationLoading by remember { mutableStateOf(false) }
     var stationResolved by remember { mutableStateOf(false) }
     var liveNowEpochSeconds by remember { mutableStateOf(System.currentTimeMillis() / 1_000) }
+    var readinessRefreshTick by remember { mutableStateOf(0) }
     val routeCache = remember(context) {
         OfflineTransitCache(backingStore = SharedPreferencesTransitCacheStore(context))
     }
@@ -438,6 +448,13 @@ fun ArrivalAlarmApp(
         }
     }
 
+    fun refreshReadiness() {
+        guidanceController.onPermissions(AndroidGuidancePermissions.snapshot(context))
+        guidanceController.onAudioRoute(AndroidGuidanceAudio.currentRoute(context))
+        guidanceState = guidanceController.state
+        readinessRefreshTick += 1
+    }
+
     fun selectGuidanceLanguage(language: GuidanceLanguage) {
         guidanceLanguage = language
         guidancePreferences.edit()
@@ -491,9 +508,13 @@ fun ArrivalAlarmApp(
     val guidancePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
-        guidanceController.onPermissions(AndroidGuidancePermissions.snapshot(context))
-        guidanceController.onAudioRoute(AndroidGuidanceAudio.currentRoute(context))
-        guidanceState = guidanceController.state
+        refreshReadiness()
+    }
+
+    val readinessPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        refreshReadiness()
     }
 
     LaunchedEffect(journey.phase, selectedRouteId) {
@@ -615,42 +636,51 @@ fun ArrivalAlarmApp(
                     )
                 }
 
-                Text(stringResource(R.string.connector_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-                Text(
-                    connectorSetupStatus,
-                    modifier = Modifier.testTag("connector-setup-status"),
+                val readinessState = remember(
+                    readinessRefreshTick,
+                    themeMode,
+                    dataState,
+                    guidanceState,
+                    journey.phase,
+                    connectorConnected,
+                    connectorBaseUrl,
+                ) {
+                    SettingsReadinessState.from(
+                        context = context,
+                        themeMode = themeMode,
+                        dataState = dataState,
+                        guidanceState = guidanceState,
+                        backgroundJourneyActive = journey.phase == JourneyPhase.ARMED,
+                        connectorConfigured = connectorBaseUrl.isNotBlank(),
+                        connectorConnected = connectorConnected,
+                    )
+                }
+                SettingsReadinessPanel(
+                    state = readinessState,
+                    connectorBusy = connectorSetupBusy,
+                    connectorStatus = connectorSetupStatus,
+                    onThemeModeChange = onThemeModeChange,
+                    onRequestJourneyPermissions = {
+                        readinessPermissionLauncher.launch(
+                            ActiveJourneyPermissions.runtimePermissions()
+                        )
+                    },
+                    onRequestGuidancePermissions = {
+                        guidancePermissionLauncher.launch(
+                            AndroidGuidancePermissions.runtimePermissions()
+                        )
+                    },
+                    onRefreshReadiness = { refreshReadiness() },
+                    onOpenAppSettings = { openArrivalAlarmAppSettings(context) },
+                    onRetryData = {
+                        transit.ensureNationwideIndex { dataState = it }
+                    },
+                    onConnectorAction = {
+                        if (connectorConnected) disconnectConnector()
+                        else beginConnectorAuthorization()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
                 )
-                if (connectorConnected) {
-                    Button(
-                        onClick = { disconnectConnector() },
-                        enabled = !connectorSetupBusy,
-                        modifier = Modifier.testTag("connector-disconnect"),
-                    ) {
-                        Text(if (connectorSetupBusy) stringResource(R.string.processing) else stringResource(R.string.disconnect_chatgpt))
-                    }
-                } else {
-                    Button(
-                        onClick = { beginConnectorAuthorization() },
-                        enabled = !connectorSetupBusy && connectorBaseUrl.isNotBlank(),
-                        modifier = Modifier.testTag("connector-connect"),
-                    ) {
-                        Text(if (connectorSetupBusy) stringResource(R.string.processing) else stringResource(R.string.connect_chatgpt))
-                    }
-                }
-
-                val dataText = when (val value = dataState) {
-                    NationwideDataState.Idle -> stringResource(R.string.data_idle)
-                    is NationwideDataState.Loading -> value.message
-                    is NationwideDataState.Ready -> stringResource(R.string.data_ready, value.stopCount, value.sourceVersion, formatEpoch(value.fetchedAtEpochSeconds))
-                    is NationwideDataState.Error -> stringResource(R.string.data_error, value.message)
-                }
-                Text(dataText, modifier = Modifier.testTag("nationwide-data-state"))
-                if (dataState !is NationwideDataState.Ready && dataState !is NationwideDataState.Loading) {
-                    Button(
-                        onClick = { transit.ensureNationwideIndex { dataState = it } },
-                        modifier = Modifier.testTag("nationwide-index-download"),
-                    ) { Text(stringResource(R.string.download_germany_index)) }
-                }
 
                 HomeSearchPanel(
                     selectingOrigin = selectingOrigin,
