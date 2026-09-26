@@ -85,6 +85,23 @@ class JourneyConnectorActionPortTest {
         assertEquals("D", trip?.nextStop?.name)
     }
 
+
+    @Test fun authoritativeReadRefreshesFreshnessWithoutInventingStateChange() {
+        var now = 40_000L
+        val port = JourneyConnectorActionPort(
+            controller = JourneyController(),
+            nowEpochSeconds = { now },
+        )
+
+        val first = port.readSnapshot()
+        now += 600
+        val second = port.readSnapshot()
+
+        assertEquals(first.stateVersion, second.stateVersion)
+        assertEquals(40_600L, second.sourceUpdatedAtEpochSeconds)
+        assertFalse(second.isStale(40_600L))
+    }
+
     @Test fun invalidDomainOrderIsRejectedWithoutInventingState() {
         val port = JourneyConnectorActionPort(
             controller = JourneyController(),
