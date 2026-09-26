@@ -68,13 +68,12 @@ class ActiveJourneyService : Service(), LocationListener {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (!ActiveJourneyPermissions.hasRequired(this)) {
+        if (!ActiveJourneyPermissions.hasRequired(this) || enabledLocationProvider() == null) {
             stopSelf()
             return START_NOT_STICKY
         }
 
-        startLocationForeground()
-        if (!registerLocationUpdates()) {
+        if (!startLocationForeground() || !registerLocationUpdates()) {
             stopSelf()
         }
         return START_NOT_STICKY
@@ -104,7 +103,8 @@ class ActiveJourneyService : Service(), LocationListener {
     override fun onProviderEnabled(provider: String) = Unit
 
     override fun onProviderDisabled(provider: String) {
-        if (enabledLocationProvider() == null) stopSelf()
+        removeLocationUpdates()
+        if (!registerLocationUpdates()) stopSelf()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -150,16 +150,23 @@ class ActiveJourneyService : Service(), LocationListener {
         }
     }
 
-    private fun startLocationForeground() {
+    private fun startLocationForeground(): Boolean {
         val notification = trackingNotification(graph.controller.state.distanceMeters)
-        if (Build.VERSION.SDK_INT >= 29) {
-            startForeground(
-                TRACKING_NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
-            )
-        } else {
-            startForeground(TRACKING_NOTIFICATION_ID, notification)
+        return try {
+            if (Build.VERSION.SDK_INT >= 29) {
+                startForeground(
+                    TRACKING_NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
+                )
+            } else {
+                startForeground(TRACKING_NOTIFICATION_ID, notification)
+            }
+            true
+        } catch (_: SecurityException) {
+            false
+        } catch (_: IllegalArgumentException) {
+            false
         }
     }
 
