@@ -309,14 +309,13 @@ class GermanyLiveTransitApi(
                         ?: continue
                     val key = remark.optString("code").takeIf { it.isNotBlank() }
                         ?: "$tripId:$j:$detail"
-                    alerts.putIfAbsent(
-                        key,
-                        ServiceAlert(
+                    if (!alerts.containsKey(key)) {
+                        alerts[key] = ServiceAlert(
                             id = key,
                             title = "$lineName → $direction",
                             detail = detail,
                         )
-                    )
+                    }
                 }
             }
             if (departures.size >= limit.coerceIn(1, 20)) break
