@@ -79,6 +79,16 @@
     <string name="nearby_stops">Nearest stops</string>
     <string name="nearby_stop_format">%1$s • %2$s • %3$d m</string>
     <string name="route_calculating">Calculating route…</string>
+    <string name="route_results_title">Route results</string>
+    <string name="route_points_format">%1$s → %2$s</string>
+    <string name="route_offline_badge">Offline cache</string>
+    <string name="route_duration_minutes">%1$d min</string>
+    <string name="route_walk_transfer_format">%1$d min walking • %2$d transfers</string>
+    <string name="route_realtime_badge">Realtime update</string>
+    <string name="route_planned_badge">Scheduled time</string>
+    <string name="route_select_action">Select this route</string>
+    <string name="route_selected_action">Route selected</string>
+    <string name="journey_detail_title">Journey details</string>
     <string name="route_live_static">transport.rest / DB profile • live/scheduled route</string>
     <string name="route_live_unavailable">Live route unavailable: %1$s</string>
     <string name="route_not_found">No route found for this origin and destination</string>
