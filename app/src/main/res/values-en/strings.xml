@@ -7,6 +7,15 @@
     <string name="onboarding_permission_note">Location permission is requested only for location and active-trip features. ChatGPT connection is optional and is set up separately.</string>
     <string name="onboarding_background_note">Background trip tracking does not start until you enable the alarm.</string>
     <string name="continue_action">Got it, continue</string>
+    <string name="onboarding_tagline">Calmer, more controlled travel across Germany.</string>
+    <string name="onboarding_route_title">Plan a route</string>
+    <string name="onboarding_route_body">Find suitable routes from a stop, address, or place.</string>
+    <string name="onboarding_live_title">Live departures</string>
+    <string name="onboarding_live_body">Track departures, platforms, and delays in one place.</string>
+    <string name="onboarding_alarm_title">Arrival alarm</string>
+    <string name="onboarding_alarm_body">Get sound, vibration, and notification alerts as you approach your destination.</string>
+    <string name="onboarding_privacy_title">You stay in control</string>
+    <string name="onboarding_start_action">Get started</string>
     <string name="connector_title">ChatGPT connection</string>
     <string name="connector_ready">ChatGPT device connection is ready</string>
     <string name="connector_url_missing">Connector URL is not set in the release configuration</string>
