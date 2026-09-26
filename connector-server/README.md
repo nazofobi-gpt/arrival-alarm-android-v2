@@ -51,3 +51,18 @@ Production still requires deployment-specific infrastructure before end-to-end a
 4. Revoke/disconnect handling and operational audit/retention policy.
 
 Do not replace these gates with a hard-coded bearer token, API key in the APK, or anonymous public endpoints.
+
+
+## Production container
+
+The connector includes a non-root Node 22 container. Build it from `connector-server/`:
+
+```sh
+docker build -t arrival-alarm-connector .
+```
+
+Production startup validates the required configuration before listening. Use `.env.example` as the contract and inject real values through the hosting platform's secret/config system; never commit tokens or private keys.
+
+A persistent volume must back `/data` so `GATEWAY_SQLITE_PATH=/data/arrival-alarm.db` survives restarts. The image exposes port 8787 and includes a local health check. TLS should terminate at the hosting platform/reverse proxy; `MCP_PUBLIC_BASE_URL`, OAuth issuer/authorization/JWKS endpoints must still be public HTTPS URLs.
+
+The container does not include an authorization server. Production still needs an OAuth 2.1 provider that supports the MCP/ChatGPT authorization-code + PKCE flow and a device-token issuance/refresh/revoke path.
