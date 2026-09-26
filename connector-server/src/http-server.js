@@ -9,6 +9,35 @@ const service = new GatewayService(store);
 const port = Number(process.env.PORT ?? 8787);
 const MCP_PATH = "/mcp";
 const MAX_BODY_BYTES = 256 * 1024;
+const CONNECTOR_SCOPES = ["arrival.read", "arrival.write"];
+
+function publicBaseUrl(req) {
+  const configured = process.env.MCP_PUBLIC_BASE_URL?.replace(/\/$/, "");
+  if (configured) return configured;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("production_public_base_url_not_configured");
+  }
+  const proto = req.headers["x-forwarded-proto"] ?? "http";
+  return proto + "://" + (req.headers.host ?? "localhost:" + port);
+}
+
+function resourceMetadata(req) {
+  const base = publicBaseUrl(req);
+  const authorizationServer = process.env.OAUTH_AUTHORIZATION_SERVER?.replace(/\/$/, "");
+  if (process.env.NODE_ENV === "production" && !authorizationServer) {
+    throw new Error("production_oauth_not_configured");
+  }
+  return {
+    resource: base + MCP_PATH,
+    authorization_servers: authorizationServer ? [authorizationServer] : [],
+    scopes_supported: CONNECTOR_SCOPES,
+    bearer_methods_supported: ["header"],
+  };
+}
+
+function resourceMetadataUrl(req) {
+  return publicBaseUrl(req) + "/.well-known/oauth-protected-resource";
+}
 
 function bearer(req) {
   const value = req.headers.authorization ?? "";
@@ -17,7 +46,8 @@ function bearer(req) {
 
 function resolveMcpUser(req) {
   if (process.env.NODE_ENV === "production") {
-    throw new Error("production_oauth_not_configured");
+    resourceMetadata(req);
+    throw new Error("production_token_verification_not_configured");
   }
   if (process.env.ALLOW_UNAUTHENTICATED_DEV === "true") {
     return process.env.DEV_USER_ID ?? "dev-user";
@@ -54,9 +84,21 @@ function sendJson(res, status, value) {
   res.end(JSON.stringify(value));
 }
 
-function sendAuthError(res, error) {
+function sendAuthError(req, res, error) {
   const message = error instanceof Error ? error.message : "unauthorized";
-  const status = message === "unauthorized" ? 401 : 503;
+  const authFailure = message === "unauthorized";
+  const status = authFailure ? 401 : 503;
+  if (authFailure) {
+    try {
+      res.setHeader(
+        "WWW-Authenticate",
+        'Bearer resource_metadata="' + resourceMetadataUrl(req) +
+          '", error="invalid_token", error_description="Authentication required"'
+      );
+    } catch {
+      // Preserve the original authentication error if metadata cannot be built.
+    }
+  }
   sendJson(res, status, { error: message });
 }
 
@@ -66,6 +108,15 @@ const httpServer = createServer(async (req, res) => {
     return;
   }
   const url = new URL(req.url, "http://" + (req.headers.host ?? "localhost"));
+
+  if (req.method === "GET" && url.pathname === "/.well-known/oauth-protected-resource") {
+    try {
+      sendJson(res, 200, resourceMetadata(req));
+    } catch (error) {
+      sendAuthError(req, res, error);
+    }
+    return;
+  }
 
   if (req.method === "GET" && url.pathname === "/") {
     sendJson(res, 200, {
@@ -83,7 +134,7 @@ const httpServer = createServer(async (req, res) => {
       const snapshot = await readJson(req);
       sendJson(res, 200, store.putSnapshot(userId, snapshot));
     } catch (error) {
-      sendAuthError(res, error);
+      sendAuthError(req, res, error);
     }
     return;
   }
@@ -93,7 +144,7 @@ const httpServer = createServer(async (req, res) => {
       const userId = resolveDeviceUser(req);
       sendJson(res, 200, { commands: store.pendingCommands(userId) });
     } catch (error) {
-      sendAuthError(res, error);
+      sendAuthError(req, res, error);
     }
     return;
   }
@@ -104,7 +155,7 @@ const httpServer = createServer(async (req, res) => {
       const receipt = await readJson(req);
       sendJson(res, 200, store.submitReceipt(userId, receipt));
     } catch (error) {
-      sendAuthError(res, error);
+      sendAuthError(req, res, error);
     }
     return;
   }
@@ -126,7 +177,7 @@ const httpServer = createServer(async (req, res) => {
     try {
       userId = resolveMcpUser(req);
     } catch (error) {
-      sendAuthError(res, error);
+      sendAuthError(req, res, error);
       return;
     }
 
