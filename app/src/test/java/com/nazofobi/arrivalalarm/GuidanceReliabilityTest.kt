@@ -35,6 +35,15 @@ class GuidanceReliabilityTest {
         assertEquals(VoiceChoice.UNAVAILABLE, TtsVoicePolicy.choose(false, false))
     }
 
+    @Test fun guidanceLanguageProvidesLocalizedDestinationTextAndStableLocaleFallback() {
+        assertEquals("Hedef Bremen Hbf", GuidanceLanguage.TURKISH.destinationText("Bremen Hbf"))
+        assertEquals("Ziel Bremen Hbf", GuidanceLanguage.GERMAN.destinationText("Bremen Hbf"))
+        assertEquals("Destination Bremen Hbf", GuidanceLanguage.ENGLISH.destinationText("Bremen Hbf"))
+        assertEquals("de-DE", GuidanceLanguage.fromLocaleTag("de-DE").localeTag)
+        assertEquals(GuidanceLanguage.TURKISH, GuidanceLanguage.fromLocaleTag("fr-FR"))
+        assertEquals(GuidanceLanguage.TURKISH, GuidanceLanguage.fromLocaleTag(null))
+    }
+
     @Test fun deniedPartialGrantedRecoveryPreservesPendingUtterance() {
         val speaker = RecordingSpeaker()
         val store = InMemoryGuidanceStateStore()
