@@ -6,11 +6,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -20,6 +22,11 @@ fun ScreenAssistPanel(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
+    brokerCredentialConfigured: Boolean,
+    brokerCredentialDraft: String,
+    onBrokerCredentialDraftChange: (String) -> Unit,
+    onSaveBrokerCredential: () -> Unit,
+    onClearBrokerCredential: () -> Unit,
     guidanceText: String? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -39,6 +46,35 @@ fun ScreenAssistPanel(
                 state.message,
                 modifier = Modifier.testTag("screen-assist-status"),
             )
+            Text(
+                if (brokerCredentialConfigured) {
+                    "Broker kimliği cihazda şifreli olarak hazır"
+                } else {
+                    "Broker kimliği gerekli • bu olmadan ekran paylaşımı başlatılmaz"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.testTag("screen-assist-broker-status"),
+            )
+            OutlinedTextField(
+                value = brokerCredentialDraft,
+                onValueChange = onBrokerCredentialDraftChange,
+                label = { Text("Özel broker erişim anahtarı") },
+                visualTransformation = PasswordVisualTransformation(),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().testTag("screen-assist-broker-token"),
+            )
+            if (brokerCredentialDraft.isNotBlank()) {
+                Button(
+                    onClick = onSaveBrokerCredential,
+                    modifier = Modifier.fillMaxWidth().testTag("screen-assist-broker-save"),
+                ) { Text("Cihazda şifreli kaydet") }
+            }
+            if (brokerCredentialConfigured) {
+                Button(
+                    onClick = onClearBrokerCredential,
+                    modifier = Modifier.fillMaxWidth().testTag("screen-assist-broker-clear"),
+                ) { Text("Broker kimliğini sil") }
+            }
             guidanceText?.takeIf { it.isNotBlank() }?.let { guidance ->
                 Text(
                     guidance,
@@ -50,6 +86,7 @@ fun ScreenAssistPanel(
             if (state.canStart) {
                 Button(
                     onClick = onStart,
+                    enabled = brokerCredentialConfigured,
                     modifier = Modifier.fillMaxWidth().testTag("screen-assist-start"),
                 ) { Text("Ekran asistanını başlat") }
             }
