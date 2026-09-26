@@ -10,7 +10,8 @@
     "start": "node src/http-server.js",
     "test": "node --test",
     "preflight:production": "node scripts/production-preflight.js",
-    "check:worker": "wrangler deploy --dry-run --config wrangler.ci.jsonc"
+    "check:worker": "wrangler deploy --dry-run --config wrangler.ci.jsonc",
+    "check:d1": "wrangler d1 migrations apply arrival-alarm-ci --local --config wrangler.ci.jsonc"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.1",
