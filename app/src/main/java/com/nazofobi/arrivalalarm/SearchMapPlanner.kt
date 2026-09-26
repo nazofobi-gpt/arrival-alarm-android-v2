@@ -13,6 +13,18 @@ sealed interface SearchResult {
 
 data class MapPoint(val latitude: Double, val longitude: Double, val label: String)
 data class NearbyCandidate(val stop: CatalogStop, val distanceMeters: Int, val bearingDegrees: Int)
+
+data class RouteStop(
+    val id: String? = null,
+    val name: String,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val arrival: String? = null,
+    val plannedArrival: String? = null,
+    val departure: String? = null,
+    val plannedDeparture: String? = null,
+)
+
 data class RouteOption(
     val id: String,
     val origin: MapPoint,
@@ -23,6 +35,10 @@ data class RouteOption(
     val arrival: String,
     val walkingMinutes: Int,
     val transfers: Int,
+    val tripIds: List<String> = emptyList(),
+    val stops: List<RouteStop> = emptyList(),
+    val refreshToken: String? = null,
+    val sourceUpdatedAtEpochSeconds: Long? = null,
 )
 
 interface GeocodeProvider { fun search(query: String): List<MapPoint> }
