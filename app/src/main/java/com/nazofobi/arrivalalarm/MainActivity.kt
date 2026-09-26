@@ -398,6 +398,9 @@ fun ArrivalAlarmApp() {
                         screenAssistGuidance = null
                         refreshScreenAssistUi()
                     },
+                    brokerEndpointConfigured = BuildConfig.SCREEN_ASSIST_BROKER_URL
+                        .trim()
+                        .startsWith("https://"),
                     brokerCredentialConfigured = screenAssistBrokerConfigured,
                     brokerCredentialDraft = screenAssistBrokerCredentialDraft,
                     onBrokerCredentialDraftChange = { screenAssistBrokerCredentialDraft = it },
