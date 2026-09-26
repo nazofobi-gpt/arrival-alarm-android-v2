@@ -142,6 +142,7 @@
     <string name="map_instruction_origin">Haritada bir noktaya dokunarak başlangıç seçin; yakın durak işaretlerine de dokunabilirsiniz.</string>
     <string name="map_instruction_destination">Haritada bir noktaya dokunarak varış seçin; yakın durak işaretlerine de dokunabilirsiniz.</string>
     <string name="map_point_label">Harita noktası</string>
+    <string name="map_load_failed">Harita yüklenemedi • arama ve durak listesi kullanılabilir</string>
     <string name="map_provider_note">Harita: OpenFreeMap • MapLibre</string>
     <string name="location_kind_stop">Durak</string>
     <string name="location_kind_address">Adres</string>
