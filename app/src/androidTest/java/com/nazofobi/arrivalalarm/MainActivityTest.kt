@@ -1,8 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import android.content.Context
-import java.io.File
-import java.io.FileOutputStream
+import android.os.ParcelFileDescriptor
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -58,9 +57,17 @@ class MainActivityTest {
         rule.onNodeWithTag("onboarding-privacy-note")
             .performScrollTo()
             .assertIsDisplayed()
-        rule.onNodeWithTag("onboarding-complete")
+        val onboardingAction = rule.onNodeWithTag("onboarding-complete")
             .performScrollTo()
             .assertIsDisplayed()
+            .fetchSemanticsNode()
+        val onboardingMinPixels = 48f * rule.activity.resources.displayMetrics.density
+        assertTrue(
+            "onboarding-complete height=${onboardingAction.boundsInRoot.height}px, required>=$onboardingMinPixels",
+            onboardingAction.boundsInRoot.height + 0.5f >= onboardingMinPixels,
+        )
+        rule.onNodeWithTag("onboarding-complete")
+            .performScrollTo()
             .performClick()
 
         assertTrue(rule.onAllNodesWithTag("first-run-onboarding").fetchSemanticsNodes().isEmpty())
@@ -249,16 +256,41 @@ class MainActivityTest {
                 node.boundsInRoot.height + 0.5f >= minPixels,
             )
         }
-        val homeLocation = rule.onNodeWithTag("home-current-location")
+        listOf(
+            "home-current-location",
+            "home-open-search",
+            "home-open-journey",
+        ).forEach { tag ->
+            val node = rule.onNodeWithTag(tag)
+                .performScrollTo()
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+            assertTrue(
+                "$tag height=${node.boundsInRoot.height}px, required>=$minPixels",
+                node.boundsInRoot.height + 0.5f >= minPixels,
+            )
+        }
+        navigateTo("nav-search")
+        val searchAction = rule.onNodeWithTag("catalog-search-submit")
             .performScrollTo()
             .assertIsDisplayed()
             .fetchSemanticsNode()
         assertTrue(
-            "home-current-location height=${homeLocation.boundsInRoot.height}px, required>=$minPixels",
-            homeLocation.boundsInRoot.height + 0.5f >= minPixels,
+            "catalog-search-submit height=${searchAction.boundsInRoot.height}px, required>=$minPixels",
+            searchAction.boundsInRoot.height + 0.5f >= minPixels,
         )
         navigateTo("nav-settings")
-        listOf("theme-system", "theme-light", "theme-dark", "readiness-refresh").forEach { tag ->
+        listOf(
+            "theme-system",
+            "theme-light",
+            "theme-dark",
+            "readiness-permissions",
+            "readiness-guidance-permissions",
+            "readiness-refresh",
+            "readiness-app-settings",
+            "nationwide-index-download",
+            "connector-connect",
+        ).forEach { tag ->
             val node = rule.onNodeWithTag(tag)
                 .performScrollTo()
                 .assertIsDisplayed()
@@ -337,14 +369,21 @@ class MainActivityTest {
 
     private fun captureScreen(name: String) {
         rule.waitForIdle()
-        val root = rule.activity.getExternalFilesDir(null) ?: return
-        val dir = File(root, "ui-qa").apply { mkdirs() }
-        val file = File(dir, "$name.png")
-        val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-        FileOutputStream(file).use { output ->
-            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output)
+        val outputDir = "/sdcard/Download/arrival-alarm-ui-qa"
+        runShell("mkdir -p $outputDir")
+        runShell("screencap -p $outputDir/$name.png")
+    }
+
+    private fun runShell(command: String) {
+        val descriptor = InstrumentationRegistry.getInstrumentation()
+            .uiAutomation
+            .executeShellCommand(command)
+        ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { stream ->
+            val buffer = ByteArray(4096)
+            while (stream.read(buffer) != -1) {
+                // Drain stdout so the shell command has completed before the test continues.
+            }
         }
-        bitmap.recycle()
     }
 
     private fun navigateTo(tag: String) {

@@ -257,6 +257,7 @@ fun SettingsReadinessPanel(
                 onClick = onRequestJourneyPermissions,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 48.dp)
                     .testTag("readiness-permissions"),
             ) {
                 Text(stringResource(R.string.readiness_review_journey_permissions))
@@ -265,6 +266,7 @@ fun SettingsReadinessPanel(
                 onClick = onRequestGuidancePermissions,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 48.dp)
                     .testTag("readiness-guidance-permissions"),
             ) {
                 Text(stringResource(R.string.readiness_review_guidance_permissions))
@@ -273,6 +275,7 @@ fun SettingsReadinessPanel(
                 onClick = onRefreshReadiness,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 48.dp)
                     .testTag("readiness-refresh"),
             ) {
                 Text(stringResource(R.string.readiness_refresh))
@@ -281,6 +284,7 @@ fun SettingsReadinessPanel(
                 onClick = onOpenAppSettings,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 48.dp)
                     .testTag("readiness-app-settings"),
             ) {
                 Text(stringResource(R.string.readiness_open_app_settings))
@@ -293,6 +297,7 @@ fun SettingsReadinessPanel(
                     onClick = onRetryData,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .heightIn(min = 48.dp)
                         .testTag("nationwide-index-download"),
                 ) {
                     Text(stringResource(R.string.download_germany_index))
@@ -304,6 +309,7 @@ fun SettingsReadinessPanel(
                 enabled = !connectorBusy && state.connectorConfigured,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 48.dp)
                     .testTag(
                         if (state.connectorConnected) "connector-disconnect" else "connector-connect"
                     ),

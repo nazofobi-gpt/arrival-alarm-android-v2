@@ -57,12 +57,21 @@ jobs:
             set -eu
 
             adb shell wm size 412x915
+            adb shell wm density 160
             adb shell settings put system font_scale 1.0
+            adb shell rm -rf /sdcard/Download/arrival-alarm-ui-qa
             adb shell wm size
+            adb shell wm density
             adb shell settings get system font_scale
             ./gradlew --no-daemon connectedDebugAndroidTest
             mkdir -p app/build/outputs/androidTest-results/ui-qa
-            adb pull /sdcard/Android/data/com.nazofobi.arrivalalarm/files/ui-qa/. app/build/outputs/androidTest-results/ui-qa/ || true
+            adb shell ls -l /sdcard/Download/arrival-alarm-ui-qa
+            adb pull /sdcard/Download/arrival-alarm-ui-qa/. app/build/outputs/androidTest-results/ui-qa/
+            test -s app/build/outputs/androidTest-results/ui-qa/home.png
+            test -s app/build/outputs/androidTest-results/ui-qa/search.png
+            test -s app/build/outputs/androidTest-results/ui-qa/journey.png
+            test -s app/build/outputs/androidTest-results/ui-qa/departures.png
+            test -s app/build/outputs/androidTest-results/ui-qa/settings.png
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell pm clear com.nazofobi.arrivalalarm || true
             adb shell am start -W -n com.nazofobi.arrivalalarm/.MainActivity
@@ -83,8 +92,8 @@ jobs:
             mkdir -p app/build/outputs/androidTest-results/wide-window
             adb exec-out screencap -p > app/build/outputs/androidTest-results/wide-window/wide-1600x1000-readable-content.png
 
-            adb shell wm density reset
             adb shell wm size 412x915
+            adb shell wm density 160
             adb shell settings put system font_scale 2.0
             adb shell am force-stop com.nazofobi.arrivalalarm || true
             adb shell settings get system font_scale
@@ -97,6 +106,7 @@ jobs:
             adb exec-out screencap -p > app/build/outputs/androidTest-results/large-font/compact-412x915-font-200.png
 
             adb shell settings put system font_scale 1.0
+            adb shell wm density reset
             adb shell wm size reset
 
             bash .github/scripts/build-field-rc.sh

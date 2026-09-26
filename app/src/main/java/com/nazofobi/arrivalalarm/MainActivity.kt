@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -1055,7 +1056,7 @@ fun ArrivalAlarmApp(
                     Button(
                         onClick = { selectGuidanceLanguage(language) },
                         enabled = guidanceLanguage != language,
-                        modifier = Modifier.fillMaxWidth().testTag("guidance-language-${language.localeTag}"),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("guidance-language-${language.localeTag}"),
                     ) {
                         Text(
                             if (guidanceLanguage == language) stringResource(R.string.guidance_language_selected, language.displayName)
@@ -1065,7 +1066,7 @@ fun ArrivalAlarmApp(
                 }
                 Button(
                     onClick = { guidancePermissionLauncher.launch(AndroidGuidancePermissions.runtimePermissions()) },
-                    modifier = Modifier.testTag("guidance-permissions"),
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("guidance-permissions"),
                 ) { Text(stringResource(R.string.guidance_permissions)) }
                 Button(
                     onClick = {
@@ -1073,7 +1074,7 @@ fun ArrivalAlarmApp(
                         guidanceController.onAudioRoute(AndroidGuidanceAudio.currentRoute(context))
                         guidanceState = guidanceController.state
                     },
-                    modifier = Modifier.testTag("guidance-route-refresh"),
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("guidance-route-refresh"),
                 ) { Text(stringResource(R.string.guidance_refresh_route)) }
                 destination?.let { target ->
                     Button(
@@ -1088,7 +1089,7 @@ fun ArrivalAlarmApp(
                             guidanceState = guidanceController.state
                         },
                         enabled = guidanceState.permissionState != GuidancePermissionState.DENIED,
-                        modifier = Modifier.testTag("guidance-destination"),
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("guidance-destination"),
                     ) { Text(stringResource(R.string.guidance_speak_destination)) }
                 }
 
@@ -1141,7 +1142,7 @@ fun ArrivalAlarmApp(
                         }
                     },
                     enabled = inferenceEnabled && routeOptions.isNotEmpty() && origin != null,
-                    modifier = Modifier.testTag("trip-inference-run"),
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("trip-inference-run"),
                 ) { Text(stringResource(R.string.inference_run)) }
                 inferenceResult?.let { result ->
                     val accepted = result.accepted
@@ -1163,7 +1164,7 @@ fun ArrivalAlarmApp(
                                     routeStatus = localizedDomainMessage(context, selected.message)
                                 }
                             },
-                            modifier = Modifier.testTag("trip-inference-confirm"),
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("trip-inference-confirm"),
                         ) { Text(stringResource(R.string.inference_confirm)) }
                     }
                 }

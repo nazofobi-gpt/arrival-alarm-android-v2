@@ -3,6 +3,7 @@ package com.nazofobi.arrivalalarm
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -103,6 +104,7 @@ fun RouteJourneyPanel(
                             enabled = !routeBusy,
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .heightIn(min = 48.dp)
                                 .testTag("route-refresh"),
                         ) {
                             Text(
@@ -234,7 +236,7 @@ private fun RouteOptionCard(
             OutlinedButton(
                 onClick = onSelect,
                 enabled = !selected,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             ) {
                 Text(
                     if (selected) {
@@ -410,6 +412,7 @@ internal fun JourneyAlarmControls(
                 enabled = journey.phase == JourneyPhase.DESTINATION_SELECTED,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 48.dp)
                     .testTag("arm"),
             ) {
                 Text(stringResource(R.string.arm_alarm))
@@ -420,6 +423,7 @@ internal fun JourneyAlarmControls(
                     journey.phase == JourneyPhase.ARRIVED,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 48.dp)
                     .testTag("cancel-alarm"),
             ) {
                 Text(stringResource(R.string.cancel_alarm))
