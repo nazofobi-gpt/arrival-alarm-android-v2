@@ -26,14 +26,25 @@ node src/http-server.js
 
 `ALLOW_UNAUTHENTICATED_DEV=true` may only be used for isolated local MCP development. Device endpoints still require `DEV_DEVICE_BEARER_TOKEN`.
 
-## Production security gate
+## Production authentication
 
-Production mode intentionally fails closed until these are supplied by a production integration layer:
+The server has a provider-neutral JWT/OIDC resource-server gate. In production, configure:
 
-1. OAuth 2.1 user identity for the MCP endpoint.
-2. Device-bound authentication for Android state/command sync.
-3. Durable per-user state, command and receipt storage.
-4. HTTPS deployment and secret storage outside the repository.
-5. Revoke/disconnect handling.
+- `MCP_PUBLIC_BASE_URL`
+- `OAUTH_AUTHORIZATION_SERVER`
+- `OAUTH_ISSUER`
+- `OAUTH_AUDIENCE`
+- `OAUTH_JWKS_URL`
+
+MCP access tokens are verified against issuer, audience and JWKS. Read tools require `arrival.read`; write tools require `arrival.write`.
+
+Device sync uses the same verifier by default, or separate values via `DEVICE_OAUTH_ISSUER`, `DEVICE_OAUTH_AUDIENCE` and `DEVICE_OAUTH_JWKS_URL`. Device tokens must contain the `arrival.device` scope and a non-empty `device_id` claim.
+
+Production still requires deployment-specific infrastructure before end-to-end acceptance:
+
+1. An authorization server/client registration and device-token issuance flow.
+2. Durable per-user state, command and receipt storage.
+3. HTTPS hosting and secret/config storage outside the repository.
+4. Revoke/disconnect handling and operational audit/retention policy.
 
 Do not replace these gates with a hard-coded bearer token, API key in the APK, or anonymous public endpoints.

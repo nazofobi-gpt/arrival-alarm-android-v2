@@ -40,6 +40,7 @@ jobs:
 
       - name: Syntax check
         run: |
+          node --check src/auth.js
           node --check src/gateway-store.js
           node --check src/gateway-service.js
           node --check src/mcp-server.js

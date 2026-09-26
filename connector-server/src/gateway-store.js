@@ -24,11 +24,12 @@ export class InMemoryGatewayStore {
     this.commands = new Map();
   }
 
-  putSnapshot(userId, snapshot) {
+  putSnapshot(userId, snapshot, deviceId = null) {
     validateSnapshot(snapshot);
     const stored = {
       ...clone(snapshot),
       gateway_received_at_epoch_seconds: this.nowEpochSeconds(),
+      gateway_device_id: deviceId,
     };
     this.snapshots.set(userId, stored);
     return clone(stored);
@@ -39,7 +40,7 @@ export class InMemoryGatewayStore {
     return value ? clone(value) : null;
   }
 
-  enqueueCommand(userId, command, expectedStateVersion) {
+  enqueueCommand(userId, command, expectedStateVersion, deviceId = null) {
     if (!command?.type || !command?.idempotency_key) {
       throw new Error("invalid_command");
     }
@@ -53,6 +54,7 @@ export class InMemoryGatewayStore {
       user_confirmed: true,
       queued_at_epoch_seconds: this.nowEpochSeconds(),
       status: "queued",
+      device_id: deviceId,
       command: clone(command),
       receipt: null,
     };
@@ -61,16 +63,25 @@ export class InMemoryGatewayStore {
     return clone(envelope);
   }
 
-  pendingCommands(userId) {
-    return clone((this.commands.get(userId) ?? []).filter((item) => item.status === "queued"));
+  pendingCommands(userId, deviceId = null) {
+    return clone(
+      (this.commands.get(userId) ?? []).filter(
+        (item) =>
+          item.status === "queued" &&
+          (item.device_id == null || deviceId == null || item.device_id === deviceId)
+      )
+    );
   }
 
-  submitReceipt(userId, receipt) {
+  submitReceipt(userId, receipt, deviceId = null) {
     const queue = this.commands.get(userId) ?? [];
     const item = queue.find((candidate) =>
       candidate.command.idempotency_key === receipt?.idempotency_key
     );
     if (!item) throw new Error("command_not_found");
+    if (item.device_id != null && deviceId != null && item.device_id !== deviceId) {
+      throw new Error("device_mismatch");
+    }
     item.status = "completed";
     item.receipt = clone(receipt);
     item.completed_at_epoch_seconds = this.nowEpochSeconds();
