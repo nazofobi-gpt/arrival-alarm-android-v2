@@ -85,6 +85,12 @@ class MainActivityTest {
         rule.onNodeWithTag("arm").performScrollTo().assertIsDisplayed()
     }
 
+    @Test fun productionUiExposesInteractiveMapSurface() {
+        rule.onNodeWithTag("transit-map").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("map-instruction").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("map-provider").performScrollTo().assertIsDisplayed()
+    }
+
     @Test fun productionUiExposesNoLegacyFixtureControls() {
         assertTrue(rule.onAllNodesWithTag("search-airport").fetchSemanticsNodes().isEmpty())
         assertTrue(rule.onAllNodesWithTag("plan-airport").fetchSemanticsNodes().isEmpty())
