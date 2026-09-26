@@ -63,6 +63,14 @@ class ArrivalAlarmProcessGraph private constructor(context: Context) {
         onAlarmArmed = { ActiveJourneyService.tryStart(appContext) },
         onAlarmCancelled = { ActiveJourneyService.stop(appContext) },
     )
+    val connectorSessionStore = AndroidConnectorSessionStore(appContext)
+    private val connectorOAuthTransport = HttpConnectorOAuthTransport()
+    val connectorOAuth = ConnectorOAuthCoordinator(
+        sessionStore = connectorSessionStore,
+        transactionStore = AndroidConnectorOAuthTransactionStore(appContext),
+        deviceIdentityProvider = AndroidConnectorDeviceIdentityStore(appContext),
+        transport = connectorOAuthTransport,
+    )
     private val connectorRuntime = ConnectorRuntime(
         processor = ConnectorCommandProcessor(
             port = connectorPort,
@@ -70,7 +78,10 @@ class ArrivalAlarmProcessGraph private constructor(context: Context) {
                 appContext.getSharedPreferences("connector_idempotency", Context.MODE_PRIVATE)
             ),
         ),
-        sessionProvider = AndroidConnectorSessionStore(appContext),
+        sessionProvider = RefreshingConnectorSessionProvider(
+            store = connectorSessionStore,
+            oauth = connectorOAuth,
+        ),
     )
     val connectorRuntimeCoordinator = ConnectorRuntimeCoordinator(connectorRuntime)
 
