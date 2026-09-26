@@ -191,5 +191,21 @@
     <string name="departure_platform">Platform %1$s</string>
     <string name="departure_select">Select this departure</string>
     <string name="departure_cancelled">Service cancelled</string>
-
+    <string name="nav_home">Home</string>
+    <string name="nav_search">Search</string>
+    <string name="nav_journey">Trip</string>
+    <string name="nav_departures">Depart</string>
+    <string name="nav_settings">Settings</string>
+    <string name="home_overview_title">Start your journey</string>
+    <string name="home_overview_body">Use your current location, choose from nearby real stops, or open detailed search.</string>
+    <string name="home_origin_missing">Origin not selected yet</string>
+    <string name="home_destination_missing">Destination not selected yet</string>
+    <string name="home_search_action">Search stop, address or place</string>
+    <string name="home_journey_action">Open route options</string>
+    <string name="journey_empty_title">No route yet</string>
+    <string name="journey_empty_body">Choose an origin and destination first.</string>
+    <string name="journey_empty_action">Go to search</string>
+    <string name="departures_empty_title">Departure board not ready yet</string>
+    <string name="departures_empty_body">Choose a route or destination stop first.</string>
+    <string name="departures_empty_action">Plan a route</string>
 </resources>
