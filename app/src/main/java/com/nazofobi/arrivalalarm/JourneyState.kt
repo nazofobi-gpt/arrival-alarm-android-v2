@@ -50,6 +50,20 @@ class JourneyController(
         update(state.copy(phase = JourneyPhase.ARMED, error = null))
     }
 
+    fun cancelAlarm() {
+        if (state.start == null || state.destination == null) {
+            update(state.copy(error = "İptal edilecek kurulu alarm yok"))
+            return
+        }
+        update(
+            state.copy(
+                phase = JourneyPhase.DESTINATION_SELECTED,
+                distanceMeters = null,
+                error = null,
+            )
+        )
+    }
+
     fun onDistanceChanged(distanceMeters: Double) {
         if (state.phase != JourneyPhase.ARMED) return
         update(
