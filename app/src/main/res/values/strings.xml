@@ -62,6 +62,8 @@
     <string name="location_not_ready">Konum henüz hazır değil</string>
     <string name="origin_format">Başlangıç: %1$s</string>
     <string name="destination_format">Varış: %1$s</string>
+    <string name="restored_origin">Kaydedilmiş başlangıç</string>
+    <string name="restored_destination">Kaydedilmiş varış</string>
     <string name="nearby_stops">En yakın duraklar</string>
     <string name="nearby_stop_format">%1$s • %2$s • %3$d m</string>
 

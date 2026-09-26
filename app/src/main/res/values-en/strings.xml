@@ -59,6 +59,8 @@
     <string name="location_not_ready">Location is not ready yet</string>
     <string name="origin_format">Origin: %1$s</string>
     <string name="destination_format">Destination: %1$s</string>
+    <string name="restored_origin">Saved origin</string>
+    <string name="restored_destination">Saved destination</string>
     <string name="nearby_stops">Nearest stops</string>
     <string name="nearby_stop_format">%1$s • %2$s • %3$d m</string>
     <string name="route_calculating">Calculating route…</string>

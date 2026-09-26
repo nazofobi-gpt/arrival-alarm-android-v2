@@ -65,6 +65,26 @@ class MainActivityTest {
         rule.onNodeWithTag("cancel-alarm").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
     }
 
+    @Test fun journeyCoordinatesRestoreIntoProductionUiAfterRecreation() {
+        rule.activityRule.scenario.onActivity { activity ->
+            SharedPreferencesJourneyStateStore(activity).save(
+                JourneyUiState(
+                    phase = JourneyPhase.DESTINATION_SELECTED,
+                    start = GeoPoint(52.665, 8.237),
+                    destination = GeoPoint(53.083, 8.813),
+                )
+            )
+            ArrivalAlarmRuntimeGraph.resetForTests()
+        }
+
+        rule.activityRule.scenario.recreate()
+        rule.waitForIdle()
+
+        rule.onNodeWithTag("origin-label").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("destination-label").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("arm").performScrollTo().assertIsDisplayed()
+    }
+
     @Test fun productionUiExposesNoLegacyFixtureControls() {
         assertTrue(rule.onAllNodesWithTag("search-airport").fetchSemanticsNodes().isEmpty())
         assertTrue(rule.onAllNodesWithTag("plan-airport").fetchSemanticsNodes().isEmpty())
