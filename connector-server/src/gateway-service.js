@@ -83,7 +83,9 @@ export class GatewayService {
 
   #isStale(snapshot) {
     const staleAfter = Number(snapshot.stale_after_seconds ?? 120);
-    const updatedAt = Number(snapshot.source_updated_at_epoch_seconds ?? 0);
-    return updatedAt <= 0 || this.nowEpochSeconds() - updatedAt > staleAfter;
+    // Device freshness is based on when this gateway actually received a snapshot.
+    // Domain values may remain unchanged for minutes during an idle journey screen.
+    const receivedAt = Number(snapshot.gateway_received_at_epoch_seconds ?? 0);
+    return receivedAt <= 0 || this.nowEpochSeconds() - receivedAt > staleAfter;
   }
 }
