@@ -32,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -106,16 +107,20 @@ fun ArrivalAlarmApp() {
     var routeOptions by remember { mutableStateOf(emptyList<RouteOption>()) }
     var routeStatus by remember { mutableStateOf<String?>(null) }
     var routeBusy by remember { mutableStateOf(false) }
+    val routeOptionsState = rememberUpdatedState(routeOptions)
+    val connectorPort = remember(controller) {
+        JourneyConnectorActionPort(
+            controller = controller,
+            routeResolver = { routeId ->
+                routeOptionsState.value.firstOrNull { it.id == routeId }
+            },
+        )
+    }
     val routeCache = remember { OfflineTransitCache() }
     var guidanceState by remember { mutableStateOf(guidanceController.state) }
     var inferenceEnabled by remember { mutableStateOf(false) }
     var inferenceResult by remember { mutableStateOf<TripInferenceResult?>(null) }
     var confirmedTripId by remember { mutableStateOf<String?>(null) }
-
-    fun act(block: JourneyController.() -> Unit) {
-        controller.block()
-        journey = controller.state
-    }
 
     fun loadNearby(point: MapPoint) {
         transit.nearbyStops(point.latitude, point.longitude) { values, source ->
@@ -130,7 +135,8 @@ fun ArrivalAlarmApp() {
         routeOptions = emptyList()
         routeStatus = null
         selectingOrigin = false
-        act { selectStart(GeoPoint(point.latitude, point.longitude)) }
+        connectorPort.setOrigin(point)
+        journey = controller.state
         loadNearby(point)
     }
 
@@ -161,8 +167,13 @@ fun ArrivalAlarmApp() {
         if (currentOrigin == null) {
             setOrigin(point)
         } else {
+            val outcome = connectorPort.setDestination(point)
+            journey = controller.state
+            if (!outcome.applied) {
+                routeStatus = outcome.message
+                return
+            }
             destination = point
-            act { selectDestination(GeoPoint(point.latitude, point.longitude)) }
             loadRoutes(currentOrigin, point)
         }
     }
@@ -364,7 +375,10 @@ fun ArrivalAlarmApp() {
                 Text("Durum: ${journey.phase}", modifier = Modifier.testTag("phase"))
                 journey.error?.let { Text(it, modifier = Modifier.testTag("error")) }
                 Button(
-                    onClick = { act { arm() } },
+                    onClick = {
+                        connectorPort.armArrivalAlarm()
+                        journey = controller.state
+                    },
                     enabled = journey.phase == JourneyPhase.DESTINATION_SELECTED,
                     modifier = Modifier.testTag("arm"),
                 ) { Text("Varış alarmını kur") }
@@ -455,7 +469,15 @@ fun ArrivalAlarmApp() {
                         )
                         Text(accepted.explanation, modifier = Modifier.testTag("trip-inference-explanation"))
                         Button(
-                            onClick = { confirmedTripId = accepted.candidate.routeId },
+                            onClick = {
+                                val selected = connectorPort.selectJourney(accepted.candidate.routeId)
+                                if (selected.applied) {
+                                    confirmedTripId = accepted.candidate.routeId
+                                    journey = controller.state
+                                } else {
+                                    routeStatus = selected.message
+                                }
+                            },
                             modifier = Modifier.testTag("trip-inference-confirm"),
                         ) { Text("Bu seferdeyim") }
                     }
