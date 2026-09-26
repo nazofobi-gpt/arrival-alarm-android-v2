@@ -61,6 +61,7 @@ jobs:
             adb shell wm size
             adb shell settings get system font_scale
             ./gradlew --no-daemon connectedDebugAndroidTest
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell pm clear com.nazofobi.arrivalalarm || true
             adb shell am start -W -n com.nazofobi.arrivalalarm/.MainActivity
             sleep 1
@@ -73,6 +74,7 @@ jobs:
             adb shell wm size
             adb shell wm density
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.MainActivityTest#wideWindowKeepsPrimaryContentAtReadableWidth
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell pm clear com.nazofobi.arrivalalarm || true
             adb shell am start -W -n com.nazofobi.arrivalalarm/.MainActivity
             sleep 1
@@ -85,6 +87,7 @@ jobs:
             adb shell am force-stop com.nazofobi.arrivalalarm || true
             adb shell settings get system font_scale
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.MainActivityTest#largeFontKeepsCriticalJourneyControlsReachable
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell pm clear com.nazofobi.arrivalalarm || true
             adb shell am start -W -n com.nazofobi.arrivalalarm/.MainActivity
             sleep 1
