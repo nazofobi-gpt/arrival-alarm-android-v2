@@ -44,7 +44,7 @@ fun HomeSearchPanel(
     onUseCurrentLocation: () -> Unit,
     onMapStopSelected: (CatalogStop) -> Unit,
     onMapPointSelected: (MapPoint) -> Unit,
-    onMapError: () -> Unit,
+    onMapError: (String) -> Unit,
     onNearbyStopSelected: (NearbyStop) -> Unit,
     modifier: Modifier = Modifier,
 ) {
