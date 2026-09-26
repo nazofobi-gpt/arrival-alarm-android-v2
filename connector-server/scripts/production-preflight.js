@@ -99,7 +99,11 @@ function validateToolContract(tools) {
     assert.equal(tool.annotations?.readOnlyHint, true, name);
     assert.equal(tool.annotations?.destructiveHint, false, name);
     assert.equal(tool.annotations?.openWorldHint, false, name);
-    assert.deepEqual(tool.securitySchemes, [
+    const schemes =
+      tool.securitySchemes?.length > 0
+        ? tool.securitySchemes
+        : tool._meta?.securitySchemes ?? [];
+    assert.deepEqual(schemes, [
       { type: "oauth2", scopes: ["arrival.read"] },
     ]);
   }
@@ -109,7 +113,11 @@ function validateToolContract(tools) {
     assert.equal(tool.annotations?.readOnlyHint, false, name);
     assert.equal(tool.annotations?.destructiveHint, false, name);
     assert.equal(tool.annotations?.openWorldHint, false, name);
-    assert.deepEqual(tool.securitySchemes, [
+    const schemes =
+      tool.securitySchemes?.length > 0
+        ? tool.securitySchemes
+        : tool._meta?.securitySchemes ?? [];
+    assert.deepEqual(schemes, [
       { type: "oauth2", scopes: ["arrival.write"] },
     ]);
   }
