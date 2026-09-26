@@ -45,12 +45,13 @@
     <string name="select_origin">Başlangıç seç</string>
     <string name="selecting_destination">Varış seçiliyor</string>
     <string name="select_destination">Varış seç</string>
-    <string name="search_stops_label">Almanya\'da durak ara</string>
+    <string name="search_stops_label">Durak, adres veya yer ara</string>
     <string name="searching">Aranıyor…</string>
     <string name="search_action">Ara</string>
     <string name="source_format">Kaynak: %1$s</string>
     <string name="no_stop_found">Durak bulunamadı</string>
     <string name="search_result_format">%1$s • %2$s</string>
+    <string name="search_location_result_format">%1$s • %2$s • %3$s</string>
     <string name="current_location_origin">Mevcut konumu başlangıç yap</string>
     <string name="current_location_label">Mevcut konum</string>
     <string name="getting_location">Konum alınıyor…</string>
@@ -136,4 +137,14 @@
     <string name="min_two_chars">En az 2 karakter yaz</string>
     <string name="unknown_error">bilinmeyen hata</string>
     <string name="unknown_time">zaman bilinmiyor</string>
+
+    <string name="map_title">Haritadan seç</string>
+    <string name="map_instruction_origin">Haritada bir noktaya dokunarak başlangıç seçin; yakın durak işaretlerine de dokunabilirsiniz.</string>
+    <string name="map_instruction_destination">Haritada bir noktaya dokunarak varış seçin; yakın durak işaretlerine de dokunabilirsiniz.</string>
+    <string name="map_point_label">Harita noktası</string>
+    <string name="map_load_failed">Harita yüklenemedi • arama ve durak listesi kullanılabilir</string>
+    <string name="map_provider_note">Harita: OpenFreeMap • MapLibre</string>
+    <string name="location_kind_stop">Durak</string>
+    <string name="location_kind_address">Adres</string>
+    <string name="location_kind_poi">Nokta/POI</string>
 </resources>

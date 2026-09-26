@@ -141,7 +141,7 @@ fun ArrivalAlarmApp(
     var dataState by remember { mutableStateOf(transit.currentState()) }
     var query by remember { mutableStateOf("") }
     var searchBusy by remember { mutableStateOf(false) }
-    var searchResults by remember { mutableStateOf(emptyList<CatalogStop>()) }
+    var searchResults by remember { mutableStateOf(emptyList<TransitLocationResult>()) }
     var searchSource by remember { mutableStateOf<String?>(null) }
     var searchMessage by remember { mutableStateOf<String?>(null) }
     var searchRequestId by remember { mutableStateOf(0L) }
@@ -164,6 +164,7 @@ fun ArrivalAlarmApp(
     var nearby by remember { mutableStateOf(emptyList<NearbyStop>()) }
     var nearbySource by remember { mutableStateOf<String?>(null) }
     var locationMessage by remember { mutableStateOf<String?>(null) }
+    var mapMessage by remember { mutableStateOf<String?>(null) }
     var routeOptions by remember { mutableStateOf(emptyList<RouteOption>()) }
     var routeStatus by remember { mutableStateOf<String?>(null) }
     var routeOffline by remember { mutableStateOf(false) }
@@ -294,8 +295,7 @@ fun ArrivalAlarmApp(
         }
     }
 
-    fun setDestination(stop: CatalogStop) {
-        val point = MapPoint(stop.latitude, stop.longitude, stop.name)
+    fun setDestinationPoint(point: MapPoint, stopId: String? = null) {
         val currentOrigin = origin
         if (currentOrigin == null) {
             setOrigin(point)
@@ -307,11 +307,19 @@ fun ArrivalAlarmApp(
                 return
             }
             destination = point
-            destinationStopId = stop.id
+            destinationStopId = stopId
+            routeOffline = false
             routeOptions = emptyList()
             graph.routeRegistry.clear()
             loadRoutes(currentOrigin, point)
         }
+    }
+
+    fun setDestination(stop: CatalogStop) {
+        setDestinationPoint(
+            point = MapPoint(stop.latitude, stop.longitude, stop.name),
+            stopId = stop.id,
+        )
     }
 
     fun runSearch(rawQuery: String = query) {
@@ -321,7 +329,7 @@ fun ArrivalAlarmApp(
         searchRequestId = requestId
         searchBusy = true
         searchMessage = null
-        transit.searchStops(q) callback@{ values, source ->
+        transit.searchLocations(q) callback@{ values, source ->
             if (requestId != searchRequestId) return@callback
             searchBusy = false
             searchResults = values
@@ -573,16 +581,30 @@ fun ArrivalAlarmApp(
                 searchSource?.let { Text(stringResource(R.string.source_format, it), modifier = Modifier.testTag("search-source")) }
                 searchMessage?.let { Text(it, modifier = Modifier.testTag("search-message")) }
 
-                searchResults.take(12).forEachIndexed { index, stop ->
+                searchResults.take(12).forEachIndexed { index, result ->
                     Button(
                         onClick = {
-                            val point = MapPoint(stop.latitude, stop.longitude, stop.name)
-                            if (selectingOrigin) setOrigin(point) else setDestination(stop)
+                            if (selectingOrigin) {
+                                setOrigin(result.point)
+                            } else {
+                                setDestinationPoint(result.point, result.stop?.id)
+                            }
                         },
                         modifier = Modifier.fillMaxWidth().testTag("search-result-$index"),
                     ) {
-                        val action = if (selectingOrigin) stringResource(R.string.select_origin) else stringResource(R.string.select_destination)
-                        Text(stringResource(R.string.search_result_format, action, stop.name))
+                        val action = if (selectingOrigin) {
+                            stringResource(R.string.select_origin)
+                        } else {
+                            stringResource(R.string.select_destination)
+                        }
+                        Text(
+                            stringResource(
+                                R.string.search_location_result_format,
+                                action,
+                                transitLocationKindText(result.kind),
+                                result.label,
+                            )
+                        )
                     }
                 }
 
@@ -603,6 +625,51 @@ fun ArrivalAlarmApp(
                 destination?.let {
                     Text(stringResource(R.string.destination_format, it.label), modifier = Modifier.testTag("destination-label"))
                 }
+
+                Text(
+                    stringResource(R.string.map_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.semantics { heading() },
+                )
+                Text(
+                    if (selectingOrigin) stringResource(R.string.map_instruction_origin)
+                    else stringResource(R.string.map_instruction_destination),
+                    modifier = Modifier.testTag("map-instruction"),
+                )
+                val mapCenter = origin ?: destination ?: MapPoint(
+                    latitude = 51.1657,
+                    longitude = 10.4515,
+                    label = "Deutschland",
+                )
+                TransitSelectionMap(
+                    center = mapCenter,
+                    nearbyStops = nearby,
+                    origin = origin,
+                    destination = destination,
+                    mapPointLabel = stringResource(R.string.map_point_label),
+                    onStopSelected = { stop ->
+                        if (selectingOrigin) {
+                            setOrigin(MapPoint(stop.latitude, stop.longitude, stop.name))
+                        } else {
+                            setDestination(stop)
+                        }
+                    },
+                    onMapPointSelected = { point ->
+                        if (selectingOrigin) setOrigin(point)
+                        else setDestinationPoint(point)
+                    },
+                    onMapError = {
+                        mapMessage = context.getString(R.string.map_load_failed)
+                    },
+                )
+                mapMessage?.let {
+                    Text(it, modifier = Modifier.testTag("map-status"))
+                }
+                Text(
+                    stringResource(R.string.map_provider_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.testTag("map-provider"),
+                )
 
                 if (nearby.isNotEmpty()) {
                     Text(stringResource(R.string.nearby_stops), style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
@@ -868,6 +935,15 @@ private fun localizedDomainMessage(context: Context, raw: String?): String {
         else -> raw
     }
 }
+
+@Composable
+private fun transitLocationKindText(kind: TransitLocationKind): String = stringResource(
+    when (kind) {
+        TransitLocationKind.STOP -> R.string.location_kind_stop
+        TransitLocationKind.ADDRESS -> R.string.location_kind_address
+        TransitLocationKind.POI -> R.string.location_kind_poi
+    }
+)
 
 @Composable
 private fun journeyPhaseText(phase: JourneyPhase): String = stringResource(
