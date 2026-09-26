@@ -32,7 +32,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -79,7 +78,10 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun ArrivalAlarmApp() {
     val context = LocalContext.current.applicationContext
-    val controller = remember { JourneyController(stateStore = SharedPreferencesJourneyStateStore(context)) }
+    val graph = remember(context) { ArrivalAlarmRuntimeGraph.get(context) }
+    val controller = graph.controller
+    val connectorPort = graph.connectorPort
+    val connectorRuntimeCoordinator = graph.connectorRuntimeCoordinator
     val transit = remember { NationwideTransitGateway(context) }
     val currentLocation = remember { AndroidCurrentLocation(context) }
     val guidanceSpeaker = remember { AndroidTextToSpeechSpeaker(context) }
@@ -107,27 +109,6 @@ fun ArrivalAlarmApp() {
     var routeOptions by remember { mutableStateOf(emptyList<RouteOption>()) }
     var routeStatus by remember { mutableStateOf<String?>(null) }
     var routeBusy by remember { mutableStateOf(false) }
-    val routeOptionsState = rememberUpdatedState(routeOptions)
-    val connectorPort = remember(controller) {
-        JourneyConnectorActionPort(
-            controller = controller,
-            routeResolver = { routeId ->
-                routeOptionsState.value.firstOrNull { it.id == routeId }
-            },
-        )
-    }
-    val connectorRuntime = remember(connectorPort, context) {
-        val idempotencyStore = SharedPreferencesConnectorIdempotencyStore(
-            context.getSharedPreferences("connector_idempotency", Context.MODE_PRIVATE)
-        )
-        ConnectorRuntime(
-            processor = ConnectorCommandProcessor(
-                port = connectorPort,
-                idempotencyStore = idempotencyStore,
-            ),
-            sessionProvider = AndroidConnectorSessionStore(context),
-        )
-    }
     val routeCache = remember { OfflineTransitCache() }
     var guidanceState by remember { mutableStateOf(guidanceController.state) }
     var inferenceEnabled by remember { mutableStateOf(false) }
@@ -145,6 +126,7 @@ fun ArrivalAlarmApp() {
         origin = point
         destination = null
         routeOptions = emptyList()
+        graph.routeRegistry.clear()
         routeStatus = null
         selectingOrigin = false
         connectorPort.setOrigin(point)
@@ -163,11 +145,13 @@ fun ArrivalAlarmApp() {
             routeBusy = false
             if (options.isNotEmpty()) {
                 routeOptions = options
+                graph.routeRegistry.replace(options)
                 routeStatus = status
                 routeCache.put(CachedTransitPlan(key, options, emptyList(), System.currentTimeMillis() / 1000))
             } else {
                 val cached = routeCache.routeOptions(key)
                 routeOptions = cached
+                graph.routeRegistry.replace(cached)
                 routeStatus = if (cached.isNotEmpty()) "Canlı rota yok • son başarılı çevrimdışı rota" else status
             }
         }
@@ -186,6 +170,8 @@ fun ArrivalAlarmApp() {
                 return
             }
             destination = point
+            routeOptions = emptyList()
+            graph.routeRegistry.clear()
             loadRoutes(currentOrigin, point)
         }
     }
@@ -218,11 +204,32 @@ fun ArrivalAlarmApp() {
         }
     }
 
+    fun armAndStartTracking() {
+        val outcome = connectorPort.armArrivalAlarm()
+        journey = controller.state
+        if (!outcome.applied) {
+            routeStatus = outcome.message
+            return
+        }
+        ActiveJourneyService.start(context)
+        routeStatus = "Varış alarmı ve arka plan konum takibi etkin"
+    }
+
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
         if (result.values.any { it }) useCurrentLocation()
         else locationMessage = "Konum izni reddedildi; durak araması yine kullanılabilir"
+    }
+
+    val alarmPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        if (ActiveJourneyPermissions.hasRequired(context)) {
+            armAndStartTracking()
+        } else {
+            routeStatus = "Varış alarmı için konum ve bildirim izni gerekli"
+        }
     }
 
     val guidancePermissionLauncher = rememberLauncherForActivityResult(
@@ -252,9 +259,9 @@ fun ArrivalAlarmApp() {
         runSearch(q)
     }
 
-    DisposableEffect(connectorRuntime) {
-        connectorRuntime.start()
-        onDispose { connectorRuntime.close() }
+    DisposableEffect(connectorRuntimeCoordinator) {
+        connectorRuntimeCoordinator.acquire("arrival-app-ui")
+        onDispose { connectorRuntimeCoordinator.release("arrival-app-ui") }
     }
 
     DisposableEffect(Unit) {
@@ -393,12 +400,29 @@ fun ArrivalAlarmApp() {
                 journey.error?.let { Text(it, modifier = Modifier.testTag("error")) }
                 Button(
                     onClick = {
-                        connectorPort.armArrivalAlarm()
-                        journey = controller.state
+                        if (ActiveJourneyPermissions.hasRequired(context)) {
+                            armAndStartTracking()
+                        } else {
+                            alarmPermissionLauncher.launch(ActiveJourneyPermissions.runtimePermissions())
+                        }
                     },
                     enabled = journey.phase == JourneyPhase.DESTINATION_SELECTED,
                     modifier = Modifier.testTag("arm"),
                 ) { Text("Varış alarmını kur") }
+                Button(
+                    onClick = {
+                        val outcome = connectorPort.cancelArrivalAlarm()
+                        journey = controller.state
+                        if (outcome.applied) {
+                            ActiveJourneyService.stop(context)
+                            routeStatus = "Varış alarmı iptal edildi"
+                        } else {
+                            routeStatus = outcome.message
+                        }
+                    },
+                    enabled = journey.phase == JourneyPhase.ARMED || journey.phase == JourneyPhase.ARRIVED,
+                    modifier = Modifier.testTag("cancel-alarm"),
+                ) { Text("Varış alarmını iptal et") }
 
                 Text("Sesli yönlendirme", style = MaterialTheme.typography.titleMedium)
                 Text(guidanceState.status, modifier = Modifier.testTag("guidance-status"))
