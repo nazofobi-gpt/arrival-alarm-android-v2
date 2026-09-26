@@ -32,7 +32,7 @@ class ActiveJourneyServiceInstrumentedTest {
         assertTrue(
             info.foregroundServiceType and ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION != 0
         )
-
+    }
 
     @Test fun manifestUsesForegroundLocationWithoutBackgroundLocationGrant() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
@@ -49,6 +49,5 @@ class ActiveJourneyServiceInstrumentedTest {
 
         assertTrue(Manifest.permission.FOREGROUND_SERVICE_LOCATION in requested)
         assertFalse(Manifest.permission.ACCESS_BACKGROUND_LOCATION in requested)
-    }
     }
 }
