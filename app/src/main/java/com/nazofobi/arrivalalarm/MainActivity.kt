@@ -95,6 +95,7 @@ fun ArrivalAlarmApp() {
     val screenAssistRealtimeSession = remember { ScreenAssistRealtimeSession() }
     val screenAssistUiController = remember { ScreenAssistUiController() }
     val screenAssistRuntime = remember { ScreenAssistCaptureRuntime(context) }
+    val screenAssistBrokerCredentials = remember { ScreenAssistBrokerCredentialStore(context) }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val screenAssistRealtimeRuntime = remember {
         ScreenAssistRealtimeRuntime(
@@ -104,7 +105,10 @@ fun ArrivalAlarmApp() {
                 check(brokerUrl.isNotEmpty()) {
                     "Screen Assist token broker is not configured"
                 }
-                ScreenAssistBrokerTransport(brokerUrl).requestTokenResponse()
+                ScreenAssistBrokerTransport(
+                    brokerUrl = brokerUrl,
+                    authTokenProvider = { screenAssistBrokerCredentials.read() },
+                ).requestTokenResponse()
             },
             socketFactory = { ScreenAssistOpenAiWebRtcSocket(context) },
         )
@@ -132,6 +136,10 @@ fun ArrivalAlarmApp() {
     var inferenceEnabled by remember { mutableStateOf(false) }
     var inferenceResult by remember { mutableStateOf<TripInferenceResult?>(null) }
     var confirmedTripId by remember { mutableStateOf<String?>(null) }
+    var screenAssistBrokerConfigured by remember {
+        mutableStateOf(screenAssistBrokerCredentials.hasCredential())
+    }
+    var screenAssistBrokerCredentialDraft by remember { mutableStateOf("") }
     var screenAssistGuidance by remember { mutableStateOf<String?>(null) }
     var screenAssistUiState by remember {
         mutableStateOf(
@@ -387,6 +395,29 @@ fun ArrivalAlarmApp() {
                         screenAssistRealtimeRuntime.stop()
                         screenAssistRuntime.stop()
                         screenAssistSession.stop()
+                        screenAssistGuidance = null
+                        refreshScreenAssistUi()
+                    },
+                    brokerCredentialConfigured = screenAssistBrokerConfigured,
+                    brokerCredentialDraft = screenAssistBrokerCredentialDraft,
+                    onBrokerCredentialDraftChange = { screenAssistBrokerCredentialDraft = it },
+                    onSaveBrokerCredential = {
+                        val saved = runCatching {
+                            screenAssistBrokerCredentials.save(screenAssistBrokerCredentialDraft)
+                        }.isSuccess
+                        if (saved) {
+                            screenAssistBrokerCredentialDraft = ""
+                            screenAssistBrokerConfigured = true
+                        }
+                    },
+                    onClearBrokerCredential = {
+                        ScreenAssistRuntimeBridge.detach()
+                        screenAssistRealtimeRuntime.stop()
+                        screenAssistRuntime.stop()
+                        screenAssistSession.stop()
+                        screenAssistBrokerCredentials.clear()
+                        screenAssistBrokerConfigured = false
+                        screenAssistBrokerCredentialDraft = ""
                         screenAssistGuidance = null
                         refreshScreenAssistUi()
                     },
