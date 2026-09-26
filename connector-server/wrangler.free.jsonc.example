@@ -27,7 +27,6 @@
     "DEVICE_OAUTH_REVOCATION_ENDPOINT": "https://YOUR_AUTH0_DOMAIN/oauth/revoke",
     "DEVICE_OAUTH_CLIENT_ID": "REPLACE_WITH_ANDROID_NATIVE_CLIENT_ID",
     "DEVICE_OAUTH_SCOPES": "arrival.device offline_access",
-    "DEVICE_OAUTH_RESOURCE": "https://arrival-alarm-api",
     "DEVICE_OAUTH_DEVICE_ID_PARAMETER": "ext-device_id",
     "DEVICE_OAUTH_DEVICE_ID_CLAIM": "https://arrival-alarm.app/device_id"
   }
