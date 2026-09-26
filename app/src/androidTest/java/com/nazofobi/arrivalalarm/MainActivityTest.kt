@@ -25,9 +25,30 @@ class MainActivityTest {
             ArrivalAlarmRuntimeGraph.resetForTests()
             activity.getSharedPreferences("journey_state", Context.MODE_PRIVATE).edit().clear().commit()
             activity.getSharedPreferences("guidance_state", Context.MODE_PRIVATE).edit().clear().commit()
+            activity.getSharedPreferences("app_preferences", Context.MODE_PRIVATE).edit().clear().commit()
         }
         rule.activityRule.scenario.recreate()
         rule.waitForIdle()
+    }
+
+    @Test fun firstRunOnboardingExplainsConsentAndPersistsCompletion() {
+        rule.onNodeWithTag("first-run-onboarding")
+            .performScrollTo()
+            .assertIsDisplayed()
+        rule.onNodeWithTag("onboarding-privacy-note")
+            .performScrollTo()
+            .assertIsDisplayed()
+        rule.onNodeWithTag("onboarding-complete")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+
+        assertTrue(rule.onAllNodesWithTag("first-run-onboarding").fetchSemanticsNodes().isEmpty())
+
+        rule.activityRule.scenario.recreate()
+        rule.waitForIdle()
+
+        assertTrue(rule.onAllNodesWithTag("first-run-onboarding").fetchSemanticsNodes().isEmpty())
     }
 
     @Test fun launchExposesRealNationwideSearchAndLocationControls() {

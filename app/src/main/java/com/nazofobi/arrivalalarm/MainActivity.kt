@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -116,6 +117,9 @@ fun ArrivalAlarmApp(
     val coroutineScope = rememberCoroutineScope()
     val transit = remember { NationwideTransitGateway(context) }
     val currentLocation = remember { AndroidCurrentLocation(context) }
+    val appPreferences = remember(context) {
+        context.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+    }
     val guidanceSpeaker = remember { AndroidTextToSpeechSpeaker(context) }
     val guidancePreferences = remember(context) {
         context.getSharedPreferences("guidance_state", Context.MODE_PRIVATE)
@@ -128,6 +132,9 @@ fun ArrivalAlarmApp(
     }
 
     var journey by remember { mutableStateOf(controller.state) }
+    var onboardingComplete by remember {
+        mutableStateOf(appPreferences.getBoolean("onboarding_complete", false))
+    }
     var dataState by remember { mutableStateOf(transit.currentState()) }
     var query by remember { mutableStateOf("") }
     var searchBusy by remember { mutableStateOf(false) }
@@ -424,6 +431,42 @@ fun ArrivalAlarmApp(
             ) {
                 Text("Varış Alarmı", style = MaterialTheme.typography.headlineMedium)
                 Text("Almanya transit arama", style = MaterialTheme.typography.titleMedium)
+
+                if (!onboardingComplete) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().testTag("first-run-onboarding"),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text("İlk kullanım", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "1. Başlangıç ve varışı seçin. 2. Rotayı kontrol edin. " +
+                                    "3. Varış alarmını siz etkinleştirin."
+                            )
+                            Text(
+                                "Konum izni yalnız konum/aktif yolculuk özellikleri için istenir. " +
+                                    "ChatGPT bağlantısı isteğe bağlıdır ve ayrıca kurulabilir."
+                            )
+                            Text(
+                                "Alarm kurulmadan arka plan yolculuk takibi başlatılmaz.",
+                                modifier = Modifier.testTag("onboarding-privacy-note"),
+                            )
+                            Button(
+                                onClick = {
+                                    appPreferences.edit()
+                                        .putBoolean("onboarding_complete", true)
+                                        .apply()
+                                    onboardingComplete = true
+                                },
+                                modifier = Modifier.testTag("onboarding-complete"),
+                            ) {
+                                Text("Anladım, devam et")
+                            }
+                        }
+                    }
+                }
 
                 Text("ChatGPT bağlantısı", style = MaterialTheme.typography.titleMedium)
                 Text(
