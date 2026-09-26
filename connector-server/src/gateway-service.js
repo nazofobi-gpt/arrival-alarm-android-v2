@@ -19,6 +19,11 @@ export class GatewayService {
   getTripProgress(userId) {
     const snapshot = this.#requiredSnapshot(userId);
     const trip = snapshot.active_trip ?? {};
+    const progressUpdatedAt = Number(trip.progress_updated_at_epoch_seconds ?? 0);
+    const progressStaleAfter = Number(snapshot.stale_after_seconds ?? 120);
+    const progressStale =
+      progressUpdatedAt <= 0 ||
+      this.nowEpochSeconds() - progressUpdatedAt > progressStaleAfter;
     return {
       state_version: snapshot.state_version,
       stale: this.#isStale(snapshot),
@@ -35,6 +40,7 @@ export class GatewayService {
       timing_basis: trip.timing_basis ?? null,
       progress_source: trip.progress_source ?? null,
       progress_updated_at_epoch_seconds: trip.progress_updated_at_epoch_seconds ?? null,
+      progress_stale: progressStale,
       scheduled_arrival_epoch_seconds: trip.scheduled_arrival_epoch_seconds ?? null,
       estimated_arrival_epoch_seconds: trip.estimated_arrival_epoch_seconds ?? null,
     };
