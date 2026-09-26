@@ -59,6 +59,15 @@ jobs:
             ./gradlew --no-daemon connectedDebugAndroidTest
             mkdir -p app/build/outputs/androidTest-results/compact-screen
             adb exec-out screencap -p > app/build/outputs/androidTest-results/compact-screen/compact-412x915-normal-text.png
+
+            adb shell settings put system font_scale 2.0
+            adb shell am force-stop com.nazofobi.arrivalalarm || true
+            adb shell settings get system font_scale
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.MainActivityTest#largeFontKeepsCriticalJourneyControlsReachable
+            mkdir -p app/build/outputs/androidTest-results/large-font
+            adb exec-out screencap -p > app/build/outputs/androidTest-results/large-font/compact-412x915-font-200.png
+
+            adb shell settings put system font_scale 1.0
             adb shell wm size reset
 
       - name: Upload API 36 diagnostics
