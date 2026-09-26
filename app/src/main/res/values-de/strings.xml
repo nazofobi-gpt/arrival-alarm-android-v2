@@ -133,6 +133,7 @@
     <string name="map_instruction_origin">Tippen Sie auf die Karte, um den Start zu wählen; nahe Haltestellenmarker sind ebenfalls auswählbar.</string>
     <string name="map_instruction_destination">Tippen Sie auf die Karte, um das Ziel zu wählen; nahe Haltestellenmarker sind ebenfalls auswählbar.</string>
     <string name="map_point_label">Kartenpunkt</string>
+    <string name="map_load_failed">Karte konnte nicht geladen werden • Suche und Haltestellenliste bleiben verfügbar</string>
     <string name="map_provider_note">Karte: OpenFreeMap • MapLibre</string>
     <string name="location_kind_stop">Haltestelle</string>
     <string name="location_kind_address">Adresse</string>
