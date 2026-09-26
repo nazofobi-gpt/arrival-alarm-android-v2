@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -85,7 +84,7 @@ class MainActivity : ComponentActivity() {
         oauthCallbackUri = intent?.dataString
         enableEdgeToEdge()
         setContent {
-            MaterialTheme {
+            ArrivalAlarmTheme {
                 ArrivalAlarmApp(
                     oauthCallbackUri = oauthCallbackUri,
                     onOAuthCallbackConsumed = {
@@ -480,33 +479,14 @@ fun ArrivalAlarmApp(
                 Text(stringResource(R.string.subtitle), style = MaterialTheme.typography.titleMedium)
 
                 if (!onboardingComplete) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth().testTag("first-run-onboarding"),
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(stringResource(R.string.onboarding_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-                            Text(stringResource(R.string.onboarding_steps))
-                            Text(stringResource(R.string.onboarding_permission_note))
-                            Text(
-                                stringResource(R.string.onboarding_background_note),
-                                modifier = Modifier.testTag("onboarding-privacy-note"),
-                            )
-                            Button(
-                                onClick = {
-                                    appPreferences.edit()
-                                        .putBoolean("onboarding_complete", true)
-                                        .apply()
-                                    onboardingComplete = true
-                                },
-                                modifier = Modifier.testTag("onboarding-complete"),
-                            ) {
-                                Text(stringResource(R.string.continue_action))
-                            }
-                        }
-                    }
+                    FirstRunOnboarding(
+                        onContinue = {
+                            appPreferences.edit()
+                                .putBoolean("onboarding_complete", true)
+                                .apply()
+                            onboardingComplete = true
+                        },
+                    )
                 }
 
                 Text(stringResource(R.string.connector_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
