@@ -139,6 +139,24 @@ class JourneyConnectorActionPort(
     }
 
     @Synchronized
+    fun updateDistanceToDestination(distanceMeters: Double): ConnectorActionOutcome {
+        if (!distanceMeters.isFinite() || distanceMeters < 0.0) {
+            return ConnectorActionOutcome(false, "Geçersiz hedef mesafesi")
+        }
+        val before = controller.state
+        controller.onDistanceChanged(distanceMeters)
+        val after = controller.state
+        if (after == before) {
+            return ConnectorActionOutcome(false, "Aktif varış alarmı yok")
+        }
+        markChanged()
+        return ConnectorActionOutcome(
+            true,
+            if (after.phase == JourneyPhase.ARRIVED) "Varış eşiğine ulaşıldı" else "Hedef mesafesi güncellendi",
+        )
+    }
+
+    @Synchronized
     fun updateTripProgress(
         previousStop: ConnectorStopState?,
         currentStop: ConnectorStopState?,
