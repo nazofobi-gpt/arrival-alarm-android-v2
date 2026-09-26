@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createScopedGatewayService } from "../src/mcp-server.js";
+import { createScopedGatewayService, mcpErrorResult } from "../src/mcp-server.js";
 
 function fakeService() {
   return {
@@ -47,4 +47,30 @@ test("combined scope supports read and write connector operations", () => {
     service.queueWrite("user-1", { type: "cancel_arrival_alarm" }, 8).version,
     8
   );
+});
+
+
+test("insufficient scope emits ChatGPT MCP OAuth reauthorization challenge", () => {
+  const result = mcpErrorResult(
+    new Error("insufficient_scope"),
+    "https://connector.example/.well-known/oauth-protected-resource"
+  );
+
+  assert.equal(result.isError, true);
+  const challenges = result._meta?.["mcp/www_authenticate"];
+  assert.equal(Array.isArray(challenges), true);
+  assert.equal(challenges.length, 1);
+  assert.match(challenges[0], /resource_metadata="https:\/\/connector\.example\/\.well-known\/oauth-protected-resource"/);
+  assert.match(challenges[0], /error="insufficient_scope"/);
+  assert.match(challenges[0], /error_description="[^"]+"/);
+});
+
+test("domain errors do not trigger OAuth linking UI", () => {
+  const result = mcpErrorResult(
+    new Error("stale_device_state"),
+    "https://connector.example/.well-known/oauth-protected-resource"
+  );
+
+  assert.equal(result.isError, true);
+  assert.equal(result._meta, undefined);
 });
