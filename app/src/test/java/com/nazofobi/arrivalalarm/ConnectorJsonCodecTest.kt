@@ -23,6 +23,11 @@ class ConnectorJsonCodecTest {
                     previousStop = ConnectorStopState(id = "a", name = "Diepholz"),
                     currentStop = ConnectorStopState(id = "b", name = "Barnstorf"),
                     nextStop = ConnectorStopState(id = "c", name = "Twistringen"),
+                    timingBasis = "REALTIME",
+                    progressSource = "transport.rest-stopovers",
+                    progressUpdatedAtEpochSeconds = 998,
+                    scheduledArrivalEpochSeconds = 1_100,
+                    estimatedArrivalEpochSeconds = 1_120,
                 ),
                 distanceToDestinationMeters = 4_500.0,
                 alarmArmed = true,
@@ -34,7 +39,13 @@ class ConnectorJsonCodecTest {
         assertEquals(12, root.getLong("state_version"))
         assertEquals("ARMED", root.getString("journey_phase"))
         assertTrue(root.getBoolean("alarm_armed"))
-        assertEquals("Twistringen", root.getJSONObject("active_trip").getJSONObject("next_stop").getString("name"))
+        val trip = root.getJSONObject("active_trip")
+        assertEquals("Twistringen", trip.getJSONObject("next_stop").getString("name"))
+        assertEquals("REALTIME", trip.getString("timing_basis"))
+        assertEquals("transport.rest-stopovers", trip.getString("progress_source"))
+        assertEquals(998, trip.getLong("progress_updated_at_epoch_seconds"))
+        assertEquals(1_100, trip.getLong("scheduled_arrival_epoch_seconds"))
+        assertEquals(1_120, trip.getLong("estimated_arrival_epoch_seconds"))
         assertFalse(root.has("prompt"))
         assertFalse(root.has("chat"))
         assertFalse(root.has("token"))

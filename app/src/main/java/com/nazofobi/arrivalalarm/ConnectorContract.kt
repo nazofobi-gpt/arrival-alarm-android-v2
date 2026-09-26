@@ -24,6 +24,11 @@ data class ConnectorTripState(
     val previousStop: ConnectorStopState? = null,
     val currentStop: ConnectorStopState? = null,
     val nextStop: ConnectorStopState? = null,
+    val timingBasis: String? = null,
+    val progressSource: String? = null,
+    val progressUpdatedAtEpochSeconds: Long? = null,
+    val scheduledArrivalEpochSeconds: Long? = null,
+    val estimatedArrivalEpochSeconds: Long? = null,
 )
 
 data class ArrivalAlarmConnectorSnapshot(

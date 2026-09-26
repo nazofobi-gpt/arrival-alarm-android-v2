@@ -21,6 +21,11 @@ function snapshot(overrides = {}) {
       previous_stop: { id: "a", name: "Diepholz" },
       current_stop: { id: "b", name: "Barnstorf" },
       next_stop: { id: "c", name: "Twistringen" },
+      timing_basis: "REALTIME",
+      progress_source: "transport.rest-stopovers",
+      progress_updated_at_epoch_seconds: 990,
+      scheduled_arrival_epoch_seconds: 1100,
+      estimated_arrival_epoch_seconds: 1120,
     },
     ...overrides,
   };
@@ -39,8 +44,35 @@ test("read tools can derive current journey and stop progress from one snapshot"
   assert.equal(progress.previous_stop.name, "Diepholz");
   assert.equal(progress.current_stop.name, "Barnstorf");
   assert.equal(progress.next_stop.name, "Twistringen");
+  assert.equal(progress.timing_basis, "REALTIME");
+  assert.equal(progress.progress_source, "transport.rest-stopovers");
+  assert.equal(progress.progress_updated_at_epoch_seconds, 990);
+  assert.equal(progress.progress_stale, false);
+  assert.equal(progress.scheduled_arrival_epoch_seconds, 1100);
+  assert.equal(progress.estimated_arrival_epoch_seconds, 1120);
   assert.equal(alarm.alarm_armed, true);
   assert.equal(journey.stale, false);
+});
+
+
+test("trip progress can be stale even while device heartbeat is fresh", () => {
+  const store = new InMemoryGatewayStore({ nowEpochSeconds: () => 5000 });
+  const service = new GatewayService(store, { nowEpochSeconds: () => 5000 });
+  store.putSnapshot(
+    "user-1",
+    snapshot({
+      active_trip: {
+        trip_id: "trip-stale",
+        progress_updated_at_epoch_seconds: 4700,
+        next_stop: { id: "c", name: "Twistringen" },
+      },
+    })
+  );
+
+  const progress = service.getTripProgress("user-1");
+  assert.equal(progress.stale, false);
+  assert.equal(progress.progress_stale, true);
+  assert.equal(progress.next_stop.name, "Twistringen");
 });
 
 test("write queue rejects stale device heartbeat", () => {

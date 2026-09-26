@@ -91,6 +91,11 @@ object ConnectorJsonCodec {
             value.previousStop?.let { put("previous_stop", encodeStop(it)) }
             value.currentStop?.let { put("current_stop", encodeStop(it)) }
             value.nextStop?.let { put("next_stop", encodeStop(it)) }
+            value.timingBasis?.let { put("timing_basis", it) }
+            value.progressSource?.let { put("progress_source", it) }
+            value.progressUpdatedAtEpochSeconds?.let { put("progress_updated_at_epoch_seconds", it) }
+            value.scheduledArrivalEpochSeconds?.let { put("scheduled_arrival_epoch_seconds", it) }
+            value.estimatedArrivalEpochSeconds?.let { put("estimated_arrival_epoch_seconds", it) }
         }
 
     private fun encodeStop(value: ConnectorStopState): JSONObject =

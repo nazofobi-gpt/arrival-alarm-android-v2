@@ -32,6 +32,39 @@ class NationwideTransitDataTest {
         assertEquals(1, option.transfers)
     }
 
+
+    @Test fun journeyParserCarriesRealStopoversTripIdsAndFreshness() {
+        val json = JSONObject(
+            """{"journeys":[{"refreshToken":"refresh-1","legs":[
+              {"departure":"2026-09-26T08:00:00+02:00","plannedDeparture":"2026-09-26T07:58:00+02:00",
+               "arrival":"2026-09-26T08:45:00+02:00","plannedArrival":"2026-09-26T08:43:00+02:00",
+               "direction":"Bremen Hbf","line":{"name":"RE 9"},"tripId":"trip-re9",
+               "stopovers":[
+                 {"stop":{"id":"8000235","name":"Lohne(Oldb)","location":{"latitude":52.665,"longitude":8.237}},
+                  "departure":"2026-09-26T08:00:00+02:00","plannedDeparture":"2026-09-26T07:58:00+02:00"},
+                 {"stop":{"id":"8000128","name":"Diepholz","location":{"latitude":52.607,"longitude":8.371}},
+                  "arrival":"2026-09-26T08:15:00+02:00","departure":"2026-09-26T08:16:00+02:00",
+                  "plannedArrival":"2026-09-26T08:13:00+02:00","plannedDeparture":"2026-09-26T08:14:00+02:00"},
+                 {"stop":{"id":"8000050","name":"Bremen Hbf","location":{"latitude":53.083,"longitude":8.813}},
+                  "arrival":"2026-09-26T08:45:00+02:00","plannedArrival":"2026-09-26T08:43:00+02:00"}
+               ]}
+            ]}]}"""
+        )
+        val option = GermanyLiveTransitApi(nowEpochSeconds = { 123456L }).parseJourneys(
+            json,
+            MapPoint(52.665, 8.237, "Lohne"),
+            MapPoint(53.083, 8.813, "Bremen Hbf"),
+            1,
+        ).single()
+
+        assertEquals(listOf("trip-re9"), option.tripIds)
+        assertEquals("refresh-1", option.refreshToken)
+        assertEquals(listOf("Lohne(Oldb)", "Diepholz", "Bremen Hbf"), option.stops.map { it.name })
+        assertEquals("2026-09-26T08:16:00+02:00", option.stops[1].departure)
+        assertEquals(123456L, option.sourceUpdatedAtEpochSeconds)
+        assertTrue(option.stops[1].latitude != null)
+    }
+
     @Test fun liveStopParserUsesActualProviderIdsAndCoordinates() {
         val json = JSONArray(
             """[

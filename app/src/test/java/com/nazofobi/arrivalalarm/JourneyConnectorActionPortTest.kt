@@ -1,5 +1,6 @@
 package com.nazofobi.arrivalalarm
 
+
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -100,6 +101,78 @@ class JourneyConnectorActionPortTest {
         assertEquals(first.stateVersion, second.stateVersion)
         assertEquals(40_600L, second.sourceUpdatedAtEpochSeconds)
         assertFalse(second.isStale(40_600L))
+    }
+
+
+    @Test fun selectedRealRoutePublishesTimedPreviousNextAndEta() {
+        var now = 1_790_403_600L
+        val controller = JourneyController()
+        val route = RouteOption(
+            id = "journey-real-1",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
+            line = "RE 9",
+            direction = "Bremen Hbf",
+            departure = "08:00",
+            arrival = "08:45",
+            walkingMinutes = 0,
+            transfers = 0,
+            tripIds = listOf("trip-re9"),
+            stops = listOf(
+                RouteStop(
+                    id = "a",
+                    name = "Lohne",
+                    departure = "2026-09-26T08:00:00+02:00",
+                    plannedDeparture = "2026-09-26T07:58:00+02:00",
+                ),
+                RouteStop(
+                    id = "b",
+                    name = "Diepholz",
+                    arrival = "2026-09-26T08:15:00+02:00",
+                    departure = "2026-09-26T08:16:00+02:00",
+                    plannedArrival = "2026-09-26T08:13:00+02:00",
+                    plannedDeparture = "2026-09-26T08:14:00+02:00",
+                ),
+                RouteStop(
+                    id = "c",
+                    name = "Bremen Hbf",
+                    arrival = "2026-09-26T08:45:00+02:00",
+                    plannedArrival = "2026-09-26T08:43:00+02:00",
+                ),
+            ),
+            sourceUpdatedAtEpochSeconds = now - 10,
+        )
+        val port = JourneyConnectorActionPort(
+            controller = controller,
+            routeResolver = { id -> route.takeIf { it.id == id } },
+            nowEpochSeconds = { now },
+        )
+        port.setOrigin(route.origin)
+        port.setDestination(route.destination)
+        port.selectJourney(route.id)
+
+        val betweenStops = port.readSnapshot()
+        assertEquals("trip-re9", betweenStops.activeTrip?.tripId)
+        assertEquals("Diepholz", betweenStops.activeTrip?.previousStop?.name)
+        assertEquals(null, betweenStops.activeTrip?.currentStop)
+        assertEquals("Bremen Hbf", betweenStops.activeTrip?.nextStop?.name)
+        assertEquals("REALTIME", betweenStops.activeTrip?.timingBasis)
+        assertEquals("transport.rest-stopovers", betweenStops.activeTrip?.progressSource)
+        assertEquals(route.sourceUpdatedAtEpochSeconds, betweenStops.activeTrip?.progressUpdatedAtEpochSeconds)
+        assertEquals(
+            1_790_404_980L,
+            betweenStops.activeTrip?.scheduledArrivalEpochSeconds,
+        )
+        assertEquals(
+            1_790_405_100L,
+            betweenStops.activeTrip?.estimatedArrivalEpochSeconds,
+        )
+
+        val versionBeforeDwell = betweenStops.stateVersion
+        now = 1_790_405_100L
+        val atDestination = port.readSnapshot()
+        assertEquals("Bremen Hbf", atDestination.activeTrip?.currentStop?.name)
+        assertTrue(atDestination.stateVersion > versionBeforeDwell)
     }
 
     @Test fun invalidDomainOrderIsRejectedWithoutInventingState() {
