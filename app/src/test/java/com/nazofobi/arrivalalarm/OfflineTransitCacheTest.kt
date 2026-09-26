@@ -21,6 +21,27 @@ class OfflineTransitCacheTest {
         assertEquals(listOf(route), cache.routeOptions("trip"))
     }
 
+
+    @Test fun backingStoreIsLoadedAndPublishedOnMutation() {
+        val origin = MapPoint(52.665, 8.237, "Lohne")
+        val destination = MapPoint(53.083, 8.813, "Bremen")
+        val route = RouteOption("r1", origin, destination, "RE 9", "Bremen", "10:00", "10:45", 0, 0)
+        val seeded = CachedTransitPlan("seed", listOf(route), emptyList(), 10L)
+        var saved = emptyList<CachedTransitPlan>()
+        val backing = object : TransitCacheBackingStore {
+            override fun load(): List<CachedTransitPlan> = listOf(seeded)
+            override fun save(plans: List<CachedTransitPlan>) {
+                saved = plans
+            }
+        }
+
+        val cache = OfflineTransitCache(maxEntries = 2, backingStore = backing)
+        assertEquals(listOf("r1"), cache.routeOptions("seed").map { it.id })
+
+        cache.put(CachedTransitPlan("next", listOf(route.copy(id = "r2")), emptyList(), 20L))
+        assertEquals(listOf("seed", "next"), saved.map { it.key })
+    }
+
     @Test fun boundedCacheEvictsOldest() {
         val cache = OfflineTransitCache(maxEntries = 1)
         cache.put(CachedTransitPlan("a", emptyList(), emptyList(), 1))
