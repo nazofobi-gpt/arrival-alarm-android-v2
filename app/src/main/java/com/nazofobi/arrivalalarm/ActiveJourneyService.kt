@@ -14,6 +14,7 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import java.util.concurrent.Executors
@@ -48,6 +49,16 @@ class ActiveJourneyService : Service(), LocationListener {
     private lateinit var graph: ArrivalAlarmProcessGraph
     private lateinit var locationManager: LocationManager
     private val completionExecutor = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val stateMonitor = object : Runnable {
+        override fun run() {
+            if (!arrivalHandled && graph.controller.state.phase != JourneyPhase.ARMED) {
+                stopSelf()
+                return
+            }
+            mainHandler.postDelayed(this, STATE_MONITOR_MILLIS)
+        }
+    }
     @Volatile private var arrivalHandled = false
     private var locationRegistered = false
 
@@ -75,7 +86,10 @@ class ActiveJourneyService : Service(), LocationListener {
 
         if (!startLocationForeground() || !registerLocationUpdates()) {
             stopSelf()
+            return START_NOT_STICKY
         }
+        mainHandler.removeCallbacks(stateMonitor)
+        mainHandler.postDelayed(stateMonitor, STATE_MONITOR_MILLIS)
         return START_NOT_STICKY
     }
 
@@ -110,6 +124,7 @@ class ActiveJourneyService : Service(), LocationListener {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        mainHandler.removeCallbacks(stateMonitor)
         removeLocationUpdates()
         graph.connectorRuntimeCoordinator.release(SERVICE_RUNTIME_OWNER)
         completionExecutor.shutdownNow()
@@ -249,6 +264,7 @@ class ActiveJourneyService : Service(), LocationListener {
         private const val ARRIVAL_NOTIFICATION_ID = 4102
         private const val MIN_UPDATE_MILLIS = 10_000L
         private const val MIN_UPDATE_METERS = 25f
+        private const val STATE_MONITOR_MILLIS = 5_000L
 
         fun start(context: Context) {
             val intent = Intent(context, ActiveJourneyService::class.java).setAction(ACTION_START)
