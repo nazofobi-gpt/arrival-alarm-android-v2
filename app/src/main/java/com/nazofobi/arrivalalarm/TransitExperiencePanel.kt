@@ -35,6 +35,7 @@ fun TransitExperiencePanel(
     isOfflineCache: Boolean,
     nowEpochSeconds: Long,
     providerCapabilities: TransitProviderCapabilities = TransitProviderCapabilities(),
+    onSelectJourney: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val engine = remember(providerCapabilities) { TransitExperienceEngine(providerCapabilities) }
@@ -80,7 +81,14 @@ fun TransitExperiencePanel(
             }
         }
         board.take(5).forEachIndexed { index, departure ->
-            Button(onClick = { selectedTrip = departure.tripId; store.recordTrip(departure.tripId) }, modifier = Modifier.fillMaxWidth().testTag("departure-$index")) {
+            Button(
+                onClick = {
+                    selectedTrip = departure.tripId
+                    store.recordTrip(departure.tripId)
+                    departure.routeId?.let(onSelectJourney)
+                },
+                modifier = Modifier.fillMaxWidth().testTag("departure-$index"),
+            ) {
                 val source = if (departure.isRealtime && !isOfflineCache) "canlı" else "planlı"
                 Text("${departure.line} → ${departure.direction} • ${formatDepartureEpoch(departure.effectiveEpochSeconds)} • $source")
             }
