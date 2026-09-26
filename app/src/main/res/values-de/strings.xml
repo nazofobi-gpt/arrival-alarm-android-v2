@@ -191,5 +191,21 @@
     <string name="departure_platform">Gleis/Steig %1$s</string>
     <string name="departure_select">Diese Abfahrt wählen</string>
     <string name="departure_cancelled">Fahrt fällt aus</string>
-
+    <string name="nav_home">Start</string>
+    <string name="nav_search">Suche</string>
+    <string name="nav_journey">Fahrt</string>
+    <string name="nav_departures">Abfahrt</string>
+    <string name="nav_settings">Setup</string>
+    <string name="home_overview_title">Fahrt starten</string>
+    <string name="home_overview_body">Aktuellen Standort verwenden, eine echte Haltestelle in der Nähe wählen oder die Detailsuche öffnen.</string>
+    <string name="home_origin_missing">Start noch nicht gewählt</string>
+    <string name="home_destination_missing">Ziel noch nicht gewählt</string>
+    <string name="home_search_action">Haltestelle, Adresse oder Ort suchen</string>
+    <string name="home_journey_action">Verbindungen öffnen</string>
+    <string name="journey_empty_title">Noch keine Verbindung</string>
+    <string name="journey_empty_body">Wählen Sie zuerst Start und Ziel.</string>
+    <string name="journey_empty_action">Zur Suche</string>
+    <string name="departures_empty_title">Abfahrtstafel noch nicht bereit</string>
+    <string name="departures_empty_body">Wählen Sie zuerst eine Verbindung oder Zielhaltestelle.</string>
+    <string name="departures_empty_action">Route planen</string>
 </resources>
