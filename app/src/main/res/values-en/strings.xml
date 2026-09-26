@@ -127,4 +127,13 @@
     <string name="min_two_chars">Enter at least 2 characters</string>
     <string name="unknown_error">unknown error</string>
     <string name="unknown_time">time unknown</string>
+
+    <string name="map_title">Choose on map</string>
+    <string name="map_instruction_origin">Tap the map to choose an origin; nearby stop markers are selectable too.</string>
+    <string name="map_instruction_destination">Tap the map to choose a destination; nearby stop markers are selectable too.</string>
+    <string name="map_point_label">Map point</string>
+    <string name="map_provider_note">Map: OpenFreeMap • MapLibre</string>
+    <string name="location_kind_stop">Stop</string>
+    <string name="location_kind_address">Address</string>
+    <string name="location_kind_poi">Place/POI</string>
 </resources>
