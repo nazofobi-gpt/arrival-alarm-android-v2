@@ -154,6 +154,7 @@ fun ArrivalAlarmApp(
     var locationMessage by remember { mutableStateOf<String?>(null) }
     var routeOptions by remember { mutableStateOf(emptyList<RouteOption>()) }
     var routeStatus by remember { mutableStateOf<String?>(null) }
+    var routeOffline by remember { mutableStateOf(false) }
     var routeBusy by remember { mutableStateOf(false) }
     val routeCache = remember { OfflineTransitCache() }
     var guidanceState by remember { mutableStateOf(guidanceController.state) }
@@ -247,6 +248,7 @@ fun ArrivalAlarmApp(
         routeOptions = emptyList()
         graph.routeRegistry.clear()
         routeStatus = null
+        routeOffline = false
         selectingOrigin = false
         connectorPort.setOrigin(point)
         journey = controller.state
@@ -263,12 +265,14 @@ fun ArrivalAlarmApp(
         transit.journeyOptions(a, b) { options, status ->
             routeBusy = false
             if (options.isNotEmpty()) {
+                routeOffline = false
                 routeOptions = options
                 graph.routeRegistry.replace(options)
                 routeStatus = status
                 routeCache.put(CachedTransitPlan(key, options, emptyList(), System.currentTimeMillis() / 1000))
             } else {
                 val cached = routeCache.routeOptions(key)
+                routeOffline = cached.isNotEmpty()
                 routeOptions = cached
                 graph.routeRegistry.replace(cached)
                 routeStatus = if (cached.isNotEmpty()) context.getString(R.string.route_offline_fallback) else status
@@ -335,7 +339,7 @@ fun ArrivalAlarmApp(
         val outcome = connectorPort.armArrivalAlarm()
         journey = controller.state
         if (!outcome.applied) {
-            routeStatus = outcome.message
+            routeStatus = localizedDomainMessage(context, outcome.message)
             return
         }
         routeStatus = context.getString(R.string.alarm_active)
@@ -624,7 +628,7 @@ fun ArrivalAlarmApp(
                         direction = firstRoute.direction,
                         departures = departures,
                         alerts = emptyList(),
-                        isOfflineCache = routeStatus?.contains("çevrimdışı", ignoreCase = true) == true,
+                        isOfflineCache = routeOffline,
                         nowEpochSeconds = boardNow,
                         providerCapabilities = TransitProviderCapabilities(
                             realtimeDepartures = false,
@@ -664,7 +668,7 @@ fun ArrivalAlarmApp(
                         if (outcome.applied) {
                             routeStatus = context.getString(R.string.alarm_cancelled)
                         } else {
-                            routeStatus = outcome.message
+                            routeStatus = localizedDomainMessage(context, outcome.message)
                         }
                     },
                     enabled = journey.phase == JourneyPhase.ARMED || journey.phase == JourneyPhase.ARRIVED,
@@ -784,7 +788,7 @@ fun ArrivalAlarmApp(
                                     confirmedTripId = accepted.candidate.routeId
                                     journey = controller.state
                                 } else {
-                                    routeStatus = selected.message
+                                    routeStatus = localizedDomainMessage(context, selected.message)
                                 }
                             },
                             modifier = Modifier.testTag("trip-inference-confirm"),
