@@ -169,7 +169,7 @@ const httpServer = createServer(async (req, res) => {
     try {
       const auth = await resolveDeviceAuth(req);
       const snapshot = await readJson(req);
-      sendJson(res, 200, store.putSnapshot(auth.userId, snapshot));
+      sendJson(res, 200, store.putSnapshot(auth.userId, snapshot, auth.deviceId));
     } catch (error) {
       sendAuthError(req, res, error);
     }
@@ -179,7 +179,7 @@ const httpServer = createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/device/commands") {
     try {
       const auth = await resolveDeviceAuth(req);
-      sendJson(res, 200, { commands: store.pendingCommands(auth.userId) });
+      sendJson(res, 200, { commands: store.pendingCommands(auth.userId, auth.deviceId) });
     } catch (error) {
       sendAuthError(req, res, error);
     }
@@ -190,7 +190,7 @@ const httpServer = createServer(async (req, res) => {
     try {
       const auth = await resolveDeviceAuth(req);
       const receipt = await readJson(req);
-      sendJson(res, 200, store.submitReceipt(auth.userId, receipt));
+      sendJson(res, 200, store.submitReceipt(auth.userId, receipt, auth.deviceId));
     } catch (error) {
       sendAuthError(req, res, error);
     }
