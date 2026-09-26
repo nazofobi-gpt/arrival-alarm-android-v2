@@ -24,7 +24,7 @@ class ConnectorOAuthTest {
     }
 
     private class FakeTransport : ConnectorOAuthTransport {
-        val metadata = ConnectorOAuthMetadata(
+        var metadata = ConnectorOAuthMetadata(
             authorizationEndpoint = "https://auth.example/authorize",
             tokenEndpoint = "https://auth.example/token",
             revocationEndpoint = "https://auth.example/revoke",
@@ -197,4 +197,21 @@ class ConnectorOAuthTest {
         )
         assertNull(sessions.session)
     }
+
+    @Test fun reservedDeviceBindingParameterIsRejectedBeforeBrowserLaunch() {
+        val sessions = MemorySessionStore()
+        val transactions = MemoryTransactionStore()
+        val transport = FakeTransport().apply {
+            metadata = metadata.copy(deviceIdParameter = "state")
+        }
+        val oauth = coordinator(sessions, transactions, transport)
+
+        val error = runCatching {
+            oauth.beginAuthorization("https://connector.example")
+        }.exceptionOrNull()
+
+        assertTrue(error is IllegalArgumentException)
+        assertNull(transactions.transaction)
+    }
+
 }
