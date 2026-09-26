@@ -94,6 +94,7 @@ async function resolveDeviceAuth(req) {
     return getDeviceVerifier()(bearerToken(req), {
       requiredScopes: [DEVICE_SCOPE],
       requireDeviceId: true,
+      deviceIdClaim: process.env.DEVICE_OAUTH_DEVICE_ID_CLAIM?.trim() || null,
     });
   }
   const expected = process.env.DEV_DEVICE_BEARER_TOKEN;
