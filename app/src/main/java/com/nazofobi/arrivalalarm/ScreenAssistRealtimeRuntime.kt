@@ -24,6 +24,7 @@ class ScreenAssistRealtimeRuntime(
     private val session: ScreenAssistRealtimeSession,
     private val brokerTokenResponse: () -> String,
     private val socketFactory: () -> ScreenAssistRealtimeSocket,
+    private val toolHandler: ScreenAssistRealtimeToolHandler? = null,
     private val responseParser: ScreenAssistBrokerResponseParser = ScreenAssistBrokerResponseParser(),
     private val eventParser: ScreenAssistRealtimeEventParser = ScreenAssistRealtimeEventParser(),
     private val nowEpochSeconds: () -> Long = { System.currentTimeMillis() / 1_000L },
@@ -39,6 +40,7 @@ class ScreenAssistRealtimeRuntime(
     fun connect(
         onConnected: (ScreenAssistRealtimeSender) -> Unit,
         onGuidanceDelta: (String) -> Unit,
+        onToolConfirmationRequired: (ScreenAssistPendingToolCall) -> Unit = {},
         onFailure: (Throwable) -> Unit,
     ) {
         val ticket = generation.incrementAndGet()
@@ -56,6 +58,10 @@ class ScreenAssistRealtimeRuntime(
                 candidate = ScreenAssistRealtimeSender(
                     session = session,
                     socket = socket,
+                    toolHandler = toolHandler,
+                    onToolConfirmationRequired = { pending ->
+                        onToolConfirmationRequired(pending)
+                    },
                     onServerEvent = { raw ->
                         eventParser.outputTextDelta(raw)?.let(onGuidanceDelta)
                     },
@@ -80,6 +86,11 @@ class ScreenAssistRealtimeRuntime(
             }
         }
     }
+
+    fun resolveToolConfirmation(
+        pending: ScreenAssistPendingToolCall,
+        confirmed: Boolean,
+    ): Boolean = sender?.resolveToolConfirmation(pending, confirmed) == true
 
     fun stop() {
         generation.incrementAndGet()
