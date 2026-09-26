@@ -138,6 +138,7 @@ fun ArrivalAlarmApp(
     var selectingOrigin by remember { mutableStateOf(true) }
     var origin by remember { mutableStateOf<MapPoint?>(null) }
     var destination by remember { mutableStateOf<MapPoint?>(null) }
+    var destinationStopId by remember { mutableStateOf<String?>(null) }
     var nearby by remember { mutableStateOf(emptyList<NearbyStop>()) }
     var nearbySource by remember { mutableStateOf<String?>(null) }
     var locationMessage by remember { mutableStateOf<String?>(null) }
@@ -232,6 +233,7 @@ fun ArrivalAlarmApp(
     fun setOrigin(point: MapPoint) {
         origin = point
         destination = null
+        destinationStopId = null
         routeOptions = emptyList()
         graph.routeRegistry.clear()
         routeStatus = null
@@ -277,6 +279,7 @@ fun ArrivalAlarmApp(
                 return
             }
             destination = point
+            destinationStopId = stop.id
             routeOptions = emptyList()
             graph.routeRegistry.clear()
             loadRoutes(currentOrigin, point)
@@ -558,6 +561,35 @@ fun ArrivalAlarmApp(
                     Text(
                         "${option.line} • ${option.direction} • ${option.departure} → ${option.arrival} • ${option.walkingMinutes} dk yürüme • ${option.transfers} aktarma",
                         modifier = Modifier.testTag("route-option-$index"),
+                    )
+                }
+                val destinationPoint = destination
+                if (routeOptions.isNotEmpty() && destinationPoint != null) {
+                    val boardNow = System.currentTimeMillis() / 1_000
+                    val departures = routeOptions.map { option ->
+                        Departure(
+                            tripId = option.tripIds.firstOrNull() ?: option.id,
+                            line = option.line,
+                            direction = option.direction,
+                            scheduledEpochSeconds = clockToEpoch(option.departure, boardNow),
+                        )
+                    }
+                    val firstRoute = routeOptions.first()
+                    TransitExperiencePanel(
+                        stopId = destinationStopId
+                            ?: "coord:${destinationPoint.latitude},${destinationPoint.longitude}",
+                        stopName = destinationPoint.label,
+                        lineName = firstRoute.line,
+                        direction = firstRoute.direction,
+                        departures = departures,
+                        alerts = emptyList(),
+                        isOfflineCache = routeStatus?.contains("çevrimdışı", ignoreCase = true) == true,
+                        nowEpochSeconds = boardNow,
+                        providerCapabilities = TransitProviderCapabilities(
+                            realtimeDepartures = false,
+                            serviceAlerts = false,
+                        ),
+                        modifier = Modifier.fillMaxWidth().testTag("transit-experience-panel"),
                     )
                 }
 
