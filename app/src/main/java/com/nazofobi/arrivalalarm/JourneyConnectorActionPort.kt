@@ -10,6 +10,7 @@ class JourneyConnectorActionPort(
     private val routeResolver: (String) -> RouteOption? = { null },
     private val nowEpochSeconds: () -> Long = { System.currentTimeMillis() / 1_000 },
     private val staleAfterSeconds: Long = 120,
+    private val progressTracker: RouteStopProgressTracker = RouteStopProgressTracker(),
 ) : ConnectorActionPort {
     private var stateVersion = 1L
     private var sourceUpdatedAtEpochSeconds = nowEpochSeconds()
@@ -19,10 +20,12 @@ class JourneyConnectorActionPort(
     private var destination: ConnectorStopState? = controller.state.destination?.let {
         ConnectorStopState(name = "Varış", latitude = it.latitude, longitude = it.longitude)
     }
+    private var selectedRoute: RouteOption? = null
     private var activeTrip: ConnectorTripState? = null
 
     override fun readSnapshot(): ArrivalAlarmConnectorSnapshot {
         val now = nowEpochSeconds()
+        refreshTimedTripProgress(now)
         // Reading the local controller is an authoritative device-side observation.
         // Refresh freshness without changing stateVersion so an idle-but-connected app
         // can still accept a version-matched remote command.
@@ -49,6 +52,7 @@ class JourneyConnectorActionPort(
         controller.selectStart(GeoPoint(point.latitude, point.longitude))
         origin = point.toConnectorStop()
         destination = null
+        selectedRoute = null
         activeTrip = null
         markChanged()
         return ConnectorActionOutcome(true, "Başlangıç güncellendi")
@@ -63,7 +67,8 @@ class JourneyConnectorActionPort(
             return ConnectorActionOutcome(false, controller.state.error ?: "Varış güncellenemedi")
         }
         destination = point.toConnectorStop()
-        activeTrip = activeTrip?.copy(destination = destination)
+        selectedRoute = null
+        activeTrip = null
         markChanged()
         return ConnectorActionOutcome(true, "Varış güncellendi")
     }
@@ -73,17 +78,27 @@ class JourneyConnectorActionPort(
             ?: return ConnectorActionOutcome(false, "Rota artık mevcut değil; güncel rota seçilmeli")
         val currentOrigin = origin ?: route.origin.toConnectorStop()
         val currentDestination = destination ?: route.destination.toConnectorStop()
+        selectedRoute = route
         activeTrip = ConnectorTripState(
             journeyId = route.id,
-            tripId = route.id,
+            tripId = route.tripIds.firstOrNull() ?: route.id,
             routeId = route.id,
             line = route.line,
             direction = route.direction,
             origin = currentOrigin,
             destination = currentDestination,
+            progressSource = if (route.stops.isNotEmpty()) "transport.rest-stopovers" else null,
+            progressUpdatedAtEpochSeconds = route.sourceUpdatedAtEpochSeconds,
+            scheduledArrivalEpochSeconds = route.stops.lastOrNull()
+                ?.plannedArrival.toTransitEpochSecondsOrNull(),
+            estimatedArrivalEpochSeconds = route.stops.lastOrNull()?.let { stop ->
+                stop.arrival.toTransitEpochSecondsOrNull()
+                    ?: stop.plannedArrival.toTransitEpochSecondsOrNull()
+            },
         )
         origin = currentOrigin
         destination = currentDestination
+        refreshTimedTripProgress(nowEpochSeconds())
         markChanged()
         return ConnectorActionOutcome(true, "Sefer seçildi")
     }
@@ -131,6 +146,27 @@ class JourneyConnectorActionPort(
         return ConnectorActionOutcome(true, "Sefer ilerlemesi güncellendi")
     }
 
+    private fun refreshTimedTripProgress(nowEpochSeconds: Long) {
+        val route = selectedRoute ?: return
+        val trip = activeTrip ?: return
+        val progress = progressTracker.resolve(route.stops, nowEpochSeconds)
+        if (!progress.resolvedByProviderTime) return
+
+        val updated = trip.copy(
+            previousStop = progress.previous?.toConnectorStop(),
+            currentStop = progress.current?.toConnectorStop(),
+            nextStop = progress.next?.toConnectorStop(),
+            timingBasis = progress.timingBasis.name,
+            progressSource = "transport.rest-stopovers",
+            progressUpdatedAtEpochSeconds = route.sourceUpdatedAtEpochSeconds,
+        )
+        if (updated != trip) {
+            activeTrip = updated
+            stateVersion += 1
+            sourceUpdatedAtEpochSeconds = nowEpochSeconds
+        }
+    }
+
     private fun markChanged() {
         stateVersion += 1
         sourceUpdatedAtEpochSeconds = nowEpochSeconds()
@@ -138,6 +174,13 @@ class JourneyConnectorActionPort(
 
     private fun MapPoint.toConnectorStop() = ConnectorStopState(
         name = label,
+        latitude = latitude,
+        longitude = longitude,
+    )
+
+    private fun RouteStop.toConnectorStop() = ConnectorStopState(
+        id = id,
+        name = name,
         latitude = latitude,
         longitude = longitude,
     )
