@@ -42,12 +42,13 @@
     <string name="select_origin">Select origin</string>
     <string name="selecting_destination">Selecting destination</string>
     <string name="select_destination">Select destination</string>
-    <string name="search_stops_label">Search stops in Germany</string>
+    <string name="search_stops_label">Search stop, address or place</string>
     <string name="searching">Searching…</string>
     <string name="search_action">Search</string>
     <string name="source_format">Source: %1$s</string>
     <string name="no_stop_found">No stop found</string>
     <string name="search_result_format">%1$s • %2$s</string>
+    <string name="search_location_result_format">%1$s • %2$s • %3$s</string>
     <string name="current_location_origin">Use current location as origin</string>
     <string name="current_location_label">Current location</string>
     <string name="getting_location">Getting location…</string>
