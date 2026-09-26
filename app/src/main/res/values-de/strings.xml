@@ -59,6 +59,8 @@
     <string name="location_not_ready">Standort ist noch nicht verfügbar</string>
     <string name="origin_format">Start: %1$s</string>
     <string name="destination_format">Ziel: %1$s</string>
+    <string name="restored_origin">Gespeicherter Start</string>
+    <string name="restored_destination">Gespeichertes Ziel</string>
     <string name="nearby_stops">Nächste Haltestellen</string>
     <string name="nearby_stop_format">%1$s • %2$s • %3$d m</string>
     <string name="route_calculating">Verbindung wird berechnet…</string>
