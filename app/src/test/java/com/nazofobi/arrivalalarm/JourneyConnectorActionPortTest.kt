@@ -1,6 +1,5 @@
 package com.nazofobi.arrivalalarm
 
-import java.time.OffsetDateTime
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -106,7 +105,7 @@ class JourneyConnectorActionPortTest {
 
 
     @Test fun selectedRealRoutePublishesTimedPreviousNextAndEta() {
-        var now = OffsetDateTime.parse("2026-09-26T08:20:00+02:00").toEpochSecond()
+        var now = 1_790_403_600L
         val controller = JourneyController()
         val route = RouteOption(
             id = "journey-real-1",
@@ -161,16 +160,16 @@ class JourneyConnectorActionPortTest {
         assertEquals("transport.rest-stopovers", betweenStops.activeTrip?.progressSource)
         assertEquals(route.sourceUpdatedAtEpochSeconds, betweenStops.activeTrip?.progressUpdatedAtEpochSeconds)
         assertEquals(
-            OffsetDateTime.parse("2026-09-26T08:43:00+02:00").toEpochSecond(),
+            1_790_404_980L,
             betweenStops.activeTrip?.scheduledArrivalEpochSeconds,
         )
         assertEquals(
-            OffsetDateTime.parse("2026-09-26T08:45:00+02:00").toEpochSecond(),
+            1_790_405_100L,
             betweenStops.activeTrip?.estimatedArrivalEpochSeconds,
         )
 
         val versionBeforeDwell = betweenStops.stateVersion
-        now = OffsetDateTime.parse("2026-09-26T08:45:00+02:00").toEpochSecond()
+        now = 1_790_405_100L
         val atDestination = port.readSnapshot()
         assertEquals("Bremen Hbf", atDestination.activeTrip?.currentStop?.name)
         assertTrue(atDestination.stateVersion > versionBeforeDwell)
