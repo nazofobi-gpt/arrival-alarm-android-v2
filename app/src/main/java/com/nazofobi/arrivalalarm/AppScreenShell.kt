@@ -3,6 +3,7 @@ package com.nazofobi.arrivalalarm
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -131,20 +132,20 @@ fun HomeOverviewPanel(
 
                 FilledTonalButton(
                     onClick = onUseCurrentLocation,
-                    modifier = Modifier.fillMaxWidth().testTag("home-current-location"),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("home-current-location"),
                 ) {
                     Text(stringResource(R.string.current_location_origin))
                 }
                 OutlinedButton(
                     onClick = onOpenSearch,
-                    modifier = Modifier.fillMaxWidth().testTag("home-open-search"),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("home-open-search"),
                 ) {
                     Text(stringResource(R.string.home_search_action))
                 }
                 Button(
                     onClick = onOpenJourney,
                     enabled = origin != null && destination != null,
-                    modifier = Modifier.fillMaxWidth().testTag("home-open-journey"),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("home-open-journey"),
                 ) {
                     Text(stringResource(R.string.home_journey_action))
                 }
