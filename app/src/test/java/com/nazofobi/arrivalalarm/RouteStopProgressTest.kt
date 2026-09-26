@@ -1,6 +1,5 @@
 package com.nazofobi.arrivalalarm
 
-import java.time.OffsetDateTime
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -31,7 +30,7 @@ class RouteStopProgressTest {
     )
 
     @Test fun betweenStopsDoesNotInventCurrentStop() {
-        val now = OffsetDateTime.parse("2026-09-26T08:20:00+02:00").toEpochSecond()
+        val now = 1_790_403_600L
         val progress = RouteStopProgressTracker().resolve(stops, now)
 
         assertTrue(progress.resolvedByProviderTime)
@@ -42,7 +41,7 @@ class RouteStopProgressTest {
     }
 
     @Test fun dwellWindowExposesActualCurrentStop() {
-        val now = OffsetDateTime.parse("2026-09-26T08:15:30+02:00").toEpochSecond()
+        val now = 1_790_403_330L
         val progress = RouteStopProgressTracker().resolve(stops, now)
 
         assertEquals("Lohne", progress.previous?.name)
