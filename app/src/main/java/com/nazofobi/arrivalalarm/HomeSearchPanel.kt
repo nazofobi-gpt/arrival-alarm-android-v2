@@ -36,11 +36,15 @@ fun HomeSearchPanel(
     mapMessage: String?,
     nearby: List<NearbyStop>,
     nearbySource: String?,
+    recentSearches: List<String>,
+    favoriteStopIds: Set<String>,
     onSelectOriginTarget: () -> Unit,
     onSelectDestinationTarget: () -> Unit,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
     onSearchResultSelected: (TransitLocationResult) -> Unit,
+    onRecentSearchSelected: (String) -> Unit,
+    onClearRecentSearches: () -> Unit,
     onUseCurrentLocation: () -> Unit,
     onMapStopSelected: (CatalogStop) -> Unit,
     onMapPointSelected: (MapPoint) -> Unit,
@@ -230,6 +234,33 @@ fun HomeSearchPanel(
                     }
                 }
 
+                if (recentSearches.isNotEmpty()) {
+                    HorizontalDivider()
+                    Text(
+                        text = stringResource(R.string.search_recents_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    recentSearches.take(5).forEachIndexed { index, recent ->
+                        OutlinedButton(
+                            onClick = { onRecentSearchSelected(recent) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("search-recent-$index"),
+                        ) {
+                            Text(recent)
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = onClearRecentSearches,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("search-recents-clear"),
+                    ) {
+                        Text(stringResource(R.string.search_recents_clear))
+                    }
+                }
+
                 FilledTonalButton(
                     onClick = onUseCurrentLocation,
                     modifier = Modifier
@@ -349,7 +380,11 @@ fun HomeSearchPanel(
                                 stringResource(
                                     R.string.nearby_stop_format,
                                     action,
-                                    candidate.stop.name,
+                                    if (candidate.stop.id in favoriteStopIds) {
+                                        "★ " + candidate.stop.name
+                                    } else {
+                                        candidate.stop.name
+                                    },
                                     candidate.distanceMeters,
                                 )
                             )
