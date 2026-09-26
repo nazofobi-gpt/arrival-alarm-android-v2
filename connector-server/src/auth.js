@@ -1,7 +1,11 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
 export function bearerToken(req) {
-  const value = req.headers.authorization ?? "";
+  const headers = req?.headers;
+  const value =
+    typeof headers?.get === "function"
+      ? headers.get("authorization") ?? ""
+      : headers?.authorization ?? "";
   return value.startsWith("Bearer ") ? value.slice(7).trim() : null;
 }
 
@@ -25,7 +29,12 @@ export function scopesFromPayload(payload) {
 
 export function authContextFromPayload(
   payload,
-  { requiredScopes = [], requiredAnyScopes = [], requireDeviceId = false } = {}
+  {
+    requiredScopes = [],
+    requiredAnyScopes = [],
+    requireDeviceId = false,
+    deviceIdClaim = null,
+  } = {}
 ) {
   const userId = typeof payload.sub === "string" ? payload.sub.trim() : "";
   if (!userId) throw new Error("unauthorized");
@@ -41,7 +50,11 @@ export function authContextFromPayload(
     throw new Error("insufficient_scope");
   }
 
-  const rawDeviceId = payload.device_id ?? payload.deviceId;
+  const configuredDeviceId =
+    typeof deviceIdClaim === "string" && deviceIdClaim
+      ? payload[deviceIdClaim]
+      : undefined;
+  const rawDeviceId = configuredDeviceId ?? payload.device_id ?? payload.deviceId;
   const deviceId = typeof rawDeviceId === "string" ? rawDeviceId.trim() : null;
   if (requireDeviceId && !deviceId) throw new Error("unauthorized");
 
