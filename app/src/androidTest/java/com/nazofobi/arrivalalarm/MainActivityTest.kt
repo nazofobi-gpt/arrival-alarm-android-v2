@@ -248,14 +248,20 @@ class MainActivityTest {
                 node.boundsInRoot.height + 0.5f >= minPixels,
             )
         }
-        val homeLocation = rule.onNodeWithTag("home-current-location")
-            .performScrollTo()
-            .assertIsDisplayed()
-            .fetchSemanticsNode()
-        assertTrue(
-            "home-current-location height=${homeLocation.boundsInRoot.height}px, required>=$minPixels",
-            homeLocation.boundsInRoot.height + 0.5f >= minPixels,
-        )
+        listOf(
+            "home-current-location",
+            "home-open-search",
+            "home-open-journey",
+        ).forEach { tag ->
+            val node = rule.onNodeWithTag(tag)
+                .performScrollTo()
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+            assertTrue(
+                "$tag height=${node.boundsInRoot.height}px, required>=$minPixels",
+                node.boundsInRoot.height + 0.5f >= minPixels,
+            )
+        }
         navigateTo("nav-settings")
         listOf("theme-system", "theme-light", "theme-dark", "readiness-refresh").forEach { tag ->
             val node = rule.onNodeWithTag(tag)
