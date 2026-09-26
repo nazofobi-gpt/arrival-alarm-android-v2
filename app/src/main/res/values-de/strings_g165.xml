@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_readiness_title">Einstellungen und Bereitschaft</string>
+    <string name="theme_mode_title">Darstellung</string>
+    <string name="theme_mode_status">Design: %1$s</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Hell</string>
+    <string name="theme_dark">Dunkel</string>
+    <string name="theme_selected_format">%1$s • ausgewählt</string>
+    <string name="readiness_summary_ready">Bereit für die Fahrt</string>
+    <string name="readiness_summary_degraded">Einige Funktionen sind eingeschränkt; Status unten prüfen</string>
+    <string name="readiness_summary_blocked">Eine erforderliche Einstellung für den Ankunftsalarm fehlt</string>
+    <string name="readiness_location">Standort</string>
+    <string name="readiness_notifications">Benachrichtigungen</string>
+    <string name="readiness_data">ÖPNV-Daten</string>
+    <string name="readiness_audio">Audio und Bluetooth</string>
+    <string name="readiness_background">Hintergrundfahrt</string>
+    <string name="readiness_connector">ChatGPT-Verbindung</string>
+    <string name="readiness_ready">Bereit</string>
+    <string name="readiness_permission_required">Berechtigung erforderlich</string>
+    <string name="readiness_location_services_off">Standortdienste sind ausgeschaltet</string>
+    <string name="readiness_data_not_ready">Lokaler Index noch nicht bereit; Live-Suche bleibt verfügbar</string>
+    <string name="readiness_data_loading">ÖPNV-Daten werden vorbereitet</string>
+    <string name="readiness_data_ready">%1$d Haltestellen im lokalen Index bereit</string>
+    <string name="readiness_data_unavailable">Lokaler Index nicht verfügbar; Live-Suche bleibt verfügbar</string>
+    <string name="readiness_background_active">Aktive Fahrtverfolgung läuft</string>
+    <string name="readiness_background_inactive">Startet erst nach Aktivierung des Ankunftsalarms</string>
+    <string name="readiness_connector_connected">Verbunden • optional</string>
+    <string name="readiness_connector_optional_unconfigured">Optional • nicht konfiguriert</string>
+    <string name="readiness_connector_optional_disconnected">Optional • nicht verbunden</string>
+    <string name="readiness_review_journey_permissions">Fahrtberechtigungen prüfen</string>
+    <string name="readiness_review_guidance_permissions">Audio- und Bluetooth-Berechtigungen prüfen</string>
+    <string name="readiness_refresh">Bereitschaft aktualisieren</string>
+    <string name="readiness_open_app_settings">App-Einstellungen öffnen</string>
+    <string name="readiness_accessibility_title">Barrierefreiheit</string>
+    <string name="readiness_accessibility_body">TalkBack, System-Schriftgröße sowie helles und dunkles Design werden unterstützt. Kritische Aktionen werden nicht nur durch Farbe vermittelt.</string>
+    <string name="readiness_privacy_title">Datenschutz</string>
+    <string name="readiness_privacy_body">Der Standort wird nur für von Ihnen gewählte Standort- und aktive Fahrtfunktionen verwendet. Die ChatGPT-Verbindung ist optional und blockiert den Ankunftsalarm nicht.</string>
+</resources>
