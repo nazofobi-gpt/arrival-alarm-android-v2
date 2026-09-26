@@ -57,9 +57,17 @@ class MainActivityTest {
         rule.onNodeWithTag("onboarding-privacy-note")
             .performScrollTo()
             .assertIsDisplayed()
-        rule.onNodeWithTag("onboarding-complete")
+        val onboardingAction = rule.onNodeWithTag("onboarding-complete")
             .performScrollTo()
             .assertIsDisplayed()
+            .fetchSemanticsNode()
+        val onboardingMinPixels = 48f * rule.activity.resources.displayMetrics.density
+        assertTrue(
+            "onboarding-complete height=${onboardingAction.boundsInRoot.height}px, required>=$onboardingMinPixels",
+            onboardingAction.boundsInRoot.height + 0.5f >= onboardingMinPixels,
+        )
+        rule.onNodeWithTag("onboarding-complete")
+            .performScrollTo()
             .performClick()
 
         assertTrue(rule.onAllNodesWithTag("first-run-onboarding").fetchSemanticsNodes().isEmpty())
@@ -262,6 +270,15 @@ class MainActivityTest {
                 node.boundsInRoot.height + 0.5f >= minPixels,
             )
         }
+        navigateTo("nav-search")
+        val searchAction = rule.onNodeWithTag("catalog-search-submit")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .fetchSemanticsNode()
+        assertTrue(
+            "catalog-search-submit height=${searchAction.boundsInRoot.height}px, required>=$minPixels",
+            searchAction.boundsInRoot.height + 0.5f >= minPixels,
+        )
         navigateTo("nav-settings")
         listOf(
             "theme-system",
