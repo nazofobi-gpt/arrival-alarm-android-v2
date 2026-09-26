@@ -223,4 +223,42 @@ class JourneyConnectorActionPortTest {
         assertTrue(final.stateVersion > during.stateVersion)
     }
 
+
+    @Test fun failedForegroundLifecycleRollsBackRemoteArm() {
+        val controller = JourneyController()
+        val port = JourneyConnectorActionPort(
+            controller = controller,
+            nowEpochSeconds = { 60_000L },
+            onAlarmArmed = { false },
+        )
+        port.setOrigin(MapPoint(52.66, 8.23, "Lohne"))
+        port.setDestination(MapPoint(53.08, 8.81, "Bremen Hbf"))
+        val before = port.readSnapshot()
+
+        val outcome = port.armArrivalAlarm()
+        val after = port.readSnapshot()
+
+        assertFalse(outcome.applied)
+        assertEquals(JourneyPhase.DESTINATION_SELECTED, after.journeyPhase)
+        assertFalse(after.alarmArmed)
+        assertEquals(before.stateVersion, after.stateVersion)
+    }
+
+    @Test fun cancellingAlarmReleasesForegroundLifecycle() {
+        var cancelled = 0
+        val controller = JourneyController()
+        val port = JourneyConnectorActionPort(
+            controller = controller,
+            nowEpochSeconds = { 70_000L },
+            onAlarmArmed = { true },
+            onAlarmCancelled = { cancelled += 1 },
+        )
+        port.setOrigin(MapPoint(52.66, 8.23, "Lohne"))
+        port.setDestination(MapPoint(53.08, 8.81, "Bremen Hbf"))
+        assertTrue(port.armArrivalAlarm().applied)
+
+        assertTrue(port.cancelArrivalAlarm().applied)
+        assertEquals(1, cancelled)
+    }
+
 }
