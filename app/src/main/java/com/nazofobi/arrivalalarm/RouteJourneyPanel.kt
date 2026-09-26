@@ -196,6 +196,7 @@ private fun RouteOptionCard(
             )
             OutlinedButton(
                 onClick = onSelect,
+                enabled = !selected,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
