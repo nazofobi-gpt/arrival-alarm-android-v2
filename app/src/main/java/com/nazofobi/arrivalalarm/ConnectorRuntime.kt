@@ -34,6 +34,12 @@ data class ConnectorRuntimeStatus(
     val errorCode: String? = null,
 )
 
+interface ConnectorRuntimeControl {
+    fun start()
+    fun syncNow(): ConnectorRuntimeStatus
+    fun stop()
+}
+
 /**
  * App-process connector runtime.
  *
@@ -54,7 +60,7 @@ class ConnectorRuntime(
     private val nowEpochSeconds: () -> Long = { System.currentTimeMillis() / 1_000 },
     private val syncIntervalSeconds: Long = 15,
     private val onStatus: (ConnectorRuntimeStatus) -> Unit = {},
-) : Closeable {
+) : Closeable, ConnectorRuntimeControl {
     @Volatile
     var status: ConnectorRuntimeStatus = ConnectorRuntimeStatus(ConnectorRuntimeState.STOPPED)
         private set
@@ -62,7 +68,7 @@ class ConnectorRuntime(
     private var executor: ScheduledExecutorService? = null
 
     @Synchronized
-    fun start() {
+    override fun start() {
         if (executor != null) return
         val created = Executors.newSingleThreadScheduledExecutor { runnable ->
             Thread(runnable, "arrival-connector-sync").apply { isDaemon = true }
@@ -76,7 +82,7 @@ class ConnectorRuntime(
         )
     }
 
-    fun syncNow(): ConnectorRuntimeStatus {
+    override fun syncNow(): ConnectorRuntimeStatus {
         val now = nowEpochSeconds()
         val session = sessionProvider.currentSession()
         if (session == null || session.accessToken.isBlank()) {
@@ -127,7 +133,7 @@ class ConnectorRuntime(
     }
 
     @Synchronized
-    fun stop() {
+    override fun stop() {
         executor?.shutdownNow()
         executor = null
         publish(
