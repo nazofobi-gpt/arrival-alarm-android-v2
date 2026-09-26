@@ -4,6 +4,23 @@ enum class GuidancePermissionState { DENIED, PARTIAL, GRANTED }
 enum class GuidanceAudioRoute { DEVICE, BLUETOOTH_CONNECTED, BLUETOOTH_DISCONNECTED }
 enum class VoiceChoice { DESIRED_LOCALE, DEVICE_FALLBACK, UNAVAILABLE }
 
+enum class GuidanceLanguage(
+    val localeTag: String,
+    val displayName: String,
+    private val destinationPrefix: String,
+) {
+    TURKISH("tr-TR", "Türkçe", "Hedef"),
+    GERMAN("de-DE", "Deutsch", "Ziel"),
+    ENGLISH("en-US", "English", "Destination");
+
+    fun destinationText(label: String): String = "$destinationPrefix $label"
+
+    companion object {
+        fun fromLocaleTag(localeTag: String?): GuidanceLanguage =
+            values().firstOrNull { it.localeTag == localeTag } ?: TURKISH
+    }
+}
+
 data class GuidancePermissionSnapshot(
     val fineLocation: Boolean,
     val notifications: Boolean,
