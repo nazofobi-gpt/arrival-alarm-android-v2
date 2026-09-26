@@ -122,11 +122,6 @@ fun ArrivalAlarmApp() {
     var inferenceResult by remember { mutableStateOf<TripInferenceResult?>(null) }
     var confirmedTripId by remember { mutableStateOf<String?>(null) }
 
-    fun act(block: JourneyController.() -> Unit) {
-        controller.block()
-        journey = controller.state
-    }
-
     fun loadNearby(point: MapPoint) {
         transit.nearbyStops(point.latitude, point.longitude) { values, source ->
             nearby = values
