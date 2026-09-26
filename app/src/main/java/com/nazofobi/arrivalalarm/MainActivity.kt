@@ -121,6 +121,12 @@ fun ArrivalAlarmApp(
     val appPreferences = remember(context) {
         context.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
     }
+    val searchRecentsPreferences = remember(context) {
+        context.getSharedPreferences("search_recents", Context.MODE_PRIVATE)
+    }
+    val transitExperiencePreferences = remember(context) {
+        context.getSharedPreferences("transit_experience", Context.MODE_PRIVATE)
+    }
     val guidanceSpeaker = remember { AndroidTextToSpeechSpeaker(context) }
     val guidancePreferences = remember(context) {
         context.getSharedPreferences("guidance_state", Context.MODE_PRIVATE)
@@ -138,6 +144,22 @@ fun ArrivalAlarmApp(
     }
     var dataState by remember { mutableStateOf(transit.currentState()) }
     var query by remember { mutableStateOf("") }
+    var lastSearchedQuery by remember { mutableStateOf("") }
+    var recentSearches by remember {
+        mutableStateOf(
+            searchRecentsPreferences.getString("queries", "").orEmpty()
+                .split('\u001F')
+                .filter { it.isNotBlank() }
+                .take(5)
+        )
+    }
+    var favoriteStopIds by remember {
+        mutableStateOf(
+            transitExperiencePreferences.getStringSet("favorite_stop_ids", emptySet())
+                .orEmpty()
+                .toSet()
+        )
+    }
     var searchBusy by remember { mutableStateOf(false) }
     var searchResults by remember { mutableStateOf(emptyList<TransitLocationResult>()) }
     var searchSource by remember { mutableStateOf<String?>(null) }
@@ -320,9 +342,22 @@ fun ArrivalAlarmApp(
         )
     }
 
-    fun runSearch(rawQuery: String = query) {
+    fun saveRecentSearch(rawQuery: String) {
         val q = rawQuery.trim()
         if (q.length < 2) return
+        val next = (listOf(q) + recentSearches.filterNot { it.equals(q, ignoreCase = true) })
+            .take(5)
+        recentSearches = next
+        searchRecentsPreferences.edit()
+            .putString("queries", next.joinToString("\u001F"))
+            .apply()
+    }
+
+    fun runSearch(rawQuery: String = query, recordRecent: Boolean = false) {
+        val q = rawQuery.trim()
+        if (q.length < 2) return
+        if (recordRecent) saveRecentSearch(q)
+        lastSearchedQuery = q
         val requestId = searchRequestId + 1
         searchRequestId = requestId
         searchBusy = true
@@ -439,6 +474,10 @@ fun ArrivalAlarmApp(
         while (true) {
             journey = controller.state
             connectorConnected = connectorSessionStore.hasUsableSession()
+            favoriteStopIds = transitExperiencePreferences
+                .getStringSet("favorite_stop_ids", emptySet())
+                .orEmpty()
+                .toSet()
             delay(1_000)
         }
     }
@@ -453,7 +492,9 @@ fun ArrivalAlarmApp(
             return@LaunchedEffect
         }
         delay(1_000)
-        runSearch(q)
+        if (q != lastSearchedQuery) {
+            runSearch(q)
+        }
     }
 
     DisposableEffect(connectorRuntimeCoordinator) {
@@ -538,19 +579,29 @@ fun ArrivalAlarmApp(
                     mapMessage = mapMessage,
                     nearby = nearby,
                     nearbySource = nearbySource,
+                    recentSearches = recentSearches,
+                    favoriteStopIds = favoriteStopIds,
                     onSelectOriginTarget = { selectingOrigin = true },
                     onSelectDestinationTarget = { selectingOrigin = false },
                     onQueryChange = {
                         query = it
                         searchRequestId += 1
                     },
-                    onSearch = { runSearch() },
+                    onSearch = { runSearch(recordRecent = true) },
                     onSearchResultSelected = { result ->
                         if (selectingOrigin) {
                             setOrigin(result.point)
                         } else {
                             setDestinationPoint(result.point, result.stop?.id)
                         }
+                    },
+                    onRecentSearchSelected = { recent ->
+                        query = recent
+                        runSearch(recent, recordRecent = true)
+                    },
+                    onClearRecentSearches = {
+                        recentSearches = emptyList()
+                        searchRecentsPreferences.edit().remove("queries").apply()
                     },
                     onUseCurrentLocation = {
                         if (currentLocation.hasPermission()) {
