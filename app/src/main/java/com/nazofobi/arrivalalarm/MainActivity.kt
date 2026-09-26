@@ -23,7 +23,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -526,108 +525,46 @@ fun ArrivalAlarmApp(
                     ) { Text(stringResource(R.string.download_germany_index)) }
                 }
 
-                Text(
-                    if (selectingOrigin) stringResource(R.string.search_target_origin_status)
-                    else stringResource(R.string.search_target_destination_status),
-                    modifier = Modifier.testTag("search-target-status"),
-                )
-                Button(
-                    onClick = { selectingOrigin = true },
-                    enabled = !selectingOrigin,
-                    modifier = Modifier.testTag("search-target-origin"),
-                ) { Text(if (selectingOrigin) stringResource(R.string.selecting_origin) else stringResource(R.string.select_origin)) }
-                Button(
-                    onClick = { selectingOrigin = false },
-                    enabled = origin != null && selectingOrigin,
-                    modifier = Modifier.testTag("search-target-destination"),
-                ) { Text(if (!selectingOrigin) stringResource(R.string.selecting_destination) else stringResource(R.string.select_destination)) }
-
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = {
+                HomeSearchPanel(
+                    selectingOrigin = selectingOrigin,
+                    query = query,
+                    searchBusy = searchBusy,
+                    searchResults = searchResults,
+                    searchSource = searchSource,
+                    searchMessage = searchMessage,
+                    locationMessage = locationMessage,
+                    origin = origin,
+                    destination = destination,
+                    mapMessage = mapMessage,
+                    nearby = nearby,
+                    nearbySource = nearbySource,
+                    onSelectOriginTarget = { selectingOrigin = true },
+                    onSelectDestinationTarget = { selectingOrigin = false },
+                    onQueryChange = {
                         query = it
                         searchRequestId += 1
                     },
-                    label = { Text(stringResource(R.string.search_stops_label)) },
-                    modifier = Modifier.fillMaxWidth().testTag("catalog-search"),
-                    singleLine = true,
-                )
-                Button(
-                    onClick = { runSearch() },
-                    enabled = !searchBusy && query.trim().length >= 2,
-                    modifier = Modifier.testTag("catalog-search-submit"),
-                ) { Text(if (searchBusy) stringResource(R.string.searching) else stringResource(R.string.search_action)) }
-
-                searchSource?.let { Text(stringResource(R.string.source_format, it), modifier = Modifier.testTag("search-source")) }
-                searchMessage?.let { Text(it, modifier = Modifier.testTag("search-message")) }
-
-                searchResults.take(12).forEachIndexed { index, result ->
-                    Button(
-                        onClick = {
-                            if (selectingOrigin) {
-                                setOrigin(result.point)
-                            } else {
-                                setDestinationPoint(result.point, result.stop?.id)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth().testTag("search-result-$index"),
-                    ) {
-                        val action = if (selectingOrigin) {
-                            stringResource(R.string.select_origin)
+                    onSearch = { runSearch() },
+                    onSearchResultSelected = { result ->
+                        if (selectingOrigin) {
+                            setOrigin(result.point)
                         } else {
-                            stringResource(R.string.select_destination)
+                            setDestinationPoint(result.point, result.stop?.id)
                         }
-                        Text(
-                            stringResource(
-                                R.string.search_location_result_format,
-                                action,
-                                transitLocationKindText(result.kind),
-                                result.label,
-                            )
-                        )
-                    }
-                }
-
-                Button(
-                    onClick = {
-                        if (currentLocation.hasPermission()) useCurrentLocation()
-                        else locationPermissionLauncher.launch(
-                            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-                        )
                     },
-                    modifier = Modifier.testTag("current-location-origin"),
-                ) { Text(stringResource(R.string.current_location_origin)) }
-                locationMessage?.let { Text(it, modifier = Modifier.testTag("location-status")) }
-
-                origin?.let {
-                    Text(stringResource(R.string.origin_format, it.label), modifier = Modifier.testTag("origin-label"))
-                }
-                destination?.let {
-                    Text(stringResource(R.string.destination_format, it.label), modifier = Modifier.testTag("destination-label"))
-                }
-
-                Text(
-                    stringResource(R.string.map_title),
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.semantics { heading() },
-                )
-                Text(
-                    if (selectingOrigin) stringResource(R.string.map_instruction_origin)
-                    else stringResource(R.string.map_instruction_destination),
-                    modifier = Modifier.testTag("map-instruction"),
-                )
-                val mapCenter = origin ?: destination ?: MapPoint(
-                    latitude = 51.1657,
-                    longitude = 10.4515,
-                    label = "Deutschland",
-                )
-                TransitSelectionMap(
-                    center = mapCenter,
-                    nearbyStops = nearby,
-                    origin = origin,
-                    destination = destination,
-                    mapPointLabel = stringResource(R.string.map_point_label),
-                    onStopSelected = { stop ->
+                    onUseCurrentLocation = {
+                        if (currentLocation.hasPermission()) {
+                            useCurrentLocation()
+                        } else {
+                            locationPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                                )
+                            )
+                        }
+                    },
+                    onMapStopSelected = { stop ->
                         if (selectingOrigin) {
                             setOrigin(MapPoint(stop.latitude, stop.longitude, stop.name))
                         } else {
@@ -635,42 +572,28 @@ fun ArrivalAlarmApp(
                         }
                     },
                     onMapPointSelected = { point ->
-                        if (selectingOrigin) setOrigin(point)
-                        else setDestinationPoint(point)
+                        if (selectingOrigin) {
+                            setOrigin(point)
+                        } else {
+                            setDestinationPoint(point)
+                        }
                     },
                     onMapError = {
                         mapMessage = context.getString(R.string.map_load_failed)
                     },
-                )
-                mapMessage?.let {
-                    Text(it, modifier = Modifier.testTag("map-status"))
-                }
-                Text(
-                    stringResource(R.string.map_provider_note),
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.testTag("map-provider"),
-                )
-
-                if (nearby.isNotEmpty()) {
-                    Text(stringResource(R.string.nearby_stops), style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
-                    nearbySource?.let { Text(stringResource(R.string.source_format, it)) }
-                    nearby.take(8).forEachIndexed { index, candidate ->
-                        Button(
-                            onClick = {
-                                val point = MapPoint(
-                                    candidate.stop.latitude,
-                                    candidate.stop.longitude,
-                                    candidate.stop.name,
-                                )
-                                if (selectingOrigin) setOrigin(point) else setDestination(candidate.stop)
-                            },
-                            modifier = Modifier.fillMaxWidth().testTag("nearby-stop-$index"),
-                        ) {
-                            val action = if (selectingOrigin) stringResource(R.string.select_origin) else stringResource(R.string.select_destination)
-                            Text(stringResource(R.string.nearby_stop_format, action, candidate.stop.name, candidate.distanceMeters))
+                    onNearbyStopSelected = { candidate ->
+                        val point = MapPoint(
+                            candidate.stop.latitude,
+                            candidate.stop.longitude,
+                            candidate.stop.name,
+                        )
+                        if (selectingOrigin) {
+                            setOrigin(point)
+                        } else {
+                            setDestination(candidate.stop)
                         }
-                    }
-                }
+                    },
+                )
 
                 if (origin != null && destination != null) {
                     Button(
