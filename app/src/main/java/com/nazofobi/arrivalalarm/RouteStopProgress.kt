@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
-import java.time.OffsetDateTime
+import java.util.GregorianCalendar
+import java.util.TimeZone
 
 enum class TransitTimingBasis {
     SCHEDULED,
@@ -96,6 +97,36 @@ class RouteStopProgressTracker {
 }
 
 internal fun String?.toTransitEpochSecondsOrNull(): Long? {
-    if (this.isNullOrBlank()) return null
-    return runCatching { OffsetDateTime.parse(this).toEpochSecond() }.getOrNull()
+    val value = this?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val match = ISO_TRANSIT_TIMESTAMP.matchEntire(value) ?: return null
+    return runCatching {
+        val year = match.groupValues[1].toInt()
+        val month = match.groupValues[2].toInt()
+        val day = match.groupValues[3].toInt()
+        val hour = match.groupValues[4].toInt()
+        val minute = match.groupValues[5].toInt()
+        val second = match.groupValues[6].toInt()
+        val zone = match.groupValues[8]
+        val offsetSeconds = when {
+            zone == "Z" -> 0
+            else -> {
+                val sign = if (match.groupValues[9] == "-") -1 else 1
+                val offsetHours = match.groupValues[10].toInt()
+                val offsetMinutes = match.groupValues[11].toInt()
+                require(offsetHours <= 23 && offsetMinutes <= 59)
+                sign * (offsetHours * 3_600 + offsetMinutes * 60)
+            }
+        }
+
+        val calendar = GregorianCalendar(TimeZone.getTimeZone("UTC")).apply {
+            isLenient = false
+            clear()
+            set(year, month - 1, day, hour, minute, second)
+        }
+        calendar.timeInMillis / 1_000L - offsetSeconds
+    }.getOrNull()
 }
+
+private val ISO_TRANSIT_TIMESTAMP = Regex(
+    """^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(\\.\\d+)?(Z|([+-])(\\d{2}):?(\\d{2}))$"""
+)
