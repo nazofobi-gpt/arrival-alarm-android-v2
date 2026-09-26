@@ -28,6 +28,9 @@ fun ScreenAssistPanel(
     onBrokerCredentialDraftChange: (String) -> Unit,
     onSaveBrokerCredential: () -> Unit,
     onClearBrokerCredential: () -> Unit,
+    pendingConfirmationText: String? = null,
+    onApprovePendingCommand: () -> Unit,
+    onRejectPendingCommand: () -> Unit,
     guidanceText: String? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -78,6 +81,21 @@ fun ScreenAssistPanel(
                     onClick = onClearBrokerCredential,
                     modifier = Modifier.fillMaxWidth().testTag("screen-assist-broker-clear"),
                 ) { Text("Broker kimliğini sil") }
+            }
+            pendingConfirmationText?.takeIf { it.isNotBlank() }?.let { pending ->
+                Text(
+                    "Onay gerekli: $pending",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.testTag("screen-assist-command-confirmation"),
+                )
+                Button(
+                    onClick = onApprovePendingCommand,
+                    modifier = Modifier.fillMaxWidth().testTag("screen-assist-command-approve"),
+                ) { Text("Onayla") }
+                Button(
+                    onClick = onRejectPendingCommand,
+                    modifier = Modifier.fillMaxWidth().testTag("screen-assist-command-reject"),
+                ) { Text("Reddet") }
             }
             guidanceText?.takeIf { it.isNotBlank() }?.let { guidance ->
                 Text(
