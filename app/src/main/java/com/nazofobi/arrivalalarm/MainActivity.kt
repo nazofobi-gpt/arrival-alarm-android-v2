@@ -211,7 +211,6 @@ fun ArrivalAlarmApp() {
             routeStatus = outcome.message
             return
         }
-        ActiveJourneyService.start(context)
         routeStatus = "Varış alarmı ve arka plan konum takibi etkin"
     }
 
@@ -421,7 +420,6 @@ fun ArrivalAlarmApp() {
                         val outcome = connectorPort.cancelArrivalAlarm()
                         journey = controller.state
                         if (outcome.applied) {
-                            ActiveJourneyService.stop(context)
                             routeStatus = "Varış alarmı iptal edildi"
                         } else {
                             routeStatus = outcome.message
