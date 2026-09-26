@@ -7,6 +7,7 @@ class ScreenAssistBrokerTransport(
     private val brokerUrl: String,
     private val connectTimeoutMs: Int = 5_000,
     private val readTimeoutMs: Int = 5_000,
+    private val authTokenProvider: () -> String? = { null },
     private val connectionFactory: (URL) -> HttpURLConnection = { url -> url.openConnection() as HttpURLConnection },
 ) {
     init {
@@ -16,6 +17,11 @@ class ScreenAssistBrokerTransport(
     }
 
     fun requestTokenResponse(): String {
+        val callerToken = authTokenProvider()?.trim()
+        check(!callerToken.isNullOrEmpty()) {
+            "Screen Assist broker caller authorization is not configured"
+        }
+
         val connection = connectionFactory(URL(brokerUrl))
         return try {
             connection.requestMethod = "POST"
@@ -24,6 +30,7 @@ class ScreenAssistBrokerTransport(
             connection.doOutput = true
             connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("Authorization", "Bearer $callerToken")
             connection.outputStream.use { it.write("{}".toByteArray(Charsets.UTF_8)) }
             val code = connection.responseCode
             check(code in 200..299) { "Broker request failed: HTTP $code" }
