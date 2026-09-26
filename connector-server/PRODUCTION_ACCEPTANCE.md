@@ -2,6 +2,8 @@
 
 Run this only against the deployed production/staging connector after OAuth configuration is complete.
 
+For the current G-153 scope, the deployment target is the zero-cost stack in `FREE_INFRASTRUCTURE.md`: Cloudflare Workers Free + D1 Free + Auth0 Free. A passing acceptance run must not depend on a paid Render service, paid disk, or another billable fallback.
+
 ## Public preflight
 
 ```sh

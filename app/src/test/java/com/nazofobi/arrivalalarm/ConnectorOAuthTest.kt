@@ -32,6 +32,7 @@ class ConnectorOAuthTest {
             scopes = listOf("arrival.device", "offline_access"),
             redirectUri = CONNECTOR_OAUTH_REDIRECT_URI,
             resource = "https://connector.example/device",
+            audience = "https://arrival-alarm-api",
             deviceIdParameter = "device_id",
         )
         var exchangedVerifier: String? = null
@@ -107,6 +108,7 @@ class ConnectorOAuthTest {
         assertEquals("S256", query["code_challenge_method"])
         assertEquals("device-123", query["device_id"])
         assertEquals("https://connector.example/device", query["resource"])
+        assertEquals("https://arrival-alarm-api", query["audience"])
         assertEquals(transaction?.state, query["state"])
         assertNotNull(query["code_challenge"])
         assertFalse(url.contains(transaction?.codeVerifier.orEmpty()))

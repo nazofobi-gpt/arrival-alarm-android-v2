@@ -86,6 +86,7 @@ test("device OAuth metadata is a public PKCE client contract with fixed app redi
   assert.deepEqual(metadata.scopes, ["arrival.device", "offline_access"]);
   assert.equal(metadata.redirect_uri, "com.nazofobi.arrivalalarm://oauth/callback");
   assert.equal(metadata.resource, "https://connector.example/device");
+  assert.equal(metadata.audience, "arrival-alarm");
   assert.equal(metadata.device_id_parameter, "device_id");
 });
 

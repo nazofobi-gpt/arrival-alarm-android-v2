@@ -183,7 +183,7 @@ export function createArrivalAlarmMcpServer({
     },
     async () => {
       try {
-        return ok(service.getCurrentJourney(userId), "Current journey state loaded.");
+        return ok(await service.getCurrentJourney(userId), "Current journey state loaded.");
       } catch (error) {
         return failed(error, resourceMetadataUrl);
       }
@@ -205,7 +205,7 @@ export function createArrivalAlarmMcpServer({
     },
     async () => {
       try {
-        return ok(service.getTripProgress(userId), "Trip progress loaded.");
+        return ok(await service.getTripProgress(userId), "Trip progress loaded.");
       } catch (error) {
         return failed(error, resourceMetadataUrl);
       }
@@ -225,7 +225,7 @@ export function createArrivalAlarmMcpServer({
     },
     async () => {
       try {
-        return ok(service.getAlarmState(userId), "Arrival alarm state loaded.");
+        return ok(await service.getAlarmState(userId), "Arrival alarm state loaded.");
       } catch (error) {
         return failed(error, resourceMetadataUrl);
       }
@@ -255,7 +255,7 @@ export function createArrivalAlarmMcpServer({
             label: args.label,
           },
         };
-        const result = service.queueWrite(userId, command, args.expected_state_version);
+        const result = await service.queueWrite(userId, command, args.expected_state_version);
         return ok(result, "Origin change queued for the connected device.");
       } catch (error) {
         return failed(error, resourceMetadataUrl);
@@ -286,7 +286,7 @@ export function createArrivalAlarmMcpServer({
             label: args.label,
           },
         };
-        const result = service.queueWrite(userId, command, args.expected_state_version);
+        const result = await service.queueWrite(userId, command, args.expected_state_version);
         return ok(result, "Destination change queued for the connected device.");
       } catch (error) {
         return failed(error, resourceMetadataUrl);
@@ -312,7 +312,7 @@ export function createArrivalAlarmMcpServer({
     },
     async (args) => {
       try {
-        const result = service.queueWrite(
+        const result = await service.queueWrite(
           userId,
           {
             type: "select_journey",
@@ -345,7 +345,7 @@ export function createArrivalAlarmMcpServer({
     },
     async (args) => {
       try {
-        const result = service.queueWrite(
+        const result = await service.queueWrite(
           userId,
           {
             type: "set_boarding_stop",
@@ -375,7 +375,7 @@ export function createArrivalAlarmMcpServer({
     },
     async (args) => {
       try {
-        const result = service.queueWrite(
+        const result = await service.queueWrite(
           userId,
           {
             type: "arm_arrival_alarm",
@@ -404,7 +404,7 @@ export function createArrivalAlarmMcpServer({
     },
     async (args) => {
       try {
-        const result = service.queueWrite(
+        const result = await service.queueWrite(
           userId,
           {
             type: "cancel_arrival_alarm",
@@ -434,7 +434,7 @@ export function createArrivalAlarmMcpServer({
     },
     async ({ idempotency_key }) => {
       try {
-        const result = service.getCommandResult(userId, idempotency_key);
+        const result = await service.getCommandResult(userId, idempotency_key);
         return ok(
           result ?? { status: "not_found", idempotency_key },
           result ? "Command result loaded." : "No command result exists for that idempotency key."

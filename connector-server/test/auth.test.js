@@ -49,6 +49,25 @@ test("device policy requires both device scope and a bound device id", () => {
   assert.equal(auth.deviceId, "phone-1");
 });
 
+
+
+test("device policy accepts a configured namespaced provider claim", () => {
+  const auth = authContextFromPayload(
+    {
+      sub: "user-1",
+      scope: "arrival.device",
+      "https://arrival-alarm.app/device_id": "phone-auth0",
+    },
+    {
+      requiredScopes: ["arrival.device"],
+      requireDeviceId: true,
+      deviceIdClaim: "https://arrival-alarm.app/device_id",
+    }
+  );
+
+  assert.equal(auth.deviceId, "phone-auth0");
+});
+
 test("jwt verifier validates issuer audience before returning scoped context", async () => {
   const calls = [];
   const verifier = createJwtAccessVerifier({

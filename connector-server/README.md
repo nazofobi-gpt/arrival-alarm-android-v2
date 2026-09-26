@@ -35,25 +35,21 @@ The server has a provider-neutral JWT/OIDC resource-server gate. In production, 
 - `OAUTH_ISSUER`
 - `OAUTH_AUDIENCE`
 - `OAUTH_JWKS_URL`
-- `GATEWAY_SQLITE_PATH` (persistent writable SQLite file, for example `/data/arrival-alarm.db`)
+
+The canonical production target is the free Cloudflare Worker in `src/cloudflare-worker.js`, backed by D1. The Node server remains a portable/local fallback and requires `GATEWAY_SQLITE_PATH` when it is run in production mode.
 
 MCP access tokens are verified against issuer, audience and JWKS. Read tools require `arrival.read`; write tools require `arrival.write`.
 
-Device sync uses the same verifier by default, or separate values via `DEVICE_OAUTH_ISSUER`, `DEVICE_OAUTH_AUDIENCE` and `DEVICE_OAUTH_JWKS_URL`. Device tokens must contain the `arrival.device` scope and a non-empty `device_id` claim.
+Device sync uses the same verifier by default, or separate values via `DEVICE_OAUTH_ISSUER`, `DEVICE_OAUTH_AUDIENCE` and `DEVICE_OAUTH_JWKS_URL`. Device tokens must contain `arrival.device` plus a device-binding claim. `DEVICE_OAUTH_DEVICE_ID_CLAIM` supports namespaced claims such as the Auth0 Free profile.
 
-Production uses the configured SQLite store for durable per-user snapshots, queued commands and receipts. Startup fails closed when `GATEWAY_SQLITE_PATH` is missing in production.
+The free production path uses D1 for durable per-user snapshots, queued commands and receipts. It does not require a paid persistent volume. OAuth configuration and account-specific values remain outside the repository.
 
-Production still requires deployment-specific infrastructure before end-to-end acceptance:
-
-1. An authorization server/client registration and device-token issuance flow.
-2. A persistent volume for the SQLite database (or a later compatible managed store for multi-instance deployment).
-3. HTTPS hosting and secret/config storage outside the repository.
-4. Revoke/disconnect handling and operational audit/retention policy.
+Production still requires external account setup and physical acceptance, but G-153 must not introduce a paid hosting dependency without a new explicit user decision.
 
 Do not replace these gates with a hard-coded bearer token, API key in the APK, or anonymous public endpoints.
 
 
-## Production container
+## Optional portable Node container
 
 The connector includes a non-root Node 22 container. Build it from `connector-server/`:
 
@@ -83,18 +79,9 @@ Required public-client deployment variables are documented in `.env.example`: au
 A verified HTTPS Android App Link should replace the private-use callback after the final production domain and signing certificate are fixed; until then the package-based callback remains protected by PKCE and transaction-bound state.
 
 
-## Render Blueprint
 
-The repository root now includes `render.yaml` for the production connector. It is intentionally not auto-provisioned from ChatGPT because the Blueprint creates paid compute plus a persistent disk.
+## Free production target
 
-The Blueprint uses:
-- Frankfurt region.
-- Node native runtime with `connector-server` as the root directory.
-- `0.5c-512mb` paid compute, one instance.
-- A 1 GB persistent disk mounted at `/var/data`.
-- `GATEWAY_SQLITE_PATH=/var/data/arrival-alarm.db`.
-- `MCP_PUBLIC_BASE_URL` copied from Render's own `RENDER_EXTERNAL_URL`.
-- `autoDeployTrigger: checksPass`, so main-branch deploys wait for linked CI checks.
-- `sync: false` for provider-specific OAuth values so credentials/config are supplied during Blueprint creation instead of committed to git.
+The supported production target for G-153 is **Cloudflare Workers Free + D1 Free + Auth0 Free**. No Render service or paid persistent disk is part of the target architecture.
 
-Creating the Blueprint is a billing action. Review the current Render price before provisioning. Persistent disk is required for the SQLite gateway; do not downgrade this Blueprint to a free web service unless the gateway is migrated to another durable datastore.
+See `FREE_INFRASTRUCTURE.md` for account setup, D1 migration, Auth0 scopes/device binding, Worker deployment, free-tier constraints and acceptance steps. The checked-in `wrangler.free.jsonc.example` contains no secret; copy it to the gitignored `wrangler.free.jsonc` for real account values.

@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "arrival-alarm-connector",
+  "main": "src/cloudflare-worker.js",
+  "compatibility_date": "2026-09-26",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "arrival-alarm-connector",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "OAUTH_AUTHORIZATION_SERVER": "https://YOUR_AUTH0_DOMAIN/",
+    "OAUTH_ISSUER": "https://YOUR_AUTH0_DOMAIN/",
+    "OAUTH_AUDIENCE": "https://arrival-alarm-api",
+    "OAUTH_JWKS_URL": "https://YOUR_AUTH0_DOMAIN/.well-known/jwks.json",
+
+    "DEVICE_OAUTH_ISSUER": "https://YOUR_AUTH0_DOMAIN/",
+    "DEVICE_OAUTH_AUDIENCE": "https://arrival-alarm-api",
+    "DEVICE_OAUTH_JWKS_URL": "https://YOUR_AUTH0_DOMAIN/.well-known/jwks.json",
+    "DEVICE_OAUTH_AUTHORIZATION_ENDPOINT": "https://YOUR_AUTH0_DOMAIN/authorize",
+    "DEVICE_OAUTH_TOKEN_ENDPOINT": "https://YOUR_AUTH0_DOMAIN/oauth/token",
+    "DEVICE_OAUTH_REVOCATION_ENDPOINT": "https://YOUR_AUTH0_DOMAIN/oauth/revoke",
+    "DEVICE_OAUTH_CLIENT_ID": "REPLACE_WITH_ANDROID_NATIVE_CLIENT_ID",
+    "DEVICE_OAUTH_SCOPES": "arrival.device offline_access",
+    "DEVICE_OAUTH_DEVICE_ID_PARAMETER": "ext-device_id",
+    "DEVICE_OAUTH_DEVICE_ID_CLAIM": "https://arrival-alarm.app/device_id"
+  }
+}

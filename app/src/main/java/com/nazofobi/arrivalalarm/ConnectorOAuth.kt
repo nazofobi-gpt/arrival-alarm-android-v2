@@ -18,6 +18,7 @@ data class ConnectorOAuthMetadata(
     val scopes: List<String>,
     val redirectUri: String,
     val resource: String? = null,
+    val audience: String? = null,
     val deviceIdParameter: String = "device_id",
 )
 
@@ -112,6 +113,7 @@ class ConnectorOAuthCoordinator(
             metadata.deviceIdParameter to deviceId,
         )
         metadata.resource?.let { params["resource"] = it }
+        metadata.audience?.let { params["audience"] = it }
         return appendQuery(metadata.authorizationEndpoint, params)
     }
 
@@ -210,6 +212,9 @@ class ConnectorOAuthCoordinator(
             "connector_oauth_device_parameter_reserved"
         }
         metadata.resource?.let { requireHttpsUrl(it, "resource") }
+        metadata.audience?.let { audience ->
+            require(audience.isNotBlank()) { "connector_oauth_audience_invalid" }
+        }
         return metadata
     }
 
@@ -233,6 +238,7 @@ class ConnectorOAuthCoordinator(
             "code_challenge",
             "code_challenge_method",
             "resource",
+            "audience",
         )
 
         internal fun base64UrlNoPadding(bytes: ByteArray): String {

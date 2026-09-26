@@ -31,7 +31,7 @@ function publicBaseUrl(req) {
 
 function resourceMetadata(req) {
   const base = publicBaseUrl(req);
-  const authorizationServer = process.env.OAUTH_AUTHORIZATION_SERVER?.replace(/\/$/, "");
+  const authorizationServer = process.env.OAUTH_AUTHORIZATION_SERVER?.trim();
   if (process.env.NODE_ENV === "production" && !authorizationServer) {
     throw new Error("production_oauth_not_configured");
   }
@@ -94,6 +94,7 @@ async function resolveDeviceAuth(req) {
     return getDeviceVerifier()(bearerToken(req), {
       requiredScopes: [DEVICE_SCOPE],
       requireDeviceId: true,
+      deviceIdClaim: process.env.DEVICE_OAUTH_DEVICE_ID_CLAIM?.trim() || null,
     });
   }
   const expected = process.env.DEV_DEVICE_BEARER_TOKEN;
