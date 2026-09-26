@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
@@ -927,7 +928,8 @@ fun ArrivalAlarmApp(
                     ) { Text(stringResource(R.string.guidance_speak_destination)) }
                 }
 
-                Text(stringResource(R.string.inference_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+                val inferenceTitle = stringResource(R.string.inference_title)
+                Text(inferenceTitle, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
                 Switch(
                     checked = inferenceEnabled,
                     onCheckedChange = {
@@ -935,7 +937,9 @@ fun ArrivalAlarmApp(
                         inferenceResult = null
                         confirmedTripId = null
                     },
-                    modifier = Modifier.testTag("trip-inference-toggle"),
+                    modifier = Modifier
+                        .semantics { contentDescription = inferenceTitle }
+                        .testTag("trip-inference-toggle"),
                 )
                 Text(
                     if (inferenceEnabled) stringResource(R.string.inference_enabled)
