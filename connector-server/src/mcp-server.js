@@ -51,12 +51,35 @@ function ok(data, message) {
   };
 }
 
-function failed(error) {
+export function mcpErrorResult(error, resourceMetadataUrl = null) {
   const message = error instanceof Error ? error.message : "connector_error";
-  return {
+  const result = {
     isError: true,
     content: [{ type: "text", text: message }],
   };
+
+  if (
+    resourceMetadataUrl &&
+    (message === "insufficient_scope" || message === "unauthorized")
+  ) {
+    const errorCode =
+      message === "insufficient_scope" ? "insufficient_scope" : "invalid_token";
+    const description =
+      message === "insufficient_scope"
+        ? "The connected account needs additional permission for this tool."
+        : "Authentication is required for this tool.";
+    result._meta = {
+      "mcp/www_authenticate": [
+        `Bearer resource_metadata="${resourceMetadataUrl}", error="${errorCode}", error_description="${description}"`,
+      ],
+    };
+  }
+
+  return result;
+}
+
+function failed(error, resourceMetadataUrl) {
+  return mcpErrorResult(error, resourceMetadataUrl);
 }
 
 function requireScope(scopes, scope) {
@@ -96,6 +119,7 @@ export function createArrivalAlarmMcpServer({
   service: rawService,
   userId,
   scopes = ["arrival.read", "arrival.write"],
+  resourceMetadataUrl = null,
 }) {
   const service = createScopedGatewayService(rawService, scopes);
   const server = new McpServer(
@@ -131,7 +155,7 @@ export function createArrivalAlarmMcpServer({
       try {
         service.assertRead();
       } catch (error) {
-        return failed(error);
+        return failed(error, resourceMetadataUrl);
       }
       const profile = { id: userId };
       return {
@@ -157,7 +181,7 @@ export function createArrivalAlarmMcpServer({
       try {
         return ok(service.getCurrentJourney(userId), "Current journey state loaded.");
       } catch (error) {
-        return failed(error);
+        return failed(error, resourceMetadataUrl);
       }
     }
   );
@@ -178,7 +202,7 @@ export function createArrivalAlarmMcpServer({
       try {
         return ok(service.getTripProgress(userId), "Trip progress loaded.");
       } catch (error) {
-        return failed(error);
+        return failed(error, resourceMetadataUrl);
       }
     }
   );
@@ -197,7 +221,7 @@ export function createArrivalAlarmMcpServer({
       try {
         return ok(service.getAlarmState(userId), "Arrival alarm state loaded.");
       } catch (error) {
-        return failed(error);
+        return failed(error, resourceMetadataUrl);
       }
     }
   );
@@ -227,7 +251,7 @@ export function createArrivalAlarmMcpServer({
         const result = service.queueWrite(userId, command, args.expected_state_version);
         return ok(result, "Origin change queued for the connected device.");
       } catch (error) {
-        return failed(error);
+        return failed(error, resourceMetadataUrl);
       }
     }
   );
@@ -257,7 +281,7 @@ export function createArrivalAlarmMcpServer({
         const result = service.queueWrite(userId, command, args.expected_state_version);
         return ok(result, "Destination change queued for the connected device.");
       } catch (error) {
-        return failed(error);
+        return failed(error, resourceMetadataUrl);
       }
     }
   );
@@ -290,7 +314,7 @@ export function createArrivalAlarmMcpServer({
         );
         return ok(result, "Journey selection queued for the connected device.");
       } catch (error) {
-        return failed(error);
+        return failed(error, resourceMetadataUrl);
       }
     }
   );
@@ -322,7 +346,7 @@ export function createArrivalAlarmMcpServer({
         );
         return ok(result, "Boarding stop change queued for the connected device.");
       } catch (error) {
-        return failed(error);
+        return failed(error, resourceMetadataUrl);
       }
     }
   );
@@ -350,7 +374,7 @@ export function createArrivalAlarmMcpServer({
         );
         return ok(result, "Arrival alarm command queued for the connected device.");
       } catch (error) {
-        return failed(error);
+        return failed(error, resourceMetadataUrl);
       }
     }
   );
@@ -378,7 +402,7 @@ export function createArrivalAlarmMcpServer({
         );
         return ok(result, "Arrival alarm cancellation queued for the connected device.");
       } catch (error) {
-        return failed(error);
+        return failed(error, resourceMetadataUrl);
       }
     }
   );
@@ -403,7 +427,7 @@ export function createArrivalAlarmMcpServer({
           result ? "Command result loaded." : "No command result exists for that idempotency key."
         );
       } catch (error) {
-        return failed(error);
+        return failed(error, resourceMetadataUrl);
       }
     }
   );
