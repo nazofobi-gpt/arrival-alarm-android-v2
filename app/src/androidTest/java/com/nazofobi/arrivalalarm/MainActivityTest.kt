@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import android.content.Context
+import android.graphics.Bitmap
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -11,6 +12,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import java.io.File
+import java.io.FileOutputStream
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -21,6 +25,16 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class MainActivityTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
+
+    private fun saveVisualEvidence(fileName: String) {
+        rule.waitForIdle()
+        val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+        val root = requireNotNull(rule.activity.getExternalFilesDir(null))
+        val dir = File(root, "g166-screenshots").apply { mkdirs() }
+        FileOutputStream(File(dir, fileName)).use { output ->
+            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
+        }
+    }
 
     @Before fun resetPersistedJourneyState() {
         rule.activityRule.scenario.onActivity { activity ->
@@ -93,6 +107,7 @@ class MainActivityTest {
         rule.onNodeWithTag("arm").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("guidance-permissions").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("trip-inference-toggle").performScrollTo().assertIsDisplayed()
+        saveVisualEvidence("font-200-critical-controls.png")
     }
 
     @Test fun productionUiExposesInteractiveMapSurface() {
@@ -163,6 +178,35 @@ class MainActivityTest {
         rule.onNodeWithTag("theme-mode-status")
             .performScrollTo()
             .assertTextContains(darkLabel, substring = true)
+    }
+
+    @Test fun visualEvidenceCapturesSystemLightDarkSettingsMatrix() {
+        fun chooseAndCapture(tag: String, expectedLabel: String, fileName: String) {
+            rule.onNodeWithTag(tag)
+                .performScrollTo()
+                .assertIsDisplayed()
+                .performClick()
+            rule.onNodeWithTag("theme-mode-status")
+                .performScrollTo()
+                .assertTextContains(expectedLabel, substring = true)
+            saveVisualEvidence(fileName)
+        }
+
+        chooseAndCapture(
+            "theme-light",
+            rule.activity.getString(R.string.theme_light),
+            "settings-light.png",
+        )
+        chooseAndCapture(
+            "theme-dark",
+            rule.activity.getString(R.string.theme_dark),
+            "settings-dark.png",
+        )
+        chooseAndCapture(
+            "theme-system",
+            rule.activity.getString(R.string.theme_system),
+            "settings-system.png",
+        )
     }
 
     @Test fun guidanceLanguageChoicePersistsAcrossActivityRecreation() {
