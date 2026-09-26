@@ -629,6 +629,7 @@ fun ArrivalAlarmApp(
                     Modifier
                         .widthIn(max = 840.dp)
                         .fillMaxWidth()
+                        .testTag("adaptive-content")
                         .verticalScroll(rememberScrollState())
                         .padding(24.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
