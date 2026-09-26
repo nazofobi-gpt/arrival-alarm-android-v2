@@ -136,4 +136,13 @@
     <string name="min_two_chars">En az 2 karakter yaz</string>
     <string name="unknown_error">bilinmeyen hata</string>
     <string name="unknown_time">zaman bilinmiyor</string>
+
+    <string name="map_title">Haritadan seç</string>
+    <string name="map_instruction_origin">Haritada bir noktaya dokunarak başlangıç seçin; yakın durak işaretlerine de dokunabilirsiniz.</string>
+    <string name="map_instruction_destination">Haritada bir noktaya dokunarak varış seçin; yakın durak işaretlerine de dokunabilirsiniz.</string>
+    <string name="map_point_label">Harita noktası</string>
+    <string name="map_provider_note">Harita: OpenFreeMap • MapLibre</string>
+    <string name="location_kind_stop">Durak</string>
+    <string name="location_kind_address">Adres</string>
+    <string name="location_kind_poi">Nokta/POI</string>
 </resources>
