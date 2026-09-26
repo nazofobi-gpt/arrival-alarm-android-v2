@@ -75,14 +75,13 @@ class MainActivityTest {
     @Test fun launchExposesRealNationwideSearchAndLocationControls() {
         rule.onNodeWithTag("home-overview").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("bottom-navigation").assertIsDisplayed()
+        rule.onNodeWithTag("home-current-location").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("transit-map").performScrollTo().assertIsDisplayed()
 
         navigateTo("nav-search")
         rule.onNodeWithTag("catalog-search").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("catalog-search-submit").performScrollTo().assertIsNotEnabled()
         rule.onNodeWithTag("search-target-status").performScrollTo().assertIsDisplayed()
-        rule.onNodeWithTag("search-target-origin").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
-        rule.onNodeWithTag("search-target-destination").performScrollTo().assertIsDisplayed().assertIsNotEnabled()
-        rule.onNodeWithTag("current-location-origin").performScrollTo().assertIsDisplayed()
 
         navigateTo("nav-settings")
         rule.onNodeWithTag("nationwide-data-state").performScrollTo().assertIsDisplayed()
@@ -108,18 +107,17 @@ class MainActivityTest {
         rule.activityRule.scenario.recreate()
         rule.waitForIdle()
 
-        navigateTo("nav-search")
-        rule.onNodeWithTag("origin-label").performScrollTo().assertIsDisplayed()
-        rule.onNodeWithTag("destination-label").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("home-origin").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("home-destination").performScrollTo().assertIsDisplayed()
         navigateTo("nav-journey")
         rule.onNodeWithTag("route-refresh").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun largeFontKeepsCriticalJourneyControlsReachable() {
         rule.onNodeWithTag("home-overview").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("transit-map").performScrollTo().assertIsDisplayed()
         navigateTo("nav-search")
         rule.onNodeWithTag("catalog-search").performScrollTo().assertIsDisplayed()
-        rule.onNodeWithTag("transit-map").performScrollTo().assertIsDisplayed()
         navigateTo("nav-settings")
         rule.onNodeWithTag("guidance-permissions").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("trip-inference-toggle").performScrollTo().assertIsDisplayed()
@@ -153,14 +151,12 @@ class MainActivityTest {
     }
 
     @Test fun productionUiExposesInteractiveMapSurface() {
-        navigateTo("nav-search")
         val mapLabel = rule.activity.getString(R.string.map_point_label)
         rule.onNodeWithTag("transit-map")
             .performScrollTo()
             .assertIsDisplayed()
             .assertContentDescriptionEquals(mapLabel)
-        rule.onNodeWithTag("map-instruction").performScrollTo().assertIsDisplayed()
-        rule.onNodeWithTag("map-provider").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("home-map-provider").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun productionUiExposesNoLegacyFixtureControls() {
@@ -244,7 +240,6 @@ class MainActivityTest {
             "nav-journey",
             "nav-departures",
             "nav-settings",
-            "home-current-location",
         ).forEach { tag ->
             val node = rule.onNodeWithTag(tag)
                 .assertIsDisplayed()
@@ -254,6 +249,14 @@ class MainActivityTest {
                 node.boundsInRoot.height + 0.5f >= minPixels,
             )
         }
+        val homeLocation = rule.onNodeWithTag("home-current-location")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .fetchSemanticsNode()
+        assertTrue(
+            "home-current-location height=${homeLocation.boundsInRoot.height}px, required>=$minPixels",
+            homeLocation.boundsInRoot.height + 0.5f >= minPixels,
+        )
         navigateTo("nav-settings")
         listOf("theme-system", "theme-light", "theme-dark", "readiness-refresh").forEach { tag ->
             val node = rule.onNodeWithTag(tag)
