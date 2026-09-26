@@ -1,0 +1,47 @@
+name: Production Connector Preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Public HTTPS connector origin, without /mcp"
+        required: true
+        type: string
+      require_workspace_oidc:
+        description: "Require openid + email + UserInfo readiness"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: connector-server
+    env:
+      CONNECTOR_BASE_URL: ${{ inputs.base_url }}
+      PROBE_REQUIRE_WORKSPACE_OIDC: ${{ inputs.require_workspace_oidc }}
+      PROBE_USER_BEARER_TOKEN: ${{ secrets.PRODUCTION_MCP_USER_TOKEN }}
+      PROBE_DEVICE_BEARER_TOKEN: ${{ secrets.PRODUCTION_DEVICE_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: connector-server/package.json
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Run production preflight
+        run: npm run preflight:production
