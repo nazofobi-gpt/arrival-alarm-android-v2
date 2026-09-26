@@ -27,5 +27,20 @@ class LocalizationInstrumentedTest {
             "Nächste Haltestellen",
             localized("de-DE").getString(R.string.nearby_stops),
         )
+        assertEquals(
+            "Ayarlar ve hazırlık",
+            localized("tr-TR").getString(R.string.settings_readiness_title),
+        )
+        assertEquals(
+            "Settings and readiness",
+            localized("en-US").getString(R.string.settings_readiness_title),
+        )
+        assertEquals(
+            "Einstellungen und Bereitschaft",
+            localized("de-DE").getString(R.string.settings_readiness_title),
+        )
+        assertEquals("Sistem", localized("tr-TR").getString(R.string.theme_system))
+        assertEquals("System", localized("en-US").getString(R.string.theme_system))
+        assertEquals("System", localized("de-DE").getString(R.string.theme_system))
     }
 }
