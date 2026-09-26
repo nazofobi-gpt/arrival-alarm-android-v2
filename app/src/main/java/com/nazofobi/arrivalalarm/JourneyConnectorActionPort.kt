@@ -23,6 +23,7 @@ class JourneyConnectorActionPort(
     private var selectedRoute: RouteOption? = null
     private var activeTrip: ConnectorTripState? = null
 
+    @Synchronized
     override fun readSnapshot(): ArrivalAlarmConnectorSnapshot {
         val now = nowEpochSeconds()
         refreshTimedTripProgress(now)
@@ -48,6 +49,7 @@ class JourneyConnectorActionPort(
         )
     }
 
+    @Synchronized
     override fun setOrigin(point: MapPoint): ConnectorActionOutcome {
         controller.selectStart(GeoPoint(point.latitude, point.longitude))
         origin = point.toConnectorStop()
@@ -58,6 +60,7 @@ class JourneyConnectorActionPort(
         return ConnectorActionOutcome(true, "Başlangıç güncellendi")
     }
 
+    @Synchronized
     override fun setDestination(point: MapPoint): ConnectorActionOutcome {
         if (controller.state.start == null) {
             return ConnectorActionOutcome(false, "Önce başlangıç seçilmeli")
@@ -73,6 +76,7 @@ class JourneyConnectorActionPort(
         return ConnectorActionOutcome(true, "Varış güncellendi")
     }
 
+    @Synchronized
     override fun selectJourney(routeId: String): ConnectorActionOutcome {
         val route = routeResolver(routeId)
             ?: return ConnectorActionOutcome(false, "Rota artık mevcut değil; güncel rota seçilmeli")
@@ -103,6 +107,7 @@ class JourneyConnectorActionPort(
         return ConnectorActionOutcome(true, "Sefer seçildi")
     }
 
+    @Synchronized
     override fun setBoardingStop(stop: ConnectorStopState): ConnectorActionOutcome {
         val trip = activeTrip ?: return ConnectorActionOutcome(false, "Önce sefer seçilmeli")
         activeTrip = trip.copy(boardingStop = stop)
@@ -110,6 +115,7 @@ class JourneyConnectorActionPort(
         return ConnectorActionOutcome(true, "Biniş durağı güncellendi")
     }
 
+    @Synchronized
     override fun armArrivalAlarm(): ConnectorActionOutcome {
         controller.arm()
         if (controller.state.phase != JourneyPhase.ARMED) {
@@ -119,6 +125,7 @@ class JourneyConnectorActionPort(
         return ConnectorActionOutcome(true, "Varış alarmı kuruldu")
     }
 
+    @Synchronized
     override fun cancelArrivalAlarm(): ConnectorActionOutcome {
         if (controller.state.phase != JourneyPhase.ARMED && controller.state.phase != JourneyPhase.ARRIVED) {
             return ConnectorActionOutcome(false, "Kurulu varış alarmı yok")
@@ -131,6 +138,7 @@ class JourneyConnectorActionPort(
         return ConnectorActionOutcome(true, "Varış alarmı iptal edildi")
     }
 
+    @Synchronized
     fun updateTripProgress(
         previousStop: ConnectorStopState?,
         currentStop: ConnectorStopState?,
