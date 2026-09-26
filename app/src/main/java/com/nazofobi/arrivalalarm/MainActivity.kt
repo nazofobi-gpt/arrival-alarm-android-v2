@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import java.text.SimpleDateFormat
+import java.text.DateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -40,6 +40,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
@@ -151,6 +154,7 @@ fun ArrivalAlarmApp(
     var locationMessage by remember { mutableStateOf<String?>(null) }
     var routeOptions by remember { mutableStateOf(emptyList<RouteOption>()) }
     var routeStatus by remember { mutableStateOf<String?>(null) }
+    var routeOffline by remember { mutableStateOf(false) }
     var routeBusy by remember { mutableStateOf(false) }
     val routeCache = remember { OfflineTransitCache() }
     var guidanceState by remember { mutableStateOf(guidanceController.state) }
@@ -171,26 +175,26 @@ fun ArrivalAlarmApp(
     var connectorSetupStatus by remember {
         mutableStateOf(
             when {
-                connectorConnected -> "ChatGPT cihaz bağlantısı hazır"
-                connectorBaseUrl.isBlank() -> "Connector URL release yapılandırmasında ayarlı değil"
-                else -> "ChatGPT cihaz bağlantısı kurulmadı"
+                connectorConnected -> context.getString(R.string.connector_ready)
+                connectorBaseUrl.isBlank() -> context.getString(R.string.connector_url_missing)
+                else -> context.getString(R.string.connector_not_connected)
             }
         )
     }
 
     fun connectorStatusText(status: ConnectorRuntimeStatus): String = when (status.state) {
-        ConnectorRuntimeState.CONNECTED -> "ChatGPT cihaz bağlantısı aktif"
-        ConnectorRuntimeState.SYNCING -> "ChatGPT bağlantısı senkronize ediliyor"
-        ConnectorRuntimeState.AUTH_EXPIRED -> "ChatGPT cihaz oturumu süresi doldu"
-        ConnectorRuntimeState.DISCONNECTED -> "ChatGPT cihaz oturumu bulunamadı"
-        ConnectorRuntimeState.ERROR -> "Connector gateway senkronizasyonu başarısız"
-        ConnectorRuntimeState.STOPPED -> "Connector beklemede"
+        ConnectorRuntimeState.CONNECTED -> context.getString(R.string.connector_active)
+        ConnectorRuntimeState.SYNCING -> context.getString(R.string.connector_syncing)
+        ConnectorRuntimeState.AUTH_EXPIRED -> context.getString(R.string.connector_auth_expired)
+        ConnectorRuntimeState.DISCONNECTED -> context.getString(R.string.connector_session_missing)
+        ConnectorRuntimeState.ERROR -> context.getString(R.string.connector_sync_failed)
+        ConnectorRuntimeState.STOPPED -> context.getString(R.string.connector_stopped)
     }
 
     fun beginConnectorAuthorization() {
         if (connectorBaseUrl.isBlank() || connectorSetupBusy) return
         connectorSetupBusy = true
-        connectorSetupStatus = "Güvenli bağlantı hazırlanıyor…"
+        connectorSetupStatus = context.getString(R.string.connector_preparing)
         coroutineScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching { connectorOAuth.beginAuthorization(connectorBaseUrl) }
@@ -200,13 +204,13 @@ fun ArrivalAlarmApp(
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 runCatching { context.startActivity(browserIntent) }
                     .onSuccess {
-                        connectorSetupStatus = "Tarayıcıdaki yetkilendirmeyi tamamlayın"
+                        connectorSetupStatus = context.getString(R.string.connector_finish_browser)
                     }
                     .onFailure {
-                        connectorSetupStatus = "Yetkilendirme tarayıcısı açılamadı"
+                        connectorSetupStatus = context.getString(R.string.connector_browser_failed)
                     }
             }.onFailure {
-                connectorSetupStatus = "OAuth yapılandırması doğrulanamadı"
+                connectorSetupStatus = context.getString(R.string.connector_oauth_config_failed)
             }
             connectorSetupBusy = false
         }
@@ -215,16 +219,16 @@ fun ArrivalAlarmApp(
     fun disconnectConnector() {
         if (connectorSetupBusy) return
         connectorSetupBusy = true
-        connectorSetupStatus = "ChatGPT bağlantısı kesiliyor…"
+        connectorSetupStatus = context.getString(R.string.connector_disconnecting)
         coroutineScope.launch {
             val remotelyRevoked = withContext(Dispatchers.IO) {
                 connectorOAuth.disconnect()
             }
             connectorConnected = false
             connectorSetupStatus = if (remotelyRevoked) {
-                "ChatGPT cihaz bağlantısı kesildi ve token iptal edildi"
+                context.getString(R.string.connector_revoked)
             } else {
-                "Yerel bağlantı kesildi; uzak token iptali doğrulanamadı"
+                context.getString(R.string.connector_local_only_disconnect)
             }
             connectorSetupBusy = false
         }
@@ -244,6 +248,7 @@ fun ArrivalAlarmApp(
         routeOptions = emptyList()
         graph.routeRegistry.clear()
         routeStatus = null
+        routeOffline = false
         selectingOrigin = false
         connectorPort.setOrigin(point)
         journey = controller.state
@@ -255,20 +260,22 @@ fun ArrivalAlarmApp(
 
     fun loadRoutes(a: MapPoint, b: MapPoint) {
         routeBusy = true
-        routeStatus = "Rota hesaplanıyor…"
+        routeStatus = context.getString(R.string.route_calculating)
         val key = routeKey(a, b)
         transit.journeyOptions(a, b) { options, status ->
             routeBusy = false
             if (options.isNotEmpty()) {
+                routeOffline = false
                 routeOptions = options
                 graph.routeRegistry.replace(options)
                 routeStatus = status
                 routeCache.put(CachedTransitPlan(key, options, emptyList(), System.currentTimeMillis() / 1000))
             } else {
                 val cached = routeCache.routeOptions(key)
+                routeOffline = cached.isNotEmpty()
                 routeOptions = cached
                 graph.routeRegistry.replace(cached)
-                routeStatus = if (cached.isNotEmpty()) "Canlı rota yok • son başarılı çevrimdışı rota" else status
+                routeStatus = if (cached.isNotEmpty()) context.getString(R.string.route_offline_fallback) else status
             }
         }
     }
@@ -282,7 +289,7 @@ fun ArrivalAlarmApp(
             val outcome = connectorPort.setDestination(point)
             journey = controller.state
             if (!outcome.applied) {
-                routeStatus = outcome.message
+                routeStatus = localizedDomainMessage(context, outcome.message)
                 return
             }
             destination = point
@@ -305,18 +312,18 @@ fun ArrivalAlarmApp(
             searchBusy = false
             searchResults = values
             searchSource = source
-            searchMessage = if (values.isEmpty()) "Durak bulunamadı" else null
+            searchMessage = if (values.isEmpty()) context.getString(R.string.no_stop_found) else null
         }
     }
 
     fun useCurrentLocation() {
-        locationMessage = "Konum alınıyor…"
+        locationMessage = context.getString(R.string.getting_location)
         currentLocation.request { result ->
             result.onSuccess { point ->
                 locationMessage = null
-                setOrigin(MapPoint(point.latitude, point.longitude, "Mevcut konum"))
+                setOrigin(MapPoint(point.latitude, point.longitude, context.getString(R.string.current_location_label)))
             }.onFailure {
-                locationMessage = it.message ?: "Konum alınamadı"
+                locationMessage = localizedDomainMessage(context, it.message)
             }
         }
     }
@@ -332,17 +339,17 @@ fun ArrivalAlarmApp(
         val outcome = connectorPort.armArrivalAlarm()
         journey = controller.state
         if (!outcome.applied) {
-            routeStatus = outcome.message
+            routeStatus = localizedDomainMessage(context, outcome.message)
             return
         }
-        routeStatus = "Varış alarmı ve arka plan konum takibi etkin"
+        routeStatus = context.getString(R.string.alarm_active)
     }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
         if (result.values.any { it }) useCurrentLocation()
-        else locationMessage = "Konum izni reddedildi; durak araması yine kullanılabilir"
+        else locationMessage = context.getString(R.string.location_permission_denied)
     }
 
     val alarmPermissionLauncher = rememberLauncherForActivityResult(
@@ -351,7 +358,7 @@ fun ArrivalAlarmApp(
         if (ActiveJourneyPermissions.hasRequired(context)) {
             armAndStartTracking()
         } else {
-            routeStatus = "Varış alarmı için konum ve bildirim izni gerekli"
+            routeStatus = context.getString(R.string.alarm_permissions_required)
         }
     }
 
@@ -366,7 +373,7 @@ fun ArrivalAlarmApp(
     LaunchedEffect(oauthCallbackUri) {
         val callback = oauthCallbackUri?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
         connectorSetupBusy = true
-        connectorSetupStatus = "OAuth yanıtı doğrulanıyor…"
+        connectorSetupStatus = context.getString(R.string.connector_oauth_verifying)
         val result = withContext(Dispatchers.IO) {
             runCatching {
                 connectorOAuth.completeAuthorization(callback)
@@ -378,7 +385,7 @@ fun ArrivalAlarmApp(
             connectorSetupStatus = connectorStatusText(runtimeStatus)
         }.onFailure {
             connectorConnected = connectorSessionStore.hasUsableSession()
-            connectorSetupStatus = "OAuth yanıtı reddedildi; bağlantı kurulmadı"
+            connectorSetupStatus = context.getString(R.string.connector_oauth_rejected)
         }
         connectorSetupBusy = false
         onOAuthCallbackConsumed()
@@ -429,8 +436,8 @@ fun ArrivalAlarmApp(
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("Varış Alarmı", style = MaterialTheme.typography.headlineMedium)
-                Text("Almanya transit arama", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
+                Text(stringResource(R.string.subtitle), style = MaterialTheme.typography.titleMedium)
 
                 if (!onboardingComplete) {
                     Card(
@@ -440,17 +447,11 @@ fun ArrivalAlarmApp(
                             modifier = Modifier.padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Text("İlk kullanım", style = MaterialTheme.typography.titleMedium)
+                            Text(stringResource(R.string.onboarding_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+                            Text(stringResource(R.string.onboarding_steps))
+                            Text(stringResource(R.string.onboarding_permission_note))
                             Text(
-                                "1. Başlangıç ve varışı seçin. 2. Rotayı kontrol edin. " +
-                                    "3. Varış alarmını siz etkinleştirin."
-                            )
-                            Text(
-                                "Konum izni yalnız konum/aktif yolculuk özellikleri için istenir. " +
-                                    "ChatGPT bağlantısı isteğe bağlıdır ve ayrıca kurulabilir."
-                            )
-                            Text(
-                                "Alarm kurulmadan arka plan yolculuk takibi başlatılmaz.",
+                                stringResource(R.string.onboarding_background_note),
                                 modifier = Modifier.testTag("onboarding-privacy-note"),
                             )
                             Button(
@@ -462,13 +463,13 @@ fun ArrivalAlarmApp(
                                 },
                                 modifier = Modifier.testTag("onboarding-complete"),
                             ) {
-                                Text("Anladım, devam et")
+                                Text(stringResource(R.string.continue_action))
                             }
                         }
                     }
                 }
 
-                Text("ChatGPT bağlantısı", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.connector_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
                 Text(
                     connectorSetupStatus,
                     modifier = Modifier.testTag("connector-setup-status"),
@@ -479,7 +480,7 @@ fun ArrivalAlarmApp(
                         enabled = !connectorSetupBusy,
                         modifier = Modifier.testTag("connector-disconnect"),
                     ) {
-                        Text(if (connectorSetupBusy) "İşleniyor…" else "ChatGPT bağlantısını kes")
+                        Text(if (connectorSetupBusy) stringResource(R.string.processing) else stringResource(R.string.disconnect_chatgpt))
                     }
                 } else {
                     Button(
@@ -487,39 +488,39 @@ fun ArrivalAlarmApp(
                         enabled = !connectorSetupBusy && connectorBaseUrl.isNotBlank(),
                         modifier = Modifier.testTag("connector-connect"),
                     ) {
-                        Text(if (connectorSetupBusy) "İşleniyor…" else "ChatGPT bağlantısını kur")
+                        Text(if (connectorSetupBusy) stringResource(R.string.processing) else stringResource(R.string.connect_chatgpt))
                     }
                 }
 
                 val dataText = when (val value = dataState) {
-                    NationwideDataState.Idle -> "Almanya veri indeksi henüz hazır değil"
+                    NationwideDataState.Idle -> stringResource(R.string.data_idle)
                     is NationwideDataState.Loading -> value.message
-                    is NationwideDataState.Ready -> "Almanya tam durak indeksi hazır • ${value.stopCount} durak • gtfs.de/DELFI • sürüm ${value.sourceVersion} • ${formatEpoch(value.fetchedAtEpochSeconds)}"
-                    is NationwideDataState.Error -> "Tam indeks yüklenemedi • canlı arama açık • ${value.message}"
+                    is NationwideDataState.Ready -> stringResource(R.string.data_ready, value.stopCount, value.sourceVersion, formatEpoch(value.fetchedAtEpochSeconds))
+                    is NationwideDataState.Error -> stringResource(R.string.data_error, value.message)
                 }
                 Text(dataText, modifier = Modifier.testTag("nationwide-data-state"))
                 if (dataState !is NationwideDataState.Ready && dataState !is NationwideDataState.Loading) {
                     Button(
                         onClick = { transit.ensureNationwideIndex { dataState = it } },
                         modifier = Modifier.testTag("nationwide-index-download"),
-                    ) { Text("Tam Almanya durak indeksini indir") }
+                    ) { Text(stringResource(R.string.download_germany_index)) }
                 }
 
                 Text(
-                    if (selectingOrigin) "Arama sonucu başlangıç durağı olarak seçilecek"
-                    else "Arama sonucu varış durağı olarak seçilecek",
+                    if (selectingOrigin) stringResource(R.string.search_target_origin_status)
+                    else stringResource(R.string.search_target_destination_status),
                     modifier = Modifier.testTag("search-target-status"),
                 )
                 Button(
                     onClick = { selectingOrigin = true },
                     enabled = !selectingOrigin,
                     modifier = Modifier.testTag("search-target-origin"),
-                ) { Text(if (selectingOrigin) "Başlangıç seçiliyor" else "Başlangıç seç") }
+                ) { Text(if (selectingOrigin) stringResource(R.string.selecting_origin) else stringResource(R.string.select_origin)) }
                 Button(
                     onClick = { selectingOrigin = false },
                     enabled = origin != null && selectingOrigin,
                     modifier = Modifier.testTag("search-target-destination"),
-                ) { Text(if (!selectingOrigin) "Varış seçiliyor" else "Varış seç") }
+                ) { Text(if (!selectingOrigin) stringResource(R.string.selecting_destination) else stringResource(R.string.select_destination)) }
 
                 OutlinedTextField(
                     value = query,
@@ -527,7 +528,7 @@ fun ArrivalAlarmApp(
                         query = it
                         searchRequestId += 1
                     },
-                    label = { Text("Almanya'da durak ara") },
+                    label = { Text(stringResource(R.string.search_stops_label)) },
                     modifier = Modifier.fillMaxWidth().testTag("catalog-search"),
                     singleLine = true,
                 )
@@ -535,9 +536,9 @@ fun ArrivalAlarmApp(
                     onClick = { runSearch() },
                     enabled = !searchBusy && query.trim().length >= 2,
                     modifier = Modifier.testTag("catalog-search-submit"),
-                ) { Text(if (searchBusy) "Aranıyor…" else "Ara") }
+                ) { Text(if (searchBusy) stringResource(R.string.searching) else stringResource(R.string.search_action)) }
 
-                searchSource?.let { Text("Kaynak: $it", modifier = Modifier.testTag("search-source")) }
+                searchSource?.let { Text(stringResource(R.string.source_format, it), modifier = Modifier.testTag("search-source")) }
                 searchMessage?.let { Text(it, modifier = Modifier.testTag("search-message")) }
 
                 searchResults.take(12).forEachIndexed { index, stop ->
@@ -548,8 +549,8 @@ fun ArrivalAlarmApp(
                         },
                         modifier = Modifier.fillMaxWidth().testTag("search-result-$index"),
                     ) {
-                        val action = if (selectingOrigin) "Başlangıç" else "Varış"
-                        Text("$action • ${stop.name}")
+                        val action = if (selectingOrigin) stringResource(R.string.select_origin) else stringResource(R.string.select_destination)
+                        Text(stringResource(R.string.search_result_format, action, stop.name))
                     }
                 }
 
@@ -561,19 +562,19 @@ fun ArrivalAlarmApp(
                         )
                     },
                     modifier = Modifier.testTag("current-location-origin"),
-                ) { Text("Mevcut konumu başlangıç yap") }
+                ) { Text(stringResource(R.string.current_location_origin)) }
                 locationMessage?.let { Text(it, modifier = Modifier.testTag("location-status")) }
 
                 origin?.let {
-                    Text("Başlangıç: ${it.label}", modifier = Modifier.testTag("origin-label"))
+                    Text(stringResource(R.string.origin_format, it.label), modifier = Modifier.testTag("origin-label"))
                 }
                 destination?.let {
-                    Text("Varış: ${it.label}", modifier = Modifier.testTag("destination-label"))
+                    Text(stringResource(R.string.destination_format, it.label), modifier = Modifier.testTag("destination-label"))
                 }
 
                 if (nearby.isNotEmpty()) {
-                    Text("En yakın duraklar", style = MaterialTheme.typography.titleSmall)
-                    nearbySource?.let { Text("Kaynak: $it") }
+                    Text(stringResource(R.string.nearby_stops), style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
+                    nearbySource?.let { Text(stringResource(R.string.source_format, it)) }
                     nearby.take(8).forEachIndexed { index, candidate ->
                         Button(
                             onClick = {
@@ -586,8 +587,8 @@ fun ArrivalAlarmApp(
                             },
                             modifier = Modifier.fillMaxWidth().testTag("nearby-stop-$index"),
                         ) {
-                            val action = if (selectingOrigin) "Başlangıç" else "Varış"
-                            Text("$action • ${candidate.stop.name} • ${candidate.distanceMeters} m")
+                            val action = if (selectingOrigin) stringResource(R.string.select_origin) else stringResource(R.string.select_destination)
+                            Text(stringResource(R.string.nearby_stop_format, action, candidate.stop.name, candidate.distanceMeters))
                         }
                     }
                 }
@@ -597,12 +598,12 @@ fun ArrivalAlarmApp(
                         onClick = { loadRoutes(origin!!, destination!!) },
                         enabled = !routeBusy,
                         modifier = Modifier.testTag("route-refresh"),
-                    ) { Text(if (routeBusy) "Rota hesaplanıyor…" else "Rotaları yenile") }
+                    ) { Text(if (routeBusy) stringResource(R.string.route_calculating) else stringResource(R.string.refresh_routes)) }
                 }
                 routeStatus?.let { Text(it, modifier = Modifier.testTag("route-status")) }
                 routeOptions.take(3).forEachIndexed { index, option ->
                     Text(
-                        "${option.line} • ${option.direction} • ${option.departure} → ${option.arrival} • ${option.walkingMinutes} dk yürüme • ${option.transfers} aktarma",
+                        stringResource(R.string.route_option_format, option.line, option.direction, option.departure, option.arrival, option.walkingMinutes, option.transfers),
                         modifier = Modifier.testTag("route-option-$index"),
                     )
                 }
@@ -627,7 +628,7 @@ fun ArrivalAlarmApp(
                         direction = firstRoute.direction,
                         departures = departures,
                         alerts = emptyList(),
-                        isOfflineCache = routeStatus?.contains("çevrimdışı", ignoreCase = true) == true,
+                        isOfflineCache = routeOffline,
                         nowEpochSeconds = boardNow,
                         providerCapabilities = TransitProviderCapabilities(
                             realtimeDepartures = false,
@@ -638,7 +639,7 @@ fun ArrivalAlarmApp(
                             journey = controller.state
                             val selectedRoute = routeOptions.firstOrNull { it.id == routeId }
                             routeStatus = if (outcome.applied && selectedRoute != null) {
-                                "Sefer seçildi • ${selectedRoute.line} • ${selectedRoute.direction}"
+                                context.getString(R.string.route_selected, selectedRoute.line, selectedRoute.direction)
                             } else {
                                 outcome.message
                             }
@@ -647,8 +648,8 @@ fun ArrivalAlarmApp(
                     )
                 }
 
-                Text("Durum: ${journey.phase}", modifier = Modifier.testTag("phase"))
-                journey.error?.let { Text(it, modifier = Modifier.testTag("error")) }
+                Text(stringResource(R.string.phase_format, journeyPhaseText(journey.phase)), modifier = Modifier.testTag("phase"))
+                journey.error?.let { Text(localizedDomainMessage(context, it), modifier = Modifier.testTag("error")) }
                 Button(
                     onClick = {
                         if (ActiveJourneyPermissions.hasRequired(context)) {
@@ -659,26 +660,26 @@ fun ArrivalAlarmApp(
                     },
                     enabled = journey.phase == JourneyPhase.DESTINATION_SELECTED,
                     modifier = Modifier.testTag("arm"),
-                ) { Text("Varış alarmını kur") }
+                ) { Text(stringResource(R.string.arm_alarm)) }
                 Button(
                     onClick = {
                         val outcome = connectorPort.cancelArrivalAlarm()
                         journey = controller.state
                         if (outcome.applied) {
-                            routeStatus = "Varış alarmı iptal edildi"
+                            routeStatus = context.getString(R.string.alarm_cancelled)
                         } else {
-                            routeStatus = outcome.message
+                            routeStatus = localizedDomainMessage(context, outcome.message)
                         }
                     },
                     enabled = journey.phase == JourneyPhase.ARMED || journey.phase == JourneyPhase.ARRIVED,
                     modifier = Modifier.testTag("cancel-alarm"),
-                ) { Text("Varış alarmını iptal et") }
+                ) { Text(stringResource(R.string.cancel_alarm)) }
 
-                Text("Sesli yönlendirme", style = MaterialTheme.typography.titleMedium)
-                Text(guidanceState.status, modifier = Modifier.testTag("guidance-status"))
-                Text("Anons dili", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.guidance_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+                Text(guidanceStatusText(guidanceState), modifier = Modifier.testTag("guidance-status"))
+                Text(stringResource(R.string.guidance_language_title), style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "Seçili anons dili: ${guidanceLanguage.displayName}",
+                    stringResource(R.string.guidance_language_status, guidanceLanguage.displayName),
                     modifier = Modifier.testTag("guidance-language-status"),
                 )
                 GuidanceLanguage.values().forEach { language ->
@@ -688,7 +689,7 @@ fun ArrivalAlarmApp(
                         modifier = Modifier.fillMaxWidth().testTag("guidance-language-${language.localeTag}"),
                     ) {
                         Text(
-                            if (guidanceLanguage == language) "${language.displayName} seçili"
+                            if (guidanceLanguage == language) stringResource(R.string.guidance_language_selected, language.displayName)
                             else language.displayName
                         )
                     }
@@ -696,7 +697,7 @@ fun ArrivalAlarmApp(
                 Button(
                     onClick = { guidancePermissionLauncher.launch(AndroidGuidancePermissions.runtimePermissions()) },
                     modifier = Modifier.testTag("guidance-permissions"),
-                ) { Text("Ses/notification izinlerini kontrol et") }
+                ) { Text(stringResource(R.string.guidance_permissions)) }
                 Button(
                     onClick = {
                         guidanceController.onPermissions(AndroidGuidancePermissions.snapshot(context))
@@ -704,7 +705,7 @@ fun ArrivalAlarmApp(
                         guidanceState = guidanceController.state
                     },
                     modifier = Modifier.testTag("guidance-route-refresh"),
-                ) { Text("Ses rotasını yenile") }
+                ) { Text(stringResource(R.string.guidance_refresh_route)) }
                 destination?.let { target ->
                     Button(
                         onClick = {
@@ -719,10 +720,10 @@ fun ArrivalAlarmApp(
                         },
                         enabled = guidanceState.permissionState != GuidancePermissionState.DENIED,
                         modifier = Modifier.testTag("guidance-destination"),
-                    ) { Text("Hedefi seslendir") }
+                    ) { Text(stringResource(R.string.guidance_speak_destination)) }
                 }
 
-                Text("Sefer algılama (isteğe bağlı)", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.inference_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
                 Switch(
                     checked = inferenceEnabled,
                     onCheckedChange = {
@@ -733,15 +734,15 @@ fun ArrivalAlarmApp(
                     modifier = Modifier.testTag("trip-inference-toggle"),
                 )
                 Text(
-                    if (inferenceEnabled) "Açık • yalnız gerçek rota + cihaz konumundan öneri; kullanıcı onayı olmadan alarm/hedef kurulmaz"
-                    else "Kapalı • otomatik sefer tahmini yapılmaz",
+                    if (inferenceEnabled) stringResource(R.string.inference_enabled)
+                    else stringResource(R.string.inference_disabled),
                     modifier = Modifier.testTag("trip-inference-status"),
                 )
                 Button(
                     onClick = {
                         val anchor = origin
                         if (anchor == null || routeOptions.isEmpty()) {
-                            inferenceResult = TripInferenceResult(emptyList(), null, "Önce gerçek başlangıç ve rota gerekli")
+                            inferenceResult = TripInferenceResult(emptyList(), null, context.getString(R.string.inference_prerequisite))
                         } else {
                             currentLocation.request { location ->
                                 inferenceResult = location.fold(
@@ -761,7 +762,7 @@ fun ArrivalAlarmApp(
                                         TripInferenceEngine(TripInferenceSettings(enabled = true)).infer(observation, candidates)
                                     },
                                     onFailure = {
-                                        TripInferenceResult(emptyList(), null, it.message ?: "Gerçek cihaz konumu alınamadı")
+                                        TripInferenceResult(emptyList(), null, localizedDomainMessage(context, it.message))
                                     },
                                 )
                             }
@@ -769,14 +770,14 @@ fun ArrivalAlarmApp(
                     },
                     enabled = inferenceEnabled && routeOptions.isNotEmpty() && origin != null,
                     modifier = Modifier.testTag("trip-inference-run"),
-                ) { Text("Gerçek rotalardan sefer adayı hesapla") }
+                ) { Text(stringResource(R.string.inference_run)) }
                 inferenceResult?.let { result ->
                     val accepted = result.accepted
                     if (accepted == null) {
                         Text(result.reason, modifier = Modifier.testTag("trip-inference-result"))
                     } else {
                         Text(
-                            "${accepted.candidate.line} • ${accepted.candidate.direction} • güven %${(accepted.confidence * 100).toInt()}",
+                            stringResource(R.string.inference_result, accepted.candidate.line, accepted.candidate.direction, (accepted.confidence * 100).toInt()),
                             modifier = Modifier.testTag("trip-inference-result"),
                         )
                         Text(accepted.explanation, modifier = Modifier.testTag("trip-inference-explanation"))
@@ -787,16 +788,16 @@ fun ArrivalAlarmApp(
                                     confirmedTripId = accepted.candidate.routeId
                                     journey = controller.state
                                 } else {
-                                    routeStatus = selected.message
+                                    routeStatus = localizedDomainMessage(context, selected.message)
                                 }
                             },
                             modifier = Modifier.testTag("trip-inference-confirm"),
-                        ) { Text("Bu seferdeyim") }
+                        ) { Text(stringResource(R.string.inference_confirm)) }
                     }
                 }
                 confirmedTripId?.let {
                     Text(
-                        "Sefer onaylandı: $it • hedef/alarm ayrıca kullanıcı tarafından seçilmeli",
+                        stringResource(R.string.inference_confirmed, it),
                         modifier = Modifier.testTag("trip-inference-confirmed"),
                     )
                 }
@@ -819,9 +820,52 @@ private fun clockToEpoch(clock: String, nowEpochSeconds: Long): Long {
     return calendar.timeInMillis / 1000
 }
 
+private fun localizedDomainMessage(context: Context, raw: String?): String {
+    if (raw.isNullOrBlank()) return context.getString(R.string.unknown_error)
+    return when (raw) {
+        "Önce başlangıç seçilmeli" -> context.getString(R.string.error_start_required)
+        "Başlangıç ve hedef gerekli" -> context.getString(R.string.error_start_destination_required)
+        "İptal edilecek kurulu alarm yok" -> context.getString(R.string.error_no_alarm)
+        "Rota artık mevcut değil; güncel rota seçilmeli" -> context.getString(R.string.error_route_stale)
+        "Önce sefer seçilmeli" -> context.getString(R.string.error_trip_required)
+        "Kurulu varış alarmı yok" -> context.getString(R.string.error_alarm_missing)
+        "Konum izni gerekli" -> context.getString(R.string.location_permission_required)
+        "Konum servisi kapalı" -> context.getString(R.string.location_service_off)
+        "Güncel konum alınamadı" -> context.getString(R.string.current_location_unavailable)
+        "Konum henüz hazır değil" -> context.getString(R.string.location_not_ready)
+        else -> raw
+    }
+}
+
+@Composable
+private fun journeyPhaseText(phase: JourneyPhase): String = stringResource(
+    when (phase) {
+        JourneyPhase.EMPTY -> R.string.phase_empty
+        JourneyPhase.START_SELECTED -> R.string.phase_start_selected
+        JourneyPhase.DESTINATION_SELECTED -> R.string.phase_destination_selected
+        JourneyPhase.ARMED -> R.string.phase_armed
+        JourneyPhase.ARRIVED -> R.string.phase_arrived
+    }
+)
+
+@Composable
+private fun guidanceStatusText(state: GuidanceReliabilityState): String = stringResource(
+    when {
+        state.pending != null && state.permissionState == GuidancePermissionState.DENIED -> R.string.guidance_pending
+        state.pending != null -> R.string.guidance_tts_unavailable
+        state.lastSpokenKey != null && state.audioRoute == GuidanceAudioRoute.BLUETOOTH_CONNECTED -> R.string.guidance_sent_bluetooth
+        state.lastSpokenKey != null -> R.string.guidance_sent_device
+        state.permissionState == GuidancePermissionState.DENIED -> R.string.guidance_permission_needed
+        state.permissionState == GuidancePermissionState.PARTIAL -> R.string.guidance_partial
+        state.audioRoute == GuidanceAudioRoute.BLUETOOTH_CONNECTED -> R.string.guidance_bluetooth
+        else -> R.string.guidance_ready
+    }
+)
+
 private fun formatEpoch(epochSeconds: Long): String =
-    if (epochSeconds <= 0L) "zaman bilinmiyor"
-    else SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.GERMANY).format(Date(epochSeconds * 1000))
+    if (epochSeconds <= 0L) ""
+    else DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, Locale.getDefault())
+        .format(Date(epochSeconds * 1000))
 
 @Preview(showBackground = true)
 @Composable

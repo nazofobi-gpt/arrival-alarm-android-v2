@@ -50,16 +50,16 @@ class NationwideTransitGateway(
             callback(NationwideDataState.Ready(store.stopCount(), store.fetchedAt(), store.sourceVersion()))
             return
         }
-        callback(NationwideDataState.Loading("Almanya tam durak verisi hazırlanıyor"))
+        callback(NationwideDataState.Loading(appContext.getString(R.string.data_loading)))
         io.execute {
             val state = runCatching {
                 store.importStops(feedUrl) { count ->
                     if (count % 50_000 == 0) main.post {
-                        callback(NationwideDataState.Loading("Almanya durakları indeksleniyor: $count"))
+                        callback(NationwideDataState.Loading(appContext.getString(R.string.data_indexing, count)))
                     }
                 }
                 NationwideDataState.Ready(store.stopCount(), store.fetchedAt(), store.sourceVersion())
-            }.getOrElse { NationwideDataState.Error(it.message ?: "Durak verisi yüklenemedi") }
+            }.getOrElse { NationwideDataState.Error(it.message ?: appContext.getString(R.string.data_load_failed)) }
             main.post { callback(state) }
         }
     }
@@ -67,15 +67,15 @@ class NationwideTransitGateway(
     fun searchStops(query: String, limit: Int = 20, callback: (List<CatalogStop>, String?) -> Unit) {
         val q = query.trim()
         if (q.length < 2) {
-            callback(emptyList(), "En az 2 karakter yaz")
+            callback(emptyList(), appContext.getString(R.string.min_two_chars))
             return
         }
         io.execute {
             val local = if (store.isReady()) store.search(q, limit) else emptyList()
             val result = if (local.isNotEmpty()) local else runCatching { liveApi.searchStops(q, limit) }.getOrDefault(emptyList())
             val source = when {
-                local.isNotEmpty() -> "GTFS Deutschland yerel indeks"
-                result.isNotEmpty() -> "Canlı Almanya araması"
+                local.isNotEmpty() -> appContext.getString(R.string.source_gtfs_local)
+                result.isNotEmpty() -> appContext.getString(R.string.source_live_germany)
                 else -> null
             }
             main.post { callback(result, source) }
@@ -87,8 +87,8 @@ class NationwideTransitGateway(
             val local = if (store.isReady()) store.nearest(latitude, longitude, limit) else emptyList()
             val result = if (local.isNotEmpty()) local else runCatching { liveApi.nearbyStops(latitude, longitude, limit) }.getOrDefault(emptyList())
             val source = when {
-                local.isNotEmpty() -> "GTFS Deutschland yerel indeks"
-                result.isNotEmpty() -> "Canlı Almanya araması"
+                local.isNotEmpty() -> appContext.getString(R.string.source_gtfs_local)
+                result.isNotEmpty() -> appContext.getString(R.string.source_live_germany)
                 else -> null
             }
             main.post { callback(result, source) }
@@ -105,9 +105,12 @@ class NationwideTransitGateway(
             val result = runCatching { liveApi.journeys(origin, destination, limit) }
             val options = result.getOrDefault(emptyList())
             val status = when {
-                options.isNotEmpty() -> "transport.rest / DB profile • canlı/planlı rota"
-                result.isFailure -> "Canlı rota kullanılamıyor: ${result.exceptionOrNull()?.message ?: "bilinmeyen hata"}"
-                else -> "Bu başlangıç/varış için rota bulunamadı"
+                options.isNotEmpty() -> appContext.getString(R.string.route_live_static)
+                result.isFailure -> appContext.getString(
+                    R.string.route_live_unavailable,
+                    result.exceptionOrNull()?.message ?: appContext.getString(R.string.unknown_error),
+                )
+                else -> appContext.getString(R.string.route_not_found)
             }
             main.post { callback(options, status) }
         }
@@ -291,27 +294,27 @@ class AndroidCurrentLocation(private val context: Context) {
     @SuppressLint("MissingPermission")
     fun request(callback: (Result<GeoPoint>) -> Unit) {
         if (!hasPermission()) {
-            callback(Result.failure(SecurityException("Konum izni gerekli")))
+            callback(Result.failure(SecurityException(context.getString(R.string.location_permission_required))))
             return
         }
         val providers = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
             .filter { runCatching { manager.isProviderEnabled(it) }.getOrDefault(false) }
         if (providers.isEmpty()) {
-            callback(Result.failure(IllegalStateException("Konum servisi kapalı")))
+            callback(Result.failure(IllegalStateException(context.getString(R.string.location_service_off))))
             return
         }
         runCatching {
             if (Build.VERSION.SDK_INT >= 30) {
                 manager.getCurrentLocation(providers.first(), null, context.mainExecutor) { location ->
                     callback(location?.toGeoPoint()?.let { Result.success(it) }
-                        ?: Result.failure(IllegalStateException("Güncel konum alınamadı")))
+                        ?: Result.failure(IllegalStateException(context.getString(R.string.current_location_unavailable))))
                 }
             } else {
                 val best = providers.mapNotNull { provider -> runCatching { manager.getLastKnownLocation(provider) }.getOrNull() }
                     .maxByOrNull { it.time }
                 main.post {
                     callback(best?.toGeoPoint()?.let { Result.success(it) }
-                        ?: Result.failure(IllegalStateException("Konum henüz hazır değil")))
+                        ?: Result.failure(IllegalStateException(context.getString(R.string.location_not_ready))))
                 }
             }
         }.onFailure { callback(Result.failure(it)) }
