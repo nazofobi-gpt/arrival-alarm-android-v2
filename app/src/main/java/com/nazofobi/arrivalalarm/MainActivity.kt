@@ -402,6 +402,7 @@ fun ArrivalAlarmApp(
         stationResolved = false
         graph.routeRegistry.clear()
         loadRoutes(currentOrigin, point)
+        activeScreenName = ArrivalScreen.ROUTES.name
         return true
     }
 
@@ -479,6 +480,7 @@ fun ArrivalAlarmApp(
             return
         }
         routeStatus = context.getString(R.string.alarm_active)
+        activeScreenName = ArrivalScreen.LIVE.name
     }
 
     fun selectRouteOption(option: RouteOption) {
@@ -492,6 +494,7 @@ fun ArrivalAlarmApp(
                 option.line,
                 option.direction,
             )
+            activeScreenName = ArrivalScreen.JOURNEY.name
         } else {
             routeStatus = localizedDomainMessage(context, outcome.message)
         }
