@@ -59,7 +59,45 @@ function failed(error) {
   };
 }
 
-export function createArrivalAlarmMcpServer({ service, userId }) {
+function requireScope(scopes, scope) {
+  if (!scopes.has(scope)) throw new Error("insufficient_scope");
+}
+
+export function createScopedGatewayService(rawService, scopes = []) {
+  const grantedScopes = scopes instanceof Set ? scopes : new Set(scopes);
+  return {
+    assertRead() {
+      requireScope(grantedScopes, "arrival.read");
+    },
+    getCurrentJourney(userId) {
+      requireScope(grantedScopes, "arrival.read");
+      return rawService.getCurrentJourney(userId);
+    },
+    getTripProgress(userId) {
+      requireScope(grantedScopes, "arrival.read");
+      return rawService.getTripProgress(userId);
+    },
+    getAlarmState(userId) {
+      requireScope(grantedScopes, "arrival.read");
+      return rawService.getAlarmState(userId);
+    },
+    getCommandResult(userId, idempotencyKey) {
+      requireScope(grantedScopes, "arrival.read");
+      return rawService.getCommandResult(userId, idempotencyKey);
+    },
+    queueWrite(userId, command, expectedStateVersion) {
+      requireScope(grantedScopes, "arrival.write");
+      return rawService.queueWrite(userId, command, expectedStateVersion);
+    },
+  };
+}
+
+export function createArrivalAlarmMcpServer({
+  service: rawService,
+  userId,
+  scopes = ["arrival.read", "arrival.write"],
+}) {
+  const service = createScopedGatewayService(rawService, scopes);
   const server = new McpServer(
     {
       name: "arrival-alarm",
@@ -90,6 +128,11 @@ export function createArrivalAlarmMcpServer({ service, userId }) {
       },
     },
     async () => {
+      try {
+        service.assertRead();
+      } catch (error) {
+        return failed(error);
+      }
       const profile = { id: userId };
       return {
         isError: false,
@@ -352,11 +395,15 @@ export function createArrivalAlarmMcpServer({ service, userId }) {
       securitySchemes: readSecuritySchemes,
     },
     async ({ idempotency_key }) => {
-      const result = service.getCommandResult(userId, idempotency_key);
-      return ok(
-        result ?? { status: "not_found", idempotency_key },
-        result ? "Command result loaded." : "No command result exists for that idempotency key."
-      );
+      try {
+        const result = service.getCommandResult(userId, idempotency_key);
+        return ok(
+          result ?? { status: "not_found", idempotency_key },
+          result ? "Command result loaded." : "No command result exists for that idempotency key."
+        );
+      } catch (error) {
+        return failed(error);
+      }
     }
   );
 

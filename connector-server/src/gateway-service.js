@@ -54,7 +54,12 @@ export class GatewayService {
     if (expectedStateVersion !== snapshot.state_version) {
       throw new Error("state_version_mismatch");
     }
-    const item = this.store.enqueueCommand(userId, command, expectedStateVersion);
+    const item = this.store.enqueueCommand(
+      userId,
+      command,
+      expectedStateVersion,
+      snapshot.gateway_device_id ?? null
+    );
     return {
       command_id: item.command_id,
       idempotency_key: item.command.idempotency_key,
