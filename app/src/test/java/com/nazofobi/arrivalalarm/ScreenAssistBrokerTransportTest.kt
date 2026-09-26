@@ -29,11 +29,15 @@ class ScreenAssistBrokerTransportTest {
 
     @Test fun postsToBrokerOverHttps() {
         lateinit var fake: FakeConnection
-        val transport = ScreenAssistBrokerTransport("https://example.com/realtime") { url ->
+        val transport = ScreenAssistBrokerTransport(
+            brokerUrl = "https://example.com/realtime",
+            authTokenProvider = { "device-token" },
+        ) { url ->
             FakeConnection(url, 200, "{}").also { fake = it }
         }
         assertEquals("{}", transport.requestTokenResponse())
         assertEquals("POST", fake.requestMethod)
+        assertEquals("Bearer device-token", fake.getRequestProperty("Authorization"))
         assertEquals("{}", fake.written.toString(Charsets.UTF_8.name()))
     }
 
@@ -41,8 +45,21 @@ class ScreenAssistBrokerTransportTest {
         expectFailure<IllegalArgumentException> { ScreenAssistBrokerTransport("http://example.com/realtime") }
     }
 
+    @Test fun failsClosedWhenCallerAuthorizationIsMissing() {
+        var networkTouched = false
+        val transport = ScreenAssistBrokerTransport("https://example.com/realtime") { url ->
+            networkTouched = true
+            FakeConnection(url, 200, "{}")
+        }
+        expectFailure<IllegalStateException> { transport.requestTokenResponse() }
+        assertEquals(false, networkTouched)
+    }
+
     @Test fun failsClosedOnBrokerError() {
-        val transport = ScreenAssistBrokerTransport("https://example.com/realtime") { url -> FakeConnection(url, 503, "{}") }
+        val transport = ScreenAssistBrokerTransport(
+            brokerUrl = "https://example.com/realtime",
+            authTokenProvider = { "device-token" },
+        ) { url -> FakeConnection(url, 503, "{}") }
         expectFailure<IllegalStateException> { transport.requestTokenResponse() }
     }
 }
