@@ -246,6 +246,13 @@ fun ArrivalAlarmApp() {
         guidanceState = guidanceController.state
     }
 
+    LaunchedEffect(controller) {
+        while (true) {
+            journey = controller.state
+            delay(1_000)
+        }
+    }
+
     LaunchedEffect(query) {
         val q = query.trim()
         if (q.length < 2) {
