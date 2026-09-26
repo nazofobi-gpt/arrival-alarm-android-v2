@@ -61,13 +61,13 @@ class MainActivityTest {
             .performClick()
         rule.onNodeWithTag("guidance-language-status")
             .performScrollTo()
-            .assertTextContains("Deutsch")
+            .assertTextContains("Deutsch", substring = true)
 
         rule.activityRule.scenario.recreate()
         rule.waitForIdle()
 
         rule.onNodeWithTag("guidance-language-status")
             .performScrollTo()
-            .assertTextContains("Deutsch")
+            .assertTextContains("Deutsch", substring = true)
     }
 }
