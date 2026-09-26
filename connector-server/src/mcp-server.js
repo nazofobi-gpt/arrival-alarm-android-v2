@@ -167,8 +167,9 @@ export function createArrivalAlarmMcpServer({
     {
       title: "Get trip progress",
       description:
-        "Read the connected trip's previous, current and next stops plus line and direction. " +
-        "Use for questions such as next stop, current stop, or which stop was just passed.",
+        "Read the connected trip's previous/current/next stops, timing basis, ETA and progress freshness. " +
+        "Use for questions such as next stop, current stop, which stop was just passed, or ETA; " +
+        "do not present scheduled timing as realtime.",
       inputSchema: {},
       annotations: readAnnotations,
       securitySchemes: readSecuritySchemes,
