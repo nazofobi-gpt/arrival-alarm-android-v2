@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -21,12 +22,18 @@ class TripInferenceUiTest {
     @Before fun resetJourneyState() {
         rule.activityRule.scenario.onActivity { activity ->
             activity.getSharedPreferences("journey_state", Context.MODE_PRIVATE).edit().clear().commit()
+            activity.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("onboarding_complete", true)
+                .commit()
         }
         rule.activityRule.scenario.recreate()
         rule.waitForIdle()
     }
 
     @Test fun inferenceIsOptInVisibleAndConfirmationDoesNotArmAlarm() {
+        rule.onNodeWithTag("nav-settings").assertIsDisplayed().performClick()
+        rule.waitForIdle()
         rule.onNodeWithTag("trip-inference-status").performScrollTo()
             .assertTextContains(rule.activity.getString(R.string.inference_disabled), substring = true).assertIsDisplayed()
         rule.onNodeWithTag("trip-inference-run").performScrollTo().assertIsNotEnabled()
@@ -34,10 +41,11 @@ class TripInferenceUiTest {
         rule.onNodeWithTag("trip-inference-status").performScrollTo()
             .assertTextContains(rule.activity.getString(R.string.inference_enabled), substring = true)
         rule.onNodeWithTag("trip-inference-run").performScrollTo().assertIsNotEnabled()
-        rule.onNodeWithTag("phase").performScrollTo()
-            .assertTextContains(
-                rule.activity.getString(R.string.phase_format, rule.activity.getString(R.string.phase_empty)),
-                substring = true,
+        rule.activityRule.scenario.onActivity { activity ->
+            assertEquals(
+                JourneyPhase.EMPTY,
+                ArrivalAlarmRuntimeGraph.get(activity).controller.state.phase,
             )
+        }
     }
 }

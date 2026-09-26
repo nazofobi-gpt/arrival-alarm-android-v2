@@ -37,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -156,6 +157,7 @@ fun ArrivalAlarmApp(
     var onboardingComplete by remember {
         mutableStateOf(appPreferences.getBoolean("onboarding_complete", false))
     }
+    var activeScreen by rememberSaveable { mutableStateOf(ArrivalAppScreen.HOME) }
     var dataState by remember { mutableStateOf(transit.currentState()) }
     var query by remember { mutableStateOf("") }
     var lastSearchedQuery by remember { mutableStateOf("") }
@@ -398,6 +400,7 @@ fun ArrivalAlarmApp(
         stationResolved = false
         graph.routeRegistry.clear()
         loadRoutes(currentOrigin, point)
+        activeScreen = ArrivalAppScreen.ROUTES
         return true
     }
 
@@ -475,6 +478,7 @@ fun ArrivalAlarmApp(
             return
         }
         routeStatus = context.getString(R.string.alarm_active)
+        activeScreen = ArrivalAppScreen.LIVE
     }
 
     fun selectRouteOption(option: RouteOption) {
@@ -488,6 +492,7 @@ fun ArrivalAlarmApp(
                 option.line,
                 option.direction,
             )
+            activeScreen = ArrivalAppScreen.JOURNEY
         } else {
             routeStatus = localizedDomainMessage(context, outcome.message)
         }
@@ -621,7 +626,29 @@ fun ArrivalAlarmApp(
         }
     }
 
-    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        bottomBar = {
+            if (onboardingComplete) {
+                ArrivalBottomNavigation(
+                    current = activeScreen,
+                    onSelect = { requested ->
+                        activeScreen = if (requested == ArrivalAppScreen.JOURNEY) {
+                            when {
+                                journey.phase == JourneyPhase.ARMED ||
+                                    journey.phase == JourneyPhase.ARRIVED -> ArrivalAppScreen.LIVE
+                                selectedRouteId != null -> ArrivalAppScreen.JOURNEY
+                                origin != null && destination != null -> ArrivalAppScreen.ROUTES
+                                else -> ArrivalAppScreen.JOURNEY
+                            }
+                        } else {
+                            requested
+                        }
+                    },
+                )
+            }
+        },
+    ) { innerPadding ->
         Surface(Modifier.fillMaxSize().padding(innerPadding)) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -633,13 +660,10 @@ fun ArrivalAlarmApp(
                         .widthIn(max = 840.dp)
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
-                        .padding(24.dp)
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
                         .testTag("adaptive-content"),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
-                Text(stringResource(R.string.subtitle), style = MaterialTheme.typography.titleMedium)
-
                 if (!onboardingComplete) {
                     FirstRunOnboarding(
                         onContinue = {
@@ -647,10 +671,25 @@ fun ArrivalAlarmApp(
                                 .putBoolean("onboarding_complete", true)
                                 .apply()
                             onboardingComplete = true
+                            activeScreen = ArrivalAppScreen.HOME
                         },
                     )
                 }
 
+                if (onboardingComplete) {
+                Text(
+                    stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    modifier = Modifier.semantics { heading() },
+                )
+                if (activeScreen == ArrivalAppScreen.HOME) {
+                    Text(
+                        stringResource(R.string.subtitle),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 val readinessState = remember(
                     readinessRefreshTick,
                     themeMode,
@@ -670,6 +709,7 @@ fun ArrivalAlarmApp(
                         connectorConnected = connectorConnected,
                     )
                 }
+                if (activeScreen == ArrivalAppScreen.SETTINGS) {
                 SettingsReadinessPanel(
                     state = readinessState,
                     connectorBusy = connectorSetupBusy,
@@ -696,7 +736,72 @@ fun ArrivalAlarmApp(
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                }
 
+                if (activeScreen == ArrivalAppScreen.HOME) {
+                    HomeOverviewPanel(
+                        origin = origin,
+                        destination = destination,
+                        nearby = nearby,
+                        nearbySource = nearbySource,
+                        favoriteStopIds = favoriteStopIds,
+                        mapMessage = mapMessage,
+                        onUseCurrentLocation = {
+                            if (currentLocation.hasPermission()) {
+                                useCurrentLocation()
+                            } else {
+                                locationPermissionLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                                    )
+                                )
+                            }
+                        },
+                        onOpenSearch = { activeScreen = ArrivalAppScreen.SEARCH },
+                        onOpenJourney = {
+                            activeScreen = when {
+                                journey.phase == JourneyPhase.ARMED ||
+                                    journey.phase == JourneyPhase.ARRIVED -> ArrivalAppScreen.LIVE
+                                selectedRouteId != null -> ArrivalAppScreen.JOURNEY
+                                origin != null && destination != null -> ArrivalAppScreen.ROUTES
+                                else -> ArrivalAppScreen.SEARCH
+                            }
+                        },
+                        onMapStopSelected = { stop ->
+                            if (origin == null) {
+                                setOrigin(MapPoint(stop.latitude, stop.longitude, stop.name))
+                            } else {
+                                setDestination(stop)
+                            }
+                        },
+                        onMapPointSelected = { point ->
+                            if (origin == null) {
+                                setOrigin(point)
+                            } else {
+                                setDestinationPoint(point)
+                            }
+                        },
+                        onMapError = {
+                            mapMessage = context.getString(R.string.map_load_failed)
+                        },
+                        onNearbyStopSelected = { candidate ->
+                            if (origin == null) {
+                                setOrigin(
+                                    MapPoint(
+                                        candidate.stop.latitude,
+                                        candidate.stop.longitude,
+                                        candidate.stop.name,
+                                    )
+                                )
+                            } else {
+                                setDestination(candidate.stop)
+                            }
+                        },
+                    )
+                }
+
+                if (activeScreen == ArrivalAppScreen.SEARCH) {
                 HomeSearchPanel(
                     selectingOrigin = selectingOrigin,
                     query = query,
@@ -777,64 +882,113 @@ fun ArrivalAlarmApp(
                             setDestination(candidate.stop)
                         }
                     },
+                    mode = HomeSearchMode.SEARCH,
                 )
+                }
 
-                RouteJourneyPanel(
-                    origin = origin,
-                    destination = destination,
-                    routeOptions = routeOptions,
-                    routeBusy = routeBusy,
-                    routeStatus = routeStatus,
-                    routeOffline = routeOffline,
-                    selectedRouteId = selectedRouteId,
-                    journey = journey,
-                    onRefreshRoutes = {
-                        val from = origin
-                        val to = destination
-                        if (from != null && to != null) {
-                            loadRoutes(from, to)
-                        }
-                    },
-                    onSelectRoute = { option ->
-                        selectRouteOption(option)
-                    },
-                    onArmAlarm = {
-                        if (ActiveJourneyPermissions.hasRequired(context)) {
-                            armAndStartTracking()
+                if (
+                    activeScreen == ArrivalAppScreen.ROUTES ||
+                    activeScreen == ArrivalAppScreen.JOURNEY ||
+                    activeScreen == ArrivalAppScreen.LIVE
+                ) {
+                    if (origin == null || destination == null) {
+                        ScreenEmptyState(
+                            title = stringResource(R.string.journey_empty_title),
+                            body = stringResource(R.string.journey_empty_body),
+                            actionLabel = stringResource(R.string.journey_empty_action),
+                            onAction = { activeScreen = ArrivalAppScreen.SEARCH },
+                            testTag = "journey-empty-state",
+                        )
+                    } else if (activeScreen == ArrivalAppScreen.LIVE) {
+                        val selectedRoute = routeOptions.firstOrNull { it.id == selectedRouteId }
+                        if (selectedRoute == null) {
+                            ScreenEmptyState(
+                                title = stringResource(R.string.journey_detail_title),
+                                body = stringResource(R.string.error_trip_required),
+                                actionLabel = stringResource(R.string.journey_empty_action),
+                                onAction = { activeScreen = ArrivalAppScreen.ROUTES },
+                                testTag = "live-trip-empty-state",
+                            )
                         } else {
-                            alarmPermissionLauncher.launch(
-                                ActiveJourneyPermissions.runtimePermissions()
+                            LiveTripPanel(
+                                selectedRoute = selectedRoute,
+                                journey = journey,
+                                guidanceState = guidanceState,
+                                routeOffline = routeOffline,
+                                nowEpochSeconds = liveNowEpochSeconds,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            JourneyAlarmControls(
+                                journey = journey,
+                                onArmAlarm = {
+                                    if (ActiveJourneyPermissions.hasRequired(context)) {
+                                        armAndStartTracking()
+                                    } else {
+                                        alarmPermissionLauncher.launch(
+                                            ActiveJourneyPermissions.runtimePermissions()
+                                        )
+                                    }
+                                },
+                                onCancelAlarm = {
+                                    val outcome = connectorPort.cancelArrivalAlarm()
+                                    journey = controller.state
+                                    if (outcome.applied) {
+                                        routeStatus = context.getString(R.string.alarm_cancelled)
+                                        activeScreen = ArrivalAppScreen.JOURNEY
+                                    } else {
+                                        routeStatus = localizedDomainMessage(context, outcome.message)
+                                    }
+                                },
                             )
                         }
-                    },
-                    onCancelAlarm = {
-                        val outcome = connectorPort.cancelArrivalAlarm()
-                        journey = controller.state
-                        if (outcome.applied) {
-                            routeStatus = context.getString(R.string.alarm_cancelled)
-                        } else {
-                            routeStatus = localizedDomainMessage(context, outcome.message)
-                        }
-                    },
-                )
-
-                routeOptions.firstOrNull { it.id == selectedRouteId }?.let { selectedRoute ->
-                    if (
-                        journey.phase == JourneyPhase.DESTINATION_SELECTED ||
-                        journey.phase == JourneyPhase.ARMED ||
-                        journey.phase == JourneyPhase.ARRIVED
-                    ) {
-                        LiveTripPanel(
-                            selectedRoute = selectedRoute,
-                            journey = journey,
-                            guidanceState = guidanceState,
+                    } else {
+                        RouteJourneyPanel(
+                            origin = origin,
+                            destination = destination,
+                            routeOptions = routeOptions,
+                            routeBusy = routeBusy,
+                            routeStatus = routeStatus,
                             routeOffline = routeOffline,
-                            nowEpochSeconds = liveNowEpochSeconds,
-                            modifier = Modifier.fillMaxWidth(),
+                            selectedRouteId = selectedRouteId,
+                            journey = journey,
+                            onRefreshRoutes = {
+                                val from = origin
+                                val to = destination
+                                if (from != null && to != null) {
+                                    loadRoutes(from, to)
+                                }
+                            },
+                            onSelectRoute = { option ->
+                                selectRouteOption(option)
+                            },
+                            onArmAlarm = {
+                                if (ActiveJourneyPermissions.hasRequired(context)) {
+                                    armAndStartTracking()
+                                } else {
+                                    alarmPermissionLauncher.launch(
+                                        ActiveJourneyPermissions.runtimePermissions()
+                                    )
+                                }
+                            },
+                            onCancelAlarm = {
+                                val outcome = connectorPort.cancelArrivalAlarm()
+                                journey = controller.state
+                                if (outcome.applied) {
+                                    routeStatus = context.getString(R.string.alarm_cancelled)
+                                } else {
+                                    routeStatus = localizedDomainMessage(context, outcome.message)
+                                }
+                            },
+                            mode = if (activeScreen == ArrivalAppScreen.ROUTES) {
+                                RouteJourneyMode.RESULTS
+                            } else {
+                                RouteJourneyMode.DETAIL
+                            },
                         )
                     }
                 }
 
+                if (activeScreen == ArrivalAppScreen.DEPARTURES) {
                 val destinationPoint = destination
                 if (routeOptions.isNotEmpty() && destinationPoint != null) {
                     val boardNow = System.currentTimeMillis() / 1_000
@@ -878,8 +1032,18 @@ fun ArrivalAlarmApp(
                         loading = stationLoading,
                         modifier = Modifier.fillMaxWidth().testTag("transit-experience-panel"),
                     )
+                } else {
+                    ScreenEmptyState(
+                        title = stringResource(R.string.departures_empty_title),
+                        body = stringResource(R.string.departures_empty_body),
+                        actionLabel = stringResource(R.string.departures_empty_action),
+                        onAction = { activeScreen = ArrivalAppScreen.SEARCH },
+                        testTag = "departures-empty-state",
+                    )
+                }
                 }
 
+                if (activeScreen == ArrivalAppScreen.SETTINGS) {
                 Text(stringResource(R.string.guidance_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
                 Text(guidanceStatusText(guidanceState), modifier = Modifier.testTag("guidance-status"))
                 Text(stringResource(R.string.guidance_language_title), style = MaterialTheme.typography.titleSmall)
@@ -1008,6 +1172,8 @@ fun ArrivalAlarmApp(
                         stringResource(R.string.inference_confirmed, it),
                         modifier = Modifier.testTag("trip-inference-confirmed"),
                     )
+                }
+                }
                 }
                 }
             }
