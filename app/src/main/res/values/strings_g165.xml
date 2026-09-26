@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_readiness_title">Ayarlar ve hazırlık</string>
+    <string name="theme_mode_title">Görünüm</string>
+    <string name="theme_mode_status">Tema: %1$s</string>
+    <string name="theme_system">Sistem</string>
+    <string name="theme_light">Açık</string>
+    <string name="theme_dark">Koyu</string>
+    <string name="theme_selected_format">%1$s • seçili</string>
+    <string name="readiness_summary_ready">Yolculuk için hazır</string>
+    <string name="readiness_summary_degraded">Bazı özellikler sınırlı; aşağıdaki durumu kontrol edin</string>
+    <string name="readiness_summary_blocked">Yolculuk alarmı için gerekli bir ayar eksik</string>
+    <string name="readiness_location">Konum</string>
+    <string name="readiness_notifications">Bildirimler</string>
+    <string name="readiness_data">Toplu taşıma verisi</string>
+    <string name="readiness_audio">Ses ve Bluetooth</string>
+    <string name="readiness_background">Arka plan yolculuğu</string>
+    <string name="readiness_connector">ChatGPT bağlantısı</string>
+    <string name="readiness_ready">Hazır</string>
+    <string name="readiness_permission_required">İzin gerekli</string>
+    <string name="readiness_location_services_off">Konum servisleri kapalı</string>
+    <string name="readiness_data_not_ready">Yerel indeks henüz hazır değil; canlı arama kullanılabilir</string>
+    <string name="readiness_data_loading">Veri hazırlanıyor</string>
+    <string name="readiness_data_ready">%1$d durak yerel indekste hazır</string>
+    <string name="readiness_data_unavailable">Yerel indeks kullanılamıyor; canlı arama kullanılabilir</string>
+    <string name="readiness_background_active">Aktif yolculuk takibi çalışıyor</string>
+    <string name="readiness_background_inactive">Yalnız alarm etkinleştirildiğinde başlar</string>
+    <string name="readiness_connector_connected">Bağlı • isteğe bağlı</string>
+    <string name="readiness_connector_optional_unconfigured">İsteğe bağlı • yapılandırılmamış</string>
+    <string name="readiness_connector_optional_disconnected">İsteğe bağlı • bağlı değil</string>
+    <string name="readiness_review_journey_permissions">Yolculuk izinlerini gözden geçir</string>
+    <string name="readiness_review_guidance_permissions">Ses ve Bluetooth izinlerini gözden geçir</string>
+    <string name="readiness_refresh">Hazırlık durumunu yenile</string>
+    <string name="readiness_open_app_settings">Uygulama ayarlarını aç</string>
+    <string name="readiness_accessibility_title">Erişilebilirlik</string>
+    <string name="readiness_accessibility_body">TalkBack, sistem yazı ölçeği ve açık/koyu tema desteklenir. Kritik eylemler yalnız renkle anlatılmaz.</string>
+    <string name="readiness_privacy_title">Gizlilik</string>
+    <string name="readiness_privacy_body">Konum yalnız seçtiğiniz konum ve aktif yolculuk özellikleri için kullanılır. ChatGPT bağlantısı isteğe bağlıdır ve varış alarmını engellemez.</string>
+</resources>
