@@ -180,6 +180,42 @@ class MainActivityTest {
             .assertTextContains(darkLabel, substring = true)
     }
 
+    @Test fun criticalActionsMeet48DpTouchTargetFloor() {
+        val minPixels = 48f * rule.activity.resources.displayMetrics.density
+        listOf(
+            "onboarding-complete",
+            "theme-system",
+            "theme-light",
+            "theme-dark",
+            "current-location-origin",
+            "arm",
+            "readiness-refresh",
+        ).forEach { tag ->
+            val node = rule.onNodeWithTag(tag)
+                .performScrollTo()
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+            assertTrue(
+                "$tag height=${node.boundsInRoot.height}px, required>=$minPixels",
+                node.boundsInRoot.height + 0.5f >= minPixels,
+            )
+        }
+    }
+
+    @Test fun largeWindowConstrainsContentAndKeepsCoreControlsReachable() {
+        val maxPixels = 840f * rule.activity.resources.displayMetrics.density
+        val content = rule.onNodeWithTag("adaptive-content")
+            .assertIsDisplayed()
+            .fetchSemanticsNode()
+        assertTrue(
+            "adaptive content width=${content.boundsInRoot.width}px, max=$maxPixels",
+            content.boundsInRoot.width <= maxPixels + 1f,
+        )
+        rule.onNodeWithTag("catalog-search").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("settings-readiness-panel").performScrollTo().assertIsDisplayed()
+        saveVisualEvidence("large-window-core.png")
+    }
+
     @Test fun visualEvidenceCapturesSystemLightDarkSettingsMatrix() {
         fun chooseAndCapture(tag: String, expectedLabel: String, fileName: String) {
             rule.onNodeWithTag(tag)
