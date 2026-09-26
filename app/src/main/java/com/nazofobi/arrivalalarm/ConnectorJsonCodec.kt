@@ -35,8 +35,33 @@ object ConnectorJsonCodec {
             .apply { value.actionId?.let { put("action_id", it) } }
             .toString()
 
-    fun decodeCommand(json: String): ArrivalAlarmConnectorCommand {
+    fun decodeCommand(json: String): ArrivalAlarmConnectorCommand =
+        decodeCommand(JSONObject(json))
+
+    fun decodePendingCommands(json: String): List<ConnectorQueuedCommand> {
         val root = JSONObject(json)
+        val values = root.getJSONArray("commands")
+        return buildList(values.length()) {
+            for (index in 0 until values.length()) {
+                val envelope = values.getJSONObject(index)
+                add(
+                    ConnectorQueuedCommand(
+                        commandId = envelope.requiredNonBlank("command_id"),
+                        expectedStateVersion = envelope.getLong("expected_state_version"),
+                        userConfirmed = envelope.optBoolean("user_confirmed", false),
+                        queuedAtEpochSeconds = if (envelope.has("queued_at_epoch_seconds")) {
+                            envelope.getLong("queued_at_epoch_seconds")
+                        } else {
+                            null
+                        },
+                        command = decodeCommand(envelope.getJSONObject("command")),
+                    )
+                )
+            }
+        }
+    }
+
+    private fun decodeCommand(root: JSONObject): ArrivalAlarmConnectorCommand {
         val type = root.requiredNonBlank("type")
         val key = root.requiredNonBlank("idempotency_key")
         return when (type) {
