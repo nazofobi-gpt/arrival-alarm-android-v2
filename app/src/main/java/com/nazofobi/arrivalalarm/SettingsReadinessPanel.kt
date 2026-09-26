@@ -11,6 +11,7 @@ import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -357,6 +358,7 @@ private fun ThemeModeChoice(
             onClick = { onSelect(mode) },
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = 48.dp)
                 .semantics { this.selected = selected }
                 .testTag(testTag),
         ) {
@@ -367,6 +369,7 @@ private fun ThemeModeChoice(
             onClick = { onSelect(mode) },
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = 48.dp)
                 .semantics { this.selected = selected }
                 .testTag(testTag),
         ) {
