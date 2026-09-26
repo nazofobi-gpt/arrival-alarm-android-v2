@@ -70,9 +70,13 @@ fun HomeOverviewPanel(
     nearby: List<NearbyStop>,
     nearbySource: String?,
     favoriteStopIds: Set<String>,
+    mapMessage: String?,
     onUseCurrentLocation: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenJourney: () -> Unit,
+    onMapStopSelected: (CatalogStop) -> Unit,
+    onMapPointSelected: (MapPoint) -> Unit,
+    onMapError: (String) -> Unit,
     onNearbyStopSelected: (NearbyStop) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -135,6 +139,51 @@ fun HomeOverviewPanel(
                 ) {
                     Text(stringResource(R.string.home_journey_action))
                 }
+            }
+        }
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.map_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.semantics { heading() },
+                )
+                val mapCenter = origin ?: destination ?: MapPoint(
+                    latitude = 51.1657,
+                    longitude = 10.4515,
+                    label = "Deutschland",
+                )
+                TransitSelectionMap(
+                    center = mapCenter,
+                    nearbyStops = nearby,
+                    origin = origin,
+                    destination = destination,
+                    mapPointLabel = stringResource(R.string.map_point_label),
+                    onStopSelected = onMapStopSelected,
+                    onMapPointSelected = onMapPointSelected,
+                    onMapError = onMapError,
+                )
+                mapMessage?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.testTag("home-map-status"),
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.map_provider_note),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 
