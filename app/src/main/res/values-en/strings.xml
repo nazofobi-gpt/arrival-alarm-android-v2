@@ -55,6 +55,8 @@
     <string name="search_supporting_text">Enter a stop, address, or POI.</string>
     <string name="journey_points_title">Journey points</string>
     <string name="journey_points_empty">Choose an origin first.</string>
+    <string name="search_recents_title">Recent searches</string>
+    <string name="search_recents_clear">Clear recent searches</string>
     <string name="searching">Searching…</string>
     <string name="search_action">Search</string>
     <string name="source_format">Source: %1$s</string>
