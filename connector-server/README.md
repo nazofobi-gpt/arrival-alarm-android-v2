@@ -35,15 +35,18 @@ The server has a provider-neutral JWT/OIDC resource-server gate. In production, 
 - `OAUTH_ISSUER`
 - `OAUTH_AUDIENCE`
 - `OAUTH_JWKS_URL`
+- `GATEWAY_SQLITE_PATH` (persistent writable SQLite file, for example `/data/arrival-alarm.db`)
 
 MCP access tokens are verified against issuer, audience and JWKS. Read tools require `arrival.read`; write tools require `arrival.write`.
 
 Device sync uses the same verifier by default, or separate values via `DEVICE_OAUTH_ISSUER`, `DEVICE_OAUTH_AUDIENCE` and `DEVICE_OAUTH_JWKS_URL`. Device tokens must contain the `arrival.device` scope and a non-empty `device_id` claim.
 
+Production uses the configured SQLite store for durable per-user snapshots, queued commands and receipts. Startup fails closed when `GATEWAY_SQLITE_PATH` is missing in production.
+
 Production still requires deployment-specific infrastructure before end-to-end acceptance:
 
 1. An authorization server/client registration and device-token issuance flow.
-2. Durable per-user state, command and receipt storage.
+2. A persistent volume for the SQLite database (or a later compatible managed store for multi-instance deployment).
 3. HTTPS hosting and secret/config storage outside the repository.
 4. Revoke/disconnect handling and operational audit/retention policy.
 
