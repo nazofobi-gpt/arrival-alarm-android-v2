@@ -126,7 +126,7 @@ class ConnectorOAuthTest {
         }.exceptionOrNull()
 
         assertTrue(error is IllegalStateException)
-        assertNull(transactions.transaction)
+        assertNotNull(transactions.transaction)
         assertNull(sessions.session)
     }
 
@@ -212,6 +212,25 @@ class ConnectorOAuthTest {
 
         assertTrue(error is IllegalArgumentException)
         assertNull(transactions.transaction)
+    }
+
+
+    @Test fun forgedErrorCallbackCannotConsumePendingAuthorization() {
+        val sessions = MemorySessionStore()
+        val transactions = MemoryTransactionStore()
+        val transport = FakeTransport()
+        val oauth = coordinator(sessions, transactions, transport)
+        oauth.beginAuthorization("https://connector.example")
+
+        val error = runCatching {
+            oauth.completeAuthorization(
+                CONNECTOR_OAUTH_REDIRECT_URI + "?error=access_denied&state=forged"
+            )
+        }.exceptionOrNull()
+
+        assertTrue(error is IllegalStateException)
+        assertNotNull(transactions.transaction)
+        assertNull(sessions.session)
     }
 
 }
