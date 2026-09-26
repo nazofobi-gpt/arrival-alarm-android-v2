@@ -371,7 +371,7 @@ private fun JourneyEndpoint(
 }
 
 @Composable
-private fun JourneyAlarmControls(
+internal fun JourneyAlarmControls(
     journey: JourneyUiState,
     onArmAlarm: () -> Unit,
     onCancelAlarm: () -> Unit,
