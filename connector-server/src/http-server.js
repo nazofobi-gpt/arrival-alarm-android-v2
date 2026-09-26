@@ -3,9 +3,9 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { bearerToken, createJwtAccessVerifier } from "./auth.js";
 import { createGatewayStoreFromEnv } from "./gateway-store.js";
 import { GatewayService } from "./gateway-service.js";
-import { createArrivalAlarmMcpServer } from "./mcp-server.js";
+import { createArrivalAlarmMcpServer } from "./mcp-server.js";\nimport { validateProductionEnvironment } from "./production-config.js";
 
-const store = createGatewayStoreFromEnv();
+validateProductionEnvironment(process.env);\n\nconst store = createGatewayStoreFromEnv();
 const service = new GatewayService(store);
 const port = Number(process.env.PORT ?? 8787);
 const MCP_PATH = "/mcp";
