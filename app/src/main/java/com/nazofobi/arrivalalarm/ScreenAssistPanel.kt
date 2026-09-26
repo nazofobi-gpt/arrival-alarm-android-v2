@@ -22,6 +22,7 @@ fun ScreenAssistPanel(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
+    brokerEndpointConfigured: Boolean,
     brokerCredentialConfigured: Boolean,
     brokerCredentialDraft: String,
     onBrokerCredentialDraftChange: (String) -> Unit,
@@ -47,10 +48,13 @@ fun ScreenAssistPanel(
                 modifier = Modifier.testTag("screen-assist-status"),
             )
             Text(
-                if (brokerCredentialConfigured) {
-                    "Broker kimliği cihazda şifreli olarak hazır"
-                } else {
-                    "Broker kimliği gerekli • bu olmadan ekran paylaşımı başlatılmaz"
+                when {
+                    !brokerEndpointConfigured ->
+                        "Broker HTTPS adresi bu build için yapılandırılmamış"
+                    brokerCredentialConfigured ->
+                        "Broker kimliği cihazda şifreli olarak hazır"
+                    else ->
+                        "Broker kimliği gerekli • bu olmadan ekran paylaşımı başlatılmaz"
                 },
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.testTag("screen-assist-broker-status"),
@@ -86,7 +90,7 @@ fun ScreenAssistPanel(
             if (state.canStart) {
                 Button(
                     onClick = onStart,
-                    enabled = brokerCredentialConfigured,
+                    enabled = brokerEndpointConfigured && brokerCredentialConfigured,
                     modifier = Modifier.fillMaxWidth().testTag("screen-assist-start"),
                 ) { Text("Ekran asistanını başlat") }
             }
