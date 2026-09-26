@@ -156,6 +156,7 @@ fun ArrivalAlarmApp(
     var onboardingComplete by remember {
         mutableStateOf(appPreferences.getBoolean("onboarding_complete", false))
     }
+    var activeScreen by remember { mutableStateOf(ArrivalAppScreen.HOME) }
     var dataState by remember { mutableStateOf(transit.currentState()) }
     var query by remember { mutableStateOf("") }
     var lastSearchedQuery by remember { mutableStateOf("") }
@@ -398,6 +399,7 @@ fun ArrivalAlarmApp(
         stationResolved = false
         graph.routeRegistry.clear()
         loadRoutes(currentOrigin, point)
+        activeScreen = ArrivalAppScreen.JOURNEY
         return true
     }
 
@@ -621,7 +623,17 @@ fun ArrivalAlarmApp(
         }
     }
 
-    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        bottomBar = {
+            if (onboardingComplete) {
+                ArrivalBottomNavigation(
+                    current = activeScreen,
+                    onSelect = { activeScreen = it },
+                )
+            }
+        },
+    ) { innerPadding ->
         Surface(Modifier.fillMaxSize().padding(innerPadding)) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -647,10 +659,12 @@ fun ArrivalAlarmApp(
                                 .putBoolean("onboarding_complete", true)
                                 .apply()
                             onboardingComplete = true
+                            activeScreen = ArrivalAppScreen.HOME
                         },
                     )
                 }
 
+                if (onboardingComplete) {
                 val readinessState = remember(
                     readinessRefreshTick,
                     themeMode,
@@ -670,6 +684,7 @@ fun ArrivalAlarmApp(
                         connectorConnected = connectorConnected,
                     )
                 }
+                if (activeScreen == ArrivalAppScreen.SETTINGS) {
                 SettingsReadinessPanel(
                     state = readinessState,
                     connectorBusy = connectorSetupBusy,
@@ -696,7 +711,46 @@ fun ArrivalAlarmApp(
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                }
 
+                if (activeScreen == ArrivalAppScreen.HOME) {
+                    HomeOverviewPanel(
+                        origin = origin,
+                        destination = destination,
+                        nearby = nearby,
+                        nearbySource = nearbySource,
+                        favoriteStopIds = favoriteStopIds,
+                        onUseCurrentLocation = {
+                            if (currentLocation.hasPermission()) {
+                                useCurrentLocation()
+                            } else {
+                                locationPermissionLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                                    )
+                                )
+                            }
+                        },
+                        onOpenSearch = { activeScreen = ArrivalAppScreen.SEARCH },
+                        onOpenJourney = { activeScreen = ArrivalAppScreen.JOURNEY },
+                        onNearbyStopSelected = { candidate ->
+                            if (origin == null) {
+                                setOrigin(
+                                    MapPoint(
+                                        candidate.stop.latitude,
+                                        candidate.stop.longitude,
+                                        candidate.stop.name,
+                                    )
+                                )
+                            } else {
+                                setDestination(candidate.stop)
+                            }
+                        },
+                    )
+                }
+
+                if (activeScreen == ArrivalAppScreen.SEARCH) {
                 HomeSearchPanel(
                     selectingOrigin = selectingOrigin,
                     query = query,
@@ -778,7 +832,18 @@ fun ArrivalAlarmApp(
                         }
                     },
                 )
+                }
 
+                if (activeScreen == ArrivalAppScreen.JOURNEY) {
+                    if (origin == null || destination == null) {
+                        ScreenEmptyState(
+                            title = stringResource(R.string.journey_empty_title),
+                            body = stringResource(R.string.journey_empty_body),
+                            actionLabel = stringResource(R.string.journey_empty_action),
+                            onAction = { activeScreen = ArrivalAppScreen.SEARCH },
+                            testTag = "journey-empty-state",
+                        )
+                    } else {
                 RouteJourneyPanel(
                     origin = origin,
                     destination = destination,
@@ -834,7 +899,10 @@ fun ArrivalAlarmApp(
                         )
                     }
                 }
+                    }
+                }
 
+                if (activeScreen == ArrivalAppScreen.DEPARTURES) {
                 val destinationPoint = destination
                 if (routeOptions.isNotEmpty() && destinationPoint != null) {
                     val boardNow = System.currentTimeMillis() / 1_000
@@ -878,8 +946,18 @@ fun ArrivalAlarmApp(
                         loading = stationLoading,
                         modifier = Modifier.fillMaxWidth().testTag("transit-experience-panel"),
                     )
+                } else {
+                    ScreenEmptyState(
+                        title = stringResource(R.string.departures_empty_title),
+                        body = stringResource(R.string.departures_empty_body),
+                        actionLabel = stringResource(R.string.departures_empty_action),
+                        onAction = { activeScreen = ArrivalAppScreen.SEARCH },
+                        testTag = "departures-empty-state",
+                    )
+                }
                 }
 
+                if (activeScreen == ArrivalAppScreen.SETTINGS) {
                 Text(stringResource(R.string.guidance_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
                 Text(guidanceStatusText(guidanceState), modifier = Modifier.testTag("guidance-status"))
                 Text(stringResource(R.string.guidance_language_title), style = MaterialTheme.typography.titleSmall)
@@ -1008,6 +1086,8 @@ fun ArrivalAlarmApp(
                         stringResource(R.string.inference_confirmed, it),
                         modifier = Modifier.testTag("trip-inference-confirmed"),
                     )
+                }
+                }
                 }
                 }
             }
