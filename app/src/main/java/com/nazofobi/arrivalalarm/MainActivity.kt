@@ -677,9 +677,10 @@ fun ArrivalAlarmApp(
                     onSearchResultSelected = { result ->
                         if (selectingOrigin) {
                             setOrigin(result.point)
+                        } else if (result.stop != null) {
+                            setDestination(result.stop)
                         } else {
-                            result.stop?.let(::setDestination)
-                                ?: setDestinationPoint(result.point)
+                            setDestinationPoint(result.point)
                         }
                     },
                     onRecentSearchSelected = { recent ->
