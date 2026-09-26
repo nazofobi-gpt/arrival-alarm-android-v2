@@ -1,10 +1,15 @@
 package com.nazofobi.arrivalalarm
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
 import org.junit.Test
@@ -53,7 +58,8 @@ class LiveTripPanelTest {
 
         rule.setContent {
             MaterialTheme {
-                LiveTripPanel(
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    LiveTripPanel(
                     selectedRoute = route,
                     journey = JourneyUiState(
                         phase = JourneyPhase.ARMED,
@@ -67,7 +73,8 @@ class LiveTripPanelTest {
                     ),
                     routeOffline = false,
                     nowEpochSeconds = "2026-09-26T08:15:30+02:00".toTransitEpochSecondsOrNull()!!,
-                )
+                    )
+                }
             }
         }
 
@@ -75,6 +82,6 @@ class LiveTripPanelTest {
         rule.onNodeWithTag("live-trip-current").assertTextContains("Diepholz", substring = true)
         rule.onNodeWithTag("live-trip-next").assertTextContains("Bremen Hbf", substring = true)
         rule.onNodeWithTag("live-trip-distance").assertTextContains("430", substring = true)
-        rule.onNodeWithTag("live-trip-audio").assertIsDisplayed()
+        rule.onNodeWithTag("live-trip-audio").performScrollTo().assertIsDisplayed()
     }
 }
