@@ -42,12 +42,13 @@
     <string name="select_origin">Start wählen</string>
     <string name="selecting_destination">Ziel wird gewählt</string>
     <string name="select_destination">Ziel wählen</string>
-    <string name="search_stops_label">Haltestelle in Deutschland suchen</string>
+    <string name="search_stops_label">Haltestelle, Adresse oder Ort suchen</string>
     <string name="searching">Suche…</string>
     <string name="search_action">Suchen</string>
     <string name="source_format">Quelle: %1$s</string>
     <string name="no_stop_found">Keine Haltestelle gefunden</string>
     <string name="search_result_format">%1$s • %2$s</string>
+    <string name="search_location_result_format">%1$s • %2$s • %3$s</string>
     <string name="current_location_origin">Aktuellen Standort als Start verwenden</string>
     <string name="current_location_label">Aktueller Standort</string>
     <string name="getting_location">Standort wird ermittelt…</string>
