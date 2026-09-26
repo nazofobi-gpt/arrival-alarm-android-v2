@@ -3,6 +3,7 @@ package com.nazofobi.arrivalalarm
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -105,6 +106,7 @@ fun HomeSearchPanel(
                         enabled = !selectingOrigin,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(min = 48.dp)
                             .testTag("search-target-origin"),
                     ) {
                         Text(
@@ -121,6 +123,7 @@ fun HomeSearchPanel(
                         enabled = origin != null && selectingOrigin,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(min = 48.dp)
                             .testTag("search-target-destination"),
                     ) {
                         Text(
@@ -136,6 +139,7 @@ fun HomeSearchPanel(
                         onClick = onUseCurrentLocation,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(min = 48.dp)
                             .testTag("current-location-origin"),
                     ) {
                         Text(stringResource(R.string.current_location_origin))
@@ -320,6 +324,7 @@ fun HomeSearchPanel(
                         enabled = !searchBusy && query.trim().length >= 2,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(min = 48.dp)
                             .testTag("catalog-search-submit"),
                     ) {
                         Text(
@@ -353,6 +358,7 @@ fun HomeSearchPanel(
                             onClick = { onSearchResultSelected(result) },
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .heightIn(min = 48.dp)
                                 .testTag("search-result-$index"),
                         ) {
                             val action = if (selectingOrigin) {
@@ -397,6 +403,7 @@ fun HomeSearchPanel(
                             onClick = onClearRecentSearches,
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .heightIn(min = 48.dp)
                                 .testTag("search-recents-clear"),
                         ) {
                             Text(stringResource(R.string.search_recents_clear))
