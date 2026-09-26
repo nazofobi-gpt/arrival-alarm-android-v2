@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -163,6 +165,26 @@ class MainActivityTest {
         rule.onNodeWithTag("theme-mode-status")
             .performScrollTo()
             .assertTextContains(darkLabel, substring = true)
+    }
+
+    @Test fun themeControlsExposeSelectionSemantics() {
+        rule.onNodeWithTag("theme-system")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .assertIsSelected()
+        rule.onNodeWithTag("theme-dark")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .assertIsNotSelected()
+            .performClick()
+        rule.waitForIdle()
+
+        rule.onNodeWithTag("theme-dark")
+            .performScrollTo()
+            .assertIsSelected()
+        rule.onNodeWithTag("theme-system")
+            .performScrollTo()
+            .assertIsNotSelected()
     }
 
     @Test fun guidanceLanguageChoicePersistsAcrossActivityRecreation() {
