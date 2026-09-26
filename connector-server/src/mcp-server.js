@@ -43,6 +43,8 @@ const writeAnnotations = {
 
 const readSecuritySchemes = [{ type: "oauth2", scopes: ["arrival.read"] }];
 const writeSecuritySchemes = [{ type: "oauth2", scopes: ["arrival.write"] }];
+const readSecurityMeta = { securitySchemes: readSecuritySchemes };
+const writeSecurityMeta = { securitySchemes: writeSecuritySchemes };
 
 function ok(data, message) {
   return {
@@ -148,6 +150,7 @@ export function createArrivalAlarmMcpServer({
       annotations: readAnnotations,
       securitySchemes: readSecuritySchemes,
       _meta: {
+        ...readSecurityMeta,
         "openai/profile": true,
       },
     },
@@ -176,6 +179,7 @@ export function createArrivalAlarmMcpServer({
       inputSchema: {},
       annotations: readAnnotations,
       securitySchemes: readSecuritySchemes,
+      _meta: readSecurityMeta,
     },
     async () => {
       try {
@@ -197,6 +201,7 @@ export function createArrivalAlarmMcpServer({
       inputSchema: {},
       annotations: readAnnotations,
       securitySchemes: readSecuritySchemes,
+      _meta: readSecurityMeta,
     },
     async () => {
       try {
@@ -216,6 +221,7 @@ export function createArrivalAlarmMcpServer({
       inputSchema: {},
       annotations: readAnnotations,
       securitySchemes: readSecuritySchemes,
+      _meta: readSecurityMeta,
     },
     async () => {
       try {
@@ -236,6 +242,7 @@ export function createArrivalAlarmMcpServer({
       outputSchema: writeOutput,
       annotations: writeAnnotations,
       securitySchemes: writeSecuritySchemes,
+      _meta: writeSecurityMeta,
     },
     async (args) => {
       try {
@@ -266,6 +273,7 @@ export function createArrivalAlarmMcpServer({
       outputSchema: writeOutput,
       annotations: writeAnnotations,
       securitySchemes: writeSecuritySchemes,
+      _meta: writeSecurityMeta,
     },
     async (args) => {
       try {
@@ -300,6 +308,7 @@ export function createArrivalAlarmMcpServer({
       outputSchema: writeOutput,
       annotations: writeAnnotations,
       securitySchemes: writeSecuritySchemes,
+      _meta: writeSecurityMeta,
     },
     async (args) => {
       try {
@@ -332,6 +341,7 @@ export function createArrivalAlarmMcpServer({
       outputSchema: writeOutput,
       annotations: writeAnnotations,
       securitySchemes: writeSecuritySchemes,
+      _meta: writeSecurityMeta,
     },
     async (args) => {
       try {
@@ -361,6 +371,7 @@ export function createArrivalAlarmMcpServer({
       outputSchema: writeOutput,
       annotations: writeAnnotations,
       securitySchemes: writeSecuritySchemes,
+      _meta: writeSecurityMeta,
     },
     async (args) => {
       try {
@@ -389,6 +400,7 @@ export function createArrivalAlarmMcpServer({
       outputSchema: writeOutput,
       annotations: writeAnnotations,
       securitySchemes: writeSecuritySchemes,
+      _meta: writeSecurityMeta,
     },
     async (args) => {
       try {
@@ -418,6 +430,7 @@ export function createArrivalAlarmMcpServer({
       },
       annotations: readAnnotations,
       securitySchemes: readSecuritySchemes,
+      _meta: readSecurityMeta,
     },
     async ({ idempotency_key }) => {
       try {
