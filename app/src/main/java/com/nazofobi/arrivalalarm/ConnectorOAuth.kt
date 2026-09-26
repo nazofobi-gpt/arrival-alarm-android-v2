@@ -206,6 +206,9 @@ class ConnectorOAuthCoordinator(
         require(metadata.deviceIdParameter.matches(Regex("[A-Za-z0-9_.-]{1,64}"))) {
             "connector_oauth_device_parameter_invalid"
         }
+        require(metadata.deviceIdParameter !in RESERVED_AUTHORIZATION_PARAMETERS) {
+            "connector_oauth_device_parameter_reserved"
+        }
         metadata.resource?.let { requireHttpsUrl(it, "resource") }
         return metadata
     }
@@ -221,6 +224,16 @@ class ConnectorOAuthCoordinator(
 
     companion object {
         private const val TRANSACTION_TTL_SECONDS = 10 * 60L
+        private val RESERVED_AUTHORIZATION_PARAMETERS = setOf(
+            "response_type",
+            "client_id",
+            "redirect_uri",
+            "scope",
+            "state",
+            "code_challenge",
+            "code_challenge_method",
+            "resource",
+        )
 
         internal fun base64UrlNoPadding(bytes: ByteArray): String {
             val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
