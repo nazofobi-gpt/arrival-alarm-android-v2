@@ -110,7 +110,7 @@ class MainActivityTest {
         rule.onNodeWithTag("origin-label").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("destination-label").performScrollTo().assertIsDisplayed()
         navigateTo("nav-journey")
-        rule.onNodeWithTag("arm").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("route-refresh").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun largeFontKeepsCriticalJourneyControlsReachable() {
