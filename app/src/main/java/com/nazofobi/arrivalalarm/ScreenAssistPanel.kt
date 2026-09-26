@@ -29,8 +29,8 @@ fun ScreenAssistPanel(
     onSaveBrokerCredential: () -> Unit,
     onClearBrokerCredential: () -> Unit,
     pendingConfirmationText: String? = null,
-    onApprovePendingCommand: () -> Unit,
-    onRejectPendingCommand: () -> Unit,
+    onApprovePendingCommand: () -> Unit = {},
+    onRejectPendingCommand: () -> Unit = {},
     guidanceText: String? = null,
     modifier: Modifier = Modifier,
 ) {
