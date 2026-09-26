@@ -45,6 +45,14 @@ data class TransitLocationResult(
     val point: MapPoint get() = MapPoint(latitude, longitude, label)
 }
 
+data class StationDeparturesSnapshot(
+    val departures: List<Departure> = emptyList(),
+    val alerts: List<ServiceAlert> = emptyList(),
+    val sourceLabel: String? = null,
+    val fetchedAtEpochSeconds: Long = 0L,
+    val error: String? = null,
+)
+
 class NationwideTransitGateway(
     context: Context,
     private val feedUrl: String = "https://download.gtfs.de/germany/free/latest.zip",
@@ -153,6 +161,45 @@ class NationwideTransitGateway(
         }
     }
 
+    fun stationDepartures(
+        stop: CatalogStop,
+        limit: Int = 8,
+        callback: (StationDeparturesSnapshot) -> Unit,
+    ) {
+        io.execute {
+            val snapshot = runCatching {
+                val liveStop = if (stop.id.startsWith("db:")) {
+                    stop
+                } else {
+                    liveApi.searchStops(stop.name, 8)
+                        .minByOrNull { candidate ->
+                            haversineMeters(
+                                stop.latitude,
+                                stop.longitude,
+                                candidate.latitude,
+                                candidate.longitude,
+                            )
+                        }
+                        ?.takeIf { candidate ->
+                            haversineMeters(
+                                stop.latitude,
+                                stop.longitude,
+                                candidate.latitude,
+                                candidate.longitude,
+                            ) <= 1_000.0
+                        }
+                        ?: error("Live stop mapping unavailable")
+                }
+                liveApi.departures(liveStop.id, limit)
+            }.getOrElse { error ->
+                StationDeparturesSnapshot(
+                    error = error.message ?: appContext.getString(R.string.unknown_error),
+                )
+            }
+            main.post { callback(snapshot) }
+        }
+    }
+
     fun journeyOptions(
         origin: MapPoint,
         destination: MapPoint,
@@ -207,6 +254,79 @@ class GermanyLiveTransitApi(
             .map { NearbyStop(it, haversineMeters(latitude, longitude, it.latitude, it.longitude).roundToInt()) }
             .sortedBy { it.distanceMeters }
             .take(limit)
+    }
+
+    fun departures(stopId: String, limit: Int = 8): StationDeparturesSnapshot {
+        val rawStopId = stopId.removePrefix("db:")
+        require(rawStopId.isNotBlank())
+        val encoded = URLEncoder.encode(rawStopId, StandardCharsets.UTF_8.name())
+        val json = get(
+            "$baseUrl/stops/$encoded/departures?results=${limit.coerceIn(1, 20)}&duration=120&remarks=true&language=de&pretty=false"
+        )
+        return parseDepartures(JSONArray(json), limit)
+    }
+
+    internal fun parseDepartures(
+        array: JSONArray,
+        limit: Int = 8,
+    ): StationDeparturesSnapshot {
+        val departures = mutableListOf<Departure>()
+        val alerts = linkedMapOf<String, ServiceAlert>()
+        for (i in 0 until array.length()) {
+            val item = array.optJSONObject(i) ?: continue
+            val tripId = item.optString("tripId").takeIf { it.isNotBlank() } ?: continue
+            val line = item.optJSONObject("line")
+            val lineName = line?.optString("name")?.takeIf { it.isNotBlank() }
+                ?: line?.optString("id")?.takeIf { it.isNotBlank() }
+                ?: continue
+            val direction = item.optString("direction").takeIf { it.isNotBlank() } ?: continue
+            val plannedIso = item.optString("plannedWhen").takeIf { it.isNotBlank() }
+            val actualIso = item.optString("when").takeIf { it.isNotBlank() }
+            val plannedEpoch = plannedIso.toTransitEpochSecondsOrNull()
+            val actualEpoch = actualIso.toTransitEpochSecondsOrNull()
+            val scheduledEpoch = plannedEpoch ?: actualEpoch ?: continue
+            val realtimeEpoch = actualEpoch?.takeIf { plannedEpoch != null && it != plannedEpoch }
+            val platform = item.optString("platform").takeIf { it.isNotBlank() }
+                ?: item.optString("plannedPlatform").takeIf { it.isNotBlank() }
+            val cancelled = item.optBoolean("cancelled", false)
+
+            departures += Departure(
+                tripId = tripId,
+                line = lineName,
+                direction = direction,
+                scheduledEpochSeconds = scheduledEpoch,
+                realtimeEpochSeconds = realtimeEpoch,
+                cancelled = cancelled,
+                platform = platform,
+            )
+
+            val remarks = item.optJSONArray("remarks")
+            if (remarks != null) {
+                for (j in 0 until remarks.length()) {
+                    val remark = remarks.optJSONObject(j) ?: continue
+                    val detail = remark.optString("text").takeIf { it.isNotBlank() }
+                        ?: remark.optString("summary").takeIf { it.isNotBlank() }
+                        ?: continue
+                    val key = remark.optString("code").takeIf { it.isNotBlank() }
+                        ?: "$tripId:$j:$detail"
+                    alerts.putIfAbsent(
+                        key,
+                        ServiceAlert(
+                            id = key,
+                            title = "$lineName → $direction",
+                            detail = detail,
+                        )
+                    )
+                }
+            }
+            if (departures.size >= limit.coerceIn(1, 20)) break
+        }
+        return StationDeparturesSnapshot(
+            departures = departures,
+            alerts = alerts.values.toList(),
+            sourceLabel = "v6.db.transport.rest",
+            fetchedAtEpochSeconds = nowEpochSeconds(),
+        )
     }
 
     fun journeys(origin: MapPoint, destination: MapPoint, limit: Int = 3): List<RouteOption> {
