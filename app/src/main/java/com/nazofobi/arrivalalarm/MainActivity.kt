@@ -145,9 +145,21 @@ fun ArrivalAlarmApp(
     var searchSource by remember { mutableStateOf<String?>(null) }
     var searchMessage by remember { mutableStateOf<String?>(null) }
     var searchRequestId by remember { mutableStateOf(0L) }
-    var selectingOrigin by remember { mutableStateOf(true) }
-    var origin by remember { mutableStateOf<MapPoint?>(null) }
-    var destination by remember { mutableStateOf<MapPoint?>(null) }
+    var selectingOrigin by remember { mutableStateOf(controller.state.start == null) }
+    var origin by remember(controller) {
+        mutableStateOf(
+            controller.state.start?.let {
+                MapPoint(it.latitude, it.longitude, context.getString(R.string.restored_origin))
+            }
+        )
+    }
+    var destination by remember(controller) {
+        mutableStateOf(
+            controller.state.destination?.let {
+                MapPoint(it.latitude, it.longitude, context.getString(R.string.restored_destination))
+            }
+        )
+    }
     var destinationStopId by remember { mutableStateOf<String?>(null) }
     var nearby by remember { mutableStateOf(emptyList<NearbyStop>()) }
     var nearbySource by remember { mutableStateOf<String?>(null) }
@@ -156,7 +168,9 @@ fun ArrivalAlarmApp(
     var routeStatus by remember { mutableStateOf<String?>(null) }
     var routeOffline by remember { mutableStateOf(false) }
     var routeBusy by remember { mutableStateOf(false) }
-    val routeCache = remember { OfflineTransitCache() }
+    val routeCache = remember(context) {
+        OfflineTransitCache(backingStore = SharedPreferencesTransitCacheStore(context))
+    }
     var guidanceState by remember { mutableStateOf(guidanceController.state) }
     var guidanceLanguage by remember {
         mutableStateOf(
@@ -395,6 +409,24 @@ fun ArrivalAlarmApp(
         guidanceController.onPermissions(AndroidGuidancePermissions.snapshot(context))
         guidanceController.onAudioRoute(AndroidGuidanceAudio.currentRoute(context))
         guidanceState = guidanceController.state
+
+        val restoredOrigin = origin
+        val restoredDestination = destination
+        if (restoredOrigin != null) {
+            loadNearby(restoredOrigin)
+        }
+        if (restoredOrigin != null && restoredDestination != null && routeOptions.isEmpty()) {
+            val key = routeKey(restoredOrigin, restoredDestination)
+            val cached = routeCache.routeOptions(key)
+            if (cached.isNotEmpty()) {
+                routeOffline = true
+                routeOptions = cached
+                graph.routeRegistry.replace(cached)
+                routeStatus = context.getString(R.string.route_offline_fallback)
+            } else {
+                loadRoutes(restoredOrigin, restoredDestination)
+            }
+        }
     }
 
     LaunchedEffect(controller) {
