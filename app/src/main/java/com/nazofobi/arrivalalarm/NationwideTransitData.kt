@@ -123,6 +123,7 @@ class GermanyLiveTransitApi(
     private val baseUrl: String = "https://v6.db.transport.rest",
     private val connectTimeoutMs: Int = 6_000,
     private val readTimeoutMs: Int = 8_000,
+    private val nowEpochSeconds: () -> Long = { System.currentTimeMillis() / 1_000 },
 ) {
     fun searchStops(query: String, limit: Int): List<CatalogStop> {
         val encoded = URLEncoder.encode(query, StandardCharsets.UTF_8.name())
@@ -146,7 +147,7 @@ class GermanyLiveTransitApi(
             append("$baseUrl/journeys?")
             append("from.latitude=${origin.latitude}&from.longitude=${origin.longitude}&from.address=$fromLabel")
             append("&to.latitude=${destination.latitude}&to.longitude=${destination.longitude}&to.address=$toLabel")
-            append("&results=${limit.coerceIn(1, 6)}&stopovers=false&language=de&pretty=false")
+            append("&results=${limit.coerceIn(1, 6)}&stopovers=true&language=de&pretty=false")
         }
         return parseJourneys(JSONObject(get(url)), origin, destination, limit)
     }
@@ -159,6 +160,8 @@ class GermanyLiveTransitApi(
                 val legs = journey.optJSONArray("legs") ?: continue
                 if (legs.length() == 0) continue
                 val lines = mutableListOf<String>()
+                val tripIds = mutableListOf<String>()
+                val stops = mutableListOf<RouteStop>()
                 var direction = destination.label
                 var walkingMinutes = 0
                 var transitLegs = 0
@@ -174,6 +177,14 @@ class GermanyLiveTransitApi(
                     if (line != null) {
                         val name = line.optString("name").ifBlank { line.optString("id") }
                         if (name.isNotBlank() && name !in lines) lines += name
+                        leg.optString("tripId").takeIf { it.isNotBlank() }?.let { tripId ->
+                            if (tripId !in tripIds) tripIds += tripId
+                        }
+                        leg.optJSONArray("stopovers")?.let { stopovers ->
+                            for (k in 0 until stopovers.length()) {
+                                parseRouteStop(stopovers.optJSONObject(k))?.let(stops::add)
+                            }
+                        }
                         leg.optString("direction").takeIf { it.isNotBlank() }?.let { direction = it }
                         transitLegs++
                     } else {
@@ -191,10 +202,36 @@ class GermanyLiveTransitApi(
                         arrival = arrival.ifBlank { "—" },
                         walkingMinutes = walkingMinutes,
                         transfers = (transitLegs - 1).coerceAtLeast(0),
+                        tripIds = tripIds,
+                        stops = stops.distinctBy { stop ->
+                            stop.id ?: "${stop.name}:${stop.plannedDeparture.orEmpty()}:${stop.plannedArrival.orEmpty()}"
+                        },
+                        refreshToken = journey.optString("refreshToken").takeIf { it.isNotBlank() },
+                        sourceUpdatedAtEpochSeconds = nowEpochSeconds(),
                     )
                 )
             }
         }
+    }
+
+    internal fun parseRouteStop(stopover: JSONObject?): RouteStop? {
+        val item = stopover ?: return null
+        val stop = item.optJSONObject("stop") ?: return null
+        val name = stop.optString("name").trim()
+        if (name.isBlank()) return null
+        val location = stop.optJSONObject("location")
+        val latitude = location?.optDouble("latitude", Double.NaN)?.takeIf { it.isFinite() }
+        val longitude = location?.optDouble("longitude", Double.NaN)?.takeIf { it.isFinite() }
+        return RouteStop(
+            id = stop.optString("id").takeIf { it.isNotBlank() },
+            name = name,
+            latitude = latitude,
+            longitude = longitude,
+            arrival = item.optString("arrival").takeIf { it.isNotBlank() },
+            plannedArrival = item.optString("plannedArrival").takeIf { it.isNotBlank() },
+            departure = item.optString("departure").takeIf { it.isNotBlank() },
+            plannedDeparture = item.optString("plannedDeparture").takeIf { it.isNotBlank() },
+        )
     }
 
     private fun displayClock(value: String): String =
