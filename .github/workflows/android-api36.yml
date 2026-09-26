@@ -73,7 +73,7 @@ jobs:
             adb shell am force-stop com.nazofobi.arrivalalarm || true
             adb shell wm size
             adb shell wm density
-            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.MainActivityTest#wideWindowKeepsPrimaryContentAtReadableWidth
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.MainActivityTest#wideWindowKeepsPrimaryContentAtReadableWidth -Pandroid.testInstrumentationRunnerArguments.requireWide=true
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell pm clear com.nazofobi.arrivalalarm || true
             adb shell am start -W -n com.nazofobi.arrivalalarm/.MainActivity
