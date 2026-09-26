@@ -1,6 +1,8 @@
 package com.nazofobi.arrivalalarm
 
 import android.content.Context
+import java.io.File
+import java.io.FileOutputStream
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -299,6 +301,18 @@ class MainActivityTest {
         assertTrue(rule.onAllNodesWithTag("catalog-search").fetchSemanticsNodes().isEmpty())
     }
 
+    @Test fun capturePrimaryScreensForVisualQa() {
+        captureScreen("home")
+        navigateTo("nav-search")
+        captureScreen("search")
+        navigateTo("nav-journey")
+        captureScreen("journey")
+        navigateTo("nav-departures")
+        captureScreen("departures")
+        navigateTo("nav-settings")
+        captureScreen("settings")
+    }
+
     @Test fun guidanceLanguageChoicePersistsAcrossActivityRecreation() {
         navigateTo("nav-settings")
         rule.onNodeWithTag("guidance-language-de-DE")
@@ -316,6 +330,18 @@ class MainActivityTest {
         rule.onNodeWithTag("guidance-language-status")
             .performScrollTo()
             .assertTextContains("Deutsch", substring = true)
+    }
+
+    private fun captureScreen(name: String) {
+        rule.waitForIdle()
+        val root = rule.activity.getExternalFilesDir(null) ?: return
+        val dir = File(root, "ui-qa").apply { mkdirs() }
+        val file = File(dir, "$name.png")
+        val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+        FileOutputStream(file).use { output ->
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output)
+        }
+        bitmap.recycle()
     }
 
     private fun navigateTo(tag: String) {
