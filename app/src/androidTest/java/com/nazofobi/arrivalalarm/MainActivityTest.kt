@@ -180,6 +180,14 @@ class MainActivityTest {
             .assertTextContains(darkLabel, substring = true)
     }
 
+    @Test fun tripInferenceSwitchHasTalkBackLabel() {
+        val label = rule.activity.getString(R.string.inference_title)
+        rule.onNodeWithTag("trip-inference-toggle")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .assertContentDescriptionEquals(label)
+    }
+
     @Test fun criticalActionsMeet48DpTouchTargetFloor() {
         val minPixels = 48f * rule.activity.resources.displayMetrics.density
         listOf(
