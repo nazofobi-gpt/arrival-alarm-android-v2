@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -148,6 +149,7 @@ fun TransitExperiencePanel(
                     onClick = { favorite = store.toggleFavorite(stopId) },
                     modifier = Modifier
                         .fillMaxWidth()
+                        .heightIn(min = 48.dp)
                         .testTag("favorite-stop"),
                 ) {
                     Text(
@@ -220,6 +222,7 @@ fun TransitExperiencePanel(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(min = 48.dp)
                             .testTag("departure-$index"),
                     ) {
                         Text(stringResource(R.string.departure_select))
