@@ -1,0 +1,49 @@
+name: Connector Server CI
+
+on:
+  pull_request:
+    paths:
+      - "connector-server/**"
+      - ".github/workflows/connector-server-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: connector-server-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Gateway and MCP contract tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: connector-server
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: connector-server/package.json
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Syntax check
+        run: |
+          node --check src/gateway-store.js
+          node --check src/gateway-service.js
+          node --check src/mcp-server.js
+          node --check src/http-server.js
+
+      - name: Test
+        run: npm test
