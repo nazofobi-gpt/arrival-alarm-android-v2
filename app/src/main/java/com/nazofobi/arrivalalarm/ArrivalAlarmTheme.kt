@@ -14,6 +14,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+object ArrivalSpacing {
+    val xSmall = 4.dp
+    val small = 8.dp
+    val medium = 12.dp
+    val large = 16.dp
+    val xLarge = 24.dp
+    val section = 32.dp
+}
+
+object ArrivalElevation {
+    val flat = 0.dp
+    val raised = 1.dp
+}
+
 enum class ArrivalThemeMode { SYSTEM, LIGHT, DARK }
 
 internal val MatteLightColors = lightColorScheme(
