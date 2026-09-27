@@ -46,12 +46,12 @@ fun RouteJourneyPanel(
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         if (mode == RouteJourneyMode.RESULTS) {
             Text(
                 text = stringResource(R.string.route_results_title),
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.semantics { heading() },
             )
@@ -66,9 +66,9 @@ fun RouteJourneyPanel(
             } else {
                 Card(
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                     ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -142,7 +142,7 @@ fun RouteJourneyPanel(
             if (selected == null) {
                 Text(
                     text = stringResource(R.string.journey_detail_title),
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.semantics { heading() },
                 )
@@ -187,8 +187,8 @@ private fun RouteOptionCard(
         elevation = CardDefaults.cardElevation(defaultElevation = if (selected) 2.dp else 1.dp),
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
                 text = duration?.let {
@@ -255,9 +255,9 @@ private fun JourneyDetailCard(option: RouteOption) {
     val duration = routeDurationMinutes(option.departure, option.arrival)
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier
             .fillMaxWidth()
             .testTag("journey-detail"),
