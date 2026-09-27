@@ -15,27 +15,31 @@ import kotlin.math.absoluteValue
 import kotlin.math.cos
 import kotlin.math.roundToInt
 
-class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nationwide_transit.db", null, 2) {
+class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nationwide_transit.db", null, 3) {
     companion object {
         private const val PROVIDER_ID = "gtfs-de-full"
         private const val READY_KEY = "ready"
         private const val FETCHED_KEY = "fetched_at"
         private const val COUNT_KEY = "stop_count"
         private const val VERSION_KEY = "source_version"
+        private const val SCHEMA_KEY = "schema_version"
+        private const val REQUIRED_STOP_COUNT = 10_000
     }
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-        db.execSQL("CREATE TABLE stops(id TEXT PRIMARY KEY, name TEXT NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL, parent_station TEXT)")
-        db.execSQL("CREATE INDEX idx_stops_lat_lon ON stops(lat, lon)")
-        db.execSQL("CREATE VIRTUAL TABLE stop_search USING fts4(stop_id, name, tokenize=unicode61)")
+        createTransitSchema(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS stop_search")
-        db.execSQL("DROP TABLE IF EXISTS stops")
-        db.execSQL("DROP TABLE IF EXISTS metadata")
-        onCreate(db)
+        if (oldVersion < 3) {
+            // Keep the last known-good stop index usable while the richer graph is populated.
+            addColumnIfMissing(db, "stops", "location_type", "INTEGER")
+            addColumnIfMissing(db, "stops", "platform_code", "TEXT")
+            addColumnIfMissing(db, "stops", "wheelchair_boarding", "INTEGER")
+            createScheduleTables(db)
+            putMetadata(db, SCHEMA_KEY, "3")
+        }
     }
 
     fun isReady(): Boolean = metadata(READY_KEY) == "1"
@@ -43,7 +47,13 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
     fun stopCount(): Int = metadata(COUNT_KEY)?.toIntOrNull() ?: 0
     fun sourceVersion(): String = metadata(VERSION_KEY) ?: "unknown"
 
-    fun importStops(url: String, onCount: (Int) -> Unit) {
+    /**
+     * Historical API name retained for callers. The import is now a full GTFS schedule-graph import.
+     * One SQLite transaction makes a failed refresh roll back to the previous known-good graph.
+     */
+    fun importStops(url: String, onCount: (Int) -> Unit) = importFeed(url, onCount)
+
+    fun importFeed(url: String, onCount: (Int) -> Unit) {
         val db = writableDatabase
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15_000
@@ -61,67 +71,61 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         val sourceVersion = connection.getHeaderField("ETag")
             ?: connection.getHeaderField("Last-Modified")
             ?: connection.url.toString()
-        var imported = 0
+        val counts = linkedMapOf<String, Int>()
+
         db.beginTransaction()
         try {
-            db.delete("stops", null, null)
-            db.delete("stop_search", null, null)
-            val stopInsert = db.compileStatement("INSERT OR REPLACE INTO stops(id,name,lat,lon,parent_station) VALUES(?,?,?,?,?)")
-            val searchInsert = db.compileStatement("INSERT INTO stop_search(stop_id,name) VALUES(?,?)")
+            clearTransitData(db)
             ZipInputStream(BufferedInputStream(connection.inputStream, 128 * 1024)).use { zip ->
                 var entry = zip.nextEntry
-                while (entry != null && entry.name.substringAfterLast('/') != "stops.txt") {
+                while (entry != null) {
+                    val file = entry.name.substringAfterLast('/').lowercase(Locale.ROOT)
+                    if (!entry.isDirectory) {
+                        val reader = BufferedReader(InputStreamReader(zip, StandardCharsets.UTF_8), 128 * 1024)
+                        val count = when (file) {
+                            "stops.txt" -> importStopsEntry(db, reader, onCount)
+                            "agency.txt" -> importAgency(db, reader)
+                            "routes.txt" -> importRoutes(db, reader)
+                            "trips.txt" -> importTrips(db, reader)
+                            "stop_times.txt" -> importStopTimes(db, reader)
+                            "calendar.txt" -> importCalendar(db, reader)
+                            "calendar_dates.txt" -> importCalendarDates(db, reader)
+                            "transfers.txt" -> importTransfers(db, reader)
+                            "shapes.txt" -> importShapes(db, reader)
+                            "feed_info.txt" -> importFeedInfo(db, reader)
+                            else -> 0
+                        }
+                        if (count > 0) counts[file] = count
+                    }
                     zip.closeEntry()
                     entry = zip.nextEntry
                 }
-                if (entry == null) error("GTFS stops.txt bulunamadı")
-                val reader = BufferedReader(InputStreamReader(zip, StandardCharsets.UTF_8), 128 * 1024)
-                val header = parseCsvLine(reader.readLine() ?: error("GTFS stops.txt boş"))
-                val idIndex = header.indexOf("stop_id")
-                val nameIndex = header.indexOf("stop_name")
-                val latIndex = header.indexOf("stop_lat")
-                val lonIndex = header.indexOf("stop_lon")
-                val parentIndex = header.indexOf("parent_station")
-                if (listOf(idIndex, nameIndex, latIndex, lonIndex).any { it < 0 }) error("GTFS stops.txt zorunlu sütunları eksik")
-
-                while (true) {
-                    val line = reader.readLine() ?: break
-                    val row = parseCsvLine(line)
-                    val maxRequired = maxOf(idIndex, nameIndex, latIndex, lonIndex)
-                    if (row.size <= maxRequired) continue
-                    val id = row[idIndex].trim()
-                    val name = row[nameIndex].trim()
-                    val lat = row[latIndex].toDoubleOrNull()
-                    val lon = row[lonIndex].toDoubleOrNull()
-                    if (id.isBlank() || name.isBlank() || lat == null || lon == null) continue
-                    stopInsert.clearBindings()
-                    stopInsert.bindString(1, id)
-                    stopInsert.bindString(2, name)
-                    stopInsert.bindDouble(3, lat)
-                    stopInsert.bindDouble(4, lon)
-                    if (parentIndex >= 0 && row.size > parentIndex && row[parentIndex].isNotBlank()) stopInsert.bindString(5, row[parentIndex]) else stopInsert.bindNull(5)
-                    stopInsert.executeInsert()
-
-                    searchInsert.clearBindings()
-                    searchInsert.bindString(1, id)
-                    searchInsert.bindString(2, name)
-                    searchInsert.executeInsert()
-
-                    imported++
-                    if (imported % 50_000 == 0) onCount(imported)
-                }
             }
-            if (imported < 10_000) error("GTFS durak sayısı beklenenden düşük: $imported")
+
+            val stops = counts["stops.txt"] ?: 0
+            val routes = counts["routes.txt"] ?: 0
+            val trips = counts["trips.txt"] ?: 0
+            val stopTimes = counts["stop_times.txt"] ?: 0
+            if (stops < REQUIRED_STOP_COUNT) error("GTFS durak sayısı beklenenden düşük: $stops")
+            if (routes == 0 || trips == 0 || stopTimes == 0) {
+                error("GTFS schedule graph eksik: routes=$routes trips=$trips stop_times=$stopTimes")
+            }
+            if ((counts["calendar.txt"] ?: 0) == 0 && (counts["calendar_dates.txt"] ?: 0) == 0) {
+                error("GTFS service calendar eksik")
+            }
+
             putMetadata(db, READY_KEY, "1")
             putMetadata(db, FETCHED_KEY, (System.currentTimeMillis() / 1000).toString())
-            putMetadata(db, COUNT_KEY, imported.toString())
+            putMetadata(db, COUNT_KEY, stops.toString())
             putMetadata(db, VERSION_KEY, sourceVersion)
+            putMetadata(db, SCHEMA_KEY, "3")
+            counts.forEach { (file, count) -> putMetadata(db, "count_$file", count.toString()) }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
             connection.disconnect()
         }
-        onCount(imported)
+        onCount(counts["stops.txt"] ?: 0)
     }
 
     fun search(query: String, limit: Int): List<CatalogStop> {
@@ -161,6 +165,179 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         return emptyList()
     }
 
+    private fun createTransitSchema(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE stops(id TEXT PRIMARY KEY, name TEXT NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL, parent_station TEXT, location_type INTEGER, platform_code TEXT, wheelchair_boarding INTEGER)")
+        db.execSQL("CREATE INDEX idx_stops_lat_lon ON stops(lat, lon)")
+        db.execSQL("CREATE INDEX idx_stops_parent ON stops(parent_station)")
+        db.execSQL("CREATE VIRTUAL TABLE stop_search USING fts4(stop_id, name, tokenize=unicode61)")
+        createScheduleTables(db)
+    }
+
+    private fun createScheduleTables(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS agency(agency_id TEXT PRIMARY KEY, name TEXT NOT NULL, url TEXT, timezone TEXT, lang TEXT)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS routes(route_id TEXT PRIMARY KEY, agency_id TEXT, short_name TEXT, long_name TEXT, route_type INTEGER, color TEXT, text_color TEXT)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS trips(trip_id TEXT PRIMARY KEY, route_id TEXT NOT NULL, service_id TEXT NOT NULL, headsign TEXT, direction_id INTEGER, shape_id TEXT, wheelchair_accessible INTEGER, bikes_allowed INTEGER)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_trips_route_service ON trips(route_id, service_id)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS stop_times(trip_id TEXT NOT NULL, stop_sequence INTEGER NOT NULL, stop_id TEXT NOT NULL, arrival_time TEXT, departure_time TEXT, pickup_type INTEGER, drop_off_type INTEGER, PRIMARY KEY(trip_id, stop_sequence))")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_stop_times_stop ON stop_times(stop_id)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS calendar(service_id TEXT PRIMARY KEY, monday INTEGER, tuesday INTEGER, wednesday INTEGER, thursday INTEGER, friday INTEGER, saturday INTEGER, sunday INTEGER, start_date TEXT, end_date TEXT)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS calendar_dates(service_id TEXT NOT NULL, date TEXT NOT NULL, exception_type INTEGER NOT NULL, PRIMARY KEY(service_id, date))")
+        db.execSQL("CREATE TABLE IF NOT EXISTS transfers(from_stop_id TEXT NOT NULL, to_stop_id TEXT NOT NULL, transfer_type INTEGER, min_transfer_time INTEGER, PRIMARY KEY(from_stop_id, to_stop_id))")
+        db.execSQL("CREATE TABLE IF NOT EXISTS shapes(shape_id TEXT NOT NULL, sequence INTEGER NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL, dist_traveled REAL, PRIMARY KEY(shape_id, sequence))")
+        db.execSQL("CREATE TABLE IF NOT EXISTS feed_info(publisher_name TEXT, publisher_url TEXT, lang TEXT, start_date TEXT, end_date TEXT, version TEXT)")
+    }
+
+    private fun clearTransitData(db: SQLiteDatabase) {
+        listOf("stop_search", "stops", "agency", "routes", "trips", "stop_times", "calendar", "calendar_dates", "transfers", "shapes", "feed_info")
+            .forEach { db.delete(it, null, null) }
+    }
+
+    private fun importStopsEntry(db: SQLiteDatabase, reader: BufferedReader, onCount: (Int) -> Unit): Int {
+        val rows = rows(reader)
+        val h = rows.first
+        val stmt = db.compileStatement("INSERT OR REPLACE INTO stops(id,name,lat,lon,parent_station,location_type,platform_code,wheelchair_boarding) VALUES(?,?,?,?,?,?,?,?)")
+        val search = db.compileStatement("INSERT INTO stop_search(stop_id,name) VALUES(?,?)")
+        var count = 0
+        rows.second.forEach { r ->
+            val id = r.value(h, "stop_id")
+            val name = r.value(h, "stop_name")
+            val lat = r.value(h, "stop_lat").toDoubleOrNull()
+            val lon = r.value(h, "stop_lon").toDoubleOrNull()
+            if (id.isBlank() || name.isBlank() || lat == null || lon == null) return@forEach
+            stmt.bindValues(id, name, lat, lon, r.nullValue(h, "parent_station"), r.intValue(h, "location_type"), r.nullValue(h, "platform_code"), r.intValue(h, "wheelchair_boarding"))
+            stmt.executeInsert()
+            search.bindValues(id, name)
+            search.executeInsert()
+            count++
+            if (count % 50_000 == 0) onCount(count)
+        }
+        return count
+    }
+
+    private fun importAgency(db: SQLiteDatabase, reader: BufferedReader) = importRows(reader) { h, r ->
+        val id = r.value(h, "agency_id").ifBlank { r.value(h, "agency_name") }
+        if (id.isBlank()) false else {
+            db.execSQL("INSERT OR REPLACE INTO agency(agency_id,name,url,timezone,lang) VALUES(?,?,?,?,?)", arrayOf(id, r.value(h, "agency_name"), r.nullValue(h, "agency_url"), r.nullValue(h, "agency_timezone"), r.nullValue(h, "agency_lang")))
+            true
+        }
+    }
+
+    private fun importRoutes(db: SQLiteDatabase, reader: BufferedReader) = importRows(reader) { h, r ->
+        val id = r.value(h, "route_id")
+        if (id.isBlank()) false else {
+            db.execSQL("INSERT OR REPLACE INTO routes(route_id,agency_id,short_name,long_name,route_type,color,text_color) VALUES(?,?,?,?,?,?,?)", arrayOf(id, r.nullValue(h, "agency_id"), r.nullValue(h, "route_short_name"), r.nullValue(h, "route_long_name"), r.intValue(h, "route_type"), r.nullValue(h, "route_color"), r.nullValue(h, "route_text_color")))
+            true
+        }
+    }
+
+    private fun importTrips(db: SQLiteDatabase, reader: BufferedReader) = importRows(reader) { h, r ->
+        val id = r.value(h, "trip_id")
+        val route = r.value(h, "route_id")
+        val service = r.value(h, "service_id")
+        if (id.isBlank() || route.isBlank() || service.isBlank()) false else {
+            db.execSQL("INSERT OR REPLACE INTO trips(trip_id,route_id,service_id,headsign,direction_id,shape_id,wheelchair_accessible,bikes_allowed) VALUES(?,?,?,?,?,?,?,?)", arrayOf(id, route, service, r.nullValue(h, "trip_headsign"), r.intValue(h, "direction_id"), r.nullValue(h, "shape_id"), r.intValue(h, "wheelchair_accessible"), r.intValue(h, "bikes_allowed")))
+            true
+        }
+    }
+
+    private fun importStopTimes(db: SQLiteDatabase, reader: BufferedReader) = importRows(reader) { h, r ->
+        val trip = r.value(h, "trip_id")
+        val stop = r.value(h, "stop_id")
+        val sequence = r.intValue(h, "stop_sequence")
+        if (trip.isBlank() || stop.isBlank() || sequence == null) false else {
+            db.execSQL("INSERT OR REPLACE INTO stop_times(trip_id,stop_sequence,stop_id,arrival_time,departure_time,pickup_type,drop_off_type) VALUES(?,?,?,?,?,?,?)", arrayOf(trip, sequence, stop, r.nullValue(h, "arrival_time"), r.nullValue(h, "departure_time"), r.intValue(h, "pickup_type"), r.intValue(h, "drop_off_type")))
+            true
+        }
+    }
+
+    private fun importCalendar(db: SQLiteDatabase, reader: BufferedReader) = importRows(reader) { h, r ->
+        val id = r.value(h, "service_id")
+        if (id.isBlank()) false else {
+            db.execSQL("INSERT OR REPLACE INTO calendar VALUES(?,?,?,?,?,?,?,?,?,?)", arrayOf(id, r.intValue(h, "monday"), r.intValue(h, "tuesday"), r.intValue(h, "wednesday"), r.intValue(h, "thursday"), r.intValue(h, "friday"), r.intValue(h, "saturday"), r.intValue(h, "sunday"), r.nullValue(h, "start_date"), r.nullValue(h, "end_date")))
+            true
+        }
+    }
+
+    private fun importCalendarDates(db: SQLiteDatabase, reader: BufferedReader) = importRows(reader) { h, r ->
+        val id = r.value(h, "service_id")
+        val date = r.value(h, "date")
+        val type = r.intValue(h, "exception_type")
+        if (id.isBlank() || date.isBlank() || type == null) false else {
+            db.execSQL("INSERT OR REPLACE INTO calendar_dates VALUES(?,?,?)", arrayOf(id, date, type))
+            true
+        }
+    }
+
+    private fun importTransfers(db: SQLiteDatabase, reader: BufferedReader) = importRows(reader) { h, r ->
+        val from = r.value(h, "from_stop_id")
+        val to = r.value(h, "to_stop_id")
+        if (from.isBlank() || to.isBlank()) false else {
+            db.execSQL("INSERT OR REPLACE INTO transfers VALUES(?,?,?,?)", arrayOf(from, to, r.intValue(h, "transfer_type"), r.intValue(h, "min_transfer_time")))
+            true
+        }
+    }
+
+    private fun importShapes(db: SQLiteDatabase, reader: BufferedReader) = importRows(reader) { h, r ->
+        val id = r.value(h, "shape_id")
+        val seq = r.intValue(h, "shape_pt_sequence")
+        val lat = r.value(h, "shape_pt_lat").toDoubleOrNull()
+        val lon = r.value(h, "shape_pt_lon").toDoubleOrNull()
+        if (id.isBlank() || seq == null || lat == null || lon == null) false else {
+            db.execSQL("INSERT OR REPLACE INTO shapes VALUES(?,?,?,?,?)", arrayOf(id, seq, lat, lon, r.value(h, "shape_dist_traveled").toDoubleOrNull()))
+            true
+        }
+    }
+
+    private fun importFeedInfo(db: SQLiteDatabase, reader: BufferedReader) = importRows(reader) { h, r ->
+        db.execSQL("INSERT INTO feed_info VALUES(?,?,?,?,?,?)", arrayOf(r.nullValue(h, "feed_publisher_name"), r.nullValue(h, "feed_publisher_url"), r.nullValue(h, "feed_lang"), r.nullValue(h, "feed_start_date"), r.nullValue(h, "feed_end_date"), r.nullValue(h, "feed_version")))
+        true
+    }
+
+    private fun rows(reader: BufferedReader): Pair<List<String>, Sequence<List<String>>> {
+        val header = parseCsvLine(reader.readLine() ?: error("GTFS dosyası boş"))
+        return header to generateSequence { reader.readLine() }.map(::parseCsvLine)
+    }
+
+    private inline fun importRows(reader: BufferedReader, crossinline consume: (List<String>, List<String>) -> Boolean): Int {
+        val (header, sequence) = rows(reader)
+        var count = 0
+        sequence.forEach { if (consume(header, it)) count++ }
+        return count
+    }
+
+    private fun List<String>.value(header: List<String>, name: String): String {
+        val i = header.indexOf(name)
+        return if (i >= 0 && i < size) this[i].trim() else ""
+    }
+
+    private fun List<String>.nullValue(header: List<String>, name: String): String? = value(header, name).ifBlank { null }
+    private fun List<String>.intValue(header: List<String>, name: String): Int? = value(header, name).toIntOrNull()
+
+    private fun android.database.sqlite.SQLiteStatement.bindValues(vararg values: Any?) {
+        clearBindings()
+        values.forEachIndexed { index, value ->
+            val i = index + 1
+            when (value) {
+                null -> bindNull(i)
+                is String -> bindString(i, value)
+                is Double -> bindDouble(i, value)
+                is Float -> bindDouble(i, value.toDouble())
+                is Number -> bindLong(i, value.toLong())
+                else -> bindString(i, value.toString())
+            }
+        }
+    }
+
+    private fun addColumnIfMissing(db: SQLiteDatabase, table: String, column: String, type: String) {
+        val exists = db.rawQuery("PRAGMA table_info($table)", null).use { c ->
+            val nameIndex = c.getColumnIndex("name")
+            var found = false
+            while (c.moveToNext()) if (c.getString(nameIndex) == column) found = true
+            found
+        }
+        if (!exists) db.execSQL("ALTER TABLE $table ADD COLUMN $column $type")
+    }
+
     private fun metadata(key: String): String? = readableDatabase.rawQuery("SELECT value FROM metadata WHERE key=?", arrayOf(key)).use {
         if (it.moveToFirst()) it.getString(0) else null
     }
@@ -169,4 +346,3 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         db.execSQL("INSERT OR REPLACE INTO metadata(key,value) VALUES(?,?)", arrayOf(key, value))
     }
 }
-
