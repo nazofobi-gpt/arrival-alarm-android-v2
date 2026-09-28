@@ -27,7 +27,8 @@ class NationwideTransitIndexInstrumentedTest {
 
         val expected = setOf(
             "metadata", "stops", "stop_search", "agency", "routes", "trips",
-            "stop_times", "calendar", "calendar_dates", "transfers", "shapes", "feed_info"
+            "stop_times", "calendar", "calendar_dates", "transfers", "shapes", "levels",
+            "pathways", "frequencies", "attributions", "feed_info"
         )
         val actual = db.rawQuery(
             "SELECT name FROM sqlite_master WHERE type IN ('table','view')",
@@ -76,7 +77,14 @@ class NationwideTransitIndexInstrumentedTest {
                 while (cursor.moveToNext()) add(cursor.getString(name))
             }
         }
-        assertTrue(stopColumns.containsAll(setOf("location_type", "platform_code", "wheelchair_boarding")))
+        assertTrue(
+            stopColumns.containsAll(
+                setOf(
+                    "location_type", "platform_code", "wheelchair_boarding",
+                    "stop_code", "zone_id", "stop_timezone", "level_id",
+                )
+            )
+        )
 
         val scheduleTables = db.rawQuery(
             "SELECT name FROM sqlite_master WHERE type='table'",
@@ -86,7 +94,14 @@ class NationwideTransitIndexInstrumentedTest {
                 while (cursor.moveToNext()) add(cursor.getString(0))
             }
         }
-        assertTrue(scheduleTables.containsAll(setOf("agency", "routes", "trips", "stop_times", "calendar", "calendar_dates", "transfers", "shapes", "feed_info")))
+        assertTrue(
+            scheduleTables.containsAll(
+                setOf(
+                    "agency", "routes", "trips", "stop_times", "calendar", "calendar_dates",
+                    "transfers", "shapes", "levels", "pathways", "frequencies", "attributions", "feed_info",
+                )
+            )
+        )
         assertEquals(3, db.version)
         helper.close()
     }

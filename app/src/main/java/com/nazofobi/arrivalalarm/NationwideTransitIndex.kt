@@ -37,6 +37,10 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             addColumnIfMissing(db, "stops", "location_type", "INTEGER")
             addColumnIfMissing(db, "stops", "platform_code", "TEXT")
             addColumnIfMissing(db, "stops", "wheelchair_boarding", "INTEGER")
+            addColumnIfMissing(db, "stops", "stop_code", "TEXT")
+            addColumnIfMissing(db, "stops", "zone_id", "TEXT")
+            addColumnIfMissing(db, "stops", "stop_timezone", "TEXT")
+            addColumnIfMissing(db, "stops", "level_id", "TEXT")
             createScheduleTables(db)
             putMetadata(db, SCHEMA_KEY, "3")
         }
@@ -92,6 +96,10 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
                             "calendar_dates.txt" -> importCalendarDates(db, reader)
                             "transfers.txt" -> importTransfers(db, reader)
                             "shapes.txt" -> importShapes(db, reader)
+                            "levels.txt" -> importLevels(db, reader)
+                            "pathways.txt" -> importPathways(db, reader)
+                            "frequencies.txt" -> importFrequencies(db, reader)
+                            "attributions.txt" -> importAttributions(db, reader)
                             "feed_info.txt" -> importFeedInfo(db, reader)
                             else -> 0
                         }
@@ -166,7 +174,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
     }
 
     private fun createTransitSchema(db: SQLiteDatabase) {
-        db.execSQL("CREATE TABLE stops(id TEXT PRIMARY KEY, name TEXT NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL, parent_station TEXT, location_type INTEGER, platform_code TEXT, wheelchair_boarding INTEGER)")
+        db.execSQL("CREATE TABLE stops(id TEXT PRIMARY KEY, name TEXT NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL, parent_station TEXT, location_type INTEGER, platform_code TEXT, wheelchair_boarding INTEGER, stop_code TEXT, zone_id TEXT, stop_timezone TEXT, level_id TEXT)")
         db.execSQL("CREATE INDEX idx_stops_lat_lon ON stops(lat, lon)")
         db.execSQL("CREATE INDEX idx_stops_parent ON stops(parent_station)")
         db.execSQL("CREATE VIRTUAL TABLE stop_search USING fts4(stop_id, name, tokenize=unicode61)")
@@ -175,27 +183,38 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
 
     private fun createScheduleTables(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE IF NOT EXISTS agency(agency_id TEXT PRIMARY KEY, name TEXT NOT NULL, url TEXT, timezone TEXT, lang TEXT)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS routes(route_id TEXT PRIMARY KEY, agency_id TEXT, short_name TEXT, long_name TEXT, route_type INTEGER, color TEXT, text_color TEXT)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS routes(route_id TEXT PRIMARY KEY, agency_id TEXT, short_name TEXT, long_name TEXT, route_type INTEGER, color TEXT, text_color TEXT, sort_order INTEGER)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_routes_agency ON routes(agency_id)")
         db.execSQL("CREATE TABLE IF NOT EXISTS trips(trip_id TEXT PRIMARY KEY, route_id TEXT NOT NULL, service_id TEXT NOT NULL, headsign TEXT, direction_id INTEGER, shape_id TEXT, wheelchair_accessible INTEGER, bikes_allowed INTEGER)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_trips_route_service ON trips(route_id, service_id)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS stop_times(trip_id TEXT NOT NULL, stop_sequence INTEGER NOT NULL, stop_id TEXT NOT NULL, arrival_time TEXT, departure_time TEXT, pickup_type INTEGER, drop_off_type INTEGER, PRIMARY KEY(trip_id, stop_sequence))")
+        db.execSQL("CREATE TABLE IF NOT EXISTS stop_times(trip_id TEXT NOT NULL, stop_sequence INTEGER NOT NULL, stop_id TEXT NOT NULL, arrival_time TEXT, departure_time TEXT, pickup_type INTEGER, drop_off_type INTEGER, shape_dist_traveled REAL, timepoint INTEGER, PRIMARY KEY(trip_id, stop_sequence))")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_stop_times_stop ON stop_times(stop_id)")
         db.execSQL("CREATE TABLE IF NOT EXISTS calendar(service_id TEXT PRIMARY KEY, monday INTEGER, tuesday INTEGER, wednesday INTEGER, thursday INTEGER, friday INTEGER, saturday INTEGER, sunday INTEGER, start_date TEXT, end_date TEXT)")
         db.execSQL("CREATE TABLE IF NOT EXISTS calendar_dates(service_id TEXT NOT NULL, date TEXT NOT NULL, exception_type INTEGER NOT NULL, PRIMARY KEY(service_id, date))")
-        db.execSQL("CREATE TABLE IF NOT EXISTS transfers(from_stop_id TEXT NOT NULL, to_stop_id TEXT NOT NULL, transfer_type INTEGER, min_transfer_time INTEGER, PRIMARY KEY(from_stop_id, to_stop_id))")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_calendar_dates_date ON calendar_dates(date)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS transfers(from_stop_id TEXT NOT NULL, to_stop_id TEXT NOT NULL, transfer_type INTEGER, min_transfer_time INTEGER, from_route_id TEXT, to_route_id TEXT, from_trip_id TEXT, to_trip_id TEXT)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_transfers_from_stop ON transfers(from_stop_id)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_transfers_to_stop ON transfers(to_stop_id)")
         db.execSQL("CREATE TABLE IF NOT EXISTS shapes(shape_id TEXT NOT NULL, sequence INTEGER NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL, dist_traveled REAL, PRIMARY KEY(shape_id, sequence))")
+        db.execSQL("CREATE TABLE IF NOT EXISTS levels(level_id TEXT PRIMARY KEY, level_index REAL, level_name TEXT)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS pathways(pathway_id TEXT PRIMARY KEY, from_stop_id TEXT NOT NULL, to_stop_id TEXT NOT NULL, pathway_mode INTEGER, is_bidirectional INTEGER, length REAL, traversal_time INTEGER, stair_count INTEGER, max_slope REAL, min_width REAL, signposted_as TEXT, reversed_signposted_as TEXT)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_pathways_from_stop ON pathways(from_stop_id)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_pathways_to_stop ON pathways(to_stop_id)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS frequencies(trip_id TEXT NOT NULL, start_time TEXT NOT NULL, end_time TEXT NOT NULL, headway_secs INTEGER NOT NULL, exact_times INTEGER)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_frequencies_trip ON frequencies(trip_id)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS attributions(attribution_id TEXT, agency_id TEXT, route_id TEXT, trip_id TEXT, organization_name TEXT, is_producer INTEGER, is_operator INTEGER, is_authority INTEGER, url TEXT, email TEXT, phone TEXT)")
         db.execSQL("CREATE TABLE IF NOT EXISTS feed_info(publisher_name TEXT, publisher_url TEXT, lang TEXT, start_date TEXT, end_date TEXT, version TEXT)")
     }
 
     private fun clearTransitData(db: SQLiteDatabase) {
-        listOf("stop_search", "stops", "agency", "routes", "trips", "stop_times", "calendar", "calendar_dates", "transfers", "shapes", "feed_info")
+        listOf("stop_search", "stops", "agency", "routes", "trips", "stop_times", "calendar", "calendar_dates", "transfers", "shapes", "levels", "pathways", "frequencies", "attributions", "feed_info")
             .forEach { db.delete(it, null, null) }
     }
 
     private fun importStopsEntry(db: SQLiteDatabase, reader: BufferedReader, onCount: (Int) -> Unit): Int {
         val rows = rows(reader)
         val h = rows.first
-        val stmt = db.compileStatement("INSERT OR REPLACE INTO stops(id,name,lat,lon,parent_station,location_type,platform_code,wheelchair_boarding) VALUES(?,?,?,?,?,?,?,?)")
+        val stmt = db.compileStatement("INSERT OR REPLACE INTO stops(id,name,lat,lon,parent_station,location_type,platform_code,wheelchair_boarding,stop_code,zone_id,stop_timezone,level_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
         val search = db.compileStatement("INSERT INTO stop_search(stop_id,name) VALUES(?,?)")
         var count = 0
         rows.second.forEach { r ->
@@ -204,7 +223,17 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             val lat = r.value(h, "stop_lat").toDoubleOrNull()
             val lon = r.value(h, "stop_lon").toDoubleOrNull()
             if (id.isBlank() || name.isBlank() || lat == null || lon == null) return@forEach
-            stmt.bindValues(id, name, lat, lon, r.nullValue(h, "parent_station"), r.intValue(h, "location_type"), r.nullValue(h, "platform_code"), r.intValue(h, "wheelchair_boarding"))
+            stmt.bindValues(
+                id, name, lat, lon,
+                r.nullValue(h, "parent_station"),
+                r.intValue(h, "location_type"),
+                r.nullValue(h, "platform_code"),
+                r.intValue(h, "wheelchair_boarding"),
+                r.nullValue(h, "stop_code"),
+                r.nullValue(h, "zone_id"),
+                r.nullValue(h, "stop_timezone"),
+                r.nullValue(h, "level_id"),
+            )
             stmt.executeInsert()
             search.bindValues(id, name)
             search.executeInsert()
@@ -225,7 +254,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
     private fun importRoutes(db: SQLiteDatabase, reader: BufferedReader) = importRows(reader) { h, r ->
         val id = r.value(h, "route_id")
         if (id.isBlank()) false else {
-            db.execSQL("INSERT OR REPLACE INTO routes(route_id,agency_id,short_name,long_name,route_type,color,text_color) VALUES(?,?,?,?,?,?,?)", arrayOf(id, r.nullValue(h, "agency_id"), r.nullValue(h, "route_short_name"), r.nullValue(h, "route_long_name"), r.intValue(h, "route_type"), r.nullValue(h, "route_color"), r.nullValue(h, "route_text_color")))
+            db.execSQL("INSERT OR REPLACE INTO routes(route_id,agency_id,short_name,long_name,route_type,color,text_color,sort_order) VALUES(?,?,?,?,?,?,?,?)", arrayOf(id, r.nullValue(h, "agency_id"), r.nullValue(h, "route_short_name"), r.nullValue(h, "route_long_name"), r.intValue(h, "route_type"), r.nullValue(h, "route_color"), r.nullValue(h, "route_text_color"), r.intValue(h, "route_sort_order")))
             true
         }
     }
@@ -240,14 +269,28 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         }
     }
 
-    private fun importStopTimes(db: SQLiteDatabase, reader: BufferedReader) = importRows(reader) { h, r ->
-        val trip = r.value(h, "trip_id")
-        val stop = r.value(h, "stop_id")
-        val sequence = r.intValue(h, "stop_sequence")
-        if (trip.isBlank() || stop.isBlank() || sequence == null) false else {
-            db.execSQL("INSERT OR REPLACE INTO stop_times(trip_id,stop_sequence,stop_id,arrival_time,departure_time,pickup_type,drop_off_type) VALUES(?,?,?,?,?,?,?)", arrayOf(trip, sequence, stop, r.nullValue(h, "arrival_time"), r.nullValue(h, "departure_time"), r.intValue(h, "pickup_type"), r.intValue(h, "drop_off_type")))
-            true
+    private fun importStopTimes(db: SQLiteDatabase, reader: BufferedReader): Int {
+        val (h, sequenceRows) = rows(reader)
+        val stmt = db.compileStatement("INSERT OR REPLACE INTO stop_times(trip_id,stop_sequence,stop_id,arrival_time,departure_time,pickup_type,drop_off_type,shape_dist_traveled,timepoint) VALUES(?,?,?,?,?,?,?,?,?)")
+        var count = 0
+        sequenceRows.forEach { r ->
+            val trip = r.value(h, "trip_id")
+            val stop = r.value(h, "stop_id")
+            val sequence = r.intValue(h, "stop_sequence")
+            if (trip.isBlank() || stop.isBlank() || sequence == null) return@forEach
+            stmt.bindValues(
+                trip, sequence, stop,
+                r.nullValue(h, "arrival_time"),
+                r.nullValue(h, "departure_time"),
+                r.intValue(h, "pickup_type"),
+                r.intValue(h, "drop_off_type"),
+                r.value(h, "shape_dist_traveled").toDoubleOrNull(),
+                r.intValue(h, "timepoint"),
+            )
+            stmt.executeInsert()
+            count++
         }
+        return count
     }
 
     private fun importCalendar(db: SQLiteDatabase, reader: BufferedReader) = importRows(reader) { h, r ->
@@ -272,18 +315,107 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         val from = r.value(h, "from_stop_id")
         val to = r.value(h, "to_stop_id")
         if (from.isBlank() || to.isBlank()) false else {
-            db.execSQL("INSERT OR REPLACE INTO transfers VALUES(?,?,?,?)", arrayOf(from, to, r.intValue(h, "transfer_type"), r.intValue(h, "min_transfer_time")))
+            db.execSQL(
+                "INSERT INTO transfers(from_stop_id,to_stop_id,transfer_type,min_transfer_time,from_route_id,to_route_id,from_trip_id,to_trip_id) VALUES(?,?,?,?,?,?,?,?)",
+                arrayOf(
+                    from, to,
+                    r.intValue(h, "transfer_type"),
+                    r.intValue(h, "min_transfer_time"),
+                    r.nullValue(h, "from_route_id"),
+                    r.nullValue(h, "to_route_id"),
+                    r.nullValue(h, "from_trip_id"),
+                    r.nullValue(h, "to_trip_id"),
+                ),
+            )
             true
         }
     }
 
-    private fun importShapes(db: SQLiteDatabase, reader: BufferedReader) = importRows(reader) { h, r ->
-        val id = r.value(h, "shape_id")
-        val seq = r.intValue(h, "shape_pt_sequence")
-        val lat = r.value(h, "shape_pt_lat").toDoubleOrNull()
-        val lon = r.value(h, "shape_pt_lon").toDoubleOrNull()
-        if (id.isBlank() || seq == null || lat == null || lon == null) false else {
-            db.execSQL("INSERT OR REPLACE INTO shapes VALUES(?,?,?,?,?)", arrayOf(id, seq, lat, lon, r.value(h, "shape_dist_traveled").toDoubleOrNull()))
+    private fun importShapes(db: SQLiteDatabase, reader: BufferedReader): Int {
+        val (h, shapeRows) = rows(reader)
+        val stmt = db.compileStatement("INSERT OR REPLACE INTO shapes(shape_id,sequence,lat,lon,dist_traveled) VALUES(?,?,?,?,?)")
+        var count = 0
+        shapeRows.forEach { r ->
+            val id = r.value(h, "shape_id")
+            val seq = r.intValue(h, "shape_pt_sequence")
+            val lat = r.value(h, "shape_pt_lat").toDoubleOrNull()
+            val lon = r.value(h, "shape_pt_lon").toDoubleOrNull()
+            if (id.isBlank() || seq == null || lat == null || lon == null) return@forEach
+            stmt.bindValues(id, seq, lat, lon, r.value(h, "shape_dist_traveled").toDoubleOrNull())
+            stmt.executeInsert()
+            count++
+        }
+        return count
+    }
+
+    private fun importLevels(db: SQLiteDatabase, reader: BufferedReader) = importRows(reader) { h, r ->
+        val id = r.value(h, "level_id")
+        if (id.isBlank()) false else {
+            db.execSQL(
+                "INSERT OR REPLACE INTO levels(level_id,level_index,level_name) VALUES(?,?,?)",
+                arrayOf(id, r.value(h, "level_index").toDoubleOrNull(), r.nullValue(h, "level_name")),
+            )
+            true
+        }
+    }
+
+    private fun importPathways(db: SQLiteDatabase, reader: BufferedReader) = importRows(reader) { h, r ->
+        val id = r.value(h, "pathway_id")
+        val from = r.value(h, "from_stop_id")
+        val to = r.value(h, "to_stop_id")
+        if (id.isBlank() || from.isBlank() || to.isBlank()) false else {
+            db.execSQL(
+                "INSERT OR REPLACE INTO pathways(pathway_id,from_stop_id,to_stop_id,pathway_mode,is_bidirectional,length,traversal_time,stair_count,max_slope,min_width,signposted_as,reversed_signposted_as) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                arrayOf(
+                    id, from, to,
+                    r.intValue(h, "pathway_mode"),
+                    r.intValue(h, "is_bidirectional"),
+                    r.value(h, "length").toDoubleOrNull(),
+                    r.intValue(h, "traversal_time"),
+                    r.intValue(h, "stair_count"),
+                    r.value(h, "max_slope").toDoubleOrNull(),
+                    r.value(h, "min_width").toDoubleOrNull(),
+                    r.nullValue(h, "signposted_as"),
+                    r.nullValue(h, "reversed_signposted_as"),
+                ),
+            )
+            true
+        }
+    }
+
+    private fun importFrequencies(db: SQLiteDatabase, reader: BufferedReader) = importRows(reader) { h, r ->
+        val trip = r.value(h, "trip_id")
+        val start = r.value(h, "start_time")
+        val end = r.value(h, "end_time")
+        val headway = r.intValue(h, "headway_secs")
+        if (trip.isBlank() || start.isBlank() || end.isBlank() || headway == null) false else {
+            db.execSQL(
+                "INSERT INTO frequencies(trip_id,start_time,end_time,headway_secs,exact_times) VALUES(?,?,?,?,?)",
+                arrayOf(trip, start, end, headway, r.intValue(h, "exact_times")),
+            )
+            true
+        }
+    }
+
+    private fun importAttributions(db: SQLiteDatabase, reader: BufferedReader) = importRows(reader) { h, r ->
+        val org = r.value(h, "organization_name")
+        if (org.isBlank()) false else {
+            db.execSQL(
+                "INSERT INTO attributions(attribution_id,agency_id,route_id,trip_id,organization_name,is_producer,is_operator,is_authority,url,email,phone) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                arrayOf(
+                    r.nullValue(h, "attribution_id"),
+                    r.nullValue(h, "agency_id"),
+                    r.nullValue(h, "route_id"),
+                    r.nullValue(h, "trip_id"),
+                    org,
+                    r.intValue(h, "is_producer"),
+                    r.intValue(h, "is_operator"),
+                    r.intValue(h, "is_authority"),
+                    r.nullValue(h, "attribution_url"),
+                    r.nullValue(h, "attribution_email"),
+                    r.nullValue(h, "attribution_phone"),
+                ),
+            )
             true
         }
     }
