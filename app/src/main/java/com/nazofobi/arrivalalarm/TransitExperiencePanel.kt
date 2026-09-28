@@ -181,38 +181,46 @@ fun TransitExperiencePanel(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                 ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text(
-                        text = "${departure.line} → ${departure.direction}",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    val source = if (departure.isRealtime && !isOfflineCache) {
-                        stringResource(R.string.departure_source_live)
-                    } else {
-                        stringResource(R.string.departure_source_planned)
-                    }
-                    Text(
-                        text = stringResource(
-                            R.string.departure_time_source,
-                            formatDepartureEpoch(departure.effectiveEpochSeconds),
-                            source,
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    departure.platform?.takeIf { it.isNotBlank() }?.let {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
                         Text(
-                            text = stringResource(R.string.departure_platform, it),
-                            style = MaterialTheme.typography.bodySmall,
+                            text = "${departure.line}  ·  ${departure.direction}",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        val source = if (departure.isRealtime && !isOfflineCache) {
+                            stringResource(R.string.departure_source_live)
+                        } else {
+                            stringResource(R.string.departure_source_planned)
+                        }
+                        Text(
+                            text = stringResource(
+                                R.string.departure_time_source,
+                                formatDepartureEpoch(departure.effectiveEpochSeconds),
+                                source,
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        departure.platform?.takeIf { it.isNotBlank() }?.let {
+                            Text(
+                                text = stringResource(R.string.departure_platform, it),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                     Button(
                         onClick = {
@@ -221,7 +229,6 @@ fun TransitExperiencePanel(
                             departure.routeId?.let(onSelectJourney)
                         },
                         modifier = Modifier
-                            .fillMaxWidth()
                             .heightIn(min = 48.dp)
                             .testTag("departure-$index"),
                     ) {
