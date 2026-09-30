@@ -7,10 +7,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -145,10 +144,9 @@ fun TransitExperiencePanel(
                         modifier = Modifier.testTag("departure-status"),
                     )
                 }
-                OutlinedButton(
+                TextButton(
                     onClick = { favorite = store.toggleFavorite(stopId) },
                     modifier = Modifier
-                        .fillMaxWidth()
                         .heightIn(min = 48.dp)
                         .testTag("favorite-stop"),
                 ) {
@@ -222,7 +220,7 @@ fun TransitExperiencePanel(
                             )
                         }
                     }
-                    Button(
+                    TextButton(
                         onClick = {
                             selectedTrip = departure.tripId
                             store.recordTrip(departure.tripId)
