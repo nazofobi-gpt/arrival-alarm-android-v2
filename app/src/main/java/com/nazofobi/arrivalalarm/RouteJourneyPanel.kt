@@ -5,13 +5,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -99,11 +98,10 @@ fun RouteJourneyPanel(
                                 modifier = Modifier.testTag("route-offline-badge"),
                             )
                         }
-                        Button(
+                        TextButton(
                             onClick = onRefreshRoutes,
                             enabled = !routeBusy,
                             modifier = Modifier
-                                .fillMaxWidth()
                                 .heightIn(min = 48.dp)
                                 .testTag("route-refresh"),
                         ) {
@@ -233,10 +231,10 @@ private fun RouteOptionCard(
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
             )
-            OutlinedButton(
+            TextButton(
                 onClick = onSelect,
                 enabled = !selected,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                modifier = Modifier.heightIn(min = 48.dp),
             ) {
                 Text(
                     if (selected) {
@@ -407,22 +405,20 @@ internal fun JourneyAlarmControls(
                     modifier = Modifier.testTag("error"),
                 )
             }
-            Button(
+            TextButton(
                 onClick = onArmAlarm,
                 enabled = journey.phase == JourneyPhase.DESTINATION_SELECTED,
                 modifier = Modifier
-                    .fillMaxWidth()
                     .heightIn(min = 48.dp)
                     .testTag("arm"),
             ) {
                 Text(stringResource(R.string.arm_alarm))
             }
-            OutlinedButton(
+            TextButton(
                 onClick = onCancelAlarm,
                 enabled = journey.phase == JourneyPhase.ARMED ||
                     journey.phase == JourneyPhase.ARRIVED,
                 modifier = Modifier
-                    .fillMaxWidth()
                     .heightIn(min = 48.dp)
                     .testTag("cancel-alarm"),
             ) {
