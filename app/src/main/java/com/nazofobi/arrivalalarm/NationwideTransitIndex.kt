@@ -259,14 +259,31 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         }
     }
 
-    private fun importTrips(db: SQLiteDatabase, reader: BufferedReader) = importRows(reader) { h, r ->
-        val id = r.value(h, "trip_id")
-        val route = r.value(h, "route_id")
-        val service = r.value(h, "service_id")
-        if (id.isBlank() || route.isBlank() || service.isBlank()) false else {
-            db.execSQL("INSERT OR REPLACE INTO trips(trip_id,route_id,service_id,headsign,direction_id,shape_id,wheelchair_accessible,bikes_allowed) VALUES(?,?,?,?,?,?,?,?)", arrayOf(id, route, service, r.nullValue(h, "trip_headsign"), r.intValue(h, "direction_id"), r.nullValue(h, "shape_id"), r.intValue(h, "wheelchair_accessible"), r.intValue(h, "bikes_allowed")))
-            true
+    private fun importTrips(db: SQLiteDatabase, reader: BufferedReader): Int {
+        val (h, tripRows) = rows(reader)
+        val stmt = db.compileStatement(
+            "INSERT OR REPLACE INTO trips(trip_id,route_id,service_id,headsign,direction_id,shape_id,wheelchair_accessible,bikes_allowed) VALUES(?,?,?,?,?,?,?,?)"
+        )
+        var count = 0
+        tripRows.forEach { r ->
+            val id = r.value(h, "trip_id")
+            val route = r.value(h, "route_id")
+            val service = r.value(h, "service_id")
+            if (id.isBlank() || route.isBlank() || service.isBlank()) return@forEach
+            stmt.bindValues(
+                id,
+                route,
+                service,
+                r.nullValue(h, "trip_headsign"),
+                r.intValue(h, "direction_id"),
+                r.nullValue(h, "shape_id"),
+                r.intValue(h, "wheelchair_accessible"),
+                r.intValue(h, "bikes_allowed"),
+            )
+            stmt.executeInsert()
+            count++
         }
+        return count
     }
 
     private fun importStopTimes(db: SQLiteDatabase, reader: BufferedReader): Int {
