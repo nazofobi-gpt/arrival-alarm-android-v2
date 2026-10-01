@@ -119,22 +119,22 @@ fun SettingsReadinessPanel(
         modifier = modifier
             .fillMaxWidth()
             .testTag("settings-readiness-panel"),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
                 text = stringResource(R.string.settings_readiness_title),
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.semantics { heading() },
             )
             Text(
                 text = readinessSummaryText(state.overallLevel),
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.titleMedium,
                 color = readinessColor(state.overallLevel),
                 modifier = Modifier.testTag("readiness-summary"),
             )
@@ -393,29 +393,35 @@ private fun ReadinessRow(
     testTag: String,
     supporting: String? = null,
 ) {
-    Column(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
             .testTag(testTag),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        colors = CardDefaults.cardColors(containerColor = readinessContainerColor(level)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium,
-            color = readinessColor(level),
-        )
-        supporting?.takeIf { it.isNotBlank() }?.let {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             Text(
-                text = it,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = readinessContentColor(level).copy(alpha = 0.78f),
             )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = readinessContentColor(level),
+            )
+            supporting?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = readinessContentColor(level).copy(alpha = 0.78f),
+                )
+            }
         }
     }
 }
@@ -432,10 +438,21 @@ private fun readinessSummaryText(level: ReadinessLevel): String =
     )
 
 @Composable
-private fun readinessColor(level: ReadinessLevel) = when (level) {
-    ReadinessLevel.READY -> MaterialTheme.colorScheme.secondary
-    ReadinessLevel.ACTION_NEEDED -> MaterialTheme.colorScheme.tertiary
-    ReadinessLevel.BLOCKED -> MaterialTheme.colorScheme.error
+private fun readinessColor(level: ReadinessLevel) = readinessContentColor(level)
+
+@Composable
+private fun readinessContainerColor(level: ReadinessLevel) = when (level) {
+    ReadinessLevel.READY -> MaterialTheme.colorScheme.secondaryContainer
+    ReadinessLevel.ACTION_NEEDED -> MaterialTheme.colorScheme.tertiaryContainer
+    ReadinessLevel.BLOCKED -> MaterialTheme.colorScheme.errorContainer
+    ReadinessLevel.INFO -> MaterialTheme.colorScheme.surface
+}
+
+@Composable
+private fun readinessContentColor(level: ReadinessLevel) = when (level) {
+    ReadinessLevel.READY -> MaterialTheme.colorScheme.onSecondaryContainer
+    ReadinessLevel.ACTION_NEEDED -> MaterialTheme.colorScheme.onTertiaryContainer
+    ReadinessLevel.BLOCKED -> MaterialTheme.colorScheme.onErrorContainer
     ReadinessLevel.INFO -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
