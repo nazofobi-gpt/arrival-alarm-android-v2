@@ -4,8 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -41,19 +39,13 @@ fun LiveTripPanel(
         target?.arrival ?: target?.plannedArrival ?: selectedRoute.arrival
     )
 
-    Card(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .testTag("live-trip-panel"),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            .testTag("live-trip-panel")
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
             Text(
                 text = stringResource(R.string.live_trip_title),
                 style = MaterialTheme.typography.headlineLarge,
@@ -154,12 +146,11 @@ fun LiveTripPanel(
                 tag = "live-trip-alarm",
             )
 
-            LiveTripFact(
-                label = stringResource(R.string.live_trip_audio),
-                value = guidanceUiStatus(guidanceState),
-                tag = "live-trip-audio",
-            )
-        }
+        LiveTripFact(
+            label = stringResource(R.string.live_trip_audio),
+            value = guidanceUiStatus(guidanceState),
+            tag = "live-trip-audio",
+        )
     }
 }
 
