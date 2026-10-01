@@ -73,9 +73,42 @@ fun LiveTripPanel(
                     },
                 ),
                 style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.testTag("live-trip-timing"),
             )
+
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.live_trip_target),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+                    )
+                    Text(
+                        text = targetLabel,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.testTag("live-trip-target"),
+                    )
+                    targetTime?.let {
+                        Text(
+                            text = stringResource(R.string.live_trip_target_time) + ": " + it,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.testTag("live-trip-target-time"),
+                        )
+                    }
+                }
+            }
 
             HorizontalDivider()
 
@@ -116,20 +149,6 @@ fun LiveTripPanel(
                 )
             }
 
-            LiveTripFact(
-                label = stringResource(R.string.live_trip_target),
-                value = targetLabel,
-                tag = "live-trip-target",
-            )
-
-            targetTime?.let {
-                LiveTripFact(
-                    label = stringResource(R.string.live_trip_target_time),
-                    value = it,
-                    tag = "live-trip-target-time",
-                )
-            }
-
             journey.distanceMeters?.takeIf { it.isFinite() && it >= 0.0 }?.let {
                 LiveTripFact(
                     label = stringResource(R.string.live_trip_gps_distance),
@@ -167,7 +186,7 @@ private fun LiveTripFact(
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             text = value,
