@@ -59,21 +59,25 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
 
     fun importFeed(url: String, onCount: (Int) -> Unit) {
         val db = writableDatabase
-        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+        val connection = URL(url).openConnection().apply {
             connectTimeout = 15_000
             readTimeout = 60_000
+        }
+        val http = connection as? HttpURLConnection
+        http?.apply {
             requestMethod = "GET"
             instanceFollowRedirects = true
             setRequestProperty("User-Agent", "ArrivalAlarmAndroid/0.1")
         }
-        if (connection.responseCode !in 200..299) {
-            val code = connection.responseCode
-            connection.disconnect()
+        if (http != null && http.responseCode !in 200..299) {
+            val code = http.responseCode
+            http.disconnect()
             error("GTFS indirme HTTP $code")
         }
 
-        val sourceVersion = connection.getHeaderField("ETag")
-            ?: connection.getHeaderField("Last-Modified")
+        val sourceVersion = http?.getHeaderField("ETag")
+            ?: http?.getHeaderField("Last-Modified")
+            ?: connection.lastModified.takeIf { it > 0L }?.toString()
             ?: connection.url.toString()
         val counts = linkedMapOf<String, Int>()
 
@@ -131,7 +135,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
-            connection.disconnect()
+            http?.disconnect()
         }
         onCount(counts["stops.txt"] ?: 0)
     }
