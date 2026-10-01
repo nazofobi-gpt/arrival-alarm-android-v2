@@ -2,18 +2,19 @@ package com.nazofobi.arrivalalarm
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -101,44 +102,47 @@ fun HomeSearchPanel(
                         fontWeight = FontWeight.SemiBold,
                     )
 
-                    FilledTonalButton(
-                        onClick = onSelectOriginTarget,
-                        enabled = !selectingOrigin,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .testTag("search-target-origin"),
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text(
-                            if (selectingOrigin) {
-                                stringResource(R.string.selecting_origin)
-                            } else {
-                                stringResource(R.string.select_origin)
-                            }
-                        )
+                        TextButton(
+                            onClick = onSelectOriginTarget,
+                            enabled = !selectingOrigin,
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("search-target-origin"),
+                        ) {
+                            Text(
+                                if (selectingOrigin) {
+                                    stringResource(R.string.selecting_origin)
+                                } else {
+                                    stringResource(R.string.select_origin)
+                                }
+                            )
+                        }
+                        TextButton(
+                            onClick = onSelectDestinationTarget,
+                            enabled = origin != null && selectingOrigin,
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("search-target-destination"),
+                        ) {
+                            Text(
+                                if (!selectingOrigin) {
+                                    stringResource(R.string.selecting_destination)
+                                } else {
+                                    stringResource(R.string.select_destination)
+                                }
+                            )
+                        }
                     }
 
-                    FilledTonalButton(
-                        onClick = onSelectDestinationTarget,
-                        enabled = origin != null && selectingOrigin,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .testTag("search-target-destination"),
-                    ) {
-                        Text(
-                            if (!selectingOrigin) {
-                                stringResource(R.string.selecting_destination)
-                            } else {
-                                stringResource(R.string.select_destination)
-                            }
-                        )
-                    }
-
-                    FilledTonalButton(
+                    TextButton(
                         onClick = onUseCurrentLocation,
                         modifier = Modifier
-                            .fillMaxWidth()
                             .heightIn(min = 48.dp)
                             .testTag("current-location-origin"),
                     ) {
@@ -267,7 +271,7 @@ fun HomeSearchPanel(
                             )
                         }
                         nearby.take(8).forEachIndexed { index, candidate ->
-                            OutlinedButton(
+                            TextButton(
                                 onClick = { onNearbyStopSelected(candidate) },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -354,7 +358,7 @@ fun HomeSearchPanel(
                     }
 
                     searchResults.take(12).forEachIndexed { index, result ->
-                        OutlinedButton(
+                        TextButton(
                             onClick = { onSearchResultSelected(result) },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -390,7 +394,7 @@ fun HomeSearchPanel(
                             fontWeight = FontWeight.SemiBold,
                         )
                         recentSearches.take(5).forEachIndexed { index, recent ->
-                            OutlinedButton(
+                            TextButton(
                                 onClick = { onRecentSearchSelected(recent) },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -399,7 +403,7 @@ fun HomeSearchPanel(
                                 Text(recent)
                             }
                         }
-                        OutlinedButton(
+                        TextButton(
                             onClick = onClearRecentSearches,
                             modifier = Modifier
                                 .fillMaxWidth()
