@@ -414,6 +414,49 @@ fun HomeSearchPanel(
                     }
                 }
             }
+
+            if (searchResults.isEmpty() && recentSearches.isEmpty()) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.journey_points_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        Text(
+                            text = origin?.let { stringResource(R.string.origin_format, it.label) }
+                                ?: stringResource(R.string.home_origin_missing),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        Text(
+                            text = destination?.let { stringResource(R.string.destination_format, it.label) }
+                                ?: stringResource(R.string.home_destination_missing),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        if (selectingOrigin) {
+                            TextButton(
+                                onClick = onUseCurrentLocation,
+                                modifier = Modifier
+                                    .heightIn(min = 48.dp)
+                                    .testTag("search-current-location"),
+                            ) {
+                                Text(stringResource(R.string.current_location_origin))
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
