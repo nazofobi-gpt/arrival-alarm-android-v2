@@ -94,7 +94,13 @@ fun FirstRunOnboarding(onContinue: () -> Unit, modifier: Modifier = Modifier) {
 
 @Composable
 private fun OnboardingFeature(icon: ImageVector, title: String, body: String) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface, MaterialTheme.shapes.medium)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Box(
             modifier = Modifier.size(44.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
             contentAlignment = Alignment.Center,
