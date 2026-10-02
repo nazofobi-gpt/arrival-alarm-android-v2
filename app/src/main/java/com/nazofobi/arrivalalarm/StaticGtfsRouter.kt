@@ -42,6 +42,8 @@ interface StaticGtfsScheduleData {
     fun candidateTripsAtStop(stopId: String, limit: Int): List<GtfsScheduleTripCandidate>
     fun stopTimesForTrip(tripId: String, limit: Int): List<GtfsScheduleStopTime>
     fun transfersFromStop(stopId: String, limit: Int): List<GtfsScheduleTransfer>
+    fun stop(stopId: String): GtfsScheduleStop?
+    fun childStops(parentStationId: String, limit: Int): List<GtfsScheduleStop>
     fun isServiceActive(serviceId: String, serviceDate: GtfsServiceDate): Boolean
 }
 
@@ -56,6 +58,11 @@ class RepositoryStaticGtfsScheduleData(
 
     override fun transfersFromStop(stopId: String, limit: Int) =
         repository.transfersFromStop(stopId, limit)
+
+    override fun stop(stopId: String) = repository.stop(stopId)
+
+    override fun childStops(parentStationId: String, limit: Int) =
+        repository.childStops(parentStationId, limit)
 
     override fun isServiceActive(serviceId: String, serviceDate: GtfsServiceDate): Boolean {
         val exception = repository.calendarException(serviceId, serviceDate.toString())
@@ -89,12 +96,16 @@ class StaticGtfsRouter(
     private val maxCandidatesPerStop: Int = 128,
     private val maxStopTimesPerTrip: Int = 512,
     private val maxTransfersPerStop: Int = 64,
+    private val maxChildStops: Int = 64,
+    private val implicitTransferSeconds: Int = 120,
     private val maxJourneys: Int = 6,
 ) {
     init {
         require(maxCandidatesPerStop in 1..512)
         require(maxStopTimesPerTrip in 2..2_048)
         require(maxTransfersPerStop in 1..512)
+        require(maxChildStops in 1..256)
+        require(implicitTransferSeconds >= 0)
         require(maxJourneys in 1..32)
     }
 
@@ -139,16 +150,31 @@ class StaticGtfsRouter(
 
                 for (alight in stopTimes.drop(boardIndex + 1)) {
                     val firstArrival = epoch(alight.arrivalTime ?: alight.departureTime, serviceDate) ?: continue
-                    for (transfer in data.transfersFromStop(alight.stopId, maxTransfersPerStop)) {
-                        if (transfer.transferType == 3) continue
-                        val transferReady = firstArrival + max(0, transfer.minTransferTimeSeconds ?: 0) * 1_000L
-                        for (next in data.candidateTripsAtStop(transfer.toStopId, maxCandidatesPerStop)) {
+                    val rules = transferRulesFor(alight.stopId)
+                    val targets = transferTargets(alight.stopId, rules)
+                    for (targetStopId in targets) {
+                        for (next in data.candidateTripsAtStop(targetStopId, maxCandidatesPerStop)) {
                             if (!data.isServiceActive(next.trip.serviceId, serviceDate)) continue
-                            if (transfer.toTripId != null && transfer.toTripId != next.trip.id) continue
-                            if (transfer.toRouteId != null && transfer.toRouteId != next.trip.routeId) continue
+                            val applicable = rules.filter { rule ->
+                                transferTargetsForRule(rule).contains(targetStopId) &&
+                                    ruleMatches(rule, candidate.trip, next.trip)
+                            }
+                            val governing = applicable.maxWithOrNull(
+                                compareBy<GtfsScheduleTransfer> { ruleSpecificity(it) }
+                                    .thenBy { it.fromStopId }
+                                    .thenBy { it.toStopId }
+                            )
+                            if (governing?.transferType == 3) continue
+                            if (governing == null && targetStopId != alight.stopId) continue
+                            val transferSeconds = if (governing == null) {
+                                implicitTransferSeconds
+                            } else {
+                                max(0, governing.minTransferTimeSeconds ?: 0)
+                            }
+                            val transferReady = firstArrival + transferSeconds * 1_000L
                             val second = legOnTrip(
                                 candidate = next,
-                                boardStopId = transfer.toStopId,
+                                boardStopId = targetStopId,
                                 earliestBoardEpochMillis = transferReady,
                                 serviceDate = serviceDate,
                                 destinationByStop = destinationByStop,
@@ -173,6 +199,53 @@ class StaticGtfsRouter(
             .distinctBy { it.id }
             .take(maxJourneys)
         return if (deduped.isEmpty()) StaticRouterResult.NoPath else StaticRouterResult.Journeys(deduped)
+    }
+
+    private fun transferRulesFor(alightStopId: String): List<GtfsScheduleTransfer> {
+        val stop = data.stop(alightStopId)
+        val sources = listOfNotNull(alightStopId, stop?.parentStationId).distinct()
+        return sources.flatMap { data.transfersFromStop(it, maxTransfersPerStop) }
+    }
+
+    private fun transferTargets(
+        alightStopId: String,
+        rules: List<GtfsScheduleTransfer>,
+    ): List<String> = buildList {
+        add(alightStopId)
+        rules.forEach { rule -> addAll(transferTargetsForRule(rule)) }
+    }.distinct().take(maxTransfersPerStop + maxChildStops + 1)
+
+    private fun transferTargetsForRule(rule: GtfsScheduleTransfer): List<String> {
+        val target = data.stop(rule.toStopId)
+        val children = if (target?.locationType == 1) {
+            data.childStops(rule.toStopId, maxChildStops).map { it.id }
+        } else {
+            emptyList()
+        }
+        return (listOf(rule.toStopId) + children).distinct()
+    }
+
+    private fun ruleMatches(
+        rule: GtfsScheduleTransfer,
+        fromTrip: GtfsScheduleTrip,
+        toTrip: GtfsScheduleTrip,
+    ): Boolean =
+        (rule.fromTripId == null || rule.fromTripId == fromTrip.id) &&
+            (rule.fromRouteId == null || rule.fromRouteId == fromTrip.routeId) &&
+            (rule.toTripId == null || rule.toTripId == toTrip.id) &&
+            (rule.toRouteId == null || rule.toRouteId == toTrip.routeId)
+
+    private fun ruleSpecificity(rule: GtfsScheduleTransfer): Int {
+        val trips = listOf(rule.fromTripId, rule.toTripId).count { it != null }
+        val routes = listOf(rule.fromRouteId, rule.toRouteId).count { it != null }
+        return when {
+            trips == 2 -> 6
+            trips >= 1 && routes >= 1 -> 5
+            trips >= 1 -> 4
+            routes == 2 -> 3
+            routes >= 1 -> 2
+            else -> 1
+        }
     }
 
     private fun legOnTrip(

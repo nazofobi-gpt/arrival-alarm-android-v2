@@ -28,6 +28,8 @@ class GtfsScheduleRepositoryInstrumentedTest {
 
         db.execSQL("INSERT INTO stops(id,name,lat,lon,parent_station,location_type,platform_code,wheelchair_boarding) VALUES('A','Alpha',52.0,8.0,NULL,1,NULL,1)")
         db.execSQL("INSERT INTO stops(id,name,lat,lon,parent_station,location_type,platform_code,wheelchair_boarding) VALUES('B','Beta',52.1,8.1,NULL,0,'2',2)")
+        db.execSQL("INSERT INTO stops(id,name,lat,lon,parent_station,location_type) VALUES('A-2','Alpha platform 2',52.0,8.0,'A',0)")
+        db.execSQL("INSERT INTO stops(id,name,lat,lon,parent_station,location_type) VALUES('A-1','Alpha platform 1',52.0,8.0,'A',0)")
         db.execSQL("INSERT INTO routes(route_id,agency_id,short_name,long_name,route_type) VALUES('R','AG','RE1','Regional Express',2)")
         db.execSQL("INSERT INTO trips(trip_id,route_id,service_id,headsign,direction_id,shape_id,wheelchair_accessible,bikes_allowed) VALUES('T','R','S','Beta',0,'SH',1,1)")
         db.execSQL("INSERT INTO stop_times(trip_id,stop_sequence,stop_id,arrival_time,departure_time,pickup_type,drop_off_type,shape_dist_traveled,timepoint) VALUES('T',2,'B','25:10:00','25:11:00',0,0,10.0,1)")
@@ -41,6 +43,7 @@ class GtfsScheduleRepositoryInstrumentedTest {
         val repo = GtfsScheduleRepository(index)
 
         assertEquals("Alpha", repo.stop("A")?.name)
+        assertEquals(listOf("A-1"), repo.childStops("A", limit = 1).map { it.id })
         assertEquals("RE1", repo.route("R")?.shortName)
         assertEquals("S", repo.trip("T")?.serviceId)
         assertEquals(listOf(1, 2), repo.stopTimesForTrip("T").map { it.stopSequence })
@@ -55,6 +58,7 @@ class GtfsScheduleRepositoryInstrumentedTest {
         assertTrue(repo.stopTimesForTrip("missing").isEmpty())
         assertTrue(repo.candidateTripsAtStop("missing").isEmpty())
         assertTrue(repo.transfersFromStop("missing").isEmpty())
+        assertTrue(repo.childStops("missing").isEmpty())
         assertTrue(repo.shapePoints("missing").isEmpty())
 
         index.close()
@@ -99,6 +103,15 @@ class GtfsScheduleRepositoryInstrumentedTest {
                 while (cursor.moveToNext()) add(cursor.getString(detail))
             }
         }
+        val childPlan = db.rawQuery(
+            "EXPLAIN QUERY PLAN SELECT id FROM stops WHERE parent_station=? ORDER BY id LIMIT 5",
+            arrayOf("A"),
+        ).use { cursor ->
+            buildList {
+                val detail = cursor.getColumnIndexOrThrow("detail")
+                while (cursor.moveToNext()) add(cursor.getString(detail))
+            }
+        }
         val tripPlan = db.rawQuery(
             "EXPLAIN QUERY PLAN SELECT stop_sequence FROM stop_times WHERE trip_id=? ORDER BY stop_sequence LIMIT 5",
             arrayOf("T000"),
@@ -110,6 +123,7 @@ class GtfsScheduleRepositoryInstrumentedTest {
         }
 
         assertTrue(stopPlan.any { it.contains("idx_stop_times_stop", ignoreCase = true) })
+        assertTrue(childPlan.any { it.contains("idx_stops_parent", ignoreCase = true) })
         assertFalse(tripPlan.any { it.contains("SCAN stop_times", ignoreCase = true) })
 
         index.close()

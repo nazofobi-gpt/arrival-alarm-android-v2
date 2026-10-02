@@ -113,6 +113,25 @@ class GtfsScheduleRepository(
         }
     }
 
+    fun childStops(parentStationId: String, limit: Int = 64): List<GtfsScheduleStop> {
+        if (parentStationId.isBlank()) return emptyList()
+        val boundedLimit = limit.coerceIn(1, MAX_CHILD_STOPS)
+        return index.readableDatabase.rawQuery(
+            """
+            SELECT id,name,lat,lon,parent_station,location_type,platform_code,wheelchair_boarding
+            FROM stops
+            WHERE parent_station=?
+            ORDER BY id
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf(parentStationId, boundedLimit.toString()),
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) add(cursor.toStop())
+            }
+        }
+    }
+
     fun route(routeId: String): GtfsScheduleRoute? {
         if (routeId.isBlank()) return null
         return index.readableDatabase.rawQuery(
@@ -358,6 +377,7 @@ class GtfsScheduleRepository(
     private fun Cursor.nullDouble(index: Int): Double? = if (isNull(index)) null else getDouble(index)
 
     companion object {
+        private const val MAX_CHILD_STOPS = 256
         private const val MAX_STOP_TIMES = 2_048
         private const val MAX_TRIP_CANDIDATES = 512
         private const val MAX_TRANSFERS = 512
