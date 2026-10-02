@@ -153,6 +153,13 @@ class GermanyGtfsRealtimeClientTest {
                     .setTime(1_900_000_000L),
             )
             .build()
+        val unscheduled = GtfsRealtime.TripUpdate.StopTimeUpdate.newBuilder()
+            .setStopSequence(4)
+            .setStopId("stop-4")
+            .setScheduleRelationship(
+                GtfsRealtime.TripUpdate.StopTimeUpdate.ScheduleRelationship.UNSCHEDULED,
+            )
+            .build()
         val missingSequence = GtfsRealtime.TripUpdate.StopTimeUpdate.newBuilder()
             .setStopTimeProperties(
                 GtfsRealtime.TripUpdate.StopTimeUpdate.StopTimeProperties.newBuilder()
@@ -182,6 +189,7 @@ class GermanyGtfsRealtimeClientTest {
                             .addStopTimeUpdate(scheduled)
                             .addStopTimeUpdate(skipped)
                             .addStopTimeUpdate(noData)
+                            .addStopTimeUpdate(unscheduled)
                             .addStopTimeUpdate(missingSequence)
                             .addStopTimeUpdate(conflictingIds),
                     ),
@@ -210,17 +218,20 @@ class GermanyGtfsRealtimeClientTest {
         assertNull(stops[2].arrivalDelaySeconds)
         assertNull(stops[2].arrivalTimeEpochSeconds)
 
+        assertEquals("UNSCHEDULED", stops[3].scheduleRelationship)
+        assertEquals(GermanyRealtimeStopUpdateValidity.VALID, stops[3].validity)
+
         assertEquals(
             GermanyRealtimeStopUpdateValidity.ASSIGNED_STOP_REQUIRES_SEQUENCE,
-            stops[3].validity,
-        )
-        assertEquals("platform-x", stops[3].assignedStopId)
-        assertEquals(
-            GermanyRealtimeStopUpdateValidity.ASSIGNED_STOP_ID_MISMATCH,
             stops[4].validity,
         )
-        assertEquals("platform-old", stops[4].stopId)
-        assertEquals("platform-new", stops[4].assignedStopId)
+        assertEquals("platform-x", stops[4].assignedStopId)
+        assertEquals(
+            GermanyRealtimeStopUpdateValidity.ASSIGNED_STOP_ID_MISMATCH,
+            stops[5].validity,
+        )
+        assertEquals("platform-old", stops[5].stopId)
+        assertEquals("platform-new", stops[5].assignedStopId)
     }
 
     @Test
