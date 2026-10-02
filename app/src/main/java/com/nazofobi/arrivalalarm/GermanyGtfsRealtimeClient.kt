@@ -249,12 +249,12 @@ class GermanyGtfsRealtimeClient(
         try {
             val status = connection.responseCode
             if (status !in 200..299) throw HttpStatusException(status)
-            val contentLength = connection.contentLengthLong
+            val contentLength = connection.contentLength
             if (contentLength > maxBytes) throw PayloadTooLargeException()
 
             return connection.inputStream.use { input ->
                 val output = ByteArrayOutputStream(
-                    contentLength.takeIf { it in 1..maxBytes.toLong() }?.toInt() ?: 16 * 1024,
+                    contentLength.takeIf { it in 1..maxBytes } ?: 16 * 1024,
                 )
                 val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                 var total = 0
