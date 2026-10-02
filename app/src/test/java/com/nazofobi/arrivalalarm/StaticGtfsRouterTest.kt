@@ -128,11 +128,11 @@ class StaticGtfsRouterTest {
 
     private data class FakeData(
         private val active:Boolean=true,
-        private val candidates:Map<String,List<GtfsScheduleTripCandidate>>=emptyMap(),
-        private val times:Map<String,List<GtfsScheduleStopTime>>=emptyMap(),
-        val transfers:Map<String,List<GtfsScheduleTransfer>>=emptyMap(),
-        val stops:Map<String,GtfsScheduleStop> = emptyMap(),
-        val children:Map<String,List<GtfsScheduleStop>> = emptyMap(),
+        private val candidates: Map<String, List<GtfsScheduleTripCandidate>> = emptyMap(),
+        private val times: Map<String, List<GtfsScheduleStopTime>> = emptyMap(),
+        val transfers: Map<String, List<GtfsScheduleTransfer>> = emptyMap(),
+        val stops: Map<String, GtfsScheduleStop> = emptyMap(),
+        val children: Map<String, List<GtfsScheduleStop>> = emptyMap(),
     ):StaticGtfsScheduleData {
         override fun candidateTripsAtStop(stopId:String,limit:Int)=candidates[stopId].orEmpty().take(limit)
         override fun stopTimesForTrip(tripId:String,limit:Int)=times[tripId].orEmpty().take(limit)
