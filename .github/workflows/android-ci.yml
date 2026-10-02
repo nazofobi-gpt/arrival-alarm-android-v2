@@ -40,6 +40,12 @@ jobs:
       - name: Build and test
         run: ./gradlew --no-daemon lint testDebugUnitTest assembleDebug
 
+      - name: G-174 real Germany Full feed acceptance
+        if: github.head_ref == 'exec2/g174-full-gtfs-schema' || github.ref_name == 'exec2/g174-full-gtfs-schema'
+        run: |
+          curl -fL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 600 https://download.gtfs.de/germany/free/latest.zip -o /tmp/germany-full.zip
+          python3 tools/verify_germany_full_gtfs.py /tmp/germany-full.zip /tmp/g174-real-feed-report.json
+
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v4
