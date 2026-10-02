@@ -1,6 +1,9 @@
 package com.nazofobi.arrivalalarm
 
 import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 
 data class HttpTransportRequest(
     val url: String,
@@ -97,15 +100,36 @@ class BoundedHttpTransport(
     private fun retryDelayMs(response: HttpTransportResponse, attempts: Int): Long {
         val retryAfter = if (response.status == 429 || response.status == 503) {
             response.headers.entries.firstOrNull { it.key.equals("Retry-After", ignoreCase = true) }
-                ?.value?.firstOrNull()?.trim()?.toLongOrNull()?.times(1_000)
+                ?.value?.firstOrNull()?.trim()?.let(::parseRetryAfterMs)
         } else null
-        return (retryAfter ?: backoffMs(attempts)).coerceAtMost(maxRetryDelayMs)
+        return (retryAfter ?: backoffMs(attempts)).coerceIn(0L, maxRetryDelayMs)
+    }
+
+    private fun parseRetryAfterMs(value: String): Long? {
+        value.toLongOrNull()?.let { seconds ->
+            if (seconds < 0) return null
+            return saturatingMultiply(seconds, 1_000L)
+        }
+        return try {
+            val formatter = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US).apply {
+                isLenient = false
+                timeZone = TimeZone.getTimeZone("GMT")
+            }
+            val deadline = formatter.parse(value)?.time ?: return null
+            saturatingSubtractNonNegative(deadline, clock.nowMillis())
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun backoffMs(attempts: Int): Long {
-        val shift = (attempts - 1).coerceIn(0, 30)
-        val multiplier = 1L shl shift
-        return (baseBackoffMs * multiplier).coerceAtMost(maxRetryDelayMs)
+        val shift = (attempts - 1).coerceIn(0, 62)
+        var delay = baseBackoffMs
+        repeat(shift) {
+            delay = saturatingMultiply(delay, 2L)
+            if (delay >= maxRetryDelayMs) return maxRetryDelayMs
+        }
+        return delay.coerceAtMost(maxRetryDelayMs)
     }
 
     private fun isRetryableStatus(status: Int): Boolean = status == 429 || status in 500..599
@@ -118,8 +142,28 @@ class BoundedHttpTransport(
     private fun recordFailure() {
         consecutiveFailures += 1
         if (consecutiveFailures >= failureThreshold) {
-            circuitOpenUntilMs = clock.nowMillis() + circuitOpenMs
+            circuitOpenUntilMs = saturatingAdd(clock.nowMillis(), circuitOpenMs)
         }
+    }
+
+    private fun saturatingAdd(left: Long, right: Long): Long {
+        if (right > 0 && left > Long.MAX_VALUE - right) return Long.MAX_VALUE
+        if (right < 0 && left < Long.MIN_VALUE - right) return Long.MIN_VALUE
+        return left + right
+    }
+
+    private fun saturatingMultiply(left: Long, right: Long): Long {
+        if (left == 0L || right == 0L) return 0L
+        if (left > 0 && right > 0 && left > Long.MAX_VALUE / right) return Long.MAX_VALUE
+        if (left < 0 && right < 0 && left < Long.MAX_VALUE / right) return Long.MAX_VALUE
+        if (left > 0 && right < 0 && right < Long.MIN_VALUE / left) return Long.MIN_VALUE
+        if (left < 0 && right > 0 && left < Long.MIN_VALUE / right) return Long.MIN_VALUE
+        return left * right
+    }
+
+    private fun saturatingSubtractNonNegative(deadline: Long, now: Long): Long {
+        if (deadline <= now) return 0L
+        return if (now < 0 && deadline > Long.MAX_VALUE + now) Long.MAX_VALUE else deadline - now
     }
 
     companion object {
