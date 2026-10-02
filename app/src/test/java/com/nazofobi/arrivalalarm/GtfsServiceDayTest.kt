@@ -1,10 +1,6 @@
 package com.nazofobi.arrivalalarm
 
-import java.time.DayOfWeek
-import java.time.Duration
-import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.ZoneId
+import java.util.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -12,20 +8,20 @@ import org.junit.Assert.fail
 import org.junit.Test
 
 class GtfsServiceDayTest {
-    private val berlin = ZoneId.of("Europe/Berlin")
+    private val berlin = TimeZone.getTimeZone("Europe/Berlin")
 
     @Test
     fun calendarDatesOverrideBaseWeekdayPattern() {
         val weekday = GtfsCalendarService(
             serviceId = "weekday",
-            startDate = LocalDate.of(2026, 1, 1),
-            endDate = LocalDate.of(2026, 12, 31),
+            startDate = GtfsServiceDate.parse("20260101"),
+            endDate = GtfsServiceDate.parse("20261231"),
             activeDays = setOf(
-                DayOfWeek.MONDAY,
-                DayOfWeek.TUESDAY,
-                DayOfWeek.WEDNESDAY,
-                DayOfWeek.THURSDAY,
-                DayOfWeek.FRIDAY,
+                GtfsWeekday.MONDAY,
+                GtfsWeekday.TUESDAY,
+                GtfsWeekday.WEDNESDAY,
+                GtfsWeekday.THURSDAY,
+                GtfsWeekday.FRIDAY,
             ),
         )
         val calendar = GtfsServiceCalendar(
@@ -33,25 +29,25 @@ class GtfsServiceDayTest {
             exceptions = listOf(
                 GtfsCalendarException(
                     "weekday",
-                    LocalDate.of(2026, 1, 2),
+                    GtfsServiceDate.parse("20260102"),
                     GtfsCalendarExceptionType.REMOVED,
                 ),
                 GtfsCalendarException(
                     "weekday",
-                    LocalDate.of(2026, 1, 3),
+                    GtfsServiceDate.parse("20260103"),
                     GtfsCalendarExceptionType.ADDED,
                 ),
             ),
         )
 
-        assertFalse(calendar.isActive("weekday", LocalDate.of(2026, 1, 2)))
-        assertTrue(calendar.isActive("weekday", LocalDate.of(2026, 1, 3)))
-        assertFalse(calendar.isActive("weekday", LocalDate.of(2026, 1, 4)))
+        assertFalse(calendar.isActive("weekday", GtfsServiceDate.parse("20260102")))
+        assertTrue(calendar.isActive("weekday", GtfsServiceDate.parse("20260103")))
+        assertFalse(calendar.isActive("weekday", GtfsServiceDate.parse("20260104")))
     }
 
     @Test
     fun calendarDatesCanDefineServiceWithoutCalendarTxt() {
-        val date = LocalDate.of(2026, 5, 1)
+        val date = GtfsServiceDate.parse("20260501")
         val calendar = GtfsServiceCalendar(
             calendars = emptyList(),
             exceptions = listOf(
@@ -61,39 +57,52 @@ class GtfsServiceDayTest {
 
         assertTrue(calendar.isActive("special", date))
         assertEquals(setOf("special"), calendar.activeServices(date))
-        assertFalse(calendar.isActive("special", date.plusDays(1)))
+        assertFalse(calendar.isActive("special", GtfsServiceDate.parse("20260502")))
+    }
+
+    @Test
+    fun dateParsingRejectsInvalidCivilDates() {
+        listOf("20260229", "20261301", "20260001", "20260431", "26-01-01").forEach { raw ->
+            try {
+                GtfsServiceDate.parse(raw)
+                fail("Expected invalid GTFS service date to fail: $raw")
+            } catch (_: IllegalArgumentException) {
+                // expected
+            }
+        }
+        assertEquals(GtfsWeekday.THURSDAY, GtfsServiceDate.parse("20261001").weekday)
     }
 
     @Test
     fun timeAbove24HoursResolvesIntoFollowingCivilDate() {
         val time = GtfsServiceTime.parse("25:15:30")
-        val resolved = time.resolve(LocalDate.of(2026, 1, 15), berlin)
+        val resolved = time.resolve(GtfsServiceDate.parse("20260115"), berlin)
 
         assertEquals(25, time.hour)
         assertEquals(90_930, time.secondsFromServiceDayStart)
-        assertEquals(LocalDateTime.of(2026, 1, 16, 1, 15, 30), resolved.toLocalDateTime())
+        assertEquals(listOf(2026, 1, 16, 1, 15, 30), resolved.localFields().toList())
     }
 
     @Test
     fun springDstUsesGtfsNoonMinusTwelveHourAnchor() {
-        val serviceDate = LocalDate.of(2026, 3, 29)
+        val serviceDate = GtfsServiceDate.parse("20260329")
         val start = GtfsServiceTime.parse("00:00:00").resolve(serviceDate, berlin)
         val end = GtfsServiceTime.parse("04:00:00").resolve(serviceDate, berlin)
 
-        assertEquals(LocalDateTime.of(2026, 3, 28, 23, 0), start.toLocalDateTime())
-        assertEquals(LocalDateTime.of(2026, 3, 29, 4, 0), end.toLocalDateTime())
-        assertEquals(Duration.ofHours(4), Duration.between(start.toInstant(), end.toInstant()))
+        assertEquals(listOf(2026, 3, 28, 23, 0, 0), start.localFields().toList())
+        assertEquals(listOf(2026, 3, 29, 4, 0, 0), end.localFields().toList())
+        assertEquals(4L * 60L * 60L * 1_000L, end.epochMillis - start.epochMillis)
     }
 
     @Test
     fun autumnDstAlsoRemainsMonotonic() {
-        val serviceDate = LocalDate.of(2026, 10, 25)
+        val serviceDate = GtfsServiceDate.parse("20261025")
         val start = GtfsServiceTime.parse("00:00:00").resolve(serviceDate, berlin)
         val end = GtfsServiceTime.parse("04:00:00").resolve(serviceDate, berlin)
 
-        assertEquals(LocalDateTime.of(2026, 10, 25, 1, 0), start.toLocalDateTime())
-        assertEquals(LocalDateTime.of(2026, 10, 25, 4, 0), end.toLocalDateTime())
-        assertEquals(Duration.ofHours(4), Duration.between(start.toInstant(), end.toInstant()))
+        assertEquals(listOf(2026, 10, 25, 1, 0, 0), start.localFields().toList())
+        assertEquals(listOf(2026, 10, 25, 4, 0, 0), end.localFields().toList())
+        assertEquals(4L * 60L * 60L * 1_000L, end.epochMillis - start.epochMillis)
     }
 
     @Test
