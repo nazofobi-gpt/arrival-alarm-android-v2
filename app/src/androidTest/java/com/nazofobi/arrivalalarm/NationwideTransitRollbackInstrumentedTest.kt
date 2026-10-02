@@ -10,7 +10,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFailsWith
+import org.junit.Assert.fail
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,8 +41,11 @@ class NationwideTransitRollbackInstrumentedTest {
         assertEquals(2, before.stopTimes)
         assertTrue(before.knownGoodHits.contains("Known Good Bahnhof"))
 
-        assertFailsWith<IllegalStateException> {
+        try {
             index.importFeed(invalid.toURI().toURL().toString()) { }
+            fail("Expected invalid replacement feed import to fail")
+        } catch (_: IllegalStateException) {
+            // Expected: integrity validation fails after the transaction has begun.
         }
 
         assertEquals(before, snapshot(index, db))
