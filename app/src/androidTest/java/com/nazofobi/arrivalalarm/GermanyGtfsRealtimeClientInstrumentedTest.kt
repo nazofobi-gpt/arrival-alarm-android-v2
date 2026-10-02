@@ -29,8 +29,22 @@ class GermanyGtfsRealtimeClientInstrumentedTest {
                             )
                             .addStopTimeUpdate(
                                 GtfsRealtime.TripUpdate.StopTimeUpdate.newBuilder()
-                                    .setStopId("stop-1")
+                                    .setStopId("platform-2")
                                     .setStopSequence(1)
+                                    .setScheduleRelationship(
+                                        GtfsRealtime.TripUpdate.StopTimeUpdate.ScheduleRelationship.SCHEDULED,
+                                    )
+                                    .setStopTimeProperties(
+                                        GtfsRealtime.TripUpdate.StopTimeUpdate.StopTimeProperties.newBuilder()
+                                            .setAssignedStopId("platform-2")
+                                            .setStopHeadsign("Zentrum")
+                                            .setPickupType(
+                                                GtfsRealtime.TripUpdate.StopTimeUpdate.StopTimeProperties.DropOffPickupType.REGULAR,
+                                            )
+                                            .setDropOffType(
+                                                GtfsRealtime.TripUpdate.StopTimeUpdate.StopTimeProperties.DropOffPickupType.NONE,
+                                            ),
+                                    )
                                     .setDeparture(
                                         GtfsRealtime.TripUpdate.StopTimeEvent.newBuilder()
                                             .setDelay(90),
@@ -68,7 +82,14 @@ class GermanyGtfsRealtimeClientInstrumentedTest {
         assertTrue(result is GermanyRealtimeFetchResult.Available)
         val snapshot = (result as GermanyRealtimeFetchResult.Available).snapshot
         assertEquals(1_800_000_000L, snapshot.feedTimestampEpochSeconds)
-        assertEquals(90, snapshot.tripUpdates.single().stops.single().departureDelaySeconds)
+        val stop = snapshot.tripUpdates.single().stops.single()
+        assertEquals(90, stop.departureDelaySeconds)
+        assertEquals("SCHEDULED", stop.scheduleRelationship)
+        assertEquals("platform-2", stop.assignedStopId)
+        assertEquals("REGULAR", stop.pickupType)
+        assertEquals("NONE", stop.dropOffType)
+        assertEquals("Zentrum", stop.stopHeadsign)
+        assertEquals(GermanyRealtimeStopUpdateValidity.VALID, stop.validity)
         assertEquals("Hinweis", snapshot.serviceAlerts.single().header)
         assertEquals(setOf("route-1"), snapshot.serviceAlerts.single().routeIds)
     }

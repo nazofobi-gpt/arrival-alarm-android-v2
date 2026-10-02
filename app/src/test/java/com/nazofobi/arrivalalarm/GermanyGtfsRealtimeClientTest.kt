@@ -3,6 +3,7 @@ package com.nazofobi.arrivalalarm
 import com.google.transit.realtime.GtfsRealtime
 import java.io.IOException
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -106,6 +107,120 @@ class GermanyGtfsRealtimeClientTest {
         assertEquals(setOf("trip-1"), parsedAlert.tripIds)
         assertEquals(setOf("stop-7"), parsedAlert.stopIds)
         assertEquals(1_799_999_000L, parsedAlert.activePeriods.single().startEpochSeconds)
+    }
+
+    @Test
+    fun retainsStopRelationshipsPropertiesAndInvalidAssignments() {
+        val properties = GtfsRealtime.TripUpdate.StopTimeUpdate.StopTimeProperties.newBuilder()
+            .setAssignedStopId("platform-2")
+            .setStopHeadsign("City Center")
+            .setPickupType(
+                GtfsRealtime.TripUpdate.StopTimeUpdate.StopTimeProperties.DropOffPickupType.NONE,
+            )
+            .setDropOffType(
+                GtfsRealtime.TripUpdate.StopTimeUpdate.StopTimeProperties.DropOffPickupType.PHONE_AGENCY,
+            )
+            .build()
+        val scheduled = GtfsRealtime.TripUpdate.StopTimeUpdate.newBuilder()
+            .setStopSequence(1)
+            .setStopId("platform-2")
+            .setScheduleRelationship(
+                GtfsRealtime.TripUpdate.StopTimeUpdate.ScheduleRelationship.SCHEDULED,
+            )
+            .setStopTimeProperties(properties)
+            .setArrival(
+                GtfsRealtime.TripUpdate.StopTimeEvent.newBuilder()
+                    .setDelay(30)
+                    .setTime(1_800_000_030L),
+            )
+            .build()
+        val skipped = GtfsRealtime.TripUpdate.StopTimeUpdate.newBuilder()
+            .setStopSequence(2)
+            .setStopId("stop-2")
+            .setScheduleRelationship(
+                GtfsRealtime.TripUpdate.StopTimeUpdate.ScheduleRelationship.SKIPPED,
+            )
+            .build()
+        val noData = GtfsRealtime.TripUpdate.StopTimeUpdate.newBuilder()
+            .setStopSequence(3)
+            .setStopId("stop-3")
+            .setScheduleRelationship(
+                GtfsRealtime.TripUpdate.StopTimeUpdate.ScheduleRelationship.NO_DATA,
+            )
+            .setArrival(
+                GtfsRealtime.TripUpdate.StopTimeEvent.newBuilder()
+                    .setDelay(999)
+                    .setTime(1_900_000_000L),
+            )
+            .build()
+        val missingSequence = GtfsRealtime.TripUpdate.StopTimeUpdate.newBuilder()
+            .setStopTimeProperties(
+                GtfsRealtime.TripUpdate.StopTimeUpdate.StopTimeProperties.newBuilder()
+                    .setAssignedStopId("platform-x"),
+            )
+            .build()
+        val conflictingIds = GtfsRealtime.TripUpdate.StopTimeUpdate.newBuilder()
+            .setStopSequence(4)
+            .setStopId("platform-old")
+            .setStopTimeProperties(
+                GtfsRealtime.TripUpdate.StopTimeUpdate.StopTimeProperties.newBuilder()
+                    .setAssignedStopId("platform-new"),
+            )
+            .build()
+        val feed = GtfsRealtime.FeedMessage.newBuilder()
+            .setHeader(
+                GtfsRealtime.FeedHeader.newBuilder().setGtfsRealtimeVersion("2.0"),
+            )
+            .addEntity(
+                GtfsRealtime.FeedEntity.newBuilder()
+                    .setId("stop-properties")
+                    .setTripUpdate(
+                        GtfsRealtime.TripUpdate.newBuilder()
+                            .setTrip(
+                                GtfsRealtime.TripDescriptor.newBuilder().setTripId("trip-1"),
+                            )
+                            .addStopTimeUpdate(scheduled)
+                            .addStopTimeUpdate(skipped)
+                            .addStopTimeUpdate(noData)
+                            .addStopTimeUpdate(missingSequence)
+                            .addStopTimeUpdate(conflictingIds),
+                    ),
+            )
+            .build()
+
+        val result = GermanyGtfsRealtimeClient(
+            loader = { feed.toByteArray() },
+        ).fetch()
+        val stops = (result as GermanyRealtimeFetchResult.Available)
+            .snapshot.tripUpdates.single().stops
+
+        assertEquals("SCHEDULED", stops[0].scheduleRelationship)
+        assertEquals("platform-2", stops[0].assignedStopId)
+        assertEquals("NONE", stops[0].pickupType)
+        assertEquals("PHONE_AGENCY", stops[0].dropOffType)
+        assertEquals("City Center", stops[0].stopHeadsign)
+        assertEquals(GermanyRealtimeStopUpdateValidity.VALID, stops[0].validity)
+        assertEquals(30, stops[0].arrivalDelaySeconds)
+
+        assertEquals("SKIPPED", stops[1].scheduleRelationship)
+        assertNull(stops[1].arrivalTimeEpochSeconds)
+        assertNull(stops[1].departureTimeEpochSeconds)
+
+        assertEquals("NO_DATA", stops[2].scheduleRelationship)
+        assertNull(stops[2].arrivalDelaySeconds)
+        assertNull(stops[2].arrivalTimeEpochSeconds)
+
+        assertEquals(
+            GermanyRealtimeStopUpdateValidity.ASSIGNED_STOP_REQUIRES_SEQUENCE,
+            stops[3].validity,
+        )
+        assertEquals("platform-x", stops[3].assignedStopId)
+        assertEquals(
+            GermanyRealtimeStopUpdateValidity.ASSIGNED_STOP_ID_MISMATCH,
+            stops[4].validity,
+        )
+        assertEquals("platform-old", stops[4].stopId)
+        assertEquals("platform-new", stops[4].assignedStopId)
     }
 
     @Test

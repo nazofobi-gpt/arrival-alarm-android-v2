@@ -20,6 +20,12 @@ enum class GermanyRealtimeUnavailableReason {
     PARSE,
 }
 
+enum class GermanyRealtimeStopUpdateValidity {
+    VALID,
+    ASSIGNED_STOP_REQUIRES_SEQUENCE,
+    ASSIGNED_STOP_ID_MISMATCH,
+}
+
 data class GermanyRealtimeStopUpdate(
     val stopSequence: Int?,
     val stopId: String?,
@@ -27,6 +33,12 @@ data class GermanyRealtimeStopUpdate(
     val departureDelaySeconds: Int?,
     val arrivalTimeEpochSeconds: Long?,
     val departureTimeEpochSeconds: Long?,
+    val scheduleRelationship: String? = null,
+    val assignedStopId: String? = null,
+    val pickupType: String? = null,
+    val dropOffType: String? = null,
+    val stopHeadsign: String? = null,
+    val validity: GermanyRealtimeStopUpdateValidity = GermanyRealtimeStopUpdateValidity.VALID,
 )
 
 data class GermanyRealtimeTripUpdate(
@@ -154,21 +166,52 @@ class GermanyGtfsRealtimeClient(
                         scheduleRelationship = relationship,
                         cancelled = relationship == "CANCELED",
                         stops = update.stopTimeUpdateList.map { stop ->
+                            val stopSequence = stop.stopSequence.takeIf { stop.hasStopSequence() }
+                            val stopId = stop.stopId.takeIf { it.isNotBlank() }
+                            val stopRelationship = if (stop.hasScheduleRelationship()) {
+                                stop.scheduleRelationship.name
+                            } else {
+                                null
+                            }
+                            val properties = stop.stopTimeProperties.takeIf {
+                                stop.hasStopTimeProperties()
+                            }
+                            val assignedStopId = properties?.assignedStopId?.takeIf { it.isNotBlank() }
+                            val validity = when {
+                                assignedStopId != null && stopSequence == null ->
+                                    GermanyRealtimeStopUpdateValidity.ASSIGNED_STOP_REQUIRES_SEQUENCE
+                                assignedStopId != null && stopId != null && assignedStopId != stopId ->
+                                    GermanyRealtimeStopUpdateValidity.ASSIGNED_STOP_ID_MISMATCH
+                                else -> GermanyRealtimeStopUpdateValidity.VALID
+                            }
+                            val noRealtimeTiming = stopRelationship == "NO_DATA"
                             GermanyRealtimeStopUpdate(
-                                stopSequence = stop.stopSequence.takeIf { stop.hasStopSequence() },
-                                stopId = stop.stopId.takeIf { it.isNotBlank() },
+                                stopSequence = stopSequence,
+                                stopId = stopId,
                                 arrivalDelaySeconds = stop.arrival.delay.takeIf {
-                                    stop.hasArrival() && stop.arrival.hasDelay()
+                                    !noRealtimeTiming && stop.hasArrival() && stop.arrival.hasDelay()
                                 },
                                 departureDelaySeconds = stop.departure.delay.takeIf {
-                                    stop.hasDeparture() && stop.departure.hasDelay()
+                                    !noRealtimeTiming && stop.hasDeparture() && stop.departure.hasDelay()
                                 },
                                 arrivalTimeEpochSeconds = stop.arrival.time.takeIf {
-                                    stop.hasArrival() && stop.arrival.hasTime()
+                                    !noRealtimeTiming && stop.hasArrival() && stop.arrival.hasTime()
                                 },
                                 departureTimeEpochSeconds = stop.departure.time.takeIf {
-                                    stop.hasDeparture() && stop.departure.hasTime()
+                                    !noRealtimeTiming && stop.hasDeparture() && stop.departure.hasTime()
                                 },
+                                scheduleRelationship = stopRelationship,
+                                assignedStopId = assignedStopId,
+                                pickupType = properties?.pickupType?.name?.takeIf {
+                                    properties.hasPickupType()
+                                },
+                                dropOffType = properties?.dropOffType?.name?.takeIf {
+                                    properties.hasDropOffType()
+                                },
+                                stopHeadsign = properties?.stopHeadsign?.takeIf {
+                                    properties.hasStopHeadsign() && it.isNotBlank()
+                                },
+                                validity = validity,
                             )
                         },
                     ),
