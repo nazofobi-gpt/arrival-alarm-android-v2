@@ -134,10 +134,11 @@ class NationwideTransitDataTest {
         val refreshed = api.fetchJsonOutcome(url)
         assertOutcomeBody("A", refreshed)
         assertEquals("\"v1\"", exchange.requests[1].headers["If-None-Match"])
-        assertEquals(
-            TransitProviderFreshnessState.FRESH,
-            (refreshed as TransitProviderOutcome.Results).freshness.state,
-        )
+        when (refreshed) {
+            is TransitProviderOutcome.Results ->
+                assertEquals(TransitProviderFreshnessState.FRESH, refreshed.freshness.state)
+            else -> fail("Expected fresh Results but was " + refreshed)
+        }
 
         nowSeconds += 5
         assertOutcomeBody("A", api.fetchJsonOutcome(url))
@@ -251,11 +252,14 @@ class NationwideTransitDataTest {
         assertOutcomeBody("cached", api.fetchJsonOutcome(url))
         nowSeconds += 2
         val stale = api.fetchJsonOutcome(url)
-        assertTrue(stale is TransitProviderOutcome.Stale)
-        stale as TransitProviderOutcome.Stale
-        assertEquals("cached", stale.value)
-        assertEquals(TransitProviderFreshnessState.STALE, stale.freshness.state)
-        assertEquals(2L, stale.freshness.ageSeconds)
+        when (stale) {
+            is TransitProviderOutcome.Stale -> {
+                assertEquals("cached", stale.value)
+                assertEquals(TransitProviderFreshnessState.STALE, stale.freshness.state)
+                assertEquals(2L, stale.freshness.ageSeconds)
+            }
+            else -> fail("Expected typed Stale but was " + stale)
+        }
     }
 
     @Test fun cacheCapacityEvictsLeastRecentlyUsedEntry() {
