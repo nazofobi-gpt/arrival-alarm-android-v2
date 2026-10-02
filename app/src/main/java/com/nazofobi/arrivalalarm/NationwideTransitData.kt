@@ -585,7 +585,8 @@ class GermanyLiveTransitApi(
         cached: GermanyLiveCachedResponse?,
         response: HttpTransportResponse,
         now: Long,
-    ): TransitProviderOutcome<String> = when {
+    ): TransitProviderOutcome<String> {
+        return when {
         response.status == 304 -> {
             val existing = cached ?: return TransitProviderOutcome.Unavailable(
                 reason = TransitProviderUnavailableReason.INVALID_RESPONSE,
@@ -634,6 +635,7 @@ class GermanyLiveTransitApi(
             detail = "Transit API HTTP " + response.status,
             provenance = dbProvenance(now),
         )
+        }
     }
 
     private fun staleOrUnavailable(
