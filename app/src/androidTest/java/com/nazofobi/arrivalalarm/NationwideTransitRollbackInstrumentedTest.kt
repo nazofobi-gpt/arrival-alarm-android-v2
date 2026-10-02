@@ -39,7 +39,7 @@ class NationwideTransitRollbackInstrumentedTest {
         assertEquals(1, before.routes)
         assertEquals(1, before.trips)
         assertEquals(2, before.stopTimes)
-        assertTrue(before.knownGoodHits.contains("Known Good Bahnhof"))
+        assertEquals("Known Good Bahnhof", before.knownGoodStopName)
 
         try {
             index.importFeed(invalid.toURI().toURL().toString()) { }
@@ -62,11 +62,17 @@ class NationwideTransitRollbackInstrumentedTest {
         routes = count(db, "routes"),
         trips = count(db, "trips"),
         stopTimes = count(db, "stop_times"),
-        knownGoodHits = index.search("Known Good Bahnhof", 5).map { it.name },
+        knownGoodStopName = scalarString(db, "SELECT stop_name FROM stops WHERE stop_id = ?", arrayOf("known-good")),
     )
 
     private fun count(db: SQLiteDatabase, table: String): Int =
         db.rawQuery("SELECT COUNT(*) FROM $table", null).use { it.moveToFirst(); it.getInt(0) }
+
+    private fun scalarString(db: SQLiteDatabase, sql: String, args: Array<String>): String =
+        db.rawQuery(sql, args).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            cursor.getString(0)
+        }
 
     private fun writeValid(file: File) {
         ZipOutputStream(FileOutputStream(file)).use { zip ->
@@ -102,6 +108,6 @@ class NationwideTransitRollbackInstrumentedTest {
         val routes: Int,
         val trips: Int,
         val stopTimes: Int,
-        val knownGoodHits: List<String>,
+        val knownGoodStopName: String,
     )
 }
