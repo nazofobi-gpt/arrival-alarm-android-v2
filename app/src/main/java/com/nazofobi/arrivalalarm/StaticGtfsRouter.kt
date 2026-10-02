@@ -159,11 +159,14 @@ class StaticGtfsRouter(
                                 transferTargetsForRule(rule).contains(targetStopId) &&
                                     ruleMatches(rule, candidate.trip, next.trip)
                             }
-                            val governing = applicable.maxWithOrNull(
-                                compareBy<GtfsScheduleTransfer> { ruleSpecificity(it) }
-                                    .thenBy { it.fromStopId }
-                                    .thenBy { it.toStopId }
-                            )
+                            val maxSpecificity = applicable.maxOfOrNull(::ruleSpecificity)
+                            val governingRules = if (maxSpecificity == null) {
+                                emptyList()
+                            } else {
+                                applicable.filter { ruleSpecificity(it) == maxSpecificity }
+                            }
+                            if (governingRules.size > 1) continue
+                            val governing = governingRules.singleOrNull()
                             if (governing?.transferType == 3) continue
                             if (governing == null && targetStopId != alight.stopId) continue
                             val transferSeconds = if (governing == null) {
@@ -238,9 +241,12 @@ class StaticGtfsRouter(
     private fun ruleSpecificity(rule: GtfsScheduleTransfer): Int {
         val trips = listOf(rule.fromTripId, rule.toTripId).count { it != null }
         val routes = listOf(rule.fromRouteId, rule.toRouteId).count { it != null }
+        val hasCrossSideTripRoute =
+            (rule.fromTripId != null && rule.toRouteId != null) ||
+                (rule.fromRouteId != null && rule.toTripId != null)
         return when {
             trips == 2 -> 6
-            trips >= 1 && routes >= 1 -> 5
+            hasCrossSideTripRoute -> 5
             trips >= 1 -> 4
             routes == 2 -> 3
             routes >= 1 -> 2

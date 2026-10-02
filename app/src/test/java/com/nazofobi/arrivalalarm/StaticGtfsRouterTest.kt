@@ -51,6 +51,46 @@ class StaticGtfsRouterTest {
         assertEquals(listOf("T1","T2"),(result as StaticRouterResult.Journeys).journeys.single().legs.map{it.tripId})
     }
 
+    @Test fun crossSideTripRouteOutranksSameSideTripRoute() {
+        val parent=stop("P",locationType=1)
+        val child=stop("X",parent="P")
+        val data=baseTransferData().copy(
+            stops=mapOf("X" to child,"P" to parent),
+            transfers=mapOf(
+                "X" to listOf(transfer("X","X",3,0,fromRoute="R1",fromTrip="T1")),
+                "P" to listOf(transfer("P","X",2,120,toRoute="R2",fromTrip="T1")),
+            ),
+        )
+        val result=StaticGtfsRouter(data,zone).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("09:55:00"),
+        )
+        assertEquals(
+            listOf("T1","T2"),
+            (result as StaticRouterResult.Journeys).journeys.single().legs.map { it.tripId },
+        )
+    }
+
+    @Test fun equalMaxApplicableTransferRulesFailSafe() {
+        val data=baseTransferData().copy(
+            transfers=mapOf(
+                "X" to listOf(
+                    transfer("X","X",2,60,fromTrip="T1",toRoute="R2"),
+                    transfer("X","X",2,120,fromRoute="R1",toTrip="T2"),
+                ),
+            ),
+        )
+        val result=StaticGtfsRouter(data,zone).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("09:55:00"),
+        )
+        assertTrue(result is StaticRouterResult.NoPath)
+    }
+
     @Test fun stationRuleExpandsToChildPlatform() {
         val parent=stop("P",locationType=1)
         val child=stop("X",parent="P")
