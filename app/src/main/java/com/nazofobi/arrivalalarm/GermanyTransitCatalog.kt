@@ -6,7 +6,25 @@ data class TransitProvider(val id:String,val name:String,val coverage:String,val
 data class CatalogStop(val id:String,val providerId:String,val name:String,val latitude:Double,val longitude:Double)
 data class CatalogRoute(val id:String,val providerId:String,val shortName:String,val direction:String,val stopIds:List<String>)
 data class CatalogTrip(val id:String,val providerId:String,val routeId:String,val departure:String)
-data class NearbyStop(val stop:CatalogStop,val distanceMeters:Int)
+data class NearbyStop(
+    val stop: CatalogStop,
+    val distanceMeters: Int,
+    val bearingDegrees: Int? = null,
+) {
+    val directionArrow: String
+        get() = bearingDegrees?.let { bearing ->
+            when (((bearing % 360) + 360) % 360) {
+                in 23..67 -> "↗"
+                in 68..112 -> "→"
+                in 113..157 -> "↘"
+                in 158..202 -> "↓"
+                in 203..247 -> "↙"
+                in 248..292 -> "←"
+                in 293..337 -> "↖"
+                else -> "↑"
+            }
+        }.orEmpty()
+}
 data class CatalogSnapshot(val providers:List<TransitProvider>,val stops:List<CatalogStop>,val routes:List<CatalogRoute>,val trips:List<CatalogTrip>,val generatedAt:String,val stale:Boolean=false)
 
 /**
