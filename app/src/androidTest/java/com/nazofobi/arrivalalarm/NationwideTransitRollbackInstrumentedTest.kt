@@ -40,6 +40,13 @@ class NationwideTransitRollbackInstrumentedTest {
         assertEquals(1, before.trips)
         assertEquals(2, before.stopTimes)
         assertEquals("Known Good Bahnhof", before.knownGoodStopName)
+        assertEquals(
+            listOf(
+                "route-1|trip-1|1|known-good",
+                "route-1|trip-1|2|fixture-1",
+            ),
+            before.graphRows,
+        )
 
         try {
             index.importFeed(invalid.toURI().toURL().toString()) { }
@@ -62,8 +69,28 @@ class NationwideTransitRollbackInstrumentedTest {
         routes = count(db, "routes"),
         trips = count(db, "trips"),
         stopTimes = count(db, "stop_times"),
-        knownGoodStopName = scalarString(db, "SELECT stop_name FROM stops WHERE stop_id = ?", arrayOf("known-good")),
+        knownGoodStopName = scalarString(db, "SELECT name FROM stops WHERE id = ?", arrayOf("known-good")),
+        graphRows = graphRows(db),
     )
+
+    private fun graphRows(db: SQLiteDatabase): List<String> =
+        db.rawQuery(
+            """
+            SELECT r.route_id,t.trip_id,st.stop_sequence,st.stop_id
+            FROM routes r
+            JOIN trips t ON t.route_id=r.route_id
+            JOIN stop_times st ON st.trip_id=t.trip_id
+            WHERE r.route_id=? AND t.trip_id=?
+            ORDER BY st.stop_sequence
+            """.trimIndent(),
+            arrayOf("route-1", "trip-1"),
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    add("${cursor.getString(0)}|${cursor.getString(1)}|${cursor.getInt(2)}|${cursor.getString(3)}")
+                }
+            }
+        }
 
     private fun count(db: SQLiteDatabase, table: String): Int =
         db.rawQuery("SELECT COUNT(*) FROM $table", null).use { it.moveToFirst(); it.getInt(0) }
@@ -109,5 +136,6 @@ class NationwideTransitRollbackInstrumentedTest {
         val trips: Int,
         val stopTimes: Int,
         val knownGoodStopName: String,
+        val graphRows: List<String>,
     )
 }
