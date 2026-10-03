@@ -42,7 +42,12 @@ sealed interface StaticRouterResult {
 }
 
 interface StaticGtfsScheduleData {
-    fun candidateTripsAtStop(stopId: String, limit: Int): List<GtfsScheduleTripCandidate>
+    fun candidateTripsAtStop(
+        stopId: String,
+        serviceDate: GtfsServiceDate,
+        earliestBoardSeconds: Int,
+        limit: Int,
+    ): List<GtfsScheduleTripCandidate>
     fun stopTimesForTrip(tripId: String, limit: Int): List<GtfsScheduleStopTime>
     fun transfersFromStop(stopId: String, limit: Int): List<GtfsScheduleTransfer>
     fun stop(stopId: String): GtfsScheduleStop?
@@ -54,8 +59,12 @@ interface StaticGtfsScheduleData {
 class RepositoryStaticGtfsScheduleData(
     private val repository: GtfsScheduleRepository,
 ) : StaticGtfsScheduleData {
-    override fun candidateTripsAtStop(stopId: String, limit: Int) =
-        repository.candidateTripsAtStop(stopId, limit)
+    override fun candidateTripsAtStop(
+        stopId: String,
+        serviceDate: GtfsServiceDate,
+        earliestBoardSeconds: Int,
+        limit: Int,
+    ) = repository.candidateTripsAtStop(stopId, serviceDate, earliestBoardSeconds, limit)
 
     override fun stopTimesForTrip(tripId: String, limit: Int) =
         repository.stopTimesForTrip(tripId, limit)
@@ -138,7 +147,15 @@ class StaticGtfsRouter(
 
         for (access in from) {
             val earliestBoard = departureEpochMillis + access.walkSeconds * 1_000L
-            for (candidate in data.candidateTripsAtStop(access.stopId, maxCandidatesPerStop)) {
+            val earliestBoardSeconds = serviceSeconds(earliestBoard, serviceDate) ?: continue
+            for (
+                candidate in data.candidateTripsAtStop(
+                    access.stopId,
+                    serviceDate,
+                    earliestBoardSeconds,
+                    maxCandidatesPerStop,
+                )
+            ) {
                 if (!data.isServiceActive(candidate.trip.serviceId, serviceDate)) continue
                 val first = legOnTrip(
                     candidate = candidate,
@@ -170,7 +187,16 @@ class StaticGtfsRouter(
                     val targets = transferTargets(alight.stopId, rules)
                     for (target in targets) {
                         val targetStopId = target.stopId
-                        for (next in data.candidateTripsAtStop(targetStopId, maxCandidatesPerStop)) {
+                        val earliestTransferReady = firstArrival + target.walkSeconds * 1_000L
+                        val earliestTransferSeconds = serviceSeconds(earliestTransferReady, serviceDate) ?: continue
+                        for (
+                            next in data.candidateTripsAtStop(
+                                targetStopId,
+                                serviceDate,
+                                earliestTransferSeconds,
+                                maxCandidatesPerStop,
+                            )
+                        ) {
                             if (!data.isServiceActive(next.trip.serviceId, serviceDate)) continue
                             val applicable = rules.filter { rule ->
                                 transferTargetsForRule(rule).contains(targetStopId) &&
@@ -386,6 +412,14 @@ class StaticGtfsRouter(
             append(egress.stopId)
         }
         return StaticTransitJourney(id, access, egress, legs, arrival)
+    }
+
+    private fun serviceSeconds(epochMillis: Long, serviceDate: GtfsServiceDate): Int? {
+        val anchor = GtfsServiceTime.parse("00:00:00").resolve(serviceDate, agencyTimeZone).epochMillis
+        val deltaMillis = epochMillis - anchor
+        if (deltaMillis < 0L) return null
+        val seconds = deltaMillis / 1_000L + if (deltaMillis % 1_000L == 0L) 0L else 1L
+        return seconds.takeIf { it <= Int.MAX_VALUE }?.toInt()
     }
 
     private fun epoch(raw: String?, serviceDate: GtfsServiceDate): Long? =
