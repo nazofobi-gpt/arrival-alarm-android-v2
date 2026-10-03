@@ -31,10 +31,12 @@ class GtfsScheduleRepositoryInstrumentedTest {
         db.execSQL("INSERT INTO stops(id,name,lat,lon,parent_station,location_type) VALUES('A-2','Alpha platform 2',52.0,8.0,'A',0)")
         db.execSQL("INSERT INTO stops(id,name,lat,lon,parent_station,location_type) VALUES('A-1','Alpha platform 1',52.0,8.0,'A',0)")
         db.execSQL("INSERT INTO routes(route_id,agency_id,short_name,long_name,route_type) VALUES('R','AG','RE1','Regional Express',2)")
-        db.execSQL("INSERT INTO trips(trip_id,route_id,service_id,headsign,direction_id,shape_id,wheelchair_accessible,bikes_allowed) VALUES('T','R','S','Beta',0,'SH',1,1)")
+        db.execSQL("INSERT INTO trips(trip_id,route_id,service_id,headsign,direction_id,shape_id,wheelchair_accessible,bikes_allowed,block_id) VALUES('T','R','S','Beta',0,'SH',1,1,'BLOCK-1')")
+        db.execSQL("INSERT INTO trips(trip_id,route_id,service_id,headsign,block_id) VALUES('T2','R','S','Gamma','BLOCK-1')")
         db.execSQL("INSERT INTO stop_times(trip_id,stop_sequence,stop_id,arrival_time,departure_time,pickup_type,drop_off_type,shape_dist_traveled,timepoint) VALUES('T',2,'B','25:10:00','25:11:00',0,0,10.0,1)")
         db.execSQL("INSERT INTO stop_times(trip_id,stop_sequence,stop_id,arrival_time,departure_time,pickup_type,drop_off_type,shape_dist_traveled,timepoint) VALUES('T',1,'A','23:55:00','23:56:00',0,0,0.0,1)")
         db.execSQL("INSERT INTO transfers(from_stop_id,to_stop_id,transfer_type,min_transfer_time,from_route_id,to_route_id,from_trip_id,to_trip_id) VALUES('A','B',2,180,NULL,NULL,NULL,NULL)")
+        db.execSQL("INSERT INTO transfers(from_stop_id,to_stop_id,transfer_type,min_transfer_time,from_route_id,to_route_id,from_trip_id,to_trip_id) VALUES(NULL,NULL,4,NULL,NULL,NULL,'T','T2')")
         db.execSQL("INSERT INTO shapes(shape_id,sequence,lat,lon,dist_traveled) VALUES('SH',2,52.1,8.1,10.0)")
         db.execSQL("INSERT INTO shapes(shape_id,sequence,lat,lon,dist_traveled) VALUES('SH',1,52.0,8.0,0.0)")
         db.execSQL("INSERT INTO calendar(service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date) VALUES('S',1,1,1,1,1,0,0,'20260101','20261231')")
@@ -46,9 +48,14 @@ class GtfsScheduleRepositoryInstrumentedTest {
         assertEquals(listOf("A-1"), repo.childStops("A", limit = 1).map { it.id })
         assertEquals("RE1", repo.route("R")?.shortName)
         assertEquals("S", repo.trip("T")?.serviceId)
+        assertEquals("BLOCK-1", repo.trip("T")?.blockId)
+        assertEquals(listOf("T", "T2"), repo.tripsInBlock("BLOCK-1", "S").map { it.id })
         assertEquals(listOf(1, 2), repo.stopTimesForTrip("T").map { it.stopSequence })
         assertEquals(listOf("T"), repo.candidateTripsAtStop("A").map { it.trip.id })
         assertEquals(180, repo.transfersFromStop("A").single().minTransferTimeSeconds)
+        assertEquals("T2", repo.linkedTransfersFromTrip("T").single().toTripId)
+        assertNull(repo.linkedTransfersFromTrip("T").single().fromStopId)
+        assertNull(repo.linkedTransfersFromTrip("T").single().toStopId)
         assertEquals(listOf(1, 2), repo.shapePoints("SH").map { it.sequence })
         assertTrue(repo.calendar("S")!!.monday)
         assertEquals(1, repo.calendarException("S", "20261003")?.exceptionType)
@@ -58,8 +65,60 @@ class GtfsScheduleRepositoryInstrumentedTest {
         assertTrue(repo.stopTimesForTrip("missing").isEmpty())
         assertTrue(repo.candidateTripsAtStop("missing").isEmpty())
         assertTrue(repo.transfersFromStop("missing").isEmpty())
+        assertTrue(repo.linkedTransfersFromTrip("missing").isEmpty())
+        assertTrue(repo.tripsInBlock("missing", "S").isEmpty())
         assertTrue(repo.childStops("missing").isEmpty())
         assertTrue(repo.shapePoints("missing").isEmpty())
+
+        index.close()
+    }
+
+    @Test
+    fun continuityQueriesAreBoundedAndUseDedicatedIndexes() {
+        context.deleteDatabase("nationwide_transit.db")
+        val index = NationwideTransitIndex(context)
+        val db = index.writableDatabase
+        db.execSQL("INSERT INTO routes(route_id,short_name,route_type) VALUES('R','R',2)")
+        repeat(20) { i ->
+            val tripId = "T%02d".format(i)
+            db.execSQL(
+                "INSERT INTO trips(trip_id,route_id,service_id,headsign,block_id) VALUES(?,?,?,?,?)",
+                arrayOf(tripId, "R", "S", "Trip $i", "BLOCK"),
+            )
+            if (i > 0) {
+                db.execSQL(
+                    "INSERT INTO transfers(from_stop_id,to_stop_id,transfer_type,from_trip_id,to_trip_id) VALUES(NULL,NULL,4,?,?)",
+                    arrayOf("T00", tripId),
+                )
+            }
+        }
+
+        val repo = GtfsScheduleRepository(index)
+        assertEquals(3, repo.tripsInBlock("BLOCK", "S", limit = 3).size)
+        assertEquals(4, repo.linkedTransfersFromTrip("T00", limit = 4).size)
+
+        val blockPlan = db.rawQuery(
+            "EXPLAIN QUERY PLAN SELECT trip_id FROM trips WHERE block_id=? AND service_id=? ORDER BY trip_id LIMIT ?",
+            arrayOf("BLOCK", "S", "3"),
+        ).use { cursor ->
+            buildList {
+                val detail = cursor.getColumnIndexOrThrow("detail")
+                while (cursor.moveToNext()) add(cursor.getString(detail))
+            }
+        }
+        val linkedPlan = db.rawQuery(
+            "EXPLAIN QUERY PLAN SELECT to_trip_id FROM transfers WHERE from_trip_id=? AND transfer_type IN (4,5) ORDER BY to_trip_id LIMIT ?",
+            arrayOf("T00", "4"),
+        ).use { cursor ->
+            buildList {
+                val detail = cursor.getColumnIndexOrThrow("detail")
+                while (cursor.moveToNext()) add(cursor.getString(detail))
+            }
+        }
+        assertTrue(blockPlan.any { it.contains("idx_trips_block_service", ignoreCase = true) })
+        assertTrue(linkedPlan.any { it.contains("idx_transfers_from_trip_type", ignoreCase = true) })
+        assertFalse(blockPlan.any { it.contains("SCAN trips", ignoreCase = true) })
+        assertFalse(linkedPlan.any { it.contains("SCAN transfers", ignoreCase = true) })
 
         index.close()
     }
