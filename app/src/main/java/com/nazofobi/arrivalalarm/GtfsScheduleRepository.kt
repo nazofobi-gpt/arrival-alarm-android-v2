@@ -38,6 +38,7 @@ data class GtfsScheduleTrip(
     val shapeId: String?,
     val wheelchairAccessible: Int?,
     val bikesAllowed: Int?,
+    val blockId: String? = null,
 )
 
 data class GtfsScheduleStopTime(
@@ -60,8 +61,8 @@ data class GtfsScheduleTripCandidate(
 )
 
 data class GtfsScheduleTransfer(
-    val fromStopId: String,
-    val toStopId: String,
+    val fromStopId: String?,
+    val toStopId: String?,
     val transferType: Int?,
     val minTransferTimeSeconds: Int?,
     val fromRouteId: String?,
@@ -205,7 +206,7 @@ class GtfsScheduleRepository(
         if (tripId.isBlank()) return null
         return index.readableDatabase.rawQuery(
             """
-            SELECT trip_id,route_id,service_id,headsign,direction_id,shape_id,wheelchair_accessible,bikes_allowed
+            SELECT trip_id,route_id,service_id,headsign,direction_id,shape_id,wheelchair_accessible,bikes_allowed,block_id
             FROM trips
             WHERE trip_id=?
             LIMIT 1
@@ -242,7 +243,7 @@ class GtfsScheduleRepository(
             """
             SELECT
                 t.trip_id,t.route_id,t.service_id,t.headsign,t.direction_id,t.shape_id,
-                t.wheelchair_accessible,t.bikes_allowed,
+                t.wheelchair_accessible,t.bikes_allowed,t.block_id,
                 st.stop_sequence,st.arrival_time,st.departure_time
             FROM stop_times st
             JOIN trips t ON t.trip_id=st.trip_id
@@ -265,10 +266,11 @@ class GtfsScheduleRepository(
                                 shapeId = cursor.nullString(5),
                                 wheelchairAccessible = cursor.nullInt(6),
                                 bikesAllowed = cursor.nullInt(7),
+                                blockId = cursor.nullString(8),
                             ),
-                            stopSequence = cursor.getInt(8),
-                            arrivalTime = cursor.nullString(9),
-                            departureTime = cursor.nullString(10),
+                            stopSequence = cursor.getInt(9),
+                            arrivalTime = cursor.nullString(10),
+                            departureTime = cursor.nullString(11),
                         )
                     )
                 }
@@ -307,7 +309,7 @@ class GtfsScheduleRepository(
             """
             SELECT
                 t.trip_id,t.route_id,t.service_id,t.headsign,t.direction_id,t.shape_id,
-                t.wheelchair_accessible,t.bikes_allowed,
+                t.wheelchair_accessible,t.bikes_allowed,t.block_id,
                 st.stop_sequence,st.arrival_time,st.departure_time
             FROM stop_times st
             JOIN trips t ON t.trip_id=st.trip_id
@@ -365,10 +367,69 @@ class GtfsScheduleRepository(
                                 shapeId = cursor.nullString(5),
                                 wheelchairAccessible = cursor.nullInt(6),
                                 bikesAllowed = cursor.nullInt(7),
+                                blockId = cursor.nullString(8),
                             ),
-                            stopSequence = cursor.getInt(8),
-                            arrivalTime = cursor.nullString(9),
-                            departureTime = cursor.nullString(10),
+                            stopSequence = cursor.getInt(9),
+                            arrivalTime = cursor.nullString(10),
+                            departureTime = cursor.nullString(11),
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    fun tripsInBlock(
+        blockId: String,
+        serviceId: String,
+        limit: Int = 128,
+    ): List<GtfsScheduleTrip> {
+        if (blockId.isBlank() || serviceId.isBlank()) return emptyList()
+        val boundedLimit = limit.coerceIn(1, MAX_BLOCK_TRIPS)
+        return index.readableDatabase.rawQuery(
+            """
+            SELECT trip_id,route_id,service_id,headsign,direction_id,shape_id,wheelchair_accessible,bikes_allowed,block_id
+            FROM trips
+            WHERE block_id=? AND service_id=?
+            ORDER BY trip_id
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf(blockId, serviceId, boundedLimit.toString()),
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) add(cursor.toTrip())
+            }
+        }
+    }
+
+    fun linkedTransfersFromTrip(
+        fromTripId: String,
+        limit: Int = 128,
+    ): List<GtfsScheduleTransfer> {
+        if (fromTripId.isBlank()) return emptyList()
+        val boundedLimit = limit.coerceIn(1, MAX_LINKED_TRANSFERS)
+        return index.readableDatabase.rawQuery(
+            """
+            SELECT from_stop_id,to_stop_id,transfer_type,min_transfer_time,from_route_id,to_route_id,from_trip_id,to_trip_id
+            FROM transfers
+            WHERE from_trip_id=? AND transfer_type IN (4,5)
+            ORDER BY to_trip_id,COALESCE(from_stop_id,''),COALESCE(to_stop_id,'')
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf(fromTripId, boundedLimit.toString()),
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    add(
+                        GtfsScheduleTransfer(
+                            fromStopId = cursor.nullString(0),
+                            toStopId = cursor.nullString(1),
+                            transferType = cursor.nullInt(2),
+                            minTransferTimeSeconds = cursor.nullInt(3),
+                            fromRouteId = cursor.nullString(4),
+                            toRouteId = cursor.nullString(5),
+                            fromTripId = cursor.nullString(6),
+                            toTripId = cursor.nullString(7),
                         )
                     )
                 }
@@ -393,8 +454,8 @@ class GtfsScheduleRepository(
                 while (cursor.moveToNext()) {
                     add(
                         GtfsScheduleTransfer(
-                            fromStopId = cursor.getString(0),
-                            toStopId = cursor.getString(1),
+                            fromStopId = cursor.nullString(0),
+                            toStopId = cursor.nullString(1),
                             transferType = cursor.nullInt(2),
                             minTransferTimeSeconds = cursor.nullInt(3),
                             fromRouteId = cursor.nullString(4),
@@ -519,6 +580,7 @@ class GtfsScheduleRepository(
         shapeId = nullString(5),
         wheelchairAccessible = nullInt(6),
         bikesAllowed = nullInt(7),
+        blockId = nullString(8),
     )
 
     private fun Cursor.toStopTime() = GtfsScheduleStopTime(
@@ -546,6 +608,8 @@ class GtfsScheduleRepository(
         private const val MAX_STOP_TIMES = 2_048
         private const val MAX_TRIP_CANDIDATES = 512
         private const val MAX_TRANSFERS = 512
+        private const val MAX_LINKED_TRANSFERS = 512
+        private const val MAX_BLOCK_TRIPS = 512
         private const val MAX_SHAPE_POINTS = 10_000
     }
 }
