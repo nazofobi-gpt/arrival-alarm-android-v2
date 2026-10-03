@@ -337,6 +337,21 @@ class MainActivityTest {
     }
 
     @Test fun capturePrimaryScreensForVisualQa() {
+        rule.activityRule.scenario.onActivity { activity ->
+            activity.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("onboarding_complete", false)
+                .commit()
+        }
+        rule.activityRule.scenario.recreate()
+        rule.waitForIdle()
+        rule.onNodeWithTag("first-run-onboarding").assertIsDisplayed()
+        captureScreen("onboarding")
+        rule.onNodeWithTag("onboarding-complete")
+            .performScrollTo()
+            .performClick()
+        rule.waitForIdle()
+
         captureScreen("home")
         navigateTo("nav-search")
         captureScreen("search")

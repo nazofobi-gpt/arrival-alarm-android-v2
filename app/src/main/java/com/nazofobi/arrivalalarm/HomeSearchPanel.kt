@@ -2,18 +2,18 @@ package com.nazofobi.arrivalalarm
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -61,7 +61,7 @@ fun HomeSearchPanel(
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(
             text = if (mode == HomeSearchMode.HOME) {
@@ -69,7 +69,7 @@ fun HomeSearchPanel(
             } else {
                 stringResource(R.string.search_stops_label)
             },
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.semantics { heading() },
         )
@@ -87,9 +87,9 @@ fun HomeSearchPanel(
         if (mode == HomeSearchMode.HOME) {
             Card(
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                 ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -101,44 +101,47 @@ fun HomeSearchPanel(
                         fontWeight = FontWeight.SemiBold,
                     )
 
-                    FilledTonalButton(
-                        onClick = onSelectOriginTarget,
-                        enabled = !selectingOrigin,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .testTag("search-target-origin"),
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text(
-                            if (selectingOrigin) {
-                                stringResource(R.string.selecting_origin)
-                            } else {
-                                stringResource(R.string.select_origin)
-                            }
-                        )
+                        TextButton(
+                            onClick = onSelectOriginTarget,
+                            enabled = !selectingOrigin,
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("search-target-origin"),
+                        ) {
+                            Text(
+                                if (selectingOrigin) {
+                                    stringResource(R.string.selecting_origin)
+                                } else {
+                                    stringResource(R.string.select_origin)
+                                }
+                            )
+                        }
+                        TextButton(
+                            onClick = onSelectDestinationTarget,
+                            enabled = origin != null && selectingOrigin,
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("search-target-destination"),
+                        ) {
+                            Text(
+                                if (!selectingOrigin) {
+                                    stringResource(R.string.selecting_destination)
+                                } else {
+                                    stringResource(R.string.select_destination)
+                                }
+                            )
+                        }
                     }
 
-                    FilledTonalButton(
-                        onClick = onSelectDestinationTarget,
-                        enabled = origin != null && selectingOrigin,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .testTag("search-target-destination"),
-                    ) {
-                        Text(
-                            if (!selectingOrigin) {
-                                stringResource(R.string.selecting_destination)
-                            } else {
-                                stringResource(R.string.select_destination)
-                            }
-                        )
-                    }
-
-                    FilledTonalButton(
+                    TextButton(
                         onClick = onUseCurrentLocation,
                         modifier = Modifier
-                            .fillMaxWidth()
                             .heightIn(min = 48.dp)
                             .testTag("current-location-origin"),
                     ) {
@@ -184,9 +187,9 @@ fun HomeSearchPanel(
 
             Card(
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                 ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -267,7 +270,7 @@ fun HomeSearchPanel(
                             )
                         }
                         nearby.take(8).forEachIndexed { index, candidate ->
-                            OutlinedButton(
+                            TextButton(
                                 onClick = { onNearbyStopSelected(candidate) },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -298,9 +301,9 @@ fun HomeSearchPanel(
         } else {
             Card(
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                 ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -354,7 +357,7 @@ fun HomeSearchPanel(
                     }
 
                     searchResults.take(12).forEachIndexed { index, result ->
-                        OutlinedButton(
+                        TextButton(
                             onClick = { onSearchResultSelected(result) },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -390,7 +393,7 @@ fun HomeSearchPanel(
                             fontWeight = FontWeight.SemiBold,
                         )
                         recentSearches.take(5).forEachIndexed { index, recent ->
-                            OutlinedButton(
+                            TextButton(
                                 onClick = { onRecentSearchSelected(recent) },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -399,7 +402,7 @@ fun HomeSearchPanel(
                                 Text(recent)
                             }
                         }
-                        OutlinedButton(
+                        TextButton(
                             onClick = onClearRecentSearches,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -407,6 +410,49 @@ fun HomeSearchPanel(
                                 .testTag("search-recents-clear"),
                         ) {
                             Text(stringResource(R.string.search_recents_clear))
+                        }
+                    }
+                }
+            }
+
+            if (searchResults.isEmpty() && recentSearches.isEmpty()) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.journey_points_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        Text(
+                            text = origin?.let { stringResource(R.string.origin_format, it.label) }
+                                ?: stringResource(R.string.home_origin_missing),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        Text(
+                            text = destination?.let { stringResource(R.string.destination_format, it.label) }
+                                ?: stringResource(R.string.home_destination_missing),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        if (selectingOrigin) {
+                            TextButton(
+                                onClick = onUseCurrentLocation,
+                                modifier = Modifier
+                                    .heightIn(min = 48.dp)
+                                    .testTag("search-current-location"),
+                            ) {
+                                Text(stringResource(R.string.current_location_origin))
+                            }
                         }
                     }
                 }

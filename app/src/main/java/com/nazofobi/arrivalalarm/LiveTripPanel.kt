@@ -41,22 +41,16 @@ fun LiveTripPanel(
         target?.arrival ?: target?.plannedArrival ?: selectedRoute.arrival
     )
 
-    Card(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .testTag("live-trip-panel"),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+            .testTag("live-trip-panel")
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
             Text(
                 text = stringResource(R.string.live_trip_title),
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.semantics { heading() },
             )
@@ -81,9 +75,42 @@ fun LiveTripPanel(
                     },
                 ),
                 style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.testTag("live-trip-timing"),
             )
+
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.live_trip_target),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+                    )
+                    Text(
+                        text = targetLabel,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.testTag("live-trip-target"),
+                    )
+                    targetTime?.let {
+                        Text(
+                            text = stringResource(R.string.live_trip_target_time) + ": " + it,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.testTag("live-trip-target-time"),
+                        )
+                    }
+                }
+            }
 
             HorizontalDivider()
 
@@ -124,20 +151,6 @@ fun LiveTripPanel(
                 )
             }
 
-            LiveTripFact(
-                label = stringResource(R.string.live_trip_target),
-                value = targetLabel,
-                tag = "live-trip-target",
-            )
-
-            targetTime?.let {
-                LiveTripFact(
-                    label = stringResource(R.string.live_trip_target_time),
-                    value = it,
-                    tag = "live-trip-target-time",
-                )
-            }
-
             journey.distanceMeters?.takeIf { it.isFinite() && it >= 0.0 }?.let {
                 LiveTripFact(
                     label = stringResource(R.string.live_trip_gps_distance),
@@ -154,12 +167,11 @@ fun LiveTripPanel(
                 tag = "live-trip-alarm",
             )
 
-            LiveTripFact(
-                label = stringResource(R.string.live_trip_audio),
-                value = guidanceUiStatus(guidanceState),
-                tag = "live-trip-audio",
-            )
-        }
+        LiveTripFact(
+            label = stringResource(R.string.live_trip_audio),
+            value = guidanceUiStatus(guidanceState),
+            tag = "live-trip-audio",
+        )
     }
 }
 
@@ -176,7 +188,7 @@ private fun LiveTripFact(
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             text = value,

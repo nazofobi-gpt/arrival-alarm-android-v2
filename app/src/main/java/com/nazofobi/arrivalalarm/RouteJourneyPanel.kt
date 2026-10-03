@@ -5,13 +5,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -46,12 +45,12 @@ fun RouteJourneyPanel(
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         if (mode == RouteJourneyMode.RESULTS) {
             Text(
                 text = stringResource(R.string.route_results_title),
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.semantics { heading() },
             )
@@ -66,9 +65,9 @@ fun RouteJourneyPanel(
             } else {
                 Card(
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                     ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -99,11 +98,10 @@ fun RouteJourneyPanel(
                                 modifier = Modifier.testTag("route-offline-badge"),
                             )
                         }
-                        Button(
+                        TextButton(
                             onClick = onRefreshRoutes,
                             enabled = !routeBusy,
                             modifier = Modifier
-                                .fillMaxWidth()
                                 .heightIn(min = 48.dp)
                                 .testTag("route-refresh"),
                         ) {
@@ -142,7 +140,7 @@ fun RouteJourneyPanel(
             if (selected == null) {
                 Text(
                     text = stringResource(R.string.journey_detail_title),
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.semantics { heading() },
                 )
@@ -187,8 +185,8 @@ private fun RouteOptionCard(
         elevation = CardDefaults.cardElevation(defaultElevation = if (selected) 2.dp else 1.dp),
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
                 text = duration?.let {
@@ -233,10 +231,10 @@ private fun RouteOptionCard(
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
             )
-            OutlinedButton(
+            TextButton(
                 onClick = onSelect,
                 enabled = !selected,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                modifier = Modifier.heightIn(min = 48.dp),
             ) {
                 Text(
                     if (selected) {
@@ -255,9 +253,9 @@ private fun JourneyDetailCard(option: RouteOption) {
     val duration = routeDurationMinutes(option.departure, option.arrival)
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier
             .fillMaxWidth()
             .testTag("journey-detail"),
@@ -407,22 +405,20 @@ internal fun JourneyAlarmControls(
                     modifier = Modifier.testTag("error"),
                 )
             }
-            Button(
+            TextButton(
                 onClick = onArmAlarm,
                 enabled = journey.phase == JourneyPhase.DESTINATION_SELECTED,
                 modifier = Modifier
-                    .fillMaxWidth()
                     .heightIn(min = 48.dp)
                     .testTag("arm"),
             ) {
                 Text(stringResource(R.string.arm_alarm))
             }
-            OutlinedButton(
+            TextButton(
                 onClick = onCancelAlarm,
                 enabled = journey.phase == JourneyPhase.ARMED ||
                     journey.phase == JourneyPhase.ARRIVED,
                 modifier = Modifier
-                    .fillMaxWidth()
                     .heightIn(min = 48.dp)
                     .testTag("cancel-alarm"),
             ) {

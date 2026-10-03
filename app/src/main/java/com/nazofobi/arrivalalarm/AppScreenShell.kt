@@ -5,7 +5,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.DirectionsTransit
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Route
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -16,6 +23,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
@@ -41,16 +49,16 @@ fun ArrivalBottomNavigation(
     data class Item(
         val screen: ArrivalAppScreen,
         val label: String,
-        val glyph: String,
+        val icon: ImageVector,
         val tag: String,
     )
 
     val items = listOf(
-        Item(ArrivalAppScreen.HOME, stringResource(R.string.nav_home), "⌂", "nav-home"),
-        Item(ArrivalAppScreen.SEARCH, stringResource(R.string.nav_search), "⌕", "nav-search"),
-        Item(ArrivalAppScreen.JOURNEY, stringResource(R.string.nav_journey), "↔", "nav-journey"),
-        Item(ArrivalAppScreen.DEPARTURES, stringResource(R.string.nav_departures), "◷", "nav-departures"),
-        Item(ArrivalAppScreen.SETTINGS, stringResource(R.string.nav_settings), "⚙", "nav-settings"),
+        Item(ArrivalAppScreen.HOME, stringResource(R.string.nav_home), Icons.Rounded.Home, "nav-home"),
+        Item(ArrivalAppScreen.SEARCH, stringResource(R.string.nav_search), Icons.Rounded.Search, "nav-search"),
+        Item(ArrivalAppScreen.JOURNEY, stringResource(R.string.nav_journey), Icons.Rounded.Route, "nav-journey"),
+        Item(ArrivalAppScreen.DEPARTURES, stringResource(R.string.nav_departures), Icons.Rounded.DirectionsTransit, "nav-departures"),
+        Item(ArrivalAppScreen.SETTINGS, stringResource(R.string.nav_settings), Icons.Rounded.Settings, "nav-settings"),
     )
 
     NavigationBar(modifier = Modifier.testTag("bottom-navigation")) {
@@ -65,7 +73,7 @@ fun ArrivalBottomNavigation(
             NavigationBarItem(
                 selected = selected,
                 onClick = { onSelect(item.screen) },
-                icon = { Text(item.glyph) },
+                icon = { Icon(imageVector = item.icon, contentDescription = null) },
                 label = { Text(item.label, maxLines = 1) },
                 modifier = Modifier.testTag(item.tag),
             )
@@ -92,27 +100,27 @@ fun HomeOverviewPanel(
 ) {
     Column(
         modifier = modifier.fillMaxWidth().testTag("home-overview"),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(
             text = stringResource(R.string.home_overview_title),
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.semantics { heading() },
         )
         Text(
             text = stringResource(R.string.home_overview_body),
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
             Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
                     text = stringResource(R.string.journey_points_title),
@@ -153,8 +161,8 @@ fun HomeOverviewPanel(
         }
 
         Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -201,7 +209,7 @@ fun HomeOverviewPanel(
         if (nearby.isNotEmpty()) {
             Card(
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                 ),
             ) {
                 Column(
