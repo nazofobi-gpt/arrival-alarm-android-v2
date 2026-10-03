@@ -313,7 +313,7 @@ class GtfsScheduleRepository(
             JOIN trips t ON t.trip_id=st.trip_id
             WHERE st.stop_id=?
               AND $boardTime IS NOT NULL
-              AND $boardSeconds >= ?
+              AND $boardSeconds >= CAST(? AS INTEGER)
               AND (
                     EXISTS (
                         SELECT 1
