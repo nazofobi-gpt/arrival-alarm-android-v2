@@ -1,6 +1,9 @@
 package com.nazofobi.arrivalalarm
 
 import android.database.Cursor
+import kotlin.math.cos
+import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 data class GtfsScheduleStop(
     val id: String,
@@ -11,6 +14,11 @@ data class GtfsScheduleStop(
     val locationType: Int?,
     val platformCode: String?,
     val wheelchairBoarding: Int?,
+)
+
+data class GtfsScheduleNearbyStop(
+    val stop: GtfsScheduleStop,
+    val distanceMeters: Int,
 )
 
 data class GtfsScheduleRoute(
@@ -130,6 +138,52 @@ class GtfsScheduleRepository(
                 while (cursor.moveToNext()) add(cursor.toStop())
             }
         }
+    }
+
+    fun nearbyStops(
+        stopId: String,
+        radiusMeters: Int,
+        limit: Int = 16,
+    ): List<GtfsScheduleNearbyStop> {
+        if (stopId.isBlank() || radiusMeters <= 0 || limit <= 0) return emptyList()
+        val origin = stop(stopId) ?: return emptyList()
+        val boundedRadius = radiusMeters.coerceAtMost(MAX_NEARBY_RADIUS_METERS)
+        val boundedLimit = limit.coerceAtMost(MAX_NEARBY_STOPS)
+        val latDelta = boundedRadius / 111_320.0
+        val lonScale = (111_320.0 * cos(Math.toRadians(origin.latitude))).coerceAtLeast(1_000.0)
+        val lonDelta = (boundedRadius / lonScale).coerceAtMost(180.0)
+        val scanLimit = (boundedLimit * NEARBY_SCAN_MULTIPLIER).coerceAtMost(MAX_NEARBY_SCAN_ROWS)
+
+        return index.readableDatabase.rawQuery(
+            """
+            SELECT id,name,lat,lon,parent_station,location_type,platform_code,wheelchair_boarding
+            FROM stops
+            WHERE id<>?
+              AND lat BETWEEN ? AND ?
+              AND lon BETWEEN ? AND ?
+              AND (location_type IS NULL OR location_type=0)
+            ORDER BY lat,lon,id
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf(
+                stopId,
+                (origin.latitude - latDelta).toString(),
+                (origin.latitude + latDelta).toString(),
+                (origin.longitude - lonDelta).toString(),
+                (origin.longitude + lonDelta).toString(),
+                scanLimit.toString(),
+            ),
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    val candidate = cursor.toStop()
+                    val distance = distanceMeters(origin, candidate)
+                    if (distance <= boundedRadius) add(GtfsScheduleNearbyStop(candidate, distance))
+                }
+            }
+        }.sortedWith(
+            compareBy<GtfsScheduleNearbyStop> { it.distanceMeters }.thenBy { it.stop.id }
+        ).take(boundedLimit)
     }
 
     fun route(routeId: String): GtfsScheduleRoute? {
@@ -330,6 +384,13 @@ class GtfsScheduleRepository(
         }
     }
 
+    private fun distanceMeters(from: GtfsScheduleStop, to: GtfsScheduleStop): Int {
+        val meanLatitudeRadians = Math.toRadians((from.latitude + to.latitude) / 2.0)
+        val latitudeMeters = (to.latitude - from.latitude) * 111_320.0
+        val longitudeMeters = (to.longitude - from.longitude) * 111_320.0 * cos(meanLatitudeRadians)
+        return sqrt(latitudeMeters * latitudeMeters + longitudeMeters * longitudeMeters).roundToInt()
+    }
+
     private fun Cursor.toStop() = GtfsScheduleStop(
         id = getString(0),
         name = getString(1),
@@ -378,6 +439,10 @@ class GtfsScheduleRepository(
 
     companion object {
         private const val MAX_CHILD_STOPS = 256
+        private const val MAX_NEARBY_RADIUS_METERS = 2_000
+        private const val MAX_NEARBY_STOPS = 64
+        private const val NEARBY_SCAN_MULTIPLIER = 8
+        private const val MAX_NEARBY_SCAN_ROWS = 512
         private const val MAX_STOP_TIMES = 2_048
         private const val MAX_TRIP_CANDIDATES = 512
         private const val MAX_TRANSFERS = 512
