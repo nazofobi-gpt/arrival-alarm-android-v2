@@ -37,8 +37,8 @@ class NationwideTransitRollbackInstrumentedTest {
         assertEquals(10_000, before.stopCount)
         assertEquals(10_000, before.stops)
         assertEquals(1, before.routes)
-        assertEquals(1, before.trips)
-        assertEquals(2, before.stopTimes)
+        assertEquals(2, before.trips)
+        assertEquals(4, before.stopTimes)
         assertEquals("Known Good Bahnhof", before.knownGoodStopName)
         assertEquals(
             listOf(
@@ -46,6 +46,11 @@ class NationwideTransitRollbackInstrumentedTest {
                 "route-1|trip-1|2|fixture-1",
             ),
             before.graphRows,
+        )
+        assertEquals(listOf("trip-1|block-1", "trip-2|block-1"), before.continuityRows)
+        assertEquals(
+            listOf("4|<null>|<null>|trip-1|trip-2", "5|<null>|<null>|trip-2|trip-1"),
+            before.linkedTransferRows,
         )
 
         try {
@@ -71,6 +76,8 @@ class NationwideTransitRollbackInstrumentedTest {
         stopTimes = count(db, "stop_times"),
         knownGoodStopName = scalarString(db, "SELECT name FROM stops WHERE id = ?", arrayOf("known-good")),
         graphRows = graphRows(db),
+        continuityRows = continuityRows(db),
+        linkedTransferRows = linkedTransferRows(db),
     )
 
     private fun graphRows(db: SQLiteDatabase): List<String> =
@@ -92,6 +99,35 @@ class NationwideTransitRollbackInstrumentedTest {
             }
         }
 
+    private fun continuityRows(db: SQLiteDatabase): List<String> =
+        db.rawQuery(
+            "SELECT trip_id,block_id FROM trips WHERE block_id=? ORDER BY trip_id",
+            arrayOf("block-1"),
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) add("${cursor.getString(0)}|${cursor.getString(1)}")
+            }
+        }
+
+    private fun linkedTransferRows(db: SQLiteDatabase): List<String> =
+        db.rawQuery(
+            """
+            SELECT transfer_type,from_stop_id,to_stop_id,from_trip_id,to_trip_id
+            FROM transfers
+            WHERE transfer_type IN (4,5)
+            ORDER BY transfer_type,from_trip_id,to_trip_id
+            """.trimIndent(),
+            null,
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    val fromStop = if (cursor.isNull(1)) "<null>" else cursor.getString(1)
+                    val toStop = if (cursor.isNull(2)) "<null>" else cursor.getString(2)
+                    add("${cursor.getInt(0)}|$fromStop|$toStop|${cursor.getString(3)}|${cursor.getString(4)}")
+                }
+            }
+        }
+
     private fun count(db: SQLiteDatabase, table: String): Int =
         db.rawQuery("SELECT COUNT(*) FROM $table", null).use { it.moveToFirst(); it.getInt(0) }
 
@@ -109,9 +145,10 @@ class NationwideTransitRollbackInstrumentedTest {
                 for (i in 1 until 10_000) appendLine("fixture-$i,Fixture Stop $i,52.0,8.0,")
             })
             put(zip, "routes.txt", "route_id,route_short_name,route_long_name,route_type\nroute-1,R1,Fixture Route,3\n")
-            put(zip, "trips.txt", "route_id,service_id,trip_id,trip_headsign\nroute-1,service-1,trip-1,Known Good Bahnhof\n")
-            put(zip, "stop_times.txt", "trip_id,arrival_time,departure_time,stop_id,stop_sequence\ntrip-1,08:00:00,08:00:00,known-good,1\ntrip-1,08:05:00,08:05:00,fixture-1,2\n")
+            put(zip, "trips.txt", "route_id,service_id,trip_id,trip_headsign,block_id\nroute-1,service-1,trip-1,Known Good Bahnhof,block-1\nroute-1,service-1,trip-2,Next Vehicle Trip,block-1\n")
+            put(zip, "stop_times.txt", "trip_id,arrival_time,departure_time,stop_id,stop_sequence\ntrip-1,08:00:00,08:00:00,known-good,1\ntrip-1,08:05:00,08:05:00,fixture-1,2\ntrip-2,08:06:00,08:06:00,fixture-1,1\ntrip-2,08:15:00,08:15:00,fixture-2,2\n")
             put(zip, "calendar.txt", "service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\nservice-1,1,1,1,1,1,1,1,20260101,20261231\n")
+            put(zip, "transfers.txt", "from_stop_id,to_stop_id,transfer_type,min_transfer_time,from_trip_id,to_trip_id\n,,4,,trip-1,trip-2\n,,5,,trip-2,trip-1\nknown-good,fixture-1,2,120,,\n,,2,60,trip-1,trip-2\n")
         }
     }
 
@@ -137,5 +174,7 @@ class NationwideTransitRollbackInstrumentedTest {
         val stopTimes: Int,
         val knownGoodStopName: String,
         val graphRows: List<String>,
+        val continuityRows: List<String>,
+        val linkedTransferRows: List<String>,
     )
 }
