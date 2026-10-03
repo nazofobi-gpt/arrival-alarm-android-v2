@@ -311,29 +311,42 @@ class GtfsScheduleRepository(
                 st.stop_sequence,st.arrival_time,st.departure_time
             FROM stop_times st
             JOIN trips t ON t.trip_id=st.trip_id
-            LEFT JOIN calendar_dates cd
-              ON cd.service_id=t.service_id AND cd.date=?
-            LEFT JOIN calendar c ON c.service_id=t.service_id
             WHERE st.stop_id=?
               AND $boardTime IS NOT NULL
               AND $boardSeconds >= ?
               AND (
-                    cd.exception_type=1
+                    EXISTS (
+                        SELECT 1
+                        FROM calendar_dates added
+                        WHERE added.service_id=t.service_id
+                          AND added.date=?
+                          AND added.exception_type=1
+                    )
                     OR (
-                        cd.service_id IS NULL
-                        AND c.service_id IS NOT NULL
-                        AND c.start_date<=?
-                        AND c.end_date>=?
-                        AND COALESCE($weekdayColumn,0)=1
+                        NOT EXISTS (
+                            SELECT 1
+                            FROM calendar_dates exception
+                            WHERE exception.service_id=t.service_id
+                              AND exception.date=?
+                        )
+                        AND EXISTS (
+                            SELECT 1
+                            FROM calendar c
+                            WHERE c.service_id=t.service_id
+                              AND c.start_date<=?
+                              AND c.end_date>=?
+                              AND COALESCE($weekdayColumn,0)=1
+                        )
                     )
               )
             ORDER BY $boardSeconds,t.trip_id,st.stop_sequence
             LIMIT ?
             """.trimIndent(),
             arrayOf(
-                serviceDateRaw,
                 stopId,
                 earliestBoardSeconds.toString(),
+                serviceDateRaw,
+                serviceDateRaw,
                 serviceDateRaw,
                 serviceDateRaw,
                 boundedLimit.toString(),
