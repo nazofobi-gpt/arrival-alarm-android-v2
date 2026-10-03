@@ -49,7 +49,11 @@ class NationwideTransitRollbackInstrumentedTest {
         )
         assertEquals(listOf("trip-1|block-1", "trip-2|block-1"), before.continuityRows)
         assertEquals(
-            listOf("4|<null>|<null>|trip-1|trip-2", "5|<null>|<null>|trip-2|trip-1"),
+            listOf(
+                "4|<null>|<null>|trip-1|trip-2",
+                "4|fixture-1|fixture-2|trip-2|trip-1",
+                "5|<null>|<null>|trip-2|trip-1",
+            ),
             before.linkedTransferRows,
         )
 
@@ -140,15 +144,29 @@ class NationwideTransitRollbackInstrumentedTest {
     private fun writeValid(file: File) {
         ZipOutputStream(FileOutputStream(file)).use { zip ->
             put(zip, "stops.txt", buildString {
-                appendLine("stop_id,stop_name,stop_lat,stop_lon,parent_station")
-                appendLine("known-good,Known Good Bahnhof,52.0,8.0,")
-                for (i in 1 until 10_000) appendLine("fixture-$i,Fixture Stop $i,52.0,8.0,")
+                appendLine("stop_id,stop_name,stop_lat,stop_lon,parent_station,location_type")
+                appendLine("known-good,Known Good Bahnhof,52.0,8.0,,")
+                for (i in 1 until 10_000) {
+                    val locationType = if (i == 9_999) "1" else ""
+                    appendLine("fixture-$i,Fixture Stop $i,52.0,8.0,,$locationType")
+                }
             })
             put(zip, "routes.txt", "route_id,route_short_name,route_long_name,route_type\nroute-1,R1,Fixture Route,3\n")
             put(zip, "trips.txt", "route_id,service_id,trip_id,trip_headsign,block_id\nroute-1,service-1,trip-1,Known Good Bahnhof,block-1\nroute-1,service-1,trip-2,Next Vehicle Trip,block-1\n")
             put(zip, "stop_times.txt", "trip_id,arrival_time,departure_time,stop_id,stop_sequence\ntrip-1,08:00:00,08:00:00,known-good,1\ntrip-1,08:05:00,08:05:00,fixture-1,2\ntrip-2,08:06:00,08:06:00,fixture-1,1\ntrip-2,08:15:00,08:15:00,fixture-2,2\n")
             put(zip, "calendar.txt", "service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\nservice-1,1,1,1,1,1,1,1,20260101,20261231\n")
-            put(zip, "transfers.txt", "from_stop_id,to_stop_id,transfer_type,min_transfer_time,from_trip_id,to_trip_id\n,,4,,trip-1,trip-2\n,,5,,trip-2,trip-1\nknown-good,fixture-1,2,120,,\n,,2,60,trip-1,trip-2\n")
+            put(
+                zip,
+                "transfers.txt",
+                "from_stop_id,to_stop_id,transfer_type,min_transfer_time,from_trip_id,to_trip_id\n" +
+                    ",,4,,trip-1,trip-2\n" +
+                    ",,5,,trip-2,trip-1\n" +
+                    "fixture-1,fixture-2,4,,trip-2,trip-1\n" +
+                    "fixture-9999,fixture-2,4,,trip-1,trip-2\n" +
+                    "missing,fixture-2,5,,trip-1,trip-2\n" +
+                    "known-good,fixture-1,2,120,,\n" +
+                    ",,2,60,trip-1,trip-2\n",
+            )
         }
     }
 
