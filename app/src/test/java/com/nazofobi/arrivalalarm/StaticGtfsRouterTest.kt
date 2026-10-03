@@ -325,6 +325,65 @@ class StaticGtfsRouterTest {
         )
     }
 
+    @Test fun densePastCandidatesAreFilteredBeforeInitialLimit() {
+        val past = (0 until 140).map { i ->
+            candidate("P$i", "R1", "S", 1, "09:00:00")
+        }
+        val viable = candidate("T1", "R1", "S", 1, "10:05:00")
+        val data = FakeData(
+            candidates = mapOf("A" to past + viable),
+            times = mapOf(
+                "T1" to listOf(
+                    st("T1", 1, "A", "10:05:00"),
+                    st("T1", 2, "B", "10:20:00"),
+                ),
+            ),
+        )
+        val result = StaticGtfsRouter(data, zone, maxCandidatesPerStop = 1).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("10:00:00"),
+        )
+        assertEquals(
+            listOf("T1"),
+            (result as StaticRouterResult.Journeys).journeys.single().legs.map { it.tripId },
+        )
+    }
+
+    @Test fun densePastTransferCandidatesAreFilteredBeforeTransferLimit() {
+        val past = (0 until 140).map { i ->
+            candidate("PX$i", "R2", "S", 1, "10:00:00")
+        }
+        val second = candidate("T2", "R2", "S", 1, "10:08:00")
+        val data = FakeData(
+            candidates = mapOf(
+                "A" to listOf(candidate("T1", "R1", "S", 1, "10:00:00")),
+                "X" to past + second,
+            ),
+            times = mapOf(
+                "T1" to listOf(
+                    st("T1", 1, "A", "10:00:00"),
+                    st("T1", 2, "X", "10:05:00"),
+                ),
+                "T2" to listOf(
+                    st("T2", 1, "X", "10:08:00"),
+                    st("T2", 2, "B", "10:18:00"),
+                ),
+            ),
+        )
+        val result = StaticGtfsRouter(data, zone, maxCandidatesPerStop = 1).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("09:55:00"),
+        )
+        assertEquals(
+            listOf("T1", "T2"),
+            (result as StaticRouterResult.Journeys).journeys.single().legs.map { it.tripId },
+        )
+    }
+
     @Test fun inactiveServiceNoPathAndSameOriginExplicit() {
         val data=FakeData(active=false,candidates=mapOf("A" to listOf(candidate("T1","R1","S",1,"10:00:00"))))
         val router=StaticGtfsRouter(data,zone)
@@ -382,7 +441,21 @@ class StaticGtfsRouterTest {
         val nearby: List<GtfsScheduleNearbyStop> = emptyList(),
     ):StaticGtfsScheduleData {
         var lastNearbyLimit: Int = 0
-        override fun candidateTripsAtStop(stopId:String,limit:Int)=candidates[stopId].orEmpty().take(limit)
+        override fun candidateTripsAtStop(
+            stopId:String,
+            serviceDate:GtfsServiceDate,
+            earliestBoardSeconds:Int,
+            limit:Int,
+        )=candidates[stopId].orEmpty()
+            .filter { candidate ->
+                active && candidateBoardSeconds(candidate)?.let { it >= earliestBoardSeconds } == true
+            }
+            .sortedWith(
+                compareBy<GtfsScheduleTripCandidate> { candidateBoardSeconds(it) ?: Int.MAX_VALUE }
+                    .thenBy { it.trip.id }
+                    .thenBy { it.stopSequence }
+            )
+            .take(limit)
         override fun stopTimesForTrip(tripId:String,limit:Int)=times[tripId].orEmpty().take(limit)
         override fun transfersFromStop(stopId:String,limit:Int)=transfers[stopId].orEmpty().take(limit)
         override fun stop(stopId:String)=stops[stopId]
@@ -393,6 +466,11 @@ class StaticGtfsRouterTest {
                 .sortedWith(compareBy<GtfsScheduleNearbyStop> { it.distanceMeters }.thenBy { it.stop.id })
                 .take(limit)
         }
+        private fun candidateBoardSeconds(candidate:GtfsScheduleTripCandidate):Int? =
+            (candidate.departureTime ?: candidate.arrivalTime)?.let { raw ->
+                runCatching { GtfsServiceTime.parse(raw).secondsFromServiceDayStart }.getOrNull()
+            }
+
         override fun isServiceActive(serviceId:String,serviceDate:GtfsServiceDate)=active
     }
 }
