@@ -105,6 +105,164 @@ class StaticGtfsRouterTest {
         assertEquals(listOf("T1","T2"),(result as StaticRouterResult.Journeys).journeys.single().legs.map{it.tripId})
     }
 
+    @Test fun implicitSiblingPlatformTransferWorksWithoutTransfersFile() {
+        val parent = stop("P", locationType = 1, lat = 52.0, lon = 8.0)
+        val x = stop("X", parent = "P", lat = 52.0, lon = 8.0)
+        val y = stop("Y", parent = "P", lat = 52.0002, lon = 8.0)
+        val data = baseTransferData(targetStop = "Y").copy(
+            stops = mapOf("P" to parent, "X" to x, "Y" to y),
+            children = mapOf("P" to listOf(x, y)),
+        )
+        val result = StaticGtfsRouter(data, zone, implicitTransferSeconds = 60).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("09:55:00"),
+        )
+        assertEquals(
+            listOf("T1", "T2"),
+            (result as StaticRouterResult.Journeys).journeys.single().legs.map { it.tripId },
+        )
+    }
+
+    @Test fun implicitNearbyTransferUsesRadiusAndDistanceDerivedWalkTime() {
+        val x = stop("X", lat = 52.0, lon = 8.0)
+        val y = stop("Y", lat = 52.001, lon = 8.0)
+        val close = baseTransferData(targetStop = "Y").copy(
+            stops = mapOf("X" to x, "Y" to y),
+            nearby = listOf(GtfsScheduleNearbyStop(y, 100)),
+        )
+        val closeResult = StaticGtfsRouter(
+            close,
+            zone,
+            implicitTransferSeconds = 60,
+            maxImplicitTransferRadiusMeters = 300,
+            implicitWalkingMetersPerSecond = 1.0,
+        ).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("09:55:00"),
+        )
+        assertTrue(closeResult is StaticRouterResult.Journeys)
+
+        val outsideRadius = close.copy(nearby = listOf(GtfsScheduleNearbyStop(y, 301)))
+        val outsideResult = StaticGtfsRouter(
+            outsideRadius,
+            zone,
+            implicitTransferSeconds = 60,
+            maxImplicitTransferRadiusMeters = 300,
+            implicitWalkingMetersPerSecond = 1.0,
+        ).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("09:55:00"),
+        )
+        assertTrue(outsideResult is StaticRouterResult.NoPath)
+
+        val distanceBound = close.copy(nearby = listOf(GtfsScheduleNearbyStop(y, 250)))
+        val tooEarly = StaticGtfsRouter(
+            distanceBound,
+            zone,
+            implicitTransferSeconds = 60,
+            maxImplicitTransferRadiusMeters = 300,
+            implicitWalkingMetersPerSecond = 1.0,
+        ).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("09:55:00"),
+        )
+        assertTrue(tooEarly is StaticRouterResult.NoPath)
+
+        val later = baseTransferData(targetStop = "Y", secondDeparture = "10:10:00").copy(
+            stops = mapOf("X" to x, "Y" to y),
+            nearby = listOf(GtfsScheduleNearbyStop(y, 250)),
+        )
+        val laterResult = StaticGtfsRouter(
+            later,
+            zone,
+            implicitTransferSeconds = 60,
+            maxImplicitTransferRadiusMeters = 300,
+            implicitWalkingMetersPerSecond = 1.0,
+        ).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("09:55:00"),
+        )
+        assertTrue(laterResult is StaticRouterResult.Journeys)
+    }
+
+    @Test fun explicitRulesRemainAuthoritativeOverImplicitNearbyTransfer() {
+        val x = stop("X", lat = 52.0, lon = 8.0)
+        val y = stop("Y", lat = 52.0005, lon = 8.0)
+        val nearby = listOf(GtfsScheduleNearbyStop(y, 50))
+
+        val prohibited = baseTransferData(targetStop = "Y").copy(
+            stops = mapOf("X" to x, "Y" to y),
+            nearby = nearby,
+            transfers = mapOf("X" to listOf(transfer("X", "Y", 3, 0))),
+        )
+        val prohibitedResult = StaticGtfsRouter(
+            prohibited,
+            zone,
+            implicitTransferSeconds = 60,
+            maxImplicitTransferRadiusMeters = 300,
+        ).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("09:55:00"),
+        )
+        assertTrue(prohibitedResult is StaticRouterResult.NoPath)
+
+        val minimumOverride = prohibited.copy(
+            transfers = mapOf("X" to listOf(transfer("X", "Y", 2, 240))),
+        )
+        val minimumResult = StaticGtfsRouter(
+            minimumOverride,
+            zone,
+            implicitTransferSeconds = 60,
+            maxImplicitTransferRadiusMeters = 300,
+        ).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("09:55:00"),
+        )
+        assertTrue(minimumResult is StaticRouterResult.NoPath)
+    }
+
+    @Test fun implicitNearbyTransferHonorsCandidateCap() {
+        val x = stop("X", lat = 52.0, lon = 8.0)
+        val y1 = stop("Y1", lat = 52.0001, lon = 8.0)
+        val y2 = stop("Y2", lat = 52.0002, lon = 8.0)
+        val y3 = stop("Y3", lat = 52.0003, lon = 8.0)
+        val data = baseTransferData(targetStop = "Y3").copy(
+            stops = mapOf("X" to x, "Y1" to y1, "Y2" to y2, "Y3" to y3),
+            nearby = listOf(
+                GtfsScheduleNearbyStop(y1, 20),
+                GtfsScheduleNearbyStop(y2, 30),
+                GtfsScheduleNearbyStop(y3, 40),
+            ),
+        )
+        val result = StaticGtfsRouter(
+            data,
+            zone,
+            maxImplicitTransferCandidates = 2,
+            maxImplicitTransferRadiusMeters = 300,
+        ).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("09:55:00"),
+        )
+        assertTrue(result is StaticRouterResult.NoPath)
+        assertEquals(2, data.lastNearbyLimit)
+    }
+
     @Test fun nonRegularPickupAndDropOffAreNotOfferedAsScheduledDirectService() {
         for (type in 1..3) {
             val blockedPickup = FakeData(
@@ -180,15 +338,16 @@ class StaticGtfsRouterTest {
         targetStop:String="X",
         firstAlightDropOff:Int?=null,
         secondBoardPickup:Int?=null,
+        secondDeparture:String="10:08:00",
     ):FakeData {
-        val cs=mutableListOf(candidate("T2","R2","S",1,"10:08:00")); if(extraCandidate!=null) cs+=extraCandidate
+        val cs=mutableListOf(candidate("T2","R2","S",1,secondDeparture)); if(extraCandidate!=null) cs+=extraCandidate
         val ts=mutableMapOf(
             "T1" to listOf(
                 st("T1",1,"A","10:00:00"),
                 st("T1",2,"X","10:05:00",dropOff=firstAlightDropOff),
             ),
             "T2" to listOf(
-                st("T2",1,targetStop,"10:08:00",pickup=secondBoardPickup),
+                st("T2",1,targetStop,secondDeparture,pickup=secondBoardPickup),
                 st("T2",2,"B","10:18:00"),
             ),
         ); if(extraTrip!=null) ts["T3"]=extraTrip
@@ -205,7 +364,13 @@ class StaticGtfsRouterTest {
         dropOff:Int?=null,
     )=GtfsScheduleStopTime(trip,seq,stop,time,time,pickup,dropOff,null,null)
     private fun transfer(from:String,to:String,type:Int,min:Int,fromRoute:String?=null,toRoute:String?=null,fromTrip:String?=null,toTrip:String?=null)=GtfsScheduleTransfer(from,to,type,min,fromRoute,toRoute,fromTrip,toTrip)
-    private fun stop(id:String,parent:String?=null,locationType:Int?=0)=GtfsScheduleStop(id,id,0.0,0.0,parent,locationType,null,null)
+    private fun stop(
+        id:String,
+        parent:String?=null,
+        locationType:Int?=0,
+        lat:Double=0.0,
+        lon:Double=0.0,
+    )=GtfsScheduleStop(id,id,lat,lon,parent,locationType,null,null)
 
     private data class FakeData(
         private val active:Boolean=true,
@@ -214,12 +379,20 @@ class StaticGtfsRouterTest {
         val transfers: Map<String, List<GtfsScheduleTransfer>> = emptyMap(),
         val stops: Map<String, GtfsScheduleStop> = emptyMap(),
         val children: Map<String, List<GtfsScheduleStop>> = emptyMap(),
+        val nearby: List<GtfsScheduleNearbyStop> = emptyList(),
     ):StaticGtfsScheduleData {
+        var lastNearbyLimit: Int = 0
         override fun candidateTripsAtStop(stopId:String,limit:Int)=candidates[stopId].orEmpty().take(limit)
         override fun stopTimesForTrip(tripId:String,limit:Int)=times[tripId].orEmpty().take(limit)
         override fun transfersFromStop(stopId:String,limit:Int)=transfers[stopId].orEmpty().take(limit)
         override fun stop(stopId:String)=stops[stopId]
         override fun childStops(parentStationId:String,limit:Int)=children[parentStationId].orEmpty().sortedBy{it.id}.take(limit)
+        override fun nearbyStops(stopId:String,radiusMeters:Int,limit:Int):List<GtfsScheduleNearbyStop> {
+            lastNearbyLimit = limit
+            return nearby.filter { it.stop.id != stopId && it.distanceMeters <= radiusMeters }
+                .sortedWith(compareBy<GtfsScheduleNearbyStop> { it.distanceMeters }.thenBy { it.stop.id })
+                .take(limit)
+        }
         override fun isServiceActive(serviceId:String,serviceDate:GtfsServiceDate)=active
     }
 }

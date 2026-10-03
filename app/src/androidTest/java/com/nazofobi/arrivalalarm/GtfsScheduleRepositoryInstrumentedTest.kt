@@ -65,6 +65,49 @@ class GtfsScheduleRepositoryInstrumentedTest {
     }
 
     @Test
+    fun nearbyStopQueryIsRadiusAndLimitBoundedAndUsesLatLonIndex() {
+        context.deleteDatabase("nationwide_transit.db")
+        val index = NationwideTransitIndex(context)
+        val db = index.writableDatabase
+        db.execSQL("INSERT INTO stops(id,name,lat,lon,location_type) VALUES('X','Origin',52.0,8.0,0)")
+        db.execSQL("INSERT INTO stops(id,name,lat,lon,location_type) VALUES('N1','Near 1',52.0005,8.0,0)")
+        db.execSQL("INSERT INTO stops(id,name,lat,lon,location_type) VALUES('N2','Near 2',52.0010,8.0,0)")
+        db.execSQL("INSERT INTO stops(id,name,lat,lon,location_type) VALUES('FAR','Far',52.0100,8.0,0)")
+
+        val repo = GtfsScheduleRepository(index)
+        assertEquals(
+            listOf("N1", "N2"),
+            repo.nearbyStops("X", radiusMeters = 200, limit = 2).map { it.stop.id },
+        )
+        assertTrue(repo.nearbyStops("X", radiusMeters = 40, limit = 8).isEmpty())
+        assertEquals(1, repo.nearbyStops("X", radiusMeters = 500, limit = 1).size)
+
+        val plan = db.rawQuery(
+            """
+            EXPLAIN QUERY PLAN
+            SELECT id
+            FROM stops
+            WHERE id<>?
+              AND lat BETWEEN ? AND ?
+              AND lon BETWEEN ? AND ?
+              AND (location_type IS NULL OR location_type=0)
+            ORDER BY lat,lon,id
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf("X", "51.99", "52.01", "7.99", "8.01", "16"),
+        ).use { cursor ->
+            buildList {
+                val detail = cursor.getColumnIndexOrThrow("detail")
+                while (cursor.moveToNext()) add(cursor.getString(detail))
+            }
+        }
+        assertTrue(plan.any { it.contains("idx_stops_lat_lon", ignoreCase = true) })
+        assertFalse(plan.any { it.contains("SCAN stops", ignoreCase = true) })
+
+        index.close()
+    }
+
+    @Test
     fun candidateAndSequenceQueriesAreBoundedAndUseIndexedPredicates() {
         context.deleteDatabase("nationwide_transit.db")
         val index = NationwideTransitIndex(context)
