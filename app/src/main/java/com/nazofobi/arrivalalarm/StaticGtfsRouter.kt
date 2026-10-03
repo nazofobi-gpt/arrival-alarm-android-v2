@@ -1,7 +1,10 @@
 package com.nazofobi.arrivalalarm
 
 import java.util.TimeZone
+import kotlin.math.ceil
+import kotlin.math.cos
 import kotlin.math.max
+import kotlin.math.sqrt
 
 data class StaticRouterAccess(
     val stopId: String,
@@ -44,6 +47,7 @@ interface StaticGtfsScheduleData {
     fun transfersFromStop(stopId: String, limit: Int): List<GtfsScheduleTransfer>
     fun stop(stopId: String): GtfsScheduleStop?
     fun childStops(parentStationId: String, limit: Int): List<GtfsScheduleStop>
+    fun nearbyStops(stopId: String, radiusMeters: Int, limit: Int): List<GtfsScheduleNearbyStop>
     fun isServiceActive(serviceId: String, serviceDate: GtfsServiceDate): Boolean
 }
 
@@ -63,6 +67,9 @@ class RepositoryStaticGtfsScheduleData(
 
     override fun childStops(parentStationId: String, limit: Int) =
         repository.childStops(parentStationId, limit)
+
+    override fun nearbyStops(stopId: String, radiusMeters: Int, limit: Int) =
+        repository.nearbyStops(stopId, radiusMeters, limit)
 
     override fun isServiceActive(serviceId: String, serviceDate: GtfsServiceDate): Boolean {
         val exception = repository.calendarException(serviceId, serviceDate.toString())
@@ -99,6 +106,9 @@ class StaticGtfsRouter(
     private val maxChildStops: Int = 64,
     private val implicitTransferSeconds: Int = 120,
     private val maxJourneys: Int = 6,
+    private val maxImplicitTransferRadiusMeters: Int = 350,
+    private val maxImplicitTransferCandidates: Int = 16,
+    private val implicitWalkingMetersPerSecond: Double = 1.25,
 ) {
     init {
         require(maxCandidatesPerStop in 1..512)
@@ -107,6 +117,9 @@ class StaticGtfsRouter(
         require(maxChildStops in 1..256)
         require(implicitTransferSeconds >= 0)
         require(maxJourneys in 1..32)
+        require(maxImplicitTransferRadiusMeters in 1..2_000)
+        require(maxImplicitTransferCandidates in 1..64)
+        require(implicitWalkingMetersPerSecond in 0.5..3.0)
     }
 
     fun route(
@@ -155,7 +168,8 @@ class StaticGtfsRouter(
                     val firstArrival = epoch(alight.arrivalTime ?: alight.departureTime, serviceDate) ?: continue
                     val rules = transferRulesFor(alight.stopId)
                     val targets = transferTargets(alight.stopId, rules)
-                    for (targetStopId in targets) {
+                    for (target in targets) {
+                        val targetStopId = target.stopId
                         for (next in data.candidateTripsAtStop(targetStopId, maxCandidatesPerStop)) {
                             if (!data.isServiceActive(next.trip.serviceId, serviceDate)) continue
                             val applicable = rules.filter { rule ->
@@ -171,11 +185,10 @@ class StaticGtfsRouter(
                             if (governingRules.size > 1) continue
                             val governing = governingRules.singleOrNull()
                             if (governing?.transferType == 3) continue
-                            if (governing == null && targetStopId != alight.stopId) continue
-                            val transferSeconds = if (governing == null) {
-                                implicitTransferSeconds
+                            val transferSeconds = if (governing?.transferType == 2) {
+                                max(target.walkSeconds, max(0, governing.minTransferTimeSeconds ?: 0))
                             } else {
-                                max(0, governing.minTransferTimeSeconds ?: 0)
+                                target.walkSeconds
                             }
                             val transferReady = firstArrival + transferSeconds * 1_000L
                             val second = legOnTrip(
@@ -213,13 +226,79 @@ class StaticGtfsRouter(
         return sources.flatMap { data.transfersFromStop(it, maxTransfersPerStop) }
     }
 
+    private data class TransferTarget(
+        val stopId: String,
+        val walkSeconds: Int,
+    )
+
     private fun transferTargets(
         alightStopId: String,
         rules: List<GtfsScheduleTransfer>,
-    ): List<String> = buildList {
-        add(alightStopId)
-        rules.forEach { rule -> addAll(transferTargetsForRule(rule)) }
-    }.distinct().take(maxTransfersPerStop + maxChildStops + 1)
+    ): List<TransferTarget> {
+        val source = data.stop(alightStopId)
+        val targets = linkedMapOf<String, TransferTarget>()
+
+        fun offer(stop: GtfsScheduleStop?, stopId: String, knownDistanceMeters: Int? = null) {
+            val walkSeconds = if (stopId == alightStopId) {
+                implicitTransferSeconds
+            } else {
+                implicitTransferWalkSeconds(source, stop, knownDistanceMeters)
+            }
+            val previous = targets[stopId]
+            if (previous == null || walkSeconds < previous.walkSeconds) {
+                targets[stopId] = TransferTarget(stopId, walkSeconds)
+            }
+        }
+
+        offer(source, alightStopId, 0)
+
+        rules.forEach { rule ->
+            transferTargetsForRule(rule).forEach { targetStopId ->
+                offer(data.stop(targetStopId), targetStopId)
+            }
+        }
+
+        val siblingParentId = when {
+            source?.parentStationId != null -> source.parentStationId
+            source?.locationType == 1 -> source.id
+            else -> null
+        }
+        if (siblingParentId != null) {
+            data.childStops(siblingParentId, maxChildStops).forEach { sibling ->
+                if (sibling.id != alightStopId) offer(sibling, sibling.id)
+            }
+        }
+
+        data.nearbyStops(
+            stopId = alightStopId,
+            radiusMeters = maxImplicitTransferRadiusMeters,
+            limit = maxImplicitTransferCandidates,
+        ).take(maxImplicitTransferCandidates).forEach { nearby ->
+            offer(nearby.stop, nearby.stop.id, nearby.distanceMeters)
+        }
+
+        return targets.values.toList()
+    }
+
+    private fun implicitTransferWalkSeconds(
+        from: GtfsScheduleStop?,
+        to: GtfsScheduleStop?,
+        knownDistanceMeters: Int? = null,
+    ): Int {
+        if (from == null || to == null) return max(implicitTransferSeconds, 1)
+        val distanceMeters = knownDistanceMeters ?: transferDistanceMeters(from, to)
+        val walkingSeconds = ceil(distanceMeters.coerceAtLeast(0) / implicitWalkingMetersPerSecond)
+            .toInt()
+            .coerceAtLeast(if (from.id == to.id) 0 else 1)
+        return max(implicitTransferSeconds, walkingSeconds)
+    }
+
+    private fun transferDistanceMeters(from: GtfsScheduleStop, to: GtfsScheduleStop): Int {
+        val meanLatitudeRadians = Math.toRadians((from.latitude + to.latitude) / 2.0)
+        val latitudeMeters = (to.latitude - from.latitude) * 111_320.0
+        val longitudeMeters = (to.longitude - from.longitude) * 111_320.0 * cos(meanLatitudeRadians)
+        return ceil(sqrt(latitudeMeters * latitudeMeters + longitudeMeters * longitudeMeters)).toInt()
+    }
 
     private fun transferTargetsForRule(rule: GtfsScheduleTransfer): List<String> {
         val target = data.stop(rule.toStopId)
