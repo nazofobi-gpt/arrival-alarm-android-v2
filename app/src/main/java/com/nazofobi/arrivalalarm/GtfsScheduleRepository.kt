@@ -276,6 +276,93 @@ class GtfsScheduleRepository(
         }
     }
 
+    fun candidateTripsAtStop(
+        stopId: String,
+        serviceDate: GtfsServiceDate,
+        earliestBoardSeconds: Int,
+        limit: Int = 128,
+    ): List<GtfsScheduleTripCandidate> {
+        if (stopId.isBlank() || earliestBoardSeconds < 0) return emptyList()
+        val boundedLimit = limit.coerceIn(1, MAX_TRIP_CANDIDATES)
+        val serviceDateRaw = serviceDate.toString()
+        val weekdayColumn = when (serviceDate.weekday) {
+            GtfsWeekday.MONDAY -> "c.monday"
+            GtfsWeekday.TUESDAY -> "c.tuesday"
+            GtfsWeekday.WEDNESDAY -> "c.wednesday"
+            GtfsWeekday.THURSDAY -> "c.thursday"
+            GtfsWeekday.FRIDAY -> "c.friday"
+            GtfsWeekday.SATURDAY -> "c.saturday"
+            GtfsWeekday.SUNDAY -> "c.sunday"
+        }
+        val boardTime = "COALESCE(st.departure_time,st.arrival_time)"
+        val boardSeconds = """
+            (
+                CAST(substr($boardTime,1,instr($boardTime,':')-1) AS INTEGER) * 3600 +
+                CAST(substr($boardTime,instr($boardTime,':')+1,2) AS INTEGER) * 60 +
+                CAST(substr($boardTime,instr($boardTime,':')+4,2) AS INTEGER)
+            )
+        """.trimIndent()
+
+        return index.readableDatabase.rawQuery(
+            """
+            SELECT
+                t.trip_id,t.route_id,t.service_id,t.headsign,t.direction_id,t.shape_id,
+                t.wheelchair_accessible,t.bikes_allowed,
+                st.stop_sequence,st.arrival_time,st.departure_time
+            FROM stop_times st
+            JOIN trips t ON t.trip_id=st.trip_id
+            LEFT JOIN calendar_dates cd
+              ON cd.service_id=t.service_id AND cd.date=?
+            LEFT JOIN calendar c ON c.service_id=t.service_id
+            WHERE st.stop_id=?
+              AND $boardTime IS NOT NULL
+              AND $boardSeconds >= ?
+              AND (
+                    cd.exception_type=1
+                    OR (
+                        cd.service_id IS NULL
+                        AND c.service_id IS NOT NULL
+                        AND c.start_date<=?
+                        AND c.end_date>=?
+                        AND COALESCE($weekdayColumn,0)=1
+                    )
+              )
+            ORDER BY $boardSeconds,t.trip_id,st.stop_sequence
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf(
+                serviceDateRaw,
+                stopId,
+                earliestBoardSeconds.toString(),
+                serviceDateRaw,
+                serviceDateRaw,
+                boundedLimit.toString(),
+            ),
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    add(
+                        GtfsScheduleTripCandidate(
+                            trip = GtfsScheduleTrip(
+                                id = cursor.getString(0),
+                                routeId = cursor.getString(1),
+                                serviceId = cursor.getString(2),
+                                headsign = cursor.nullString(3),
+                                directionId = cursor.nullInt(4),
+                                shapeId = cursor.nullString(5),
+                                wheelchairAccessible = cursor.nullInt(6),
+                                bikesAllowed = cursor.nullInt(7),
+                            ),
+                            stopSequence = cursor.getInt(8),
+                            arrivalTime = cursor.nullString(9),
+                            departureTime = cursor.nullString(10),
+                        )
+                    )
+                }
+            }
+        }
+    }
+
     fun transfersFromStop(stopId: String, limit: Int = 128): List<GtfsScheduleTransfer> {
         if (stopId.isBlank()) return emptyList()
         val boundedLimit = limit.coerceIn(1, MAX_TRANSFERS)
