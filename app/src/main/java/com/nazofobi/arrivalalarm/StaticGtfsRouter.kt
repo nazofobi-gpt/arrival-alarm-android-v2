@@ -327,13 +327,16 @@ class StaticGtfsRouter(
     }
 
     private fun transferTargetsForRule(rule: GtfsScheduleTransfer): List<String> {
-        val target = data.stop(rule.toStopId)
+        // Linked-trip type 4/5 rows may intentionally omit stop IDs. This router node keeps
+        // current stop-based semantics only; linked-trip routing is implemented by the successor.
+        val toStopId = rule.toStopId ?: return emptyList()
+        val target = data.stop(toStopId)
         val children = if (target?.locationType == 1) {
-            data.childStops(rule.toStopId, maxChildStops).map { it.id }
+            data.childStops(toStopId, maxChildStops).map { it.id }
         } else {
             emptyList()
         }
-        return (listOf(rule.toStopId) + children).distinct()
+        return (listOf(toStopId) + children).distinct()
     }
 
     private fun ruleMatches(

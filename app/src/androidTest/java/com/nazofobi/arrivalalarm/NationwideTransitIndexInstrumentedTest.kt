@@ -40,7 +40,100 @@ class NationwideTransitIndexInstrumentedTest {
         }
 
         assertTrue(actual.containsAll(expected))
-        assertEquals(3, db.version)
+        assertEquals(4, db.version)
+        helper.close()
+    }
+
+    @Test
+    fun v3UpgradePreservesGraphAndRelaxesLinkedTransferStops() {
+        context.deleteDatabase("nationwide_transit.db")
+        val path = context.getDatabasePath("nationwide_transit.db")
+        path.parentFile?.mkdirs()
+        val legacy = SQLiteDatabase.openOrCreateDatabase(path, null)
+        legacy.execSQL("CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        legacy.execSQL("INSERT INTO metadata(key,value) VALUES('ready','1')")
+        legacy.execSQL("INSERT INTO metadata(key,value) VALUES('schema_version','3')")
+        legacy.execSQL(
+            "CREATE TABLE trips(trip_id TEXT PRIMARY KEY, route_id TEXT NOT NULL, service_id TEXT NOT NULL, headsign TEXT, direction_id INTEGER, shape_id TEXT, wheelchair_accessible INTEGER, bikes_allowed INTEGER)"
+        )
+        legacy.execSQL(
+            "CREATE TABLE transfers(from_stop_id TEXT NOT NULL, to_stop_id TEXT NOT NULL, transfer_type INTEGER, min_transfer_time INTEGER, from_route_id TEXT, to_route_id TEXT, from_trip_id TEXT, to_trip_id TEXT)"
+        )
+        legacy.execSQL(
+            "INSERT INTO trips(trip_id,route_id,service_id,headsign) VALUES('legacy-trip','R','S','Legacy')"
+        )
+        legacy.execSQL(
+            "INSERT INTO transfers(from_stop_id,to_stop_id,transfer_type,min_transfer_time,from_trip_id,to_trip_id) VALUES('A','B',2,120,'legacy-trip','next-trip')"
+        )
+        legacy.version = 3
+        legacy.close()
+
+        val helper = NationwideTransitIndex(context)
+        val db = helper.writableDatabase
+
+        assertEquals(4, db.version)
+        assertEquals(
+            "legacy-trip",
+            db.rawQuery("SELECT trip_id FROM trips WHERE trip_id='legacy-trip'", null).use {
+                assertTrue(it.moveToFirst())
+                it.getString(0)
+            },
+        )
+        assertEquals(
+            "A|B|2|120",
+            db.rawQuery(
+                "SELECT from_stop_id,to_stop_id,transfer_type,min_transfer_time FROM transfers LIMIT 1",
+                null,
+            ).use {
+                assertTrue(it.moveToFirst())
+                "${it.getString(0)}|${it.getString(1)}|${it.getInt(2)}|${it.getInt(3)}"
+            },
+        )
+
+        val tripColumns = db.rawQuery("PRAGMA table_info(trips)", null).use { cursor ->
+            buildSet {
+                val name = cursor.getColumnIndexOrThrow("name")
+                while (cursor.moveToNext()) add(cursor.getString(name))
+            }
+        }
+        assertTrue(tripColumns.contains("block_id"))
+
+        val nullableTransferColumns = db.rawQuery("PRAGMA table_info(transfers)", null).use { cursor ->
+            buildMap {
+                val name = cursor.getColumnIndexOrThrow("name")
+                val notNull = cursor.getColumnIndexOrThrow("notnull")
+                while (cursor.moveToNext()) put(cursor.getString(name), cursor.getInt(notNull))
+            }
+        }
+        assertEquals(0, nullableTransferColumns["from_stop_id"])
+        assertEquals(0, nullableTransferColumns["to_stop_id"])
+
+        val indexes = db.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type='index'",
+            null,
+        ).use { cursor ->
+            buildSet { while (cursor.moveToNext()) add(cursor.getString(0)) }
+        }
+        assertTrue(indexes.contains("idx_trips_block_service"))
+        assertTrue(indexes.contains("idx_transfers_from_trip_type"))
+
+        db.execSQL(
+            "INSERT INTO transfers(from_stop_id,to_stop_id,transfer_type,from_trip_id,to_trip_id) VALUES(NULL,NULL,4,'legacy-trip','next-trip')"
+        )
+        assertEquals(
+            1,
+            db.rawQuery(
+                "SELECT COUNT(*) FROM transfers WHERE transfer_type=4 AND from_stop_id IS NULL AND to_stop_id IS NULL",
+                null,
+            ).use { it.moveToFirst(); it.getInt(0) },
+        )
+        assertEquals(
+            "4",
+            db.rawQuery("SELECT value FROM metadata WHERE key='schema_version'", null).use {
+                assertTrue(it.moveToFirst())
+                it.getString(0)
+            },
+        )
         helper.close()
     }
 
@@ -102,7 +195,7 @@ class NationwideTransitIndexInstrumentedTest {
                 )
             )
         )
-        assertEquals(3, db.version)
+        assertEquals(4, db.version)
         helper.close()
     }
 }
