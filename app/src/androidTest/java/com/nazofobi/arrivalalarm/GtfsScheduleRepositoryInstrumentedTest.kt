@@ -108,6 +108,107 @@ class GtfsScheduleRepositoryInstrumentedTest {
     }
 
     @Test
+    fun timeAwareCandidatesFilterBeforeLimitAndNormalizeGtfsHours() {
+        context.deleteDatabase("nationwide_transit.db")
+        val index = NationwideTransitIndex(context)
+        val db = index.writableDatabase
+
+        db.execSQL("INSERT INTO stops(id,name,lat,lon) VALUES('A','Dense',52.0,8.0)")
+        db.execSQL("INSERT INTO stops(id,name,lat,lon) VALUES('B','Clock',52.0,8.1)")
+        db.execSQL("INSERT INTO routes(route_id,short_name,route_type) VALUES('R','R',2)")
+        db.execSQL(
+            "INSERT INTO calendar(service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date) VALUES('ACTIVE',0,0,0,0,0,1,0,'20260101','20261231')"
+        )
+        db.execSQL(
+            "INSERT INTO calendar(service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date) VALUES('INACTIVE',1,1,1,1,1,0,1,'20260101','20261231')"
+        )
+
+        repeat(140) { i ->
+            val tripId = "PAST%03d".format(i)
+            db.execSQL(
+                "INSERT INTO trips(trip_id,route_id,service_id,headsign) VALUES(?,?,?,?)",
+                arrayOf(tripId, "R", "ACTIVE", "Past $i"),
+            )
+            db.execSQL(
+                "INSERT INTO stop_times(trip_id,stop_sequence,stop_id,arrival_time,departure_time) VALUES(?,?,?,?,?)",
+                arrayOf(tripId, 1, "A", "08:00:00", "08:00:00"),
+            )
+        }
+        repeat(20) { i ->
+            val tripId = "INACTIVE%03d".format(i)
+            db.execSQL(
+                "INSERT INTO trips(trip_id,route_id,service_id,headsign) VALUES(?,?,?,?)",
+                arrayOf(tripId, "R", "INACTIVE", "Inactive $i"),
+            )
+            db.execSQL(
+                "INSERT INTO stop_times(trip_id,stop_sequence,stop_id,arrival_time,departure_time) VALUES(?,?,?,?,?)",
+                arrayOf(tripId, 1, "A", "10:00:00", "10:00:00"),
+            )
+        }
+        db.execSQL("INSERT INTO trips(trip_id,route_id,service_id,headsign) VALUES('VIABLE','R','ACTIVE','Viable')")
+        db.execSQL("INSERT INTO stop_times(trip_id,stop_sequence,stop_id,arrival_time,departure_time) VALUES('VIABLE',1,'A','10:30:00','10:30:00')")
+
+        listOf(
+            Triple("T9", "9:59:00", "Nine"),
+            Triple("T24", "24:05:00", "Twenty four"),
+            Triple("T100", "100:00:00", "Hundred"),
+        ).forEach { (tripId, time, headsign) ->
+            db.execSQL(
+                "INSERT INTO trips(trip_id,route_id,service_id,headsign) VALUES(?,?,?,?)",
+                arrayOf(tripId, "R", "ACTIVE", headsign),
+            )
+            db.execSQL(
+                "INSERT INTO stop_times(trip_id,stop_sequence,stop_id,arrival_time,departure_time) VALUES(?,?,?,?,?)",
+                arrayOf(tripId, 1, "B", time, time),
+            )
+        }
+
+        val repo = GtfsScheduleRepository(index)
+        val date = GtfsServiceDate(2026, 10, 3)
+        assertEquals(
+            listOf("VIABLE"),
+            repo.candidateTripsAtStop(
+                stopId = "A",
+                serviceDate = date,
+                earliestBoardSeconds = 9 * 3_600,
+                limit = 1,
+            ).map { it.trip.id },
+        )
+        assertEquals(
+            listOf("T9", "T24", "T100"),
+            repo.candidateTripsAtStop(
+                stopId = "B",
+                serviceDate = date,
+                earliestBoardSeconds = 0,
+                limit = 3,
+            ).map { it.trip.id },
+        )
+
+        val plan = db.rawQuery(
+            """
+            EXPLAIN QUERY PLAN
+            SELECT st.trip_id
+            FROM stop_times st
+            JOIN trips t ON t.trip_id=st.trip_id
+            LEFT JOIN calendar_dates cd ON cd.service_id=t.service_id AND cd.date=?
+            LEFT JOIN calendar cal ON cal.service_id=t.service_id
+            WHERE st.stop_id=?
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf("20261003", "A", "1"),
+        ).use { cursor ->
+            buildList {
+                val detail = cursor.getColumnIndexOrThrow("detail")
+                while (cursor.moveToNext()) add(cursor.getString(detail))
+            }
+        }
+        assertTrue(plan.any { it.contains("idx_stop_times_stop", ignoreCase = true) })
+        assertFalse(plan.any { it.contains("SCAN stop_times", ignoreCase = true) })
+
+        index.close()
+    }
+
+    @Test
     fun candidateAndSequenceQueriesAreBoundedAndUseIndexedPredicates() {
         context.deleteDatabase("nationwide_transit.db")
         val index = NationwideTransitIndex(context)
