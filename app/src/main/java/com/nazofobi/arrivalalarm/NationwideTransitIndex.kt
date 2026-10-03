@@ -117,6 +117,10 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
                 }
             }
 
+            // ZIP entry order is not significant in GTFS. Validate optional linked-transfer
+            // stop references only after every stops.txt row has been imported.
+            discardInvalidLinkedTransferStopReferences(db)
+
             val stops = counts["stops.txt"] ?: 0
             val routes = counts["routes.txt"] ?: 0
             val trips = counts["trips.txt"] ?: 0
@@ -347,9 +351,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         val toTrip = r.nullValue(h, "to_trip_id")
         val valid = when (effectiveType) {
             in 0..3 -> from != null && to != null
-            4, 5 -> fromTrip != null && toTrip != null &&
-                (from == null || isBoardingStop(db, from)) &&
-                (to == null || isBoardingStop(db, to))
+            4, 5 -> fromTrip != null && toTrip != null
             else -> false
         }
         if (!valid) false else {
@@ -369,11 +371,33 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         }
     }
 
-    private fun isBoardingStop(db: SQLiteDatabase, stopId: String): Boolean =
-        db.rawQuery(
-            "SELECT 1 FROM stops WHERE id=? AND COALESCE(location_type,0)=0 LIMIT 1",
-            arrayOf(stopId),
-        ).use { it.moveToFirst() }
+    private fun discardInvalidLinkedTransferStopReferences(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            DELETE FROM transfers
+            WHERE transfer_type IN (4,5)
+              AND (
+                (
+                  from_stop_id IS NOT NULL
+                  AND NOT EXISTS (
+                    SELECT 1 FROM stops s
+                    WHERE s.id=transfers.from_stop_id
+                      AND COALESCE(s.location_type,0)=0
+                  )
+                )
+                OR
+                (
+                  to_stop_id IS NOT NULL
+                  AND NOT EXISTS (
+                    SELECT 1 FROM stops s
+                    WHERE s.id=transfers.to_stop_id
+                      AND COALESCE(s.location_type,0)=0
+                  )
+                )
+              )
+            """.trimIndent()
+        )
+    }
 
     private fun importShapes(db: SQLiteDatabase, reader: BufferedReader): Int {
         val (h, shapeRows) = rows(reader)
