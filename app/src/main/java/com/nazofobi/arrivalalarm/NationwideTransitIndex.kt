@@ -347,7 +347,9 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         val toTrip = r.nullValue(h, "to_trip_id")
         val valid = when (effectiveType) {
             in 0..3 -> from != null && to != null
-            4, 5 -> fromTrip != null && toTrip != null
+            4, 5 -> fromTrip != null && toTrip != null &&
+                (from == null || isBoardingStop(db, from)) &&
+                (to == null || isBoardingStop(db, to))
             else -> false
         }
         if (!valid) false else {
@@ -366,6 +368,12 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             true
         }
     }
+
+    private fun isBoardingStop(db: SQLiteDatabase, stopId: String): Boolean =
+        db.rawQuery(
+            "SELECT 1 FROM stops WHERE id=? AND COALESCE(location_type,0)=0 LIMIT 1",
+            arrayOf(stopId),
+        ).use { it.moveToFirst() }
 
     private fun importShapes(db: SQLiteDatabase, reader: BufferedReader): Int {
         val (h, shapeRows) = rows(reader)
