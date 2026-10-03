@@ -105,6 +105,68 @@ class StaticGtfsRouterTest {
         assertEquals(listOf("T1","T2"),(result as StaticRouterResult.Journeys).journeys.single().legs.map{it.tripId})
     }
 
+    @Test fun nonRegularPickupAndDropOffAreNotOfferedAsScheduledDirectService() {
+        for (type in 1..3) {
+            val blockedPickup = FakeData(
+                candidates = mapOf("A" to listOf(candidate("T1","R1","S",1,"10:00:00"))),
+                times = mapOf(
+                    "T1" to listOf(
+                        st("T1",1,"A","10:00:00",pickup=type),
+                        st("T1",2,"B","10:15:00"),
+                    ),
+                ),
+            )
+            assertTrue(
+                StaticGtfsRouter(blockedPickup,zone).route(
+                    listOf(StaticRouterAccess("A")),
+                    listOf(StaticRouterAccess("B")),
+                    date,
+                    at("09:55:00"),
+                ) is StaticRouterResult.NoPath,
+            )
+
+            val blockedDropOff = FakeData(
+                candidates = mapOf("A" to listOf(candidate("T1","R1","S",1,"10:00:00"))),
+                times = mapOf(
+                    "T1" to listOf(
+                        st("T1",1,"A","10:00:00"),
+                        st("T1",2,"B","10:15:00",dropOff=type),
+                    ),
+                ),
+            )
+            assertTrue(
+                StaticGtfsRouter(blockedDropOff,zone).route(
+                    listOf(StaticRouterAccess("A")),
+                    listOf(StaticRouterAccess("B")),
+                    date,
+                    at("09:55:00"),
+                ) is StaticRouterResult.NoPath,
+            )
+        }
+    }
+
+    @Test fun transferRequiresRegularFirstLegDropOffAndSecondLegPickup() {
+        val blockedFirstAlight = baseTransferData(firstAlightDropOff=1)
+        assertTrue(
+            StaticGtfsRouter(blockedFirstAlight,zone).route(
+                listOf(StaticRouterAccess("A")),
+                listOf(StaticRouterAccess("B")),
+                date,
+                at("09:55:00"),
+            ) is StaticRouterResult.NoPath,
+        )
+
+        val blockedSecondBoard = baseTransferData(secondBoardPickup=1)
+        assertTrue(
+            StaticGtfsRouter(blockedSecondBoard,zone).route(
+                listOf(StaticRouterAccess("A")),
+                listOf(StaticRouterAccess("B")),
+                date,
+                at("09:55:00"),
+            ) is StaticRouterResult.NoPath,
+        )
+    }
+
     @Test fun inactiveServiceNoPathAndSameOriginExplicit() {
         val data=FakeData(active=false,candidates=mapOf("A" to listOf(candidate("T1","R1","S",1,"10:00:00"))))
         val router=StaticGtfsRouter(data,zone)
@@ -112,17 +174,36 @@ class StaticGtfsRouterTest {
         assertTrue(router.route(listOf(StaticRouterAccess("A")),listOf(StaticRouterAccess("A")),date,at("09:00:00")) is StaticRouterResult.SameOrigin)
     }
 
-    private fun baseTransferData(extraCandidate:GtfsScheduleTripCandidate?=null,extraTrip:List<GtfsScheduleStopTime>?=null,targetStop:String="X"):FakeData {
+    private fun baseTransferData(
+        extraCandidate:GtfsScheduleTripCandidate?=null,
+        extraTrip:List<GtfsScheduleStopTime>?=null,
+        targetStop:String="X",
+        firstAlightDropOff:Int?=null,
+        secondBoardPickup:Int?=null,
+    ):FakeData {
         val cs=mutableListOf(candidate("T2","R2","S",1,"10:08:00")); if(extraCandidate!=null) cs+=extraCandidate
         val ts=mutableMapOf(
-            "T1" to listOf(st("T1",1,"A","10:00:00"),st("T1",2,"X","10:05:00")),
-            "T2" to listOf(st("T2",1,targetStop,"10:08:00"),st("T2",2,"B","10:18:00")),
+            "T1" to listOf(
+                st("T1",1,"A","10:00:00"),
+                st("T1",2,"X","10:05:00",dropOff=firstAlightDropOff),
+            ),
+            "T2" to listOf(
+                st("T2",1,targetStop,"10:08:00",pickup=secondBoardPickup),
+                st("T2",2,"B","10:18:00"),
+            ),
         ); if(extraTrip!=null) ts["T3"]=extraTrip
         return FakeData(candidates=mapOf("A" to listOf(candidate("T1","R1","S",1,"10:00:00")),targetStop to cs),times=ts)
     }
     private fun at(raw:String)=GtfsServiceTime.parse(raw).resolve(date,zone).epochMillis
     private fun candidate(trip:String,route:String,service:String,seq:Int,dep:String)=GtfsScheduleTripCandidate(GtfsScheduleTrip(trip,route,service,null,null,null,null,null),seq,null,dep)
-    private fun st(trip:String,seq:Int,stop:String,time:String)=GtfsScheduleStopTime(trip,seq,stop,time,time,null,null,null,null)
+    private fun st(
+        trip:String,
+        seq:Int,
+        stop:String,
+        time:String,
+        pickup:Int?=null,
+        dropOff:Int?=null,
+    )=GtfsScheduleStopTime(trip,seq,stop,time,time,pickup,dropOff,null,null)
     private fun transfer(from:String,to:String,type:Int,min:Int,fromRoute:String?=null,toRoute:String?=null,fromTrip:String?=null,toTrip:String?=null)=GtfsScheduleTransfer(from,to,type,min,fromRoute,toRoute,fromTrip,toTrip)
     private fun stop(id:String,parent:String?=null,locationType:Int?=0)=GtfsScheduleStop(id,id,0.0,0.0,parent,locationType,null,null)
 

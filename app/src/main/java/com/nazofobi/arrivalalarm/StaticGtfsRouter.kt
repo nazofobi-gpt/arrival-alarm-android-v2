@@ -144,11 +144,14 @@ class StaticGtfsRouter(
                     it.stopId == access.stopId && it.stopSequence == candidate.stopSequence
                 }
                 if (boardIndex < 0) continue
-                val boardDeparture = epoch(stopTimes[boardIndex].departureTime ?: stopTimes[boardIndex].arrivalTime, serviceDate)
+                val boardStopTime = stopTimes[boardIndex]
+                if (!allowsScheduledPickup(boardStopTime)) continue
+                val boardDeparture = epoch(boardStopTime.departureTime ?: boardStopTime.arrivalTime, serviceDate)
                     ?: continue
                 if (boardDeparture < earliestBoard) continue
 
                 for (alight in stopTimes.drop(boardIndex + 1)) {
+                    if (!allowsScheduledDropOff(alight)) continue
                     val firstArrival = epoch(alight.arrivalTime ?: alight.departureTime, serviceDate) ?: continue
                     val rules = transferRulesFor(alight.stopId)
                     val targets = transferTargets(alight.stopId, rules)
@@ -266,9 +269,12 @@ class StaticGtfsRouter(
             it.stopId == boardStopId && it.stopSequence == candidate.stopSequence
         }
         if (boardIndex < 0) return null
-        val departure = epoch(times[boardIndex].departureTime ?: times[boardIndex].arrivalTime, serviceDate) ?: return null
+        val boardStopTime = times[boardIndex]
+        if (!allowsScheduledPickup(boardStopTime)) return null
+        val departure = epoch(boardStopTime.departureTime ?: boardStopTime.arrivalTime, serviceDate) ?: return null
         if (departure < earliestBoardEpochMillis) return null
         for (arrival in times.drop(boardIndex + 1)) {
+            if (!allowsScheduledDropOff(arrival)) continue
             val egress = destinationByStop[arrival.stopId] ?: continue
             val arrivalEpoch = epoch(arrival.arrivalTime ?: arrival.departureTime, serviceDate) ?: continue
             return StaticTransitLeg(
@@ -282,6 +288,12 @@ class StaticGtfsRouter(
         }
         return null
     }
+
+    private fun allowsScheduledPickup(stopTime: GtfsScheduleStopTime): Boolean =
+        stopTime.pickupType == null || stopTime.pickupType == 0
+
+    private fun allowsScheduledDropOff(stopTime: GtfsScheduleStopTime): Boolean =
+        stopTime.dropOffType == null || stopTime.dropOffType == 0
 
     private fun journey(
         access: StaticRouterAccess,
