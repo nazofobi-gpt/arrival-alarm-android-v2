@@ -122,7 +122,7 @@ internal class ProductionRealtimeJourneyOverlay(
                         delaySeconds = update.arrivalDelaySeconds,
                     )
                 }
-                val departure = matching.lastNotNullOfOrNull { update ->
+                val departure = matching.asReversed().firstNotNullOfOrNull { update ->
                     realtimeIso(
                         epochSeconds = update.departureTimeEpochSeconds,
                         plannedIso = stop.plannedDeparture,
