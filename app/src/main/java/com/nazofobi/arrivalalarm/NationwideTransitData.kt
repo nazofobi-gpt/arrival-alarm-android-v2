@@ -53,13 +53,40 @@ data class StationDeparturesSnapshot(
     val error: String? = null,
 )
 
+enum class NationwideJourneySource {
+    LOCAL_STATIC,
+    LIVE_FALLBACK,
+}
+
+sealed interface NationwideJourneyResolution {
+    data class Results(
+        val options: List<RouteOption>,
+        val source: NationwideJourneySource,
+    ) : NationwideJourneyResolution
+
+    data class NoRoute(
+        val localOutcome: LocalStaticJourneyOutcome,
+    ) : NationwideJourneyResolution
+
+    data class ProviderUnavailable(
+        val localOutcome: LocalStaticJourneyOutcome,
+        val message: String,
+    ) : NationwideJourneyResolution
+}
+
 class NationwideTransitGateway(
     context: Context,
     private val feedUrl: String = "https://download.gtfs.de/germany/free/latest.zip",
     private val liveApi: GermanyLiveTransitApi = GermanyLiveTransitApi(),
+    private val nowMillis: () -> Long = { System.currentTimeMillis() },
+    private val liveJourneyLoader: ((MapPoint, MapPoint, Int) -> List<RouteOption>)? = null,
 ) {
     private val appContext = context.applicationContext
     private val store = NationwideTransitIndex(appContext)
+    private val staticJourneyPlanner = ProductionStaticJourneyPlanner(
+        index = store,
+        nowMillis = nowMillis,
+    )
     private val io = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
 
@@ -207,17 +234,69 @@ class NationwideTransitGateway(
         callback: (List<RouteOption>, String) -> Unit,
     ) {
         io.execute {
-            val result = runCatching { liveApi.journeys(origin, destination, limit) }
-            val options = result.getOrDefault(emptyList())
-            val status = when {
-                options.isNotEmpty() -> appContext.getString(R.string.route_live_static)
-                result.isFailure -> appContext.getString(
-                    R.string.route_live_unavailable,
-                    result.exceptionOrNull()?.message ?: appContext.getString(R.string.unknown_error),
-                )
-                else -> appContext.getString(R.string.route_not_found)
+            val resolution = resolveJourneyOptions(origin, destination, limit)
+            val options = when (resolution) {
+                is NationwideJourneyResolution.Results -> resolution.options
+                is NationwideJourneyResolution.NoRoute,
+                is NationwideJourneyResolution.ProviderUnavailable -> emptyList()
+            }
+            val status = when (resolution) {
+                is NationwideJourneyResolution.Results -> when (resolution.source) {
+                    NationwideJourneySource.LOCAL_STATIC ->
+                        appContext.getString(R.string.source_gtfs_local)
+                    NationwideJourneySource.LIVE_FALLBACK ->
+                        appContext.getString(R.string.route_live_static)
+                }
+                is NationwideJourneyResolution.NoRoute ->
+                    appContext.getString(R.string.route_not_found)
+                is NationwideJourneyResolution.ProviderUnavailable ->
+                    appContext.getString(
+                        R.string.route_live_unavailable,
+                        resolution.message,
+                    )
             }
             main.post { callback(options, status) }
+        }
+    }
+
+    internal fun resolveJourneyOptions(
+        origin: MapPoint,
+        destination: MapPoint,
+        limit: Int = 3,
+    ): NationwideJourneyResolution {
+        val localOutcome = runCatching {
+            staticJourneyPlanner.plan(origin, destination, limit)
+        }.getOrDefault(LocalStaticJourneyOutcome.Unavailable)
+
+        if (localOutcome is LocalStaticJourneyOutcome.Results) {
+            return NationwideJourneyResolution.Results(
+                options = localOutcome.options,
+                source = NationwideJourneySource.LOCAL_STATIC,
+            )
+        }
+        if (localOutcome == LocalStaticJourneyOutcome.SameOrigin) {
+            return NationwideJourneyResolution.NoRoute(localOutcome)
+        }
+
+        val live = runCatching {
+            liveJourneyLoader?.invoke(origin, destination, limit)
+                ?: liveApi.journeys(origin, destination, limit)
+        }
+        if (live.isFailure) {
+            return NationwideJourneyResolution.ProviderUnavailable(
+                localOutcome = localOutcome,
+                message = live.exceptionOrNull()?.message
+                    ?: appContext.getString(R.string.unknown_error),
+            )
+        }
+        val options = live.getOrDefault(emptyList())
+        return if (options.isNotEmpty()) {
+            NationwideJourneyResolution.Results(
+                options = options,
+                source = NationwideJourneySource.LIVE_FALLBACK,
+            )
+        } else {
+            NationwideJourneyResolution.NoRoute(localOutcome)
         }
     }
 
