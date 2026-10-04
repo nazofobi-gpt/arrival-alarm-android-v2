@@ -15,6 +15,8 @@ class GermanyGtfsRealtimeClientInstrumentedTest {
             .setHeader(
                 GtfsRealtime.FeedHeader.newBuilder()
                     .setGtfsRealtimeVersion("2.0")
+                    .setIncrementality(GtfsRealtime.FeedHeader.Incrementality.FULL_DATASET)
+                    .setFeedVersion("android-feed")
                     .setTimestamp(1_800_000_000L),
             )
             .addEntity(
@@ -22,6 +24,7 @@ class GermanyGtfsRealtimeClientInstrumentedTest {
                     .setId("trip-update")
                     .setTripUpdate(
                         GtfsRealtime.TripUpdate.newBuilder()
+                            .setTimestamp(1_800_000_003L)
                             .setTrip(
                                 GtfsRealtime.TripDescriptor.newBuilder()
                                     .setTripId("trip-1")
@@ -85,7 +88,11 @@ class GermanyGtfsRealtimeClientInstrumentedTest {
         assertTrue(result is GermanyRealtimeFetchResult.Available)
         val snapshot = (result as GermanyRealtimeFetchResult.Available).snapshot
         assertEquals(1_800_000_000L, snapshot.feedTimestampEpochSeconds)
+        assertEquals("2.0", snapshot.gtfsRealtimeVersion)
+        assertEquals("FULL_DATASET", snapshot.incrementality)
+        assertEquals("android-feed", snapshot.feedVersion)
         val tripUpdate = snapshot.tripUpdates.single()
+        assertEquals(1_800_000_003L, tripUpdate.updateTimestampEpochSeconds)
         assertEquals(1, tripUpdate.directionId)
         assertEquals("12:34:00", tripUpdate.startTime)
         assertEquals("20261004", tripUpdate.startDate)
