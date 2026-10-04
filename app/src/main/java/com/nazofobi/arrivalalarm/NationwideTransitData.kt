@@ -92,8 +92,9 @@ class NationwideTransitGateway(
     private val realtimeClient = GermanyGtfsRealtimeClient(
         clock = EpochClock { nowMillis() / 1_000L },
     )
+    private val realtimeScheduleRepository = GtfsScheduleRepository(store)
     private val realtimeMatcher = GermanyRealtimeMatcher(
-        RepositoryGermanyRealtimeStaticData(GtfsScheduleRepository(store)),
+        RepositoryGermanyRealtimeStaticData(realtimeScheduleRepository),
     )
     private val realtimeJourneyOverlay = ProductionRealtimeJourneyOverlay(
         fetch = { realtimeFetch?.invoke() ?: realtimeClient.fetch() },
@@ -108,6 +109,9 @@ class NationwideTransitGateway(
         fetch = { realtimeFetch?.invoke() ?: realtimeClient.fetch() },
         match = { result, now -> realtimeMatcher.match(result, now) },
         nowEpochSeconds = { nowMillis() / 1_000L },
+        isFrequencyTrip = { tripId ->
+            realtimeScheduleRepository.frequenciesForTrip(tripId, 1).isNotEmpty()
+        },
     )
     private val io = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
