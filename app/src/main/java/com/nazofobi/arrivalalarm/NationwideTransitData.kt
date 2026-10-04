@@ -80,12 +80,24 @@ class NationwideTransitGateway(
     private val liveApi: GermanyLiveTransitApi = GermanyLiveTransitApi(),
     private val nowMillis: () -> Long = { System.currentTimeMillis() },
     private val liveJourneyLoader: ((MapPoint, MapPoint, Int) -> List<RouteOption>)? = null,
+    private val realtimeFetch: (() -> GermanyRealtimeFetchResult)? = null,
 ) {
     private val appContext = context.applicationContext
     private val store = NationwideTransitIndex(appContext)
     private val staticJourneyPlanner = ProductionStaticJourneyPlanner(
         index = store,
         nowMillis = nowMillis,
+    )
+    private val realtimeClient = GermanyGtfsRealtimeClient(
+        clock = EpochClock { nowMillis() / 1_000L },
+    )
+    private val realtimeMatcher = GermanyRealtimeMatcher(
+        RepositoryGermanyRealtimeStaticData(GtfsScheduleRepository(store)),
+    )
+    private val realtimeJourneyOverlay = ProductionRealtimeJourneyOverlay(
+        fetch = { realtimeFetch?.invoke() ?: realtimeClient.fetch() },
+        match = realtimeMatcher::match,
+        nowEpochSeconds = { nowMillis() / 1_000L },
     )
     private val io = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
@@ -243,7 +255,7 @@ class NationwideTransitGateway(
             val status = when (resolution) {
                 is NationwideJourneyResolution.Results -> when (resolution.source) {
                     NationwideJourneySource.LOCAL_STATIC ->
-                        appContext.getString(R.string.source_gtfs_local)
+                        localJourneyStatus(resolution.options)
                     NationwideJourneySource.LIVE_FALLBACK ->
                         appContext.getString(R.string.route_live_static)
                 }
@@ -270,7 +282,7 @@ class NationwideTransitGateway(
 
         if (localOutcome is LocalStaticJourneyOutcome.Results) {
             return NationwideJourneyResolution.Results(
-                options = localOutcome.options,
+                options = realtimeJourneyOverlay.enrich(localOutcome.options),
                 source = NationwideJourneySource.LOCAL_STATIC,
             )
         }
@@ -299,6 +311,19 @@ class NationwideTransitGateway(
             NationwideJourneyResolution.NoRoute(localOutcome)
         }
     }
+
+    private fun localJourneyStatus(options: List<RouteOption>): String =
+        when (options.firstOrNull()?.realtime?.state) {
+            RouteRealtimeState.FRESH_MATCHED ->
+                appContext.getString(R.string.route_gtfsrt_fresh)
+            RouteRealtimeState.FRESH_NO_MATCH ->
+                appContext.getString(R.string.route_gtfsrt_no_match)
+            RouteRealtimeState.STALE ->
+                appContext.getString(R.string.route_gtfsrt_stale)
+            RouteRealtimeState.UNAVAILABLE ->
+                appContext.getString(R.string.route_gtfsrt_unavailable)
+            null -> appContext.getString(R.string.source_gtfs_local)
+        }
 
     fun close() {
         io.shutdownNow()
