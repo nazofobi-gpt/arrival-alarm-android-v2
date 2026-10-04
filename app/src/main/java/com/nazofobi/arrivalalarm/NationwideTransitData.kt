@@ -439,27 +439,62 @@ class GermanyLiveTransitApi(
     init {
         require(cacheCapacity in 1..256)
     }
-    fun searchStops(query: String, limit: Int): List<CatalogStop> {
+    fun searchStops(query: String, limit: Int): List<CatalogStop> =
+        freshList(searchStopsOutcome(query, limit))
+
+    internal fun searchStopsOutcome(
+        query: String,
+        limit: Int,
+    ): TransitProviderOutcome<List<CatalogStop>> {
         val encoded = URLEncoder.encode(query, StandardCharsets.UTF_8.name())
-        val json = get("$baseUrl/locations?query=$encoded&results=$limit&stops=true&addresses=false&poi=false")
-        return parseStops(JSONArray(json), limit)
+        val url = "$baseUrl/locations?query=$encoded&results=$limit&stops=true&addresses=false&poi=false"
+        return parseListOutcome(fetchJsonOutcome(url)) { body ->
+            parseStops(JSONArray(body), limit)
+        }
     }
 
-    fun searchLocations(query: String, limit: Int): List<TransitLocationResult> {
+    fun searchLocations(query: String, limit: Int): List<TransitLocationResult> =
+        freshList(searchLocationsOutcome(query, limit))
+
+    internal fun searchLocationsOutcome(
+        query: String,
+        limit: Int,
+    ): TransitProviderOutcome<List<TransitLocationResult>> {
         val encoded = URLEncoder.encode(query, StandardCharsets.UTF_8.name())
-        val json = get(
+        val url =
             "$baseUrl/locations?query=$encoded&results=$limit&stops=true&addresses=true&poi=true&language=de&pretty=false"
-        )
-        return parseLocations(JSONArray(json), limit)
+        return parseListOutcome(fetchJsonOutcome(url)) { body ->
+            parseLocations(JSONArray(body), limit)
+        }
     }
 
-    fun nearbyStops(latitude: Double, longitude: Double, limit: Int): List<NearbyStop> {
+    fun nearbyStops(latitude: Double, longitude: Double, limit: Int): List<NearbyStop> =
+        freshList(nearbyStopsOutcome(latitude, longitude, limit))
+
+    internal fun nearbyStopsOutcome(
+        latitude: Double,
+        longitude: Double,
+        limit: Int,
+    ): TransitProviderOutcome<List<NearbyStop>> {
         val results = max(limit, 12)
-        val json = get("$baseUrl/locations/nearby?latitude=$latitude&longitude=$longitude&results=$results&distance=50000&stops=true&poi=false")
-        return parseStops(JSONArray(json), results)
-            .map { NearbyStop(it, haversineMeters(latitude, longitude, it.latitude, it.longitude).roundToInt()) }
-            .sortedBy { it.distanceMeters }
-            .take(limit)
+        val url =
+            "$baseUrl/locations/nearby?latitude=$latitude&longitude=$longitude&results=$results&distance=50000&stops=true&poi=false"
+        return parseListOutcome(fetchJsonOutcome(url)) { body ->
+            parseStops(JSONArray(body), results)
+                .map {
+                    NearbyStop(
+                        it,
+                        haversineMeters(
+                            latitude,
+                            longitude,
+                            it.latitude,
+                            it.longitude,
+                        ).roundToInt(),
+                    )
+                }
+                .sortedBy { it.distanceMeters }
+                .take(limit)
+        }
     }
 
     fun departures(stopId: String, limit: Int = 8): StationDeparturesSnapshot {
@@ -699,6 +734,75 @@ class GermanyLiveTransitApi(
                 )
             )
             if (size >= limit) break
+        }
+    }
+
+    private fun <T> freshList(
+        outcome: TransitProviderOutcome<List<T>>,
+    ): List<T> = when (outcome) {
+        is TransitProviderOutcome.Results -> outcome.value
+        is TransitProviderOutcome.NoResult -> emptyList()
+        is TransitProviderOutcome.Stale ->
+            error("Transit API stale cache (" + (outcome.freshness.ageSeconds ?: 0L) + "s)")
+        is TransitProviderOutcome.Unavailable ->
+            error(outcome.detail ?: "Transit API unavailable: " + outcome.reason)
+    }
+
+    private fun <T> parseListOutcome(
+        raw: TransitProviderOutcome<String>,
+        parse: (String) -> List<T>,
+    ): TransitProviderOutcome<List<T>> = when (raw) {
+        is TransitProviderOutcome.Results -> parsedList(
+            body = raw.value,
+            provenance = raw.provenance,
+            freshness = raw.freshness,
+            stale = false,
+            parse = parse,
+        )
+        is TransitProviderOutcome.Stale -> parsedList(
+            body = raw.value,
+            provenance = raw.provenance,
+            freshness = raw.freshness,
+            stale = true,
+            parse = parse,
+        )
+        is TransitProviderOutcome.NoResult -> raw
+        is TransitProviderOutcome.Unavailable -> raw
+    }
+
+    private fun <T> parsedList(
+        body: String,
+        provenance: TransitProviderProvenance,
+        freshness: TransitProviderFreshness,
+        stale: Boolean,
+        parse: (String) -> List<T>,
+    ): TransitProviderOutcome<List<T>> {
+        val values = runCatching { parse(body) }.getOrElse {
+            return TransitProviderOutcome.Unavailable(
+                reason = TransitProviderUnavailableReason.INVALID_RESPONSE,
+                retryable = false,
+                detail = "Transit provider returned invalid JSON",
+                provenance = provenance,
+            )
+        }
+        if (values.isEmpty()) {
+            return TransitProviderOutcome.NoResult(
+                provenance = provenance,
+                freshness = freshness,
+            )
+        }
+        return if (stale) {
+            TransitProviderOutcome.Stale(
+                value = values,
+                provenance = provenance,
+                freshness = freshness,
+            )
+        } else {
+            TransitProviderOutcome.Results(
+                value = values,
+                provenance = provenance,
+                freshness = freshness,
+            )
         }
     }
 
