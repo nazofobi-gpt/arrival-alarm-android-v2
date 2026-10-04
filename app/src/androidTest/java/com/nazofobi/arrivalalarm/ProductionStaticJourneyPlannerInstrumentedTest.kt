@@ -201,11 +201,19 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
             val departures = planner.plan("A", 3)
             assertEquals(
                 listOf(
-                    at("08:15:00") / 1_000L,
-                    at("08:25:00") / 1_000L,
-                    at("08:35:00") / 1_000L,
+                    at("08:20:00") / 1_000L,
+                    at("08:30:00") / 1_000L,
+                    at("08:40:00") / 1_000L,
                 ),
                 departures.map { it.scheduledEpochSeconds },
+            )
+            assertEquals(
+                listOf("20261004", "20261004", "20261004"),
+                departures.map { it.realtimeTripStartDate },
+            )
+            assertEquals(
+                listOf("08:20:00", "08:30:00", "08:40:00"),
+                departures.map { it.realtimeTripStartTime },
             )
         } finally {
             index.close()
