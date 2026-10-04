@@ -45,32 +45,13 @@ internal class ProductionStationDeparturesPlanner(
                     serviceDate = serviceDate,
                     earliestBoardSeconds = earliest,
                     limit = maxCandidatesPerServiceDay,
-                ).mapNotNull { candidate ->
-                    if (repository.frequenciesForTrip(candidate.trip.id, 1).isNotEmpty()) {
-                        return@mapNotNull null
-                    }
-                    val raw = candidate.departureTime ?: candidate.arrivalTime
-                        ?: return@mapNotNull null
-                    val scheduled = runCatching {
-                        GtfsServiceTime.parse(raw)
-                            .resolve(serviceDate, agencyTimeZone)
-                            .epochMillis / 1_000L
-                    }.getOrNull() ?: return@mapNotNull null
-                    if (scheduled < now / 1_000L) return@mapNotNull null
-                    val route = repository.route(candidate.trip.routeId)
-                    Departure(
-                        tripId = candidate.trip.id,
-                        line = route?.shortName
-                            ?.takeIf { it.isNotBlank() }
-                            ?: route?.longName?.takeIf { it.isNotBlank() }
-                            ?: candidate.trip.routeId,
-                        direction = candidate.trip.headsign
-                            ?.takeIf { it.isNotBlank() }
-                            ?: route?.longName?.takeIf { it.isNotBlank() }
-                            ?: "",
-                        scheduledEpochSeconds = scheduled,
-                        platform = plannedPlatform,
-                        routeId = candidate.trip.routeId,
+                ).flatMap { candidate ->
+                    departuresForCandidate(
+                        candidate = candidate,
+                        serviceDate = serviceDate,
+                        earliestBoardSeconds = earliest,
+                        nowEpochSeconds = now / 1_000L,
+                        plannedPlatform = plannedPlatform,
                     )
                 }
             }
@@ -81,6 +62,140 @@ internal class ProductionStationDeparturesPlanner(
             )
             .take(boundedLimit)
     }
+
+    private data class ParsedFrequency(
+        val startSeconds: Int,
+        val endSeconds: Int,
+        val headwaySeconds: Int,
+    )
+
+    private fun departuresForCandidate(
+        candidate: GtfsScheduleTripCandidate,
+        serviceDate: GtfsServiceDate,
+        earliestBoardSeconds: Int,
+        nowEpochSeconds: Long,
+        plannedPlatform: String?,
+    ): List<Departure> {
+        val rawBoard = candidate.departureTime ?: candidate.arrivalTime ?: return emptyList()
+        val boardSeconds = parseServiceSeconds(rawBoard) ?: return emptyList()
+        val route = repository.route(candidate.trip.routeId)
+        val line = route?.shortName
+            ?.takeIf { it.isNotBlank() }
+            ?: route?.longName?.takeIf { it.isNotBlank() }
+            ?: candidate.trip.routeId
+        val direction = candidate.trip.headsign
+            ?.takeIf { it.isNotBlank() }
+            ?: route?.longName?.takeIf { it.isNotBlank() }
+            ?: ""
+
+        val frequencies = repository.frequenciesForTrip(
+            candidate.trip.id,
+            MAX_FREQUENCY_ROWS_PER_TRIP,
+        )
+        if (frequencies.isEmpty()) {
+            if (boardSeconds < earliestBoardSeconds) return emptyList()
+            val scheduled = serviceEpochSeconds(serviceDate, boardSeconds) ?: return emptyList()
+            if (scheduled < nowEpochSeconds) return emptyList()
+            return listOf(
+                departure(
+                    candidate = candidate,
+                    line = line,
+                    direction = direction,
+                    scheduledEpochSeconds = scheduled,
+                    plannedPlatform = plannedPlatform,
+                ),
+            )
+        }
+
+        val firstStop = repository.stopTimesForTrip(candidate.trip.id, 1).firstOrNull()
+            ?: return emptyList()
+        val templateStart = parseServiceSeconds(
+            firstStop.departureTime ?: firstStop.arrivalTime ?: return emptyList()
+        ) ?: return emptyList()
+        val boardOffset = boardSeconds - templateStart
+        if (boardOffset < 0) return emptyList()
+
+        val parsed = frequencies.map { row ->
+            if (row.exactTimes != 1 || row.headwaySeconds <= 0) return emptyList()
+            val start = parseServiceSeconds(row.startTime) ?: return emptyList()
+            val end = parseServiceSeconds(row.endTime) ?: return emptyList()
+            if (start >= end) return emptyList()
+            ParsedFrequency(start, end, row.headwaySeconds)
+        }.sortedBy { it.startSeconds }
+        if (parsed.zipWithNext().any { (left, right) ->
+                right.startSeconds < left.endSeconds
+            }
+        ) {
+            return emptyList()
+        }
+
+        return buildList {
+            for (frequency in parsed) {
+                if (size >= MAX_FREQUENCY_DEPARTURES_PER_CANDIDATE) break
+                val windowStart = frequency.startSeconds + boardOffset
+                val windowEnd = frequency.endSeconds + boardOffset
+                if (earliestBoardSeconds >= windowEnd) continue
+
+                var board = windowStart
+                if (board < earliestBoardSeconds) {
+                    val delta = earliestBoardSeconds - board
+                    board += (
+                        (delta + frequency.headwaySeconds - 1) /
+                            frequency.headwaySeconds
+                        ) * frequency.headwaySeconds
+                }
+                while (
+                    board < windowEnd &&
+                    size < MAX_FREQUENCY_DEPARTURES_PER_CANDIDATE
+                ) {
+                    val scheduled = serviceEpochSeconds(serviceDate, board)
+                    if (scheduled != null && scheduled >= nowEpochSeconds) {
+                        add(
+                            departure(
+                                candidate = candidate,
+                                line = line,
+                                direction = direction,
+                                scheduledEpochSeconds = scheduled,
+                                plannedPlatform = plannedPlatform,
+                            ),
+                        )
+                    }
+                    board += frequency.headwaySeconds
+                }
+            }
+        }
+    }
+
+    private fun departure(
+        candidate: GtfsScheduleTripCandidate,
+        line: String,
+        direction: String,
+        scheduledEpochSeconds: Long,
+        plannedPlatform: String?,
+    ) = Departure(
+        tripId = candidate.trip.id,
+        line = line,
+        direction = direction,
+        scheduledEpochSeconds = scheduledEpochSeconds,
+        platform = plannedPlatform,
+        routeId = candidate.trip.routeId,
+    )
+
+    private fun parseServiceSeconds(raw: String): Int? =
+        runCatching { GtfsServiceTime.parse(raw).secondsFromServiceDayStart }.getOrNull()
+
+    private fun serviceEpochSeconds(
+        serviceDate: GtfsServiceDate,
+        serviceSeconds: Int,
+    ): Long? = runCatching {
+        GtfsServiceTime.parse(
+            "%02d:%02d:%02d".format(
+                serviceSeconds / 3_600,
+                (serviceSeconds % 3_600) / 60,
+                serviceSeconds % 60,
+            ),
+        ).resolve(serviceDate, agencyTimeZone).epochMillis / 1_000L
+    }.getOrNull()
 
     private fun serviceDates(epochMillis: Long): List<GtfsServiceDate> =
         listOf(
@@ -111,6 +226,11 @@ internal class ProductionStationDeparturesPlanner(
         if (delta < 0L) return null
         val seconds = delta / 1_000L + if (delta % 1_000L == 0L) 0L else 1L
         return seconds.takeIf { it <= Int.MAX_VALUE }?.toInt()
+    }
+
+    private companion object {
+        const val MAX_FREQUENCY_ROWS_PER_TRIP = 64
+        const val MAX_FREQUENCY_DEPARTURES_PER_CANDIDATE = 64
     }
 }
 
