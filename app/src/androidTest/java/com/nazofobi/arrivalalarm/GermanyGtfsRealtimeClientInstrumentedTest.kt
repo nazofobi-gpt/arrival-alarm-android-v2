@@ -71,9 +71,21 @@ class GermanyGtfsRealtimeClientInstrumentedTest {
                                             .setText("Hinweis"),
                                     ),
                             )
+                            .setSeverityLevel(GtfsRealtime.Alert.SeverityLevel.WARNING)
                             .addInformedEntity(
                                 GtfsRealtime.EntitySelector.newBuilder()
-                                    .setRouteId("route-1"),
+                                    .setAgencyId("agency-1")
+                                    .setRouteId("route-1")
+                                    .setDirectionId(1)
+                                    .setStopId("platform-2")
+                                    .setTrip(
+                                        GtfsRealtime.TripDescriptor.newBuilder()
+                                            .setTripId("trip-1")
+                                            .setRouteId("route-1")
+                                            .setDirectionId(1)
+                                            .setStartTime("12:34:00")
+                                            .setStartDate("20261004"),
+                                    ),
                             ),
                     ),
             )
@@ -109,8 +121,20 @@ class GermanyGtfsRealtimeClientInstrumentedTest {
         assertEquals("NONE", stop.dropOffType)
         assertEquals("Zentrum", stop.stopHeadsign)
         assertEquals(GermanyRealtimeStopUpdateValidity.VALID, stop.validity)
-        assertEquals("Hinweis", snapshot.serviceAlerts.single().header)
-        assertEquals(setOf("route-1"), snapshot.serviceAlerts.single().routeIds)
+        val alert = snapshot.serviceAlerts.single()
+        assertEquals("Hinweis", alert.header)
+        assertEquals("WARNING", alert.severityLevel)
+        assertEquals(setOf("route-1"), alert.routeIds)
+        assertEquals(setOf("trip-1"), alert.tripIds)
+        assertEquals(setOf("platform-2"), alert.stopIds)
+        val selector = alert.informedEntities.single()
+        assertEquals("agency-1", selector.agencyId)
+        assertEquals("route-1", selector.routeId)
+        assertEquals(1, selector.directionId)
+        assertEquals("platform-2", selector.stopId)
+        assertEquals(GermanyRealtimeAlertSelectorValidity.VALID, selector.validity)
+        assertEquals("trip-1", selector.trip?.tripId)
+        assertEquals("12:34:00", selector.trip?.startTime)
     }
 
     @Test
