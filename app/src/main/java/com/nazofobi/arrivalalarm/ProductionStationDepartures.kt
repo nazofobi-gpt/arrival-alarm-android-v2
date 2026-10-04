@@ -157,6 +157,8 @@ internal class ProductionStationDeparturesPlanner(
                                 direction = direction,
                                 scheduledEpochSeconds = scheduled,
                                 plannedPlatform = plannedPlatform,
+                                realtimeTripStartDate = formatServiceDate(serviceDate),
+                                realtimeTripStartTime = formatServiceTime(board - boardOffset),
                             ),
                         )
                     }
@@ -172,6 +174,8 @@ internal class ProductionStationDeparturesPlanner(
         direction: String,
         scheduledEpochSeconds: Long,
         plannedPlatform: String?,
+        realtimeTripStartDate: String? = null,
+        realtimeTripStartTime: String? = null,
     ) = Departure(
         tripId = candidate.trip.id,
         line = line,
@@ -179,10 +183,22 @@ internal class ProductionStationDeparturesPlanner(
         scheduledEpochSeconds = scheduledEpochSeconds,
         platform = plannedPlatform,
         routeId = candidate.trip.routeId,
+        realtimeTripStartDate = realtimeTripStartDate,
+        realtimeTripStartTime = realtimeTripStartTime,
     )
 
     private fun parseServiceSeconds(raw: String): Int? =
         runCatching { GtfsServiceTime.parse(raw).secondsFromServiceDayStart }.getOrNull()
+
+    private fun formatServiceDate(date: GtfsServiceDate): String =
+        "%04d%02d%02d".format(date.year, date.month, date.day)
+
+    private fun formatServiceTime(seconds: Int): String =
+        "%02d:%02d:%02d".format(
+            seconds / 3_600,
+            (seconds % 3_600) / 60,
+            seconds % 60,
+        )
 
     private fun serviceEpochSeconds(
         serviceDate: GtfsServiceDate,
@@ -290,12 +306,15 @@ internal class ProductionRealtimeStationOverlay(
         planned: List<Departure>,
         overlay: GermanyRealtimeOverlayResult.Matched,
     ): ProductionStationDeparturesResult {
-        val byTrip = overlay.tripOverlays
-            .filterNot { frequencyTrip(it.staticTrip.id) }
-            .associateBy { it.staticTrip.id }
+        val byTrip = overlay.tripOverlays.groupBy { it.staticTrip.id }
         var matchedAny = false
         val departures = planned.map { departure ->
-            val trip = byTrip[departure.tripId] ?: return@map departure
+            val trip = byTrip[departure.tripId]
+                .orEmpty()
+                .firstOrNull { candidate ->
+                    overlayMatchesDeparture(candidate, departure)
+                }
+                ?: return@map departure
             val update = trip.stopUpdates.firstOrNull { it.scheduledStopId == stopId }
             matchedAny = true
             departure.copy(
@@ -373,6 +392,27 @@ internal class ProductionRealtimeStationOverlay(
             selector.agencyId == null &&
             selector.routeType == null
     }
+
+    private fun overlayMatchesDeparture(
+        overlay: GermanyRealtimeTripOverlay,
+        departure: Departure,
+    ): Boolean {
+        if (!frequencyTrip(departure.tripId)) return true
+
+        val expectedDate = departure.realtimeTripStartDate ?: return false
+        val expectedStart = departure.realtimeTripStartTime
+            ?.let(::serviceTimeSeconds)
+            ?: return false
+        val actualDate = overlay.startDate ?: return false
+        val actualStart = overlay.startTime
+            ?.let(::serviceTimeSeconds)
+            ?: return false
+
+        return actualDate == expectedDate && actualStart == expectedStart
+    }
+
+    private fun serviceTimeSeconds(raw: String): Int? =
+        runCatching { GtfsServiceTime.parse(raw).secondsFromServiceDayStart }.getOrNull()
 
     private fun frequencyTrip(tripId: String): Boolean =
         runCatching { isFrequencyTrip(tripId) }.getOrDefault(true)
