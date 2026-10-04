@@ -63,6 +63,7 @@ class GermanyGtfsRealtimeClientInstrumentedTest {
                     .setId("alert")
                     .setAlert(
                         GtfsRealtime.Alert.newBuilder()
+                            .setSeverityLevel(GtfsRealtime.Alert.SeverityLevel.WARNING)
                             .setHeaderText(
                                 GtfsRealtime.TranslatedString.newBuilder()
                                     .addTranslation(
@@ -73,7 +74,9 @@ class GermanyGtfsRealtimeClientInstrumentedTest {
                             )
                             .addInformedEntity(
                                 GtfsRealtime.EntitySelector.newBuilder()
-                                    .setRouteId("route-1"),
+                                    .setRouteId("route-1")
+                                    .setDirectionId(1)
+                                    .setStopId("platform-2"),
                             ),
                     ),
             )
@@ -109,8 +112,16 @@ class GermanyGtfsRealtimeClientInstrumentedTest {
         assertEquals("NONE", stop.dropOffType)
         assertEquals("Zentrum", stop.stopHeadsign)
         assertEquals(GermanyRealtimeStopUpdateValidity.VALID, stop.validity)
-        assertEquals("Hinweis", snapshot.serviceAlerts.single().header)
-        assertEquals(setOf("route-1"), snapshot.serviceAlerts.single().routeIds)
+        val parsedAlert = snapshot.serviceAlerts.single()
+        assertEquals("Hinweis", parsedAlert.header)
+        assertEquals("WARNING", parsedAlert.severityLevel)
+        assertEquals(setOf("route-1"), parsedAlert.routeIds)
+        assertEquals(setOf("platform-2"), parsedAlert.stopIds)
+        val selector = parsedAlert.selectors.single()
+        assertEquals("route-1", selector.routeId)
+        assertEquals(1, selector.directionId)
+        assertEquals("platform-2", selector.stopId)
+        assertEquals(GermanyRealtimeAlertSelectorValidity.VALID, selector.validity)
     }
 
     @Test
