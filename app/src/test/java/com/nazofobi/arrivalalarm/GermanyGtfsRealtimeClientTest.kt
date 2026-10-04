@@ -337,6 +337,128 @@ class GermanyGtfsRealtimeClientTest {
     }
 
     @Test
+    fun preservesAlertSelectorBoundariesDimensionsAndSeverity() {
+        val completeTripSelector = GtfsRealtime.TripDescriptor.newBuilder()
+            .setTripId("trip-instance")
+            .setRouteId("trip-route")
+            .setDirectionId(1)
+            .setStartTime("25:10:00")
+            .setStartDate("20261004")
+            .setScheduleRelationship(GtfsRealtime.TripDescriptor.ScheduleRelationship.SCHEDULED)
+            .build()
+        val incompleteTripSelector = GtfsRealtime.TripDescriptor.newBuilder()
+            .setRouteId("incomplete-trip-route")
+            .setStartTime("08:00:00")
+            .build()
+
+        val alert = GtfsRealtime.Alert.newBuilder()
+            .setSeverityLevel(GtfsRealtime.Alert.SeverityLevel.WARNING)
+            .addInformedEntity(
+                GtfsRealtime.EntitySelector.newBuilder()
+                    .setAgencyId("agency-1"),
+            )
+            .addInformedEntity(
+                GtfsRealtime.EntitySelector.newBuilder()
+                    .setRouteType(2),
+            )
+            .addInformedEntity(
+                GtfsRealtime.EntitySelector.newBuilder()
+                    .setRouteId("route-direction")
+                    .setDirectionId(1),
+            )
+            .addInformedEntity(
+                GtfsRealtime.EntitySelector.newBuilder()
+                    .setRouteId("route-stop")
+                    .setStopId("stop-route"),
+            )
+            .addInformedEntity(
+                GtfsRealtime.EntitySelector.newBuilder()
+                    .setTrip(completeTripSelector),
+            )
+            .addInformedEntity(
+                GtfsRealtime.EntitySelector.newBuilder()
+                    .setStopId("stop-only"),
+            )
+            .addInformedEntity(
+                GtfsRealtime.EntitySelector.newBuilder(),
+            )
+            .addInformedEntity(
+                GtfsRealtime.EntitySelector.newBuilder()
+                    .setRouteId("route-with-invalid-trip")
+                    .setTrip(incompleteTripSelector),
+            )
+            .build()
+
+        val feed = GtfsRealtime.FeedMessage.newBuilder()
+            .setHeader(
+                GtfsRealtime.FeedHeader.newBuilder()
+                    .setGtfsRealtimeVersion("2.0"),
+            )
+            .addEntity(
+                GtfsRealtime.FeedEntity.newBuilder()
+                    .setId("selector-alert")
+                    .setAlert(alert),
+            )
+            .build()
+
+        val result = GermanyGtfsRealtimeClient(
+            loader = { feed.toByteArray() },
+        ).fetch()
+        val parsed = (result as GermanyRealtimeFetchResult.Available)
+            .snapshot.serviceAlerts.single()
+
+        assertEquals("WARNING", parsed.severityLevel)
+        assertEquals(8, parsed.informedEntities.size)
+
+        val agencyOnly = parsed.informedEntities[0]
+        assertEquals("agency-1", agencyOnly.agencyId)
+        assertEquals(GermanyRealtimeAlertSelectorValidity.VALID, agencyOnly.validity)
+
+        val routeTypeOnly = parsed.informedEntities[1]
+        assertEquals(2, routeTypeOnly.routeType)
+        assertEquals(GermanyRealtimeAlertSelectorValidity.VALID, routeTypeOnly.validity)
+
+        val routeDirection = parsed.informedEntities[2]
+        assertEquals("route-direction", routeDirection.routeId)
+        assertEquals(1, routeDirection.directionId)
+
+        val routeStop = parsed.informedEntities[3]
+        assertEquals("route-stop", routeStop.routeId)
+        assertEquals("stop-route", routeStop.stopId)
+
+        val tripInstance = parsed.informedEntities[4].trip
+        assertEquals("trip-instance", tripInstance?.tripId)
+        assertEquals("trip-route", tripInstance?.routeId)
+        assertEquals(1, tripInstance?.directionId)
+        assertEquals("25:10:00", tripInstance?.startTime)
+        assertEquals("20261004", tripInstance?.startDate)
+        assertEquals(
+            GermanyRealtimeTripSelectorValidity.VALID_ID_BASED,
+            tripInstance?.validity,
+        )
+
+        val stopOnly = parsed.informedEntities[5]
+        assertEquals("stop-only", stopOnly.stopId)
+        assertEquals(GermanyRealtimeAlertSelectorValidity.VALID, stopOnly.validity)
+
+        assertEquals(
+            GermanyRealtimeAlertSelectorValidity.UNMATCHABLE_EMPTY,
+            parsed.informedEntities[6].validity,
+        )
+        assertEquals(
+            GermanyRealtimeAlertSelectorValidity.UNMATCHABLE_TRIP_SELECTOR,
+            parsed.informedEntities[7].validity,
+        )
+
+        assertEquals(
+            setOf("route-direction", "route-stop"),
+            parsed.routeIds,
+        )
+        assertEquals(setOf("trip-instance"), parsed.tripIds)
+        assertEquals(setOf("stop-route", "stop-only"), parsed.stopIds)
+    }
+
+    @Test
     fun differentialFeedFailsClosedInsteadOfMasqueradingAsFullSnapshot() {
         val feed = GtfsRealtime.FeedMessage.newBuilder()
             .setHeader(
