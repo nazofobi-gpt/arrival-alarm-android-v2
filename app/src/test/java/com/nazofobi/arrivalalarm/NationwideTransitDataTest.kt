@@ -2,8 +2,11 @@ package com.nazofobi.arrivalalarm
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
+import java.util.ArrayDeque
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class NationwideTransitDataTest {
@@ -103,6 +106,179 @@ class NationwideTransitDataTest {
         assertEquals("Frankfurt(Main)Hbf", values.single().name)
         assertTrue(values.single().latitude > 50.0)
     }
+    @Test fun httpCacheFreshHitAvoidsSecondRequest() {
+        var nowSeconds = 1_000L
+        val exchange = RecordingExchange(
+            httpResponse(200, "A", "Cache-Control" to "max-age=60", "ETag" to "\"v1\""),
+        )
+        val api = cacheApi(exchange, { nowSeconds })
+        val url = "https://example.test/a"
+
+        assertOutcomeBody("A", api.fetchJsonOutcome(url))
+        nowSeconds += 10
+        assertOutcomeBody("A", api.fetchJsonOutcome(url))
+        assertEquals(1, exchange.requests.size)
+    }
+
+    @Test fun expiredEtagCacheRevalidatesWith304AndRefreshesFreshness() {
+        var nowSeconds = 2_000L
+        val exchange = RecordingExchange(
+            httpResponse(200, "A", "Cache-Control" to "max-age=1", "ETag" to "\"v1\""),
+            httpResponse(304, "", "Cache-Control" to "max-age=30", "ETag" to "\"v1\""),
+        )
+        val api = cacheApi(exchange, { nowSeconds })
+        val url = "https://example.test/revalidate"
+
+        assertOutcomeBody("A", api.fetchJsonOutcome(url))
+        nowSeconds += 2
+        val refreshed = api.fetchJsonOutcome(url)
+        assertOutcomeBody("A", refreshed)
+        assertEquals("\"v1\"", exchange.requests[1].headers["If-None-Match"])
+        when (refreshed) {
+            is TransitProviderOutcome.Results ->
+                assertEquals(TransitProviderFreshnessState.FRESH, refreshed.freshness.state)
+            else -> fail("Expected fresh Results but was " + refreshed)
+        }
+
+        nowSeconds += 5
+        assertOutcomeBody("A", api.fetchJsonOutcome(url))
+        assertEquals(2, exchange.requests.size)
+    }
+
+    @Test fun expiredCacheAcceptsNew200Representation() {
+        var nowSeconds = 3_000L
+        val exchange = RecordingExchange(
+            httpResponse(200, "A", "Cache-Control" to "max-age=1", "ETag" to "\"v1\""),
+            httpResponse(200, "B", "Cache-Control" to "max-age=60", "ETag" to "\"v2\""),
+        )
+        val api = cacheApi(exchange, { nowSeconds })
+        val url = "https://example.test/new"
+
+        assertOutcomeBody("A", api.fetchJsonOutcome(url))
+        nowSeconds += 2
+        assertOutcomeBody("B", api.fetchJsonOutcome(url))
+        assertEquals("\"v1\"", exchange.requests[1].headers["If-None-Match"])
+    }
+
+    @Test fun noStoreIsNeverCachedAndNoCacheAlwaysRevalidates() {
+        var nowSeconds = 4_000L
+        val noStoreExchange = RecordingExchange(
+            httpResponse(200, "A", "Cache-Control" to "no-store, max-age=60"),
+            httpResponse(200, "B", "Cache-Control" to "no-store, max-age=60"),
+        )
+        val noStoreApi = cacheApi(noStoreExchange, { nowSeconds })
+        val noStoreUrl = "https://example.test/no-store"
+        assertOutcomeBody("A", noStoreApi.fetchJsonOutcome(noStoreUrl))
+        assertOutcomeBody("B", noStoreApi.fetchJsonOutcome(noStoreUrl))
+        assertEquals(2, noStoreExchange.requests.size)
+
+        val noCacheExchange = RecordingExchange(
+            httpResponse(200, "C", "Cache-Control" to "no-cache, max-age=60", "ETag" to "\"c1\""),
+            httpResponse(304, "", "Cache-Control" to "no-cache, max-age=60"),
+            httpResponse(304, "", "Cache-Control" to "no-cache, max-age=60"),
+        )
+        val noCacheApi = cacheApi(noCacheExchange, { nowSeconds })
+        val noCacheUrl = "https://example.test/no-cache"
+        assertOutcomeBody("C", noCacheApi.fetchJsonOutcome(noCacheUrl))
+        assertOutcomeBody("C", noCacheApi.fetchJsonOutcome(noCacheUrl))
+        assertOutcomeBody("C", noCacheApi.fetchJsonOutcome(noCacheUrl))
+        assertEquals(3, noCacheExchange.requests.size)
+        assertEquals("\"c1\"", noCacheExchange.requests[1].headers["If-None-Match"])
+    }
+
+    @Test fun invalidOrConflictingMaxAgeIsConservativelyRevalidated() {
+        var nowSeconds = 5_000L
+        val exchange = RecordingExchange(
+            HttpTransportResponse(
+                status = 200,
+                headers = mapOf(
+                    "Cache-Control" to listOf("max-age=60", "max-age=30"),
+                    "ETag" to listOf("\"x\""),
+                ),
+                body = "A",
+            ),
+            httpResponse(304, "", "Cache-Control" to "max-age=10"),
+        )
+        val api = cacheApi(exchange, { nowSeconds })
+        val url = "https://example.test/conflict"
+
+        assertOutcomeBody("A", api.fetchJsonOutcome(url))
+        assertOutcomeBody("A", api.fetchJsonOutcome(url))
+        assertEquals(2, exchange.requests.size)
+    }
+
+    @Test fun rateLimitAndServerFailureAreNotStoredAsContent() {
+        var nowSeconds = 6_000L
+        val rateExchange = RecordingExchange(
+            httpResponse(429, "rate-limited"),
+            httpResponse(200, "ok", "Cache-Control" to "max-age=60"),
+        )
+        val rateApi = cacheApi(rateExchange, { nowSeconds })
+        val rateUrl = "https://example.test/rate"
+        val firstRate = rateApi.fetchJsonOutcome(rateUrl)
+        assertTrue(firstRate is TransitProviderOutcome.Unavailable)
+        assertEquals(
+            TransitProviderUnavailableReason.RATE_LIMITED,
+            (firstRate as TransitProviderOutcome.Unavailable).reason,
+        )
+        assertOutcomeBody("ok", rateApi.fetchJsonOutcome(rateUrl))
+        assertEquals(2, rateExchange.requests.size)
+
+        val serverExchange = RecordingExchange(
+            httpResponse(503, "down"),
+            httpResponse(200, "recovered", "Cache-Control" to "max-age=60"),
+        )
+        val serverApi = cacheApi(serverExchange, { nowSeconds })
+        val serverUrl = "https://example.test/server"
+        val firstServer = serverApi.fetchJsonOutcome(serverUrl)
+        assertTrue(firstServer is TransitProviderOutcome.Unavailable)
+        assertEquals(
+            TransitProviderUnavailableReason.UPSTREAM_ERROR,
+            (firstServer as TransitProviderOutcome.Unavailable).reason,
+        )
+        assertOutcomeBody("recovered", serverApi.fetchJsonOutcome(serverUrl))
+        assertEquals(2, serverExchange.requests.size)
+    }
+
+    @Test fun expiredCacheBecomesTypedStaleOnNetworkFailure() {
+        var nowSeconds = 7_000L
+        val exchange = RecordingExchange(
+            httpResponse(200, "cached", "Cache-Control" to "max-age=1", "ETag" to "\"v1\""),
+            IOException("offline"),
+        )
+        val api = cacheApi(exchange, { nowSeconds })
+        val url = "https://example.test/offline"
+
+        assertOutcomeBody("cached", api.fetchJsonOutcome(url))
+        nowSeconds += 2
+        val stale = api.fetchJsonOutcome(url)
+        when (stale) {
+            is TransitProviderOutcome.Stale -> {
+                assertEquals("cached", stale.value)
+                assertEquals(TransitProviderFreshnessState.STALE, stale.freshness.state)
+                assertEquals(2L, stale.freshness.ageSeconds)
+            }
+            else -> fail("Expected typed Stale but was " + stale)
+        }
+    }
+
+    @Test fun cacheCapacityEvictsLeastRecentlyUsedEntry() {
+        var nowSeconds = 8_000L
+        val exchange = RecordingExchange(
+            httpResponse(200, "A", "Cache-Control" to "max-age=60"),
+            httpResponse(200, "B", "Cache-Control" to "max-age=60"),
+            httpResponse(200, "C", "Cache-Control" to "max-age=60"),
+            httpResponse(200, "A2", "Cache-Control" to "max-age=60"),
+        )
+        val api = cacheApi(exchange, { nowSeconds }, capacity = 2)
+
+        assertOutcomeBody("A", api.fetchJsonOutcome("https://example.test/a"))
+        assertOutcomeBody("B", api.fetchJsonOutcome("https://example.test/b"))
+        assertOutcomeBody("C", api.fetchJsonOutcome("https://example.test/c"))
+        assertOutcomeBody("A2", api.fetchJsonOutcome("https://example.test/a"))
+        assertEquals(4, exchange.requests.size)
+    }
+
     @Test fun stationDepartureParserPreservesRealtimePlatformCancellationAndRemarks() {
         val json = JSONArray(
             """[
@@ -126,6 +302,62 @@ class NationwideTransitDataTest {
         assertEquals(1, snapshot.alerts.size)
         assertEquals("v6.db.transport.rest", snapshot.sourceLabel)
         assertEquals(999L, snapshot.fetchedAtEpochSeconds)
+    }
+
+    private fun cacheApi(
+        exchange: RecordingExchange,
+        nowEpochSeconds: () -> Long,
+        capacity: Int = 64,
+    ): GermanyLiveTransitApi {
+        val transport = BoundedHttpTransport(
+            exchange = exchange,
+            clock = HttpTransportClock { nowEpochSeconds() * 1_000L },
+            sleeper = HttpTransportSleeper { },
+            maxRetries = 0,
+        )
+        return GermanyLiveTransitApi(
+            nowEpochSeconds = nowEpochSeconds,
+            transport = transport,
+            cacheCapacity = capacity,
+        )
+    }
+
+    private fun httpResponse(
+        status: Int,
+        body: String,
+        vararg headers: Pair<String, String>,
+    ): HttpTransportResponse = HttpTransportResponse(
+        status = status,
+        headers = headers.groupBy({ it.first }, { it.second }),
+        body = body,
+    )
+
+    private fun assertOutcomeBody(expected: String, outcome: TransitProviderOutcome<String>) {
+        when (outcome) {
+            is TransitProviderOutcome.Results -> {
+                assertEquals(expected, outcome.value)
+                assertEquals(TransitProviderFreshnessState.FRESH, outcome.freshness.state)
+            }
+            else -> fail("Expected fresh Results but was " + outcome)
+        }
+    }
+
+    private class RecordingExchange(vararg initialOutcomes: Any) : HttpExchange {
+        private val outcomes = ArrayDeque<Any>().apply {
+            initialOutcomes.forEach { addLast(it) }
+        }
+        val requests = mutableListOf<HttpTransportRequest>()
+
+        override fun execute(
+            request: HttpTransportRequest,
+            connectTimeoutMs: Int,
+            readTimeoutMs: Int,
+        ): HttpTransportResponse {
+            requests += request
+            val next = outcomes.removeFirst()
+            if (next is IOException) throw next
+            return next as HttpTransportResponse
+        }
     }
 
 }

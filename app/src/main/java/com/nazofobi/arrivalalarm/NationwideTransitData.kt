@@ -227,12 +227,59 @@ class NationwideTransitGateway(
     }
 }
 
+private data class GermanyLiveCachePolicy(
+    val noStore: Boolean = false,
+    val noCache: Boolean = false,
+    val maxAgeMillis: Long = 0L,
+)
+
+private data class GermanyLiveCachedResponse(
+    val body: String,
+    val etag: String?,
+    val storedAtMillis: Long,
+    val policy: GermanyLiveCachePolicy,
+)
+
 class GermanyLiveTransitApi(
     private val baseUrl: String = "https://v6.db.transport.rest",
-    private val connectTimeoutMs: Int = 6_000,
-    private val readTimeoutMs: Int = 8_000,
+    private val connectTimeoutMs: Int = BoundedHttpTransport.DEFAULT_CONNECT_TIMEOUT_MS,
+    private val readTimeoutMs: Int = BoundedHttpTransport.DEFAULT_READ_TIMEOUT_MS,
     private val nowEpochSeconds: () -> Long = { System.currentTimeMillis() / 1_000 },
+    private val nowMillis: () -> Long = { nowEpochSeconds() * 1_000L },
+    transport: BoundedHttpTransport? = null,
+    private val cacheCapacity: Int = 64,
 ) {
+    private val cache = LinkedHashMap<String, GermanyLiveCachedResponse>(16, 0.75f, true)
+    private val httpTransport = transport ?: BoundedHttpTransport(
+        exchange = HttpExchange { request, connectTimeout, readTimeout ->
+            val connection = URL(request.url).openConnection() as HttpURLConnection
+            connection.connectTimeout = connectTimeout
+            connection.readTimeout = readTimeout
+            connection.requestMethod = request.method
+            request.headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
+            try {
+                val status = connection.responseCode
+                val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+                val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                val headers = connection.headerFields.entries
+                    .mapNotNull { (name, values) -> name?.let { it to values.orEmpty() } }
+                    .toMap()
+                HttpTransportResponse(status = status, headers = headers, body = body)
+            } finally {
+                connection.disconnect()
+            }
+        },
+        clock = HttpTransportClock { nowMillis() },
+        sleeper = HttpTransportSleeper { delayMillis ->
+            if (delayMillis > 0L) Thread.sleep(delayMillis)
+        },
+        connectTimeoutMs = connectTimeoutMs,
+        readTimeoutMs = readTimeoutMs,
+    )
+
+    init {
+        require(cacheCapacity in 1..256)
+    }
     fun searchStops(query: String, limit: Int): List<CatalogStop> {
         val encoded = URLEncoder.encode(query, StandardCharsets.UTF_8.name())
         val json = get("$baseUrl/locations?query=$encoded&results=$limit&stops=true&addresses=false&poi=false")
@@ -496,19 +543,207 @@ class GermanyLiveTransitApi(
         }
     }
 
-    private fun get(url: String): String = (URL(url).openConnection() as HttpURLConnection).run {
-        connectTimeout = connectTimeoutMs
-        readTimeout = readTimeoutMs
-        requestMethod = "GET"
-        setRequestProperty("Accept", "application/json")
-        setRequestProperty("User-Agent", "ArrivalAlarmAndroid/0.1")
-        try {
-            if (responseCode !in 200..299) error("Transit API HTTP $responseCode")
-            inputStream.bufferedReader().use { it.readText() }
-        } finally {
-            disconnect()
+    private fun get(url: String): String = when (val outcome = fetchJsonOutcome(url)) {
+        is TransitProviderOutcome.Results -> outcome.value
+        is TransitProviderOutcome.Stale ->
+            error("Transit API stale cache (" + (outcome.freshness.ageSeconds ?: 0L) + "s)")
+        is TransitProviderOutcome.NoResult -> error("Transit API returned no HTTP representation")
+        is TransitProviderOutcome.Unavailable ->
+            error(outcome.detail ?: "Transit API unavailable: " + outcome.reason)
+    }
+
+    @Synchronized
+    internal fun fetchJsonOutcome(url: String): TransitProviderOutcome<String> {
+        val now = nowMillis()
+        val cached = cache[url]
+        if (cached != null && isFresh(cached, now)) {
+            return freshOutcome(cached.body, cached.storedAtMillis, now)
+        }
+
+        val headers = linkedMapOf(
+            "Accept" to "application/json",
+            "User-Agent" to "ArrivalAlarmAndroid/0.1",
+        )
+        cached?.etag?.takeIf { it.isNotBlank() }?.let { headers["If-None-Match"] = it }
+
+        return when (
+            val result = httpTransport.execute(HttpTransportRequest(url = url, headers = headers))
+        ) {
+            is HttpTransportResult.Failure -> staleOrUnavailable(
+                cached = cached,
+                nowMillis = now,
+                reason = TransitProviderUnavailableReason.OFFLINE,
+                retryable = true,
+                detail = result.message ?: result.kind.name,
+            )
+            is HttpTransportResult.Response -> handleResponse(url, cached, result.response, now)
         }
     }
+
+    private fun handleResponse(
+        url: String,
+        cached: GermanyLiveCachedResponse?,
+        response: HttpTransportResponse,
+        now: Long,
+    ): TransitProviderOutcome<String> {
+        return when {
+        response.status == 304 -> {
+            val existing = cached ?: return TransitProviderOutcome.Unavailable(
+                reason = TransitProviderUnavailableReason.INVALID_RESPONSE,
+                retryable = false,
+                detail = "HTTP 304 without cached representation",
+                provenance = dbProvenance(null),
+            )
+            val policy = cachePolicy(response.headers, fallback = existing.policy)
+            val refreshed = existing.copy(
+                etag = firstHeader(response.headers, "ETag") ?: existing.etag,
+                storedAtMillis = now,
+                policy = policy,
+            )
+            if (policy.noStore) cache.remove(url) else putCache(url, refreshed)
+            freshOutcome(existing.body, now, now)
+        }
+        response.status == 200 -> {
+            val policy = cachePolicy(response.headers)
+            val current = GermanyLiveCachedResponse(
+                body = response.body,
+                etag = firstHeader(response.headers, "ETag"),
+                storedAtMillis = now,
+                policy = policy,
+            )
+            if (policy.noStore) cache.remove(url) else putCache(url, current)
+            freshOutcome(response.body, now, now)
+        }
+        response.status == 429 -> staleOrUnavailable(
+            cached = cached,
+            nowMillis = now,
+            reason = TransitProviderUnavailableReason.RATE_LIMITED,
+            retryable = true,
+            detail = "Transit API HTTP 429",
+        )
+        response.status in 500..599 -> staleOrUnavailable(
+            cached = cached,
+            nowMillis = now,
+            reason = TransitProviderUnavailableReason.UPSTREAM_ERROR,
+            retryable = true,
+            detail = "Transit API HTTP " + response.status,
+        )
+        response.status in 200..299 -> freshOutcome(response.body, now, now)
+        else -> TransitProviderOutcome.Unavailable(
+            reason = TransitProviderUnavailableReason.INVALID_RESPONSE,
+            retryable = false,
+            detail = "Transit API HTTP " + response.status,
+            provenance = dbProvenance(now),
+        )
+        }
+    }
+
+    private fun staleOrUnavailable(
+        cached: GermanyLiveCachedResponse?,
+        nowMillis: Long,
+        reason: TransitProviderUnavailableReason,
+        retryable: Boolean,
+        detail: String,
+    ): TransitProviderOutcome<String> {
+        if (cached == null) {
+            return TransitProviderOutcome.Unavailable(
+                reason = reason,
+                retryable = retryable,
+                detail = detail,
+                provenance = dbProvenance(null),
+            )
+        }
+        val ageMillis = elapsedMillis(cached.storedAtMillis, nowMillis)
+        return TransitProviderOutcome.Stale(
+            value = cached.body,
+            provenance = dbProvenance(cached.storedAtMillis),
+            freshness = TransitProviderFreshness(
+                state = TransitProviderFreshnessState.STALE,
+                ageSeconds = ageMillis / 1_000L,
+                updatedAtEpochSeconds = cached.storedAtMillis / 1_000L,
+            ),
+        )
+    }
+
+    private fun freshOutcome(
+        body: String,
+        storedAtMillis: Long,
+        nowMillis: Long,
+    ): TransitProviderOutcome.Results<String> {
+        val ageMillis = elapsedMillis(storedAtMillis, nowMillis)
+        return TransitProviderOutcome.Results(
+            value = body,
+            provenance = dbProvenance(storedAtMillis),
+            freshness = TransitProviderFreshness(
+                state = TransitProviderFreshnessState.FRESH,
+                ageSeconds = ageMillis / 1_000L,
+                updatedAtEpochSeconds = storedAtMillis / 1_000L,
+            ),
+        )
+    }
+
+    private fun dbProvenance(storedAtMillis: Long?): TransitProviderProvenance =
+        TransitProviderProvenance(
+            providerId = ArrivalAlarmTransitProviders.DbEnrichment.id,
+            sourceLabel = ArrivalAlarmTransitProviders.DbEnrichment.label,
+            fetchedAtEpochSeconds = storedAtMillis?.div(1_000L),
+        )
+
+    private fun isFresh(entry: GermanyLiveCachedResponse, now: Long): Boolean {
+        if (entry.policy.noCache) return false
+        val age = elapsedMillis(entry.storedAtMillis, now)
+        return entry.policy.maxAgeMillis > age
+    }
+
+    private fun elapsedMillis(thenMillis: Long, nowMillis: Long): Long =
+        if (nowMillis <= thenMillis) 0L else nowMillis - thenMillis
+
+    private fun putCache(url: String, entry: GermanyLiveCachedResponse) {
+        cache[url] = entry
+        while (cache.size > cacheCapacity) {
+            val iterator = cache.entries.iterator()
+            if (!iterator.hasNext()) break
+            iterator.next()
+            iterator.remove()
+        }
+    }
+
+    private fun cachePolicy(
+        headers: Map<String, List<String>>,
+        fallback: GermanyLiveCachePolicy? = null,
+    ): GermanyLiveCachePolicy {
+        val values = headerValues(headers, "Cache-Control")
+        if (values.isEmpty()) return fallback ?: GermanyLiveCachePolicy()
+
+        val directives = values
+            .flatMap { value -> value.split(',') }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+        val noStore = directives.any { it.equals("no-store", ignoreCase = true) }
+        val noCache = directives.any { it.equals("no-cache", ignoreCase = true) }
+        val maxAgeRaw = directives
+            .filter { it.substringBefore('=').trim().equals("max-age", ignoreCase = true) }
+            .map { it.substringAfter('=', "").trim().trim('"') }
+        val parsed = maxAgeRaw.map { raw -> raw.toLongOrNull()?.takeIf { it >= 0L } }
+        val maxAgeMillis = when {
+            maxAgeRaw.isEmpty() -> 0L
+            parsed.any { it == null } -> 0L
+            parsed.filterNotNull().distinct().size != 1 -> 0L
+            else -> saturatingSecondsToMillis(parsed.filterNotNull().single())
+        }
+        return GermanyLiveCachePolicy(noStore, noCache, maxAgeMillis)
+    }
+
+    private fun headerValues(headers: Map<String, List<String>>, name: String): List<String> =
+        headers.entries
+            .filter { (header, _) -> header.equals(name, ignoreCase = true) }
+            .flatMap { it.value }
+
+    private fun firstHeader(headers: Map<String, List<String>>, name: String): String? =
+        headerValues(headers, name).firstOrNull()?.trim()?.takeIf { it.isNotBlank() }
+
+    private fun saturatingSecondsToMillis(seconds: Long): Long =
+        if (seconds > Long.MAX_VALUE / 1_000L) Long.MAX_VALUE else seconds * 1_000L
 }
 
 class AndroidCurrentLocation(private val context: Context) {
