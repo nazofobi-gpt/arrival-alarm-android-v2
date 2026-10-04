@@ -100,6 +100,9 @@ class NationwideTransitGateway(
         fetch = { realtimeFetch?.invoke() ?: realtimeClient.fetch() },
         match = { result, now -> realtimeMatcher.match(result, now) },
         nowEpochSeconds = { nowMillis() / 1_000L },
+        isFrequencyTrip = { tripId ->
+            realtimeScheduleRepository.frequenciesForTrip(tripId, 1).isNotEmpty()
+        },
     )
     private val stationDeparturesPlanner = ProductionStationDeparturesPlanner(
         index = store,
