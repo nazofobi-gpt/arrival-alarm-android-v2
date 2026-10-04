@@ -116,6 +116,7 @@ internal class StaticRouteOptionMapper(
                 longitude = stop?.longitude,
                 plannedArrival = shiftedIso(stopTime.arrivalTime, serviceDate, shiftMillis),
                 plannedDeparture = shiftedIso(stopTime.departureTime, serviceDate, shiftMillis),
+                plannedPlatform = stop?.platformCode,
             )
         }
     }
@@ -170,6 +171,7 @@ internal class StaticRouteOptionMapper(
             longitude = stop.longitude,
             plannedArrival = arrivalMillis?.let(::iso),
             plannedDeparture = departureMillis?.let(::iso),
+            plannedPlatform = stop.platformCode,
         )
     }
 
