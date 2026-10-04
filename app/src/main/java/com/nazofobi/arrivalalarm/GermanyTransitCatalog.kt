@@ -67,8 +67,7 @@ class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
         stop.parentStationId?.trim()?.takeIf { it.isNotEmpty() }?.let { return "parent:$it" }
         val normalizedName = stop.name
             .lowercase()
-            .replace(Regex("""\\p{M}+"""), "")
-            .replace(Regex("""[^\\p{L}\\p{N}]+"""), " ")
+            .replace(Regex("""[^\p{L}\p{N}]+"""), " ")
             .trim()
         val latBucket = (stop.latitude * 10_000).roundToInt()
         val lonBucket = (stop.longitude * 10_000).roundToInt()
