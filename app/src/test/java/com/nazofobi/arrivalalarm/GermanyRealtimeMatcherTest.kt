@@ -272,6 +272,45 @@ class GermanyRealtimeMatcherTest {
     }
 
     @Test
+    fun expiredAlertActivePeriodIsNotApplied() {
+        val data = FakeRealtimeStaticData(
+            routes = mapOf("R1" to route("R1", "agency-1", 3)),
+        )
+        val selector = GermanyRealtimeAlertSelector(
+            agencyId = null,
+            routeId = "R1",
+            routeType = null,
+            directionId = null,
+            stopId = null,
+            trip = null,
+            validity = GermanyRealtimeAlertSelectorValidity.VALID,
+        )
+        val expired = alert("expired", listOf(selector)).copy(
+            activePeriods = listOf(
+                GermanyRealtimeActivePeriod(
+                    startEpochSeconds = 1_799_999_000L,
+                    endEpochSeconds = 1_800_000_000L,
+                ),
+            ),
+        )
+        val openEnded = alert("open-ended", listOf(selector)).copy(
+            activePeriods = listOf(
+                GermanyRealtimeActivePeriod(
+                    startEpochSeconds = 1_800_000_000L,
+                    endEpochSeconds = null,
+                ),
+            ),
+        )
+
+        val result = matcher(data).match(
+            snapshot(serviceAlerts = listOf(expired, openEnded)),
+            1_800_000_010L,
+        ) as GermanyRealtimeOverlayResult.Matched
+
+        assertEquals(listOf("open-ended"), result.serviceAlerts.map { it.entityId })
+    }
+
+    @Test
     fun staleUnavailableAndNoMatchAreExplicit() {
         val noStaticMatch = matcher(FakeRealtimeStaticData()).match(
             snapshot(
