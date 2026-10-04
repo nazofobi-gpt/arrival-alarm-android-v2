@@ -425,9 +425,9 @@ class NationwideTransitGateway(
                     ?: error("Live stop mapping unavailable")
             }
             liveApi.departures(liveStop.id, limit)
-        }.getOrElse { error ->
+        }.getOrElse {
             StationDeparturesSnapshot(
-                error = error.message ?: appContext.getString(R.string.unknown_error),
+                error = appContext.getString(R.string.departures_live_unavailable),
             )
         }
     }
@@ -557,6 +557,8 @@ class GermanyLiveTransitApi(
     private val cacheCapacity: Int = 64,
 ) {
     private val cache = LinkedHashMap<String, GermanyLiveCachedResponse>(16, 0.75f, true)
+    @Volatile
+    private var lastProviderHealth: TransitProviderHealth? = null
     private val httpTransport = transport ?: BoundedHttpTransport(
         exchange = HttpExchange { request, connectTimeout, readTimeout ->
             val connection = URL(request.url).openConnection() as HttpURLConnection
@@ -587,6 +589,9 @@ class GermanyLiveTransitApi(
     init {
         require(cacheCapacity in 1..256)
     }
+
+    fun providerHealth(): TransitProviderHealth? = lastProviderHealth
+
     fun searchStops(query: String, limit: Int): List<CatalogStop> =
         freshList(searchStopsOutcome(query, limit))
 
@@ -916,7 +921,7 @@ class GermanyLiveTransitApi(
         )
         is TransitProviderOutcome.NoResult -> raw
         is TransitProviderOutcome.Unavailable -> raw
-    }
+    }.also(::recordProviderHealth)
 
     private fun <T> parsedList(
         body: String,
@@ -953,6 +958,22 @@ class GermanyLiveTransitApi(
         )
     }
 
+    private fun recordProviderHealth(outcome: TransitProviderOutcome<*>) {
+        val state = when (outcome) {
+            is TransitProviderOutcome.Results,
+            is TransitProviderOutcome.NoResult -> TransitProviderHealthState.READY
+            is TransitProviderOutcome.Stale -> TransitProviderHealthState.DEGRADED
+            is TransitProviderOutcome.Unavailable -> TransitProviderHealthState.UNAVAILABLE
+        }
+        val detail = (outcome as? TransitProviderOutcome.Unavailable)?.reason?.name
+        lastProviderHealth = TransitProviderHealth(
+            providerId = ArrivalAlarmTransitProviders.DbEnrichment.id,
+            state = state,
+            checkedAtEpochSeconds = nowEpochSeconds(),
+            detail = detail,
+        )
+    }
+
     private fun get(url: String): String = when (val outcome = fetchJsonOutcome(url)) {
         is TransitProviderOutcome.Results -> outcome.value
         is TransitProviderOutcome.Stale ->
@@ -968,6 +989,7 @@ class GermanyLiveTransitApi(
         val cached = cache[url]
         if (cached != null && isFresh(cached, now)) {
             return freshOutcome(cached.body, cached.storedAtMillis, now)
+                .also(::recordProviderHealth)
         }
 
         val headers = linkedMapOf(
@@ -982,12 +1004,19 @@ class GermanyLiveTransitApi(
             is HttpTransportResult.Failure -> staleOrUnavailable(
                 cached = cached,
                 nowMillis = now,
-                reason = TransitProviderUnavailableReason.OFFLINE,
+                reason = when (result.kind) {
+                    HttpTransportResult.Failure.Kind.NETWORK ->
+                        TransitProviderUnavailableReason.OFFLINE
+                    HttpTransportResult.Failure.Kind.TIMEOUT ->
+                        TransitProviderUnavailableReason.TIMEOUT
+                    HttpTransportResult.Failure.Kind.CIRCUIT_OPEN ->
+                        TransitProviderUnavailableReason.UPSTREAM_ERROR
+                },
                 retryable = true,
                 detail = result.message ?: result.kind.name,
             )
             is HttpTransportResult.Response -> handleResponse(url, cached, result.response, now)
-        }
+        }.also(::recordProviderHealth)
     }
 
     private fun handleResponse(
