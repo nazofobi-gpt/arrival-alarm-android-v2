@@ -208,4 +208,25 @@
     <string name="departures_empty_title">Departure board not ready yet</string>
     <string name="departures_empty_body">Choose a route or destination stop first.</string>
     <string name="departures_empty_action">Plan a route</string>
+
+    <string name="route_realtime_cancelled_badge">Live data: trip cancellation</string>
+    <string name="route_realtime_cancelled_action_blocked">Trip cancelled • choose another route</string>
+    <string name="route_realtime_stale_badge">Live data stale • scheduled time</string>
+    <string name="route_realtime_no_match_badge">Live data current • no matching trip</string>
+    <string name="route_realtime_unavailable_badge">Live data unavailable • scheduled time</string>
+    <string name="route_realtime_platform_format">Live platform: %1$s</string>
+    <string name="route_planned_platform_format">Scheduled platform: %1$s</string>
+    <string name="route_gtfsrt_fresh">GTFS Deutschland local index • GTFS-RT live</string>
+    <string name="route_gtfsrt_no_match">GTFS Deutschland local index • GTFS-RT current, no matching trip</string>
+    <string name="route_gtfsrt_stale">GTFS Deutschland local index • GTFS-RT stale, scheduled times</string>
+    <string name="route_gtfsrt_unavailable">GTFS Deutschland local index • GTFS-RT unavailable, scheduled times</string>
+    <string name="live_trip_realtime_source">GTFS-RT status</string>
+    <string name="live_trip_realtime_fresh">current • static route enriched with live data</string>
+    <string name="live_trip_realtime_no_match">current • no matching trip • scheduled route preserved</string>
+    <string name="live_trip_realtime_stale">stale • scheduled route preserved</string>
+    <string name="live_trip_realtime_unavailable">unavailable • scheduled route preserved</string>
+    <string name="departures_gtfsrt_fresh">GTFS Deutschland local departures • GTFS-RT live</string>
+    <string name="departures_gtfsrt_no_match">GTFS Deutschland local departures • GTFS-RT current, no matching trip</string>
+    <string name="departures_gtfsrt_stale">GTFS Deutschland local departures • GTFS-RT stale, scheduled times</string>
+    <string name="departures_gtfsrt_unavailable">GTFS Deutschland local departures • GTFS-RT unavailable, scheduled times</string>
 </resources>
