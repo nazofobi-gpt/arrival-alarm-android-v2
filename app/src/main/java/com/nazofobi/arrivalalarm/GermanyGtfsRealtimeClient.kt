@@ -18,6 +18,7 @@ enum class GermanyRealtimeUnavailableReason {
     NETWORK,
     TOO_LARGE,
     PARSE,
+    UNSUPPORTED_INCREMENTALITY,
 }
 
 enum class GermanyRealtimeStopUpdateValidity {
@@ -59,6 +60,7 @@ data class GermanyRealtimeTripUpdate(
     val startTime: String? = null,
     val selectorValidity: GermanyRealtimeTripSelectorValidity =
         GermanyRealtimeTripSelectorValidity.UNMATCHABLE_INCOMPLETE,
+    val updateTimestampEpochSeconds: Long? = null,
 ) {
     val hasFrequencyInstanceIdentity: Boolean
         get() = tripId != null && startTime != null && startDate != null
@@ -88,6 +90,9 @@ data class GermanyRealtimeSnapshot(
     val fetchedAtEpochSeconds: Long,
     val tripUpdates: List<GermanyRealtimeTripUpdate>,
     val serviceAlerts: List<GermanyRealtimeAlert>,
+    val gtfsRealtimeVersion: String? = null,
+    val incrementality: String = "FULL_DATASET",
+    val feedVersion: String? = null,
 )
 
 sealed interface GermanyRealtimeFetchResult {
@@ -157,6 +162,23 @@ class GermanyGtfsRealtimeClient(
                 GermanyRealtimeUnavailableReason.PARSE,
                 failure.message,
             )
+        }
+
+        val header = feed.header
+        val incrementality = if (header.hasIncrementality()) {
+            header.incrementality.name
+        } else {
+            "FULL_DATASET"
+        }
+        if (incrementality != "FULL_DATASET") {
+            return GermanyRealtimeFetchResult.Unavailable(
+                GermanyRealtimeUnavailableReason.UNSUPPORTED_INCREMENTALITY,
+                "GTFS-RT incrementality $incrementality is not supported as snapshot state",
+            )
+        }
+        val gtfsRealtimeVersion = header.gtfsRealtimeVersion.takeIf { it.isNotBlank() }
+        val feedVersion = header.feedVersion.takeIf {
+            header.hasFeedVersion() && it.isNotBlank()
         }
 
         val tripUpdates = buildList {
@@ -244,6 +266,9 @@ class GermanyGtfsRealtimeClient(
                         directionId = directionId,
                         startTime = startTime,
                         selectorValidity = selectorValidity,
+                        updateTimestampEpochSeconds = update.timestamp.takeIf {
+                            update.hasTimestamp()
+                        },
                     ),
                 )
             }
@@ -292,12 +317,15 @@ class GermanyGtfsRealtimeClient(
             GermanyRealtimeSnapshot(
                 source = GermanyGtfsRealtimeProvenance.PROVIDER,
                 license = GermanyGtfsRealtimeProvenance.LICENSE,
-                feedTimestampEpochSeconds = feed.header.timestamp.takeIf {
-                    feed.header.hasTimestamp()
+                feedTimestampEpochSeconds = header.timestamp.takeIf {
+                    header.hasTimestamp()
                 },
                 fetchedAtEpochSeconds = fetchedAtEpochSeconds,
                 tripUpdates = tripUpdates,
                 serviceAlerts = alerts,
+                gtfsRealtimeVersion = gtfsRealtimeVersion,
+                incrementality = incrementality,
+                feedVersion = feedVersion,
             ),
         )
     }
