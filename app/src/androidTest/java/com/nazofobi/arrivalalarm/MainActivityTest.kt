@@ -11,16 +11,23 @@ import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.json.JSONObject
+import java.io.File
+import java.util.Calendar
+import java.util.TimeZone
+import java.util.zip.ZipFile
 
 @RunWith(AndroidJUnit4::class)
 class MainActivityTest {
@@ -31,6 +38,7 @@ class MainActivityTest {
             ArrivalAlarmRuntimeGraph.resetForTests()
             activity.getSharedPreferences("journey_state", Context.MODE_PRIVATE).edit().clear().commit()
             activity.getSharedPreferences("guidance_state", Context.MODE_PRIVATE).edit().clear().commit()
+            activity.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE).edit().clear().commit()
             activity.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
                 .edit()
                 .clear()
@@ -337,15 +345,157 @@ class MainActivityTest {
     }
 
     @Test fun capturePrimaryScreensForVisualQa() {
+        val archivePath = InstrumentationRegistry.getArguments()
+            .getString("visualQaFeedPath")
+            .orEmpty()
+        assumeTrue(
+            "visualQaFeedPath instrumentation argument is required for canonical 8-screen capture",
+            archivePath.isNotBlank(),
+        )
+
+        rule.activityRule.scenario.onActivity { activity ->
+            activity.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("onboarding_complete", false)
+                .commit()
+        }
+        rule.activityRule.scenario.recreate()
+        rule.waitForIdle()
+        rule.onNodeWithTag("first-run-onboarding").performScrollTo().assertIsDisplayed()
+        captureScreen("onboarding")
+        rule.onNodeWithTag("onboarding-complete")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+
+        prepareRealStaticJourneyForVisualQa(archivePath)
+        ArrivalAlarmRuntimeGraph.resetForTests()
+        rule.activityRule.scenario.recreate()
+        rule.waitForIdle()
+
+        rule.onNodeWithTag("home-overview").performScrollTo().assertIsDisplayed()
         captureScreen("home")
+
         navigateTo("nav-search")
+        rule.onNodeWithTag("catalog-search").performScrollTo().assertIsDisplayed()
         captureScreen("search")
+
         navigateTo("nav-journey")
+        rule.waitUntil(30_000) {
+            rule.onAllNodesWithTag("route-option-0").fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onNodeWithTag("route-option-0").performScrollTo().assertIsDisplayed()
+        captureScreen("route")
+
+        val selectRouteLabel = rule.activity.getString(R.string.route_select_action)
+        rule.onAllNodesWithText(selectRouteLabel)[0]
+            .assertIsDisplayed()
+            .performClick()
+        rule.onNodeWithTag("journey-detail").performScrollTo().assertIsDisplayed()
         captureScreen("journey")
+
+        val targetPackage = InstrumentationRegistry.getInstrumentation().targetContext.packageName
+        ActiveJourneyPermissions.runtimePermissions().forEach { permission ->
+            runShell("pm grant $targetPackage $permission || true")
+        }
+        rule.onNodeWithTag("arm")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        rule.waitUntil(10_000) {
+            rule.onAllNodesWithTag("live-trip-panel").fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onNodeWithTag("live-trip-panel").performScrollTo().assertIsDisplayed()
+        captureScreen("live")
+
         navigateTo("nav-departures")
+        rule.onNodeWithTag("transit-experience-panel").performScrollTo().assertIsDisplayed()
         captureScreen("departures")
+
         navigateTo("nav-settings")
+        rule.onNodeWithTag("settings-readiness-panel").performScrollTo().assertIsDisplayed()
         captureScreen("settings")
+    }
+
+    private fun prepareRealStaticJourneyForVisualQa(archivePath: String) {
+        val archive = File(archivePath)
+        assertTrue(
+            "Germany Full-derived visual QA archive missing: $archivePath",
+            archive.isFile && archive.length() > 0L,
+        )
+        val acceptance = ZipFile(archive).use { zip ->
+            val entry = zip.getEntry("g175_acceptance.json")
+                ?: error("g175_acceptance.json missing from real-feed archive")
+            zip.getInputStream(entry).bufferedReader().use { reader ->
+                JSONObject(reader.readText())
+                    .getJSONObject("cases")
+                    .getJSONObject("lohne-achim")
+            }
+        }
+        val origin = acceptancePoint(acceptance, "origin")
+        val destination = acceptancePoint(acceptance, "destination")
+
+        val context = rule.activity.applicationContext
+        val index = NationwideTransitIndex(context)
+        try {
+            index.importFeed(archive.toURI().toString()) { }
+            assertTrue("visual QA static index was not ready after real-feed import", index.isReady())
+            val outcome = ProductionStaticJourneyPlanner(
+                index,
+                nowMillis = { nextWeekdayAtEight() },
+            ).plan(origin, destination, limit = 3)
+            val options = (outcome as? LocalStaticJourneyOutcome.Results)?.options
+                ?: error("visual QA production route did not resolve locally: $outcome")
+            assertTrue("visual QA production route returned no options", options.isNotEmpty())
+
+            SharedPreferencesJourneyStateStore(context).save(
+                JourneyUiState(
+                    phase = JourneyPhase.DESTINATION_SELECTED,
+                    start = GeoPoint(origin.latitude, origin.longitude),
+                    destination = GeoPoint(destination.latitude, destination.longitude),
+                )
+            )
+            val key =
+                "${origin.latitude},${origin.longitude}->${destination.latitude},${destination.longitude}"
+            OfflineTransitCache(
+                backingStore = SharedPreferencesTransitCacheStore(context),
+            ).put(
+                CachedTransitPlan(
+                    key = key,
+                    routeOptions = options,
+                    departures = emptyList(),
+                    savedAtEpochSeconds = System.currentTimeMillis() / 1_000L,
+                )
+            )
+        } finally {
+            index.close()
+        }
+    }
+
+    private fun acceptancePoint(definition: JSONObject, key: String): MapPoint {
+        val point = definition.getJSONObject(key)
+        return MapPoint(
+            latitude = point.getDouble("lat"),
+            longitude = point.getDouble("lon"),
+            label = point.getString("name"),
+        )
+    }
+
+    private fun nextWeekdayAtEight(): Long {
+        val calendar = Calendar.getInstance(TimeZone.getTimeZone("Europe/Berlin")).apply {
+            add(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 8)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+            while (
+                get(Calendar.DAY_OF_WEEK) == Calendar.SATURDAY ||
+                get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
+            ) {
+                add(Calendar.DAY_OF_MONTH, 1)
+            }
+        }
+        return calendar.timeInMillis
     }
 
     @Test fun guidanceLanguageChoicePersistsAcrossActivityRecreation() {
