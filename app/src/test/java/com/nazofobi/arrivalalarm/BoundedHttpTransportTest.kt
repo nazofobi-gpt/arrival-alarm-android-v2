@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import java.io.IOException
+import java.net.SocketTimeoutException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -106,6 +107,31 @@ class BoundedHttpTransportTest {
         )
         val result = transport.execute(HttpTransportRequest("https://example.invalid")) as HttpTransportResult.Failure
         assertEquals(HttpTransportResult.Failure.Kind.NETWORK, result.kind)
+        assertEquals(2, result.attempts)
+        assertEquals(2, calls)
+        assertEquals(listOf(25L), delays)
+    }
+
+    @Test
+    fun socketTimeoutRetainsTimeoutKindAfterBoundedRetries() {
+        var calls = 0
+        val delays = mutableListOf<Long>()
+        val transport = BoundedHttpTransport(
+            exchange = HttpExchange { _, _, _ ->
+                calls += 1
+                throw SocketTimeoutException("read timed out")
+            },
+            clock = HttpTransportClock { 0 },
+            sleeper = HttpTransportSleeper { delays += it },
+            maxRetries = 1,
+            baseBackoffMs = 25,
+        )
+
+        val result = transport.execute(
+            HttpTransportRequest("https://example.invalid")
+        ) as HttpTransportResult.Failure
+
+        assertEquals(HttpTransportResult.Failure.Kind.TIMEOUT, result.kind)
         assertEquals(2, result.attempts)
         assertEquals(2, calls)
         assertEquals(listOf(25L), delays)

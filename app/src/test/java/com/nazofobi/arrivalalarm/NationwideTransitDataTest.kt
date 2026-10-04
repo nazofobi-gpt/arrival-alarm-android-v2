@@ -3,6 +3,7 @@ package com.nazofobi.arrivalalarm
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.net.SocketTimeoutException
 import java.util.ArrayDeque
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -358,6 +359,30 @@ class NationwideTransitDataTest {
         )
     }
 
+    @Test fun providerTimeoutRemainsTypedUnavailableInsteadOfNoResult() {
+        val api = cacheApi(
+            RecordingExchange(SocketTimeoutException("read timed out")),
+            { 10_200L },
+        )
+
+        val outcome = api.searchStopsOutcome("Frankfurt", 5)
+
+        assertTrue(outcome is TransitProviderOutcome.Unavailable)
+        assertEquals(
+            TransitProviderUnavailableReason.TIMEOUT,
+            (outcome as TransitProviderOutcome.Unavailable).reason,
+        )
+        assertTrue(outcome.retryable)
+        assertEquals(
+            TransitProviderHealthState.UNAVAILABLE,
+            api.providerHealth()?.state,
+        )
+        assertEquals(
+            TransitProviderUnavailableReason.TIMEOUT.name,
+            api.providerHealth()?.detail,
+        )
+    }
+
     @Test fun staleEmptyCacheIsNotReclassifiedAsFreshNoResult() {
         var nowSeconds = 10_500L
         val api = cacheApi(
@@ -379,6 +404,51 @@ class NationwideTransitDataTest {
         assertTrue(stale is TransitProviderOutcome.Stale)
         assertTrue((stale as TransitProviderOutcome.Stale).value.isEmpty())
         assertEquals(TransitProviderFreshnessState.STALE, stale.freshness.state)
+        assertEquals(TransitProviderHealthState.DEGRADED, api.providerHealth()?.state)
+    }
+
+    @Test fun providerCircuitOpensAndRecoversToFreshResults() {
+        var nowSeconds = 11_000L
+        val exchange = RecordingExchange(
+            IOException("offline"),
+            httpResponse(
+                200,
+                """[{"type":"stop","id":"8000105","name":"Frankfurt(Main)Hbf","location":{"latitude":50.1071,"longitude":8.6638}}]""",
+                "Cache-Control" to "max-age=60",
+            ),
+        )
+        val api = cacheApi(
+            exchange = exchange,
+            nowEpochSeconds = { nowSeconds },
+            failureThreshold = 1,
+            circuitOpenMs = 1_000L,
+        )
+
+        val first = api.searchStopsOutcome("Frankfurt", 5)
+        assertTrue(first is TransitProviderOutcome.Unavailable)
+        assertEquals(
+            TransitProviderUnavailableReason.OFFLINE,
+            (first as TransitProviderOutcome.Unavailable).reason,
+        )
+        assertEquals(TransitProviderHealthState.UNAVAILABLE, api.providerHealth()?.state)
+
+        val openCircuit = api.searchStopsOutcome("Frankfurt", 5)
+        assertTrue(openCircuit is TransitProviderOutcome.Unavailable)
+        assertEquals(
+            TransitProviderUnavailableReason.UPSTREAM_ERROR,
+            (openCircuit as TransitProviderOutcome.Unavailable).reason,
+        )
+        assertEquals(1, exchange.requests.size)
+
+        nowSeconds += 2
+        val recovered = api.searchStopsOutcome("Frankfurt", 5)
+        assertTrue(recovered is TransitProviderOutcome.Results)
+        assertEquals(
+            listOf("db:8000105"),
+            (recovered as TransitProviderOutcome.Results).value.map { it.id },
+        )
+        assertEquals(TransitProviderHealthState.READY, api.providerHealth()?.state)
+        assertEquals(2, exchange.requests.size)
     }
 
     @Test fun stationDepartureParserPreservesRealtimePlatformCancellationAndRemarks() {
@@ -410,12 +480,16 @@ class NationwideTransitDataTest {
         exchange: RecordingExchange,
         nowEpochSeconds: () -> Long,
         capacity: Int = 64,
+        failureThreshold: Int = 3,
+        circuitOpenMs: Long = 30_000L,
     ): GermanyLiveTransitApi {
         val transport = BoundedHttpTransport(
             exchange = exchange,
             clock = HttpTransportClock { nowEpochSeconds() * 1_000L },
             sleeper = HttpTransportSleeper { },
             maxRetries = 0,
+            failureThreshold = failureThreshold,
+            circuitOpenMs = circuitOpenMs,
         )
         return GermanyLiveTransitApi(
             nowEpochSeconds = nowEpochSeconds,
