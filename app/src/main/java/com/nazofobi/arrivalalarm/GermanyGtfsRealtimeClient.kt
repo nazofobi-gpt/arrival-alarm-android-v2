@@ -198,7 +198,7 @@ class GermanyGtfsRealtimeClient(
         fetchedAtEpochSeconds: Long,
     ): GermanyRealtimeFetchResult {
         val feed = try {
-            GtfsRealtime.FeedMessage.parseFrom(bytes)
+            GtfsRealtime.FeedMessage.parseFrom(bytes).toBuilder()
         } catch (failure: InvalidProtocolBufferException) {
             return GermanyRealtimeFetchResult.Unavailable(
                 GermanyRealtimeUnavailableReason.PARSE,
@@ -224,8 +224,9 @@ class GermanyGtfsRealtimeClient(
         }
 
         val tripUpdates = buildList {
-            feed.entityList.forEach { entity ->
-                if (!entity.hasTripUpdate()) return@forEach
+            for (index in feed.entityCount - 1 downTo 0) {
+                val entity = feed.getEntity(index)
+                if (!entity.hasTripUpdate()) continue
                 val update = entity.tripUpdate
                 val trip = update.trip
                 val tripId = trip.tripId.takeIf { it.isNotBlank() }
@@ -313,12 +314,17 @@ class GermanyGtfsRealtimeClient(
                         },
                     ),
                 )
+                feed.setEntity(
+                    index,
+                    entity.toBuilder().clearTripUpdate().build(),
+                )
             }
-        }
+        }.asReversed()
 
         val alerts = buildList {
-            feed.entityList.forEach { entity ->
-                if (!entity.hasAlert()) return@forEach
+            for (index in feed.entityCount - 1 downTo 0) {
+                val entity = feed.getEntity(index)
+                if (!entity.hasAlert()) continue
                 val alert = entity.alert
                 val selectors = alert.informedEntityList.map { selector ->
                     val agencyId = selector.agencyId.takeIf { it.isNotBlank() }
@@ -374,8 +380,13 @@ class GermanyGtfsRealtimeClient(
                         },
                     ),
                 )
+                feed.setEntity(
+                    index,
+                    entity.toBuilder().clearAlert().build(),
+                )
             }
-        }
+        }.asReversed()
+        feed.clearEntity()
 
         return GermanyRealtimeFetchResult.Available(
             GermanyRealtimeSnapshot(
