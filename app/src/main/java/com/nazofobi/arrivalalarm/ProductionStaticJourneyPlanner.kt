@@ -191,10 +191,16 @@ internal class StaticRouteOptionMapper(
             timeZone = agencyTimeZone
         }.format(Date(epochMillis))
 
-    private fun iso(epochMillis: Long): String =
-        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.ROOT).apply {
+    private fun iso(epochMillis: Long): String {
+        val compact = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.ROOT).apply {
             timeZone = agencyTimeZone
         }.format(Date(epochMillis))
+        if (compact.length < 5) return compact
+        val offsetStart = compact.length - 5
+        return compact.substring(0, offsetStart) +
+            compact.substring(offsetStart, offsetStart + 3) + ":" +
+            compact.substring(offsetStart + 3)
+    }
 }
 
 class ProductionStaticJourneyPlanner(
