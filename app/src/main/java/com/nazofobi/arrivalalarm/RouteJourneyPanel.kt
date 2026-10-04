@@ -244,7 +244,8 @@ private fun RouteOptionCard(
             )
             OutlinedButton(
                 onClick = onSelect,
-                enabled = !selected,
+                enabled = !selected &&
+                    option.realtime?.cancelledTripIds?.isNotEmpty() != true,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             ) {
                 Text(
