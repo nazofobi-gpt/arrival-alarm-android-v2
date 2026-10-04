@@ -116,20 +116,25 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
     @Test
     fun overlappingNearestWindowsDoNotCreateFalseSameOrigin() {
         seedReadyGraph(includeTrip = true)
-        val planner = ProductionStaticJourneyPlanner(
-            index = NationwideTransitIndex(context),
-            agencyTimeZone = zone,
-            nowMillis = { at("07:55:00") },
-            maxAccessStops = 4,
-        )
+        val index = NationwideTransitIndex(context)
+        try {
+            val planner = ProductionStaticJourneyPlanner(
+                index = index,
+                agencyTimeZone = zone,
+                nowMillis = { at("07:55:00") },
+                maxAccessStops = 4,
+            )
 
-        val outcome = planner.plan(
-            origin = MapPoint(52.665, 8.237, "Lohne"),
-            destination = MapPoint(52.700, 8.400, "Achim"),
-            limit = 3,
-        )
+            val outcome = planner.plan(
+                origin = MapPoint(52.665, 8.237, "Lohne"),
+                destination = MapPoint(52.700, 8.400, "Achim"),
+                limit = 3,
+            )
 
-        assertTrue(outcome is LocalStaticJourneyOutcome.Results)
+            assertTrue(outcome is LocalStaticJourneyOutcome.Results)
+        } finally {
+            index.close()
+        }
     }
 
     private fun seedReadyGraph(includeTrip: Boolean) {
