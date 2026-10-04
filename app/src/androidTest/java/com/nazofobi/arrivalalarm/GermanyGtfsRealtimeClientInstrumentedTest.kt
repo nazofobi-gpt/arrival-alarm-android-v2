@@ -125,6 +125,12 @@ class GermanyGtfsRealtimeClientInstrumentedTest {
     }
 
     @Test
+    fun defaultPayloadBoundCoversNationwideFeedClassOnAndroidRuntime() {
+        assertEquals(64 * 1024 * 1024, GERMANY_REALTIME_DEFAULT_MAX_BYTES)
+        assertTrue(GERMANY_REALTIME_DEFAULT_MAX_BYTES > 32 * 1024 * 1024)
+    }
+
+    @Test
     fun malformedProtobufFailsClosedOnAndroidRuntime() {
         val result = GermanyGtfsRealtimeClient(
             loader = { byteArrayOf(0x08) },
