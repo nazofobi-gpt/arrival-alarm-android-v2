@@ -54,6 +54,31 @@ data class StationDeparturesSnapshot(
     val realtimeState: StationRealtimeState? = null,
 )
 
+sealed interface NationwideLookupResolution<out T> {
+    data class Results<T>(
+        val values: List<T>,
+        val sourceLabel: String,
+        val freshness: TransitProviderFreshness? = null,
+    ) : NationwideLookupResolution<T>
+
+    data class NoResult(
+        val sourceLabel: String? = null,
+        val freshness: TransitProviderFreshness? = null,
+    ) : NationwideLookupResolution<Nothing>
+
+    data class Stale<T>(
+        val values: List<T>,
+        val sourceLabel: String,
+        val freshness: TransitProviderFreshness,
+    ) : NationwideLookupResolution<T>
+
+    data class ProviderUnavailable(
+        val reason: TransitProviderUnavailableReason,
+        val retryable: Boolean,
+        val sourceLabel: String? = null,
+    ) : NationwideLookupResolution<Nothing>
+}
+
 enum class NationwideJourneySource {
     LOCAL_STATIC,
     LIVE_FALLBACK,
@@ -142,21 +167,48 @@ class NationwideTransitGateway(
     }
 
     fun searchStops(query: String, limit: Int = 20, callback: (List<CatalogStop>, String?) -> Unit) {
+        searchStopsResolved(query, limit) { resolution ->
+            when (resolution) {
+                is NationwideLookupResolution.Results ->
+                    callback(resolution.values, resolution.sourceLabel)
+                is NationwideLookupResolution.Stale ->
+                    callback(resolution.values, resolution.sourceLabel)
+                is NationwideLookupResolution.NoResult ->
+                    callback(emptyList(), resolution.sourceLabel)
+                is NationwideLookupResolution.ProviderUnavailable ->
+                    callback(emptyList(), resolution.sourceLabel)
+            }
+        }
+    }
+
+    internal fun searchStopsResolved(
+        query: String,
+        limit: Int = 20,
+        callback: (NationwideLookupResolution<CatalogStop>) -> Unit,
+    ) {
         val q = query.trim()
         if (q.length < 2) {
-            callback(emptyList(), appContext.getString(R.string.min_two_chars))
+            callback(NationwideLookupResolution.NoResult())
             return
         }
         io.execute {
-            val local = if (store.isReady()) store.search(q, limit) else emptyList()
-            val result = if (local.isNotEmpty()) local else runCatching { liveApi.searchStops(q, limit) }.getOrDefault(emptyList())
-            val source = when {
-                local.isNotEmpty() -> appContext.getString(R.string.source_gtfs_local)
-                result.isNotEmpty() -> appContext.getString(R.string.source_live_germany)
-                else -> null
-            }
-            main.post { callback(result, source) }
+            val resolution = resolveSearchStops(q, limit)
+            main.post { callback(resolution) }
         }
+    }
+
+    internal fun resolveSearchStops(
+        query: String,
+        limit: Int = 20,
+    ): NationwideLookupResolution<CatalogStop> {
+        val local = if (store.isReady()) store.search(query, limit) else emptyList()
+        if (local.isNotEmpty()) {
+            return NationwideLookupResolution.Results(
+                values = local,
+                sourceLabel = appContext.getString(R.string.source_gtfs_local),
+            )
+        }
+        return liveLookup(liveApi.searchStopsOutcome(query, limit))
     }
 
     fun searchLocations(
@@ -164,57 +216,156 @@ class NationwideTransitGateway(
         limit: Int = 20,
         callback: (List<TransitLocationResult>, String?) -> Unit,
     ) {
-        val q = query.trim()
-        if (q.length < 2) {
-            callback(emptyList(), appContext.getString(R.string.min_two_chars))
-            return
-        }
-        io.execute {
-            val localStops = if (store.isReady()) store.search(q, limit) else emptyList()
-            val local = localStops.map { stop ->
-                TransitLocationResult(
-                    key = "stop:${stop.id}",
-                    kind = TransitLocationKind.STOP,
-                    label = stop.name,
-                    latitude = stop.latitude,
-                    longitude = stop.longitude,
-                    stop = stop,
-                )
+        searchLocationsResolved(query, limit) { resolution ->
+            when (resolution) {
+                is NationwideLookupResolution.Results ->
+                    callback(resolution.values, resolution.sourceLabel)
+                is NationwideLookupResolution.Stale ->
+                    callback(resolution.values, resolution.sourceLabel)
+                is NationwideLookupResolution.NoResult ->
+                    callback(emptyList(), resolution.sourceLabel)
+                is NationwideLookupResolution.ProviderUnavailable ->
+                    callback(emptyList(), resolution.sourceLabel)
             }
-            val live = runCatching { liveApi.searchLocations(q, limit) }.getOrDefault(emptyList())
-            val merged = (local + live)
-                .distinctBy { result ->
-                    if (result.kind == TransitLocationKind.STOP && result.stop != null) {
-                        "stop:${result.stop.id}"
-                    } else {
-                        "${result.kind}:${result.label.lowercase(Locale.ROOT)}:" +
-                            "${"%.5f".format(Locale.ROOT, result.latitude)}:" +
-                            "${"%.5f".format(Locale.ROOT, result.longitude)}"
-                    }
-                }
-                .take(limit)
-            val source = when {
-                local.isNotEmpty() && live.isNotEmpty() ->
-                    "${appContext.getString(R.string.source_gtfs_local)} + ${appContext.getString(R.string.source_live_germany)}"
-                local.isNotEmpty() -> appContext.getString(R.string.source_gtfs_local)
-                live.isNotEmpty() -> appContext.getString(R.string.source_live_germany)
-                else -> null
-            }
-            main.post { callback(merged, source) }
         }
     }
 
-    fun nearbyStops(latitude: Double, longitude: Double, limit: Int = 8, callback: (List<NearbyStop>, String?) -> Unit) {
-        io.execute {
-            val local = if (store.isReady()) store.nearest(latitude, longitude, limit) else emptyList()
-            val result = if (local.isNotEmpty()) local else runCatching { liveApi.nearbyStops(latitude, longitude, limit) }.getOrDefault(emptyList())
-            val source = when {
-                local.isNotEmpty() -> appContext.getString(R.string.source_gtfs_local)
-                result.isNotEmpty() -> appContext.getString(R.string.source_live_germany)
-                else -> null
-            }
-            main.post { callback(result, source) }
+    fun searchLocationsResolved(
+        query: String,
+        limit: Int = 20,
+        callback: (NationwideLookupResolution<TransitLocationResult>) -> Unit,
+    ) {
+        val q = query.trim()
+        if (q.length < 2) {
+            callback(NationwideLookupResolution.NoResult())
+            return
         }
+        io.execute {
+            val resolution = resolveSearchLocations(q, limit)
+            main.post { callback(resolution) }
+        }
+    }
+
+    internal fun resolveSearchLocations(
+        query: String,
+        limit: Int = 20,
+    ): NationwideLookupResolution<TransitLocationResult> {
+        val local = if (store.isReady()) {
+            store.search(query, limit).map(::localLocation)
+        } else {
+            emptyList()
+        }
+        val live = liveApi.searchLocationsOutcome(query, limit)
+
+        if (local.isNotEmpty()) {
+            return when (live) {
+                is TransitProviderOutcome.Results -> NationwideLookupResolution.Results(
+                    values = mergeLocations(local, live.value, limit),
+                    sourceLabel =
+                        appContext.getString(R.string.source_gtfs_local) + " + " +
+                            appContext.getString(R.string.source_live_germany),
+                    freshness = live.freshness,
+                )
+                else -> NationwideLookupResolution.Results(
+                    values = local,
+                    sourceLabel = appContext.getString(R.string.source_gtfs_local),
+                )
+            }
+        }
+        return liveLookup(live)
+    }
+
+    fun nearbyStops(latitude: Double, longitude: Double, limit: Int = 8, callback: (List<NearbyStop>, String?) -> Unit) {
+        nearbyStopsResolved(latitude, longitude, limit) { resolution ->
+            when (resolution) {
+                is NationwideLookupResolution.Results ->
+                    callback(resolution.values, resolution.sourceLabel)
+                is NationwideLookupResolution.Stale ->
+                    callback(resolution.values, resolution.sourceLabel)
+                is NationwideLookupResolution.NoResult ->
+                    callback(emptyList(), resolution.sourceLabel)
+                is NationwideLookupResolution.ProviderUnavailable ->
+                    callback(emptyList(), resolution.sourceLabel)
+            }
+        }
+    }
+
+    fun nearbyStopsResolved(
+        latitude: Double,
+        longitude: Double,
+        limit: Int = 8,
+        callback: (NationwideLookupResolution<NearbyStop>) -> Unit,
+    ) {
+        io.execute {
+            val resolution = resolveNearbyStops(latitude, longitude, limit)
+            main.post { callback(resolution) }
+        }
+    }
+
+    internal fun resolveNearbyStops(
+        latitude: Double,
+        longitude: Double,
+        limit: Int = 8,
+    ): NationwideLookupResolution<NearbyStop> {
+        val local = if (store.isReady()) store.nearest(latitude, longitude, limit) else emptyList()
+        if (local.isNotEmpty()) {
+            return NationwideLookupResolution.Results(
+                values = local,
+                sourceLabel = appContext.getString(R.string.source_gtfs_local),
+            )
+        }
+        return liveLookup(liveApi.nearbyStopsOutcome(latitude, longitude, limit))
+    }
+
+    private fun localLocation(stop: CatalogStop) = TransitLocationResult(
+        key = "stop:${stop.id}",
+        kind = TransitLocationKind.STOP,
+        label = stop.name,
+        latitude = stop.latitude,
+        longitude = stop.longitude,
+        stop = stop,
+    )
+
+    private fun mergeLocations(
+        local: List<TransitLocationResult>,
+        live: List<TransitLocationResult>,
+        limit: Int,
+    ): List<TransitLocationResult> =
+        (local + live)
+            .distinctBy { result ->
+                if (result.kind == TransitLocationKind.STOP && result.stop != null) {
+                    "stop:${result.stop.id}"
+                } else {
+                    "${result.kind}:${result.label.lowercase(Locale.ROOT)}:" +
+                        "${"%.5f".format(Locale.ROOT, result.latitude)}:" +
+                        "${"%.5f".format(Locale.ROOT, result.longitude)}"
+                }
+            }
+            .take(limit)
+
+    private fun <T> liveLookup(
+        outcome: TransitProviderOutcome<List<T>>,
+    ): NationwideLookupResolution<T> = when (outcome) {
+        is TransitProviderOutcome.Results -> NationwideLookupResolution.Results(
+            values = outcome.value,
+            sourceLabel = appContext.getString(R.string.source_live_germany),
+            freshness = outcome.freshness,
+        )
+        is TransitProviderOutcome.NoResult -> NationwideLookupResolution.NoResult(
+            sourceLabel = appContext.getString(R.string.source_live_germany),
+            freshness = outcome.freshness,
+        )
+        is TransitProviderOutcome.Stale -> NationwideLookupResolution.Stale(
+            values = outcome.value,
+            sourceLabel = appContext.getString(R.string.source_live_germany),
+            freshness = outcome.freshness,
+        )
+        is TransitProviderOutcome.Unavailable -> NationwideLookupResolution.ProviderUnavailable(
+            reason = outcome.reason,
+            retryable = outcome.retryable,
+            sourceLabel = outcome.provenance?.sourceLabel
+                ?: appContext.getString(R.string.source_live_germany),
+        )
     }
 
     fun stationDepartures(
