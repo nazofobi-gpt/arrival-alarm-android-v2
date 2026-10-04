@@ -49,6 +49,8 @@ class GtfsScheduleRepositoryInstrumentedTest {
         assertEquals("RE1", repo.route("R")?.shortName)
         assertEquals("S", repo.trip("T")?.serviceId)
         assertEquals("BLOCK-1", repo.trip("T")?.blockId)
+        assertEquals(listOf("T"), repo.tripsForRouteDirection("R", 0).map { it.id })
+        assertEquals(1, repo.tripsForRouteDirection("R", 0, limit = 1).size)
         assertEquals(listOf("T", "T2"), repo.tripsInBlock("BLOCK-1", "S").map { it.id })
         assertEquals(listOf(1, 2), repo.stopTimesForTrip("T").map { it.stopSequence })
         assertEquals(listOf("T"), repo.candidateTripsAtStop("A").map { it.trip.id })
@@ -62,6 +64,7 @@ class GtfsScheduleRepositoryInstrumentedTest {
 
         assertNull(repo.stop("missing"))
         assertNull(repo.trip("missing"))
+        assertTrue(repo.tripsForRouteDirection("missing", 0).isEmpty())
         assertTrue(repo.stopTimesForTrip("missing").isEmpty())
         assertTrue(repo.candidateTripsAtStop("missing").isEmpty())
         assertTrue(repo.transfersFromStop("missing").isEmpty())
@@ -69,6 +72,18 @@ class GtfsScheduleRepositoryInstrumentedTest {
         assertTrue(repo.tripsInBlock("missing", "S").isEmpty())
         assertTrue(repo.childStops("missing").isEmpty())
         assertTrue(repo.shapePoints("missing").isEmpty())
+
+        val selectorPlan = db.rawQuery(
+            "EXPLAIN QUERY PLAN SELECT trip_id FROM trips WHERE route_id=? AND direction_id=? ORDER BY service_id,trip_id LIMIT ?",
+            arrayOf("R", "0", "64"),
+        ).use { cursor ->
+            buildList {
+                val detail = cursor.getColumnIndexOrThrow("detail")
+                while (cursor.moveToNext()) add(cursor.getString(detail))
+            }
+        }
+        assertTrue(selectorPlan.any { it.contains("idx_trips_route_service", ignoreCase = true) })
+        assertFalse(selectorPlan.any { it.contains("SCAN trips", ignoreCase = true) })
 
         index.close()
     }
