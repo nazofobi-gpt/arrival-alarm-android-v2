@@ -190,6 +190,74 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
     }
 
     @Test
+    fun stationDeparturesUseLocalScheduleAndFreshGtfsRealtimeOverlay() {
+        seedReadyGraph(includeTrip = true)
+        val gateway = NationwideTransitGateway(
+            context = context,
+            nowMillis = { at("07:55:00") },
+            realtimeFetch = {
+                GermanyRealtimeFetchResult.Available(
+                    GermanyRealtimeSnapshot(
+                        source = GermanyGtfsRealtimeProvenance.PROVIDER,
+                        license = GermanyGtfsRealtimeProvenance.LICENSE,
+                        feedTimestampEpochSeconds = at("07:54:30") / 1_000L,
+                        fetchedAtEpochSeconds = at("07:54:35") / 1_000L,
+                        tripUpdates = listOf(
+                            GermanyRealtimeTripUpdate(
+                                entityId = "rt-departure-T1",
+                                tripId = "T1",
+                                routeId = "R1",
+                                startDate = null,
+                                scheduleRelationship = "SCHEDULED",
+                                cancelled = false,
+                                stops = listOf(
+                                    GermanyRealtimeStopUpdate(
+                                        stopSequence = 1,
+                                        stopId = "A",
+                                        arrivalDelaySeconds = null,
+                                        departureDelaySeconds = 120,
+                                        arrivalTimeEpochSeconds = null,
+                                        departureTimeEpochSeconds = null,
+                                    ),
+                                ),
+                                selectorValidity =
+                                    GermanyRealtimeTripSelectorValidity.VALID_ID_BASED,
+                            ),
+                        ),
+                        serviceAlerts = emptyList(),
+                        gtfsRealtimeVersion = "2.0",
+                        incrementality = "FULL_DATASET",
+                        feedVersion = "instrumented",
+                    ),
+                )
+            },
+        )
+        try {
+            val snapshot = gateway.resolveStationDepartures(
+                stop = CatalogStop(
+                    id = "A",
+                    providerId = "local-static",
+                    name = "Lohne",
+                    latitude = 52.665,
+                    longitude = 8.237,
+                ),
+                limit = 8,
+            )
+
+            assertEquals(null, snapshot.error)
+            assertEquals(StationRealtimeState.FRESH_MATCHED, snapshot.realtimeState)
+            assertEquals(listOf("T1"), snapshot.departures.map { it.tripId })
+            val departure = snapshot.departures.single()
+            assertEquals(at("08:00:00") / 1_000L, departure.scheduledEpochSeconds)
+            assertEquals(at("08:02:00") / 1_000L, departure.realtimeEpochSeconds)
+            assertEquals("RE 1", departure.line)
+            assertEquals("Achim", departure.direction)
+        } finally {
+            gateway.close()
+        }
+    }
+
+    @Test
     fun afterMidnightPrefersPreviousServiceDayCarryoverOverNextNightTrip() {
         seedCrossMidnightGraph()
         var liveCalls = 0
