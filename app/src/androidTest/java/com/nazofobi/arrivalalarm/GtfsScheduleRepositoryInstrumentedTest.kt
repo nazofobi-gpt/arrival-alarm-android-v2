@@ -47,8 +47,13 @@ class GtfsScheduleRepositoryInstrumentedTest {
         assertEquals("Alpha", repo.stop("A")?.name)
         assertEquals(listOf("A-1"), repo.childStops("A", limit = 1).map { it.id })
         assertEquals("RE1", repo.route("R")?.shortName)
+        assertEquals(listOf("R"), repo.routesMatching("AG", 2).map { it.id })
+        assertEquals(listOf("R"), repo.routesMatching(null, 2).map { it.id })
+        assertTrue(repo.routesMatching("missing", 2).isEmpty())
         assertEquals("S", repo.trip("T")?.serviceId)
         assertEquals("BLOCK-1", repo.trip("T")?.blockId)
+        assertEquals(listOf("T"), repo.tripsForRouteDirection("R", 0).map { it.id })
+        assertEquals(1, repo.tripsForRouteDirection("R", 0, limit = 1).size)
         assertEquals(listOf("T", "T2"), repo.tripsInBlock("BLOCK-1", "S").map { it.id })
         assertEquals(listOf(1, 2), repo.stopTimesForTrip("T").map { it.stopSequence })
         assertEquals(listOf("T"), repo.candidateTripsAtStop("A").map { it.trip.id })
@@ -62,6 +67,7 @@ class GtfsScheduleRepositoryInstrumentedTest {
 
         assertNull(repo.stop("missing"))
         assertNull(repo.trip("missing"))
+        assertTrue(repo.tripsForRouteDirection("missing", 0).isEmpty())
         assertTrue(repo.stopTimesForTrip("missing").isEmpty())
         assertTrue(repo.candidateTripsAtStop("missing").isEmpty())
         assertTrue(repo.transfersFromStop("missing").isEmpty())
@@ -69,6 +75,29 @@ class GtfsScheduleRepositoryInstrumentedTest {
         assertTrue(repo.tripsInBlock("missing", "S").isEmpty())
         assertTrue(repo.childStops("missing").isEmpty())
         assertTrue(repo.shapePoints("missing").isEmpty())
+
+        val selectorPlan = db.rawQuery(
+            "EXPLAIN QUERY PLAN SELECT trip_id FROM trips WHERE route_id=? AND direction_id=? ORDER BY service_id,trip_id LIMIT ?",
+            arrayOf("R", "0", "64"),
+        ).use { cursor ->
+            buildList {
+                val detail = cursor.getColumnIndexOrThrow("detail")
+                while (cursor.moveToNext()) add(cursor.getString(detail))
+            }
+        }
+        assertTrue(selectorPlan.any { it.contains("idx_trips_route_service", ignoreCase = true) })
+        assertFalse(selectorPlan.any { it.contains("SCAN trips", ignoreCase = true) })
+
+        val routeSelectorPlan = db.rawQuery(
+            "EXPLAIN QUERY PLAN SELECT route_id FROM routes WHERE agency_id=? AND route_type=? ORDER BY route_id LIMIT ?",
+            arrayOf("AG", "2", "64"),
+        ).use { cursor ->
+            buildList {
+                val detail = cursor.getColumnIndexOrThrow("detail")
+                while (cursor.moveToNext()) add(cursor.getString(detail))
+            }
+        }
+        assertTrue(routeSelectorPlan.any { it.contains("idx_routes_agency", ignoreCase = true) })
 
         index.close()
     }
