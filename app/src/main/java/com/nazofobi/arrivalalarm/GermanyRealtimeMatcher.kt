@@ -194,7 +194,8 @@ class GermanyRealtimeMatcher(
 
         val overlays = snapshot.tripUpdates.mapNotNull(::matchTripUpdate)
         val alerts = snapshot.serviceAlerts.filter { alert ->
-            alert.selectors.any(::selectorCanBeApplied)
+            alertIsActive(alert, nowEpochSeconds) &&
+                alert.selectors.any(::selectorCanBeApplied)
         }
 
         return if (overlays.isEmpty() && alerts.isEmpty()) {
@@ -353,6 +354,19 @@ class GermanyRealtimeMatcher(
             dropOffType = update.dropOffType,
             stopHeadsign = update.stopHeadsign,
         )
+    }
+
+    private fun alertIsActive(
+        alert: GermanyRealtimeAlert,
+        nowEpochSeconds: Long,
+    ): Boolean {
+        if (alert.activePeriods.isEmpty()) return true
+        return alert.activePeriods.any { period ->
+            val starts = period.startEpochSeconds
+            val ends = period.endEpochSeconds
+            (starts == null || nowEpochSeconds >= starts) &&
+                (ends == null || nowEpochSeconds < ends)
+        }
     }
 
     private fun selectorCanBeApplied(
