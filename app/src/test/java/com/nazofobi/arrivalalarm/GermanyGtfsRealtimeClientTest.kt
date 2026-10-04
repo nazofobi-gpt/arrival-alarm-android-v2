@@ -32,6 +32,7 @@ class GermanyGtfsRealtimeClientTest {
             .build()
         val tripUpdate = GtfsRealtime.TripUpdate.newBuilder()
             .setTrip(trip)
+            .setTimestamp(1_800_000_005L)
             .addStopTimeUpdate(stop)
             .build()
 
@@ -66,6 +67,8 @@ class GermanyGtfsRealtimeClientTest {
             .setHeader(
                 GtfsRealtime.FeedHeader.newBuilder()
                     .setGtfsRealtimeVersion("2.0")
+                    .setIncrementality(GtfsRealtime.FeedHeader.Incrementality.FULL_DATASET)
+                    .setFeedVersion("feed-20261004")
                     .setTimestamp(1_800_000_000L),
             )
             .addEntity(
@@ -92,11 +95,15 @@ class GermanyGtfsRealtimeClientTest {
         assertEquals(GermanyGtfsRealtimeProvenance.LICENSE, snapshot.license)
         assertEquals(1_800_000_000L, snapshot.feedTimestampEpochSeconds)
         assertEquals(1_800_000_010L, snapshot.fetchedAtEpochSeconds)
+        assertEquals("2.0", snapshot.gtfsRealtimeVersion)
+        assertEquals("FULL_DATASET", snapshot.incrementality)
+        assertEquals("feed-20261004", snapshot.feedVersion)
 
         val update = snapshot.tripUpdates.single()
         assertEquals("trip-1", update.tripId)
         assertEquals("route-1", update.routeId)
         assertEquals("20261002", update.startDate)
+        assertEquals(1_800_000_005L, update.updateTimestampEpochSeconds)
         assertTrue(update.cancelled)
         assertEquals(120, update.stops.single().arrivalDelaySeconds)
         assertEquals(180, update.stops.single().departureDelaySeconds)
@@ -327,6 +334,29 @@ class GermanyGtfsRealtimeClientTest {
             GermanyRealtimeTripSelectorValidity.VALID_ID_BASED,
             parsedCancelled.selectorValidity,
         )
+    }
+
+    @Test
+    fun differentialFeedFailsClosedInsteadOfMasqueradingAsFullSnapshot() {
+        val feed = GtfsRealtime.FeedMessage.newBuilder()
+            .setHeader(
+                GtfsRealtime.FeedHeader.newBuilder()
+                    .setGtfsRealtimeVersion("2.0")
+                    .setIncrementality(GtfsRealtime.FeedHeader.Incrementality.DIFFERENTIAL)
+                    .setFeedVersion("delta-feed"),
+            )
+            .build()
+
+        val result = GermanyGtfsRealtimeClient(
+            loader = { feed.toByteArray() },
+        ).fetch()
+
+        assertTrue(result is GermanyRealtimeFetchResult.Unavailable)
+        assertEquals(
+            GermanyRealtimeUnavailableReason.UNSUPPORTED_INCREMENTALITY,
+            (result as GermanyRealtimeFetchResult.Unavailable).reason,
+        )
+        assertTrue(result.detail?.contains("DIFFERENTIAL") == true)
     }
 
     @Test
