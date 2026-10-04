@@ -455,10 +455,7 @@ class NationwideTransitGateway(
                 is NationwideJourneyResolution.NoRoute ->
                     appContext.getString(R.string.route_not_found)
                 is NationwideJourneyResolution.ProviderUnavailable ->
-                    appContext.getString(
-                        R.string.route_live_unavailable,
-                        resolution.message,
-                    )
+                    appContext.getString(R.string.route_live_unavailable)
             }
             main.post { callback(options, status) }
         }
