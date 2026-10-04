@@ -62,6 +62,57 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
     }
 
     @Test
+    fun localLookupRemainsUsableWhenEnrichmentProviderIsOffline() {
+        seedReadyGraph(includeTrip = true)
+        var providerCalls = 0
+        val transport = BoundedHttpTransport(
+            exchange = HttpExchange { _, _, _ ->
+                providerCalls += 1
+                throw IOException("provider offline")
+            },
+            clock = HttpTransportClock { at("07:55:00") },
+            sleeper = HttpTransportSleeper { },
+            maxRetries = 0,
+        )
+        val gateway = NationwideTransitGateway(
+            context = context,
+            liveApi = GermanyLiveTransitApi(
+                nowEpochSeconds = { at("07:55:00") / 1_000L },
+                transport = transport,
+            ),
+            nowMillis = { at("07:55:00") },
+            realtimeFetch = ::realtimeUnavailable,
+        )
+        try {
+            val stops = gateway.resolveSearchStops("Lohne", 5)
+            assertTrue(stops is NationwideLookupResolution.Results)
+            stops as NationwideLookupResolution.Results
+            assertEquals(listOf("A"), stops.values.map { it.id })
+            assertEquals(0, providerCalls)
+
+            val nearby = gateway.resolveNearbyStops(52.665, 8.237, 5)
+            assertTrue(nearby is NationwideLookupResolution.Results)
+            nearby as NationwideLookupResolution.Results
+            assertEquals("A", nearby.values.first().stop.id)
+            assertEquals(0, providerCalls)
+
+            val locations = gateway.resolveSearchLocations("Lohne", 5)
+            assertTrue(locations is NationwideLookupResolution.Results)
+            locations as NationwideLookupResolution.Results
+            assertEquals(listOf("A"), locations.values.mapNotNull { it.stop?.id })
+            assertEquals(1, providerCalls)
+
+            val unavailable = gateway.resolveSearchStops("NoSuchStop", 5)
+            assertTrue(unavailable is NationwideLookupResolution.ProviderUnavailable)
+            unavailable as NationwideLookupResolution.ProviderUnavailable
+            assertEquals(TransitProviderUnavailableReason.OFFLINE, unavailable.reason)
+            assertEquals(2, providerCalls)
+        } finally {
+            gateway.close()
+        }
+    }
+
+    @Test
     fun noStaticPathFallsBackToLiveAndProviderFailureRemainsTyped() {
         seedReadyGraph(includeTrip = false)
         val liveOption = RouteOption(
@@ -481,6 +532,8 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
             "INSERT INTO stops(id,name,lat,lon,parent_station,location_type) " +
                 "VALUES('B','Achim',52.700,8.400,NULL,0)",
         )
+        db.execSQL("INSERT INTO stop_search(stop_id,name) VALUES('A','Lohne')")
+        db.execSQL("INSERT INTO stop_search(stop_id,name) VALUES('B','Achim')")
         db.execSQL(
             "INSERT INTO routes(route_id,agency_id,short_name,long_name,route_type) " +
                 "VALUES('R1','AG','RE 1','Regional Express',2)",

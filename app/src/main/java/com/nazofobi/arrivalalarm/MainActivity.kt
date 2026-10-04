@@ -200,6 +200,7 @@ fun ArrivalAlarmApp(
     var destinationStopId by remember { mutableStateOf<String?>(null) }
     var nearby by remember { mutableStateOf(emptyList<NearbyStop>()) }
     var nearbySource by remember { mutableStateOf<String?>(null) }
+    var nearbyMessage by remember { mutableStateOf<String?>(null) }
     var locationMessage by remember { mutableStateOf<String?>(null) }
     var mapMessage by remember { mutableStateOf<String?>(null) }
     var routeOptions by remember { mutableStateOf(emptyList<RouteOption>()) }
@@ -297,9 +298,30 @@ fun ArrivalAlarmApp(
     }
 
     fun loadNearby(point: MapPoint) {
-        transit.nearbyStops(point.latitude, point.longitude) { values, source ->
-            nearby = values
-            nearbySource = source
+        nearbyMessage = null
+        transit.nearbyStopsResolved(point.latitude, point.longitude) { resolution ->
+            when (resolution) {
+                is NationwideLookupResolution.Results -> {
+                    nearby = resolution.values
+                    nearbySource = resolution.sourceLabel
+                    nearbyMessage = null
+                }
+                is NationwideLookupResolution.Stale -> {
+                    nearby = resolution.values
+                    nearbySource = resolution.sourceLabel
+                    nearbyMessage = context.getString(R.string.lookup_stale_results)
+                }
+                is NationwideLookupResolution.NoResult -> {
+                    nearby = emptyList()
+                    nearbySource = resolution.sourceLabel
+                    nearbyMessage = null
+                }
+                is NationwideLookupResolution.ProviderUnavailable -> {
+                    nearby = emptyList()
+                    nearbySource = resolution.sourceLabel
+                    nearbyMessage = context.getString(R.string.lookup_provider_unavailable)
+                }
+            }
         }
     }
 
@@ -442,12 +464,31 @@ fun ArrivalAlarmApp(
         searchRequestId = requestId
         searchBusy = true
         searchMessage = null
-        transit.searchLocations(q) callback@{ values, source ->
+        transit.searchLocationsResolved(q) callback@{ resolution ->
             if (requestId != searchRequestId) return@callback
             searchBusy = false
-            searchResults = values
-            searchSource = source
-            searchMessage = if (values.isEmpty()) context.getString(R.string.no_stop_found) else null
+            when (resolution) {
+                is NationwideLookupResolution.Results -> {
+                    searchResults = resolution.values
+                    searchSource = resolution.sourceLabel
+                    searchMessage = null
+                }
+                is NationwideLookupResolution.Stale -> {
+                    searchResults = resolution.values
+                    searchSource = resolution.sourceLabel
+                    searchMessage = context.getString(R.string.lookup_stale_results)
+                }
+                is NationwideLookupResolution.NoResult -> {
+                    searchResults = emptyList()
+                    searchSource = resolution.sourceLabel
+                    searchMessage = context.getString(R.string.no_stop_found)
+                }
+                is NationwideLookupResolution.ProviderUnavailable -> {
+                    searchResults = emptyList()
+                    searchSource = resolution.sourceLabel
+                    searchMessage = context.getString(R.string.lookup_provider_unavailable)
+                }
+            }
         }
     }
 
@@ -833,6 +874,7 @@ fun ArrivalAlarmApp(
                     mapMessage = mapMessage,
                     nearby = nearby,
                     nearbySource = nearbySource,
+                    nearbyMessage = nearbyMessage,
                     recentSearches = recentSearches,
                     favoriteStopIds = favoriteStopIds,
                     onSelectOriginTarget = { selectingOrigin = true },

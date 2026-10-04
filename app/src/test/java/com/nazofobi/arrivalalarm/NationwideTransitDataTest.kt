@@ -279,6 +279,108 @@ class NationwideTransitDataTest {
         assertEquals(4, exchange.requests.size)
     }
 
+    @Test fun typedStopSearchDistinguishesResultsNoResultAndInvalidResponse() {
+        val resultApi = cacheApi(
+            RecordingExchange(
+                httpResponse(
+                    200,
+                    """[{"type":"stop","id":"8000105","name":"Frankfurt(Main)Hbf","location":{"latitude":50.1071,"longitude":8.6638}}]""",
+                    "Cache-Control" to "max-age=60",
+                ),
+            ),
+            { 9_000L },
+        )
+        val results = resultApi.searchStopsOutcome("Frankfurt", 5)
+        assertTrue(results is TransitProviderOutcome.Results)
+        assertEquals(
+            listOf("db:8000105"),
+            (results as TransitProviderOutcome.Results).value.map { it.id },
+        )
+
+        val emptyApi = cacheApi(
+            RecordingExchange(
+                httpResponse(200, "[]", "Cache-Control" to "max-age=60"),
+            ),
+            { 9_100L },
+        )
+        assertTrue(
+            emptyApi.searchStopsOutcome("Nowhere", 5) is TransitProviderOutcome.NoResult,
+        )
+
+        val invalidApi = cacheApi(
+            RecordingExchange(
+                httpResponse(200, "{not-json", "Cache-Control" to "max-age=60"),
+            ),
+            { 9_200L },
+        )
+        val invalid = invalidApi.searchStopsOutcome("Broken", 5)
+        assertTrue(invalid is TransitProviderOutcome.Unavailable)
+        assertEquals(
+            TransitProviderUnavailableReason.INVALID_RESPONSE,
+            (invalid as TransitProviderOutcome.Unavailable).reason,
+        )
+    }
+
+    @Test fun typedStopSearchRetainsParsedStaleCacheAndProviderFailure() {
+        var nowSeconds = 10_000L
+        val staleApi = cacheApi(
+            RecordingExchange(
+                httpResponse(
+                    200,
+                    """[{"type":"stop","id":"8000105","name":"Frankfurt(Main)Hbf","location":{"latitude":50.1071,"longitude":8.6638}}]""",
+                    "Cache-Control" to "max-age=1",
+                    "ETag" to "\"v1\"",
+                ),
+                IOException("offline"),
+            ),
+            { nowSeconds },
+        )
+        val fresh = staleApi.searchStopsOutcome("Frankfurt", 5)
+        assertTrue(fresh is TransitProviderOutcome.Results)
+        nowSeconds += 2
+        val stale = staleApi.searchStopsOutcome("Frankfurt", 5)
+        assertTrue(stale is TransitProviderOutcome.Stale)
+        assertEquals(
+            listOf("db:8000105"),
+            (stale as TransitProviderOutcome.Stale).value.map { it.id },
+        )
+        assertEquals(2L, stale.freshness.ageSeconds)
+
+        val unavailableApi = cacheApi(
+            RecordingExchange(httpResponse(503, "down")),
+            { 10_100L },
+        )
+        val unavailable = unavailableApi.searchStopsOutcome("Frankfurt", 5)
+        assertTrue(unavailable is TransitProviderOutcome.Unavailable)
+        assertEquals(
+            TransitProviderUnavailableReason.UPSTREAM_ERROR,
+            (unavailable as TransitProviderOutcome.Unavailable).reason,
+        )
+    }
+
+    @Test fun staleEmptyCacheIsNotReclassifiedAsFreshNoResult() {
+        var nowSeconds = 10_500L
+        val api = cacheApi(
+            RecordingExchange(
+                httpResponse(
+                    200,
+                    "[]",
+                    "Cache-Control" to "max-age=1",
+                    "ETag" to "\"empty-v1\"",
+                ),
+                IOException("offline"),
+            ),
+            { nowSeconds },
+        )
+
+        assertTrue(api.searchStopsOutcome("Nowhere", 5) is TransitProviderOutcome.NoResult)
+        nowSeconds += 2
+        val stale = api.searchStopsOutcome("Nowhere", 5)
+        assertTrue(stale is TransitProviderOutcome.Stale)
+        assertTrue((stale as TransitProviderOutcome.Stale).value.isEmpty())
+        assertEquals(TransitProviderFreshnessState.STALE, stale.freshness.state)
+    }
+
     @Test fun stationDepartureParserPreservesRealtimePlatformCancellationAndRemarks() {
         val json = JSONArray(
             """[

@@ -229,4 +229,6 @@
     <string name="departures_gtfsrt_no_match">GTFS Deutschland local departures • GTFS-RT current, no matching trip</string>
     <string name="departures_gtfsrt_stale">GTFS Deutschland local departures • GTFS-RT stale, scheduled times</string>
     <string name="departures_gtfsrt_unavailable">GTFS Deutschland local departures • GTFS-RT unavailable, scheduled times</string>
+    <string name="lookup_stale_results">Cached provider results are stale • freshness could not be verified</string>
+    <string name="lookup_provider_unavailable">Live search provider is unavailable • local data returned no result</string>
 </resources>

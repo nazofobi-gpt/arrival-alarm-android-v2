@@ -112,6 +112,35 @@ class BoundedHttpTransportTest {
     }
 
     @Test
+    fun interruptedBackoffStopsRetryAndPreservesThreadInterrupt() {
+        var calls = 0
+        val transport = BoundedHttpTransport(
+            exchange = HttpExchange { _, _, _ ->
+                calls += 1
+                HttpTransportResponse(503)
+            },
+            clock = HttpTransportClock { 0 },
+            sleeper = HttpTransportSleeper { throw InterruptedException("cancelled") },
+            maxRetries = 2,
+            failureThreshold = 1,
+        )
+
+        try {
+            val result = transport.execute(
+                HttpTransportRequest("https://example.invalid")
+            ) as HttpTransportResult.Failure
+
+            assertEquals(HttpTransportResult.Failure.Kind.NETWORK, result.kind)
+            assertEquals(1, result.attempts)
+            assertEquals("retry interrupted", result.message)
+            assertEquals(1, calls)
+            assertTrue(Thread.currentThread().isInterrupted)
+        } finally {
+            Thread.interrupted()
+        }
+    }
+
+    @Test
     fun hugeBackoffAndCircuitDeadlineNeverOverflowNegative() {
         val clock = FakeClock(Long.MAX_VALUE - 10)
         val delays = mutableListOf<Long>()

@@ -237,4 +237,6 @@
     <string name="departures_empty_title">Kalkış panosu henüz hazır değil</string>
     <string name="departures_empty_body">Önce bir rota veya hedef durak seç.</string>
     <string name="departures_empty_action">Rota planla</string>
+    <string name="lookup_stale_results">Önbellekteki eski sağlayıcı sonuçları gösteriliyor • güncellik doğrulanamadı</string>
+    <string name="lookup_provider_unavailable">Canlı arama sağlayıcısına ulaşılamıyor • yerel veri sonuç vermedi</string>
 </resources>

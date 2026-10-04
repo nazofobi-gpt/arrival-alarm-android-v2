@@ -42,6 +42,7 @@ fun HomeSearchPanel(
     mapMessage: String?,
     nearby: List<NearbyStop>,
     nearbySource: String?,
+    nearbyMessage: String?,
     recentSearches: List<String>,
     favoriteStopIds: Set<String>,
     onSelectOriginTarget: () -> Unit,
@@ -240,6 +241,15 @@ fun HomeSearchPanel(
                         modifier = Modifier.testTag("map-provider"),
                     )
                 }
+            }
+
+            nearbyMessage?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("nearby-message"),
+                )
             }
 
             if (nearby.isNotEmpty()) {
