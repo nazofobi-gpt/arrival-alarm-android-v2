@@ -532,8 +532,8 @@ class StaticGtfsRouterTest {
             at("25:07:00"),
         )
         val leg = (result as StaticRouterResult.Journeys).journeys.first().legs.single()
-        assertEquals(at("25:15:00"), leg.departureEpochMillis)
-        assertEquals(at("25:25:00"), leg.arrivalEpochMillis)
+        assertEquals(at("25:10:00"), leg.departureEpochMillis)
+        assertEquals(at("25:20:00"), leg.arrivalEpochMillis)
         assertTrue(leg.frequencyBased)
         assertTrue(!leg.approximate)
         assertEquals(25 * 3_600 + 10 * 60, leg.frequencyInstanceStartSeconds)
