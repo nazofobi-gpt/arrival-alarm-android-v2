@@ -27,6 +27,7 @@ internal class ProductionRealtimeJourneyOverlay(
     private val match: (GermanyRealtimeFetchResult, Long) -> GermanyRealtimeOverlayResult,
     private val nowEpochSeconds: () -> Long = { System.currentTimeMillis() / 1_000L },
     private val agencyTimeZone: TimeZone = TimeZone.getTimeZone("Europe/Berlin"),
+    private val isFrequencyTrip: (String) -> Boolean = { false },
 ) {
     fun enrich(options: List<RouteOption>): List<RouteOption> {
         if (options.isEmpty()) return options
@@ -50,6 +51,7 @@ internal class ProductionRealtimeJourneyOverlay(
                                 updatedAtEpochSeconds = overlay.updatedAtEpochSeconds(),
                                 ageSeconds = overlay.ageSeconds,
                                 matchedTripIds = overlay.tripOverlays
+                                    .filterNot { frequencyTrip(it.staticTrip.id) }
                                     .map { it.staticTrip.id }
                                     .filter { it in option.tripIds },
                                 cancelledTripIds = emptyList(),
@@ -93,7 +95,9 @@ internal class ProductionRealtimeJourneyOverlay(
         option: RouteOption,
         overlay: GermanyRealtimeOverlayResult.Matched,
     ): RouteOption {
-        val tripOverlays = overlay.tripOverlays.filter { it.staticTrip.id in option.tripIds }
+        val tripOverlays = overlay.tripOverlays.filter {
+            it.staticTrip.id in option.tripIds && !frequencyTrip(it.staticTrip.id)
+        }
         if (tripOverlays.isEmpty()) {
             return option.copy(
                 realtime = RouteRealtimeInfo(
@@ -149,6 +153,9 @@ internal class ProductionRealtimeJourneyOverlay(
             ),
         )
     }
+
+    private fun frequencyTrip(tripId: String): Boolean =
+        runCatching { isFrequencyTrip(tripId) }.getOrDefault(true)
 
     private fun realtimeIso(
         epochSeconds: Long?,
