@@ -271,39 +271,63 @@ class ProductionStaticJourneyPlanner(
         if (origins.isEmpty() || destinations.isEmpty()) return LocalStaticJourneyOutcome.NoPath
 
         val departureMillis = nowMillis()
-        val serviceDate = serviceDate(departureMillis)
-        return when (
-            val result = router.route(
-                origins = origins,
-                destinations = destinations,
-                serviceDate = serviceDate,
-                departureEpochMillis = departureMillis,
-            )
-        ) {
-            is StaticRouterResult.Journeys -> {
-                val options = result.journeys.take(boundedLimit).map { journey ->
-                    mapper.map(
-                        journey = journey,
-                        origin = origin,
-                        destination = destination,
+        var sawSameOrigin = false
+        val datedJourneys = buildList {
+            serviceDates(departureMillis).forEach { serviceDate ->
+                when (
+                    val result = router.route(
+                        origins = origins,
+                        destinations = destinations,
                         serviceDate = serviceDate,
-                        sourceUpdatedAtEpochSeconds = index.fetchedAt(),
+                        departureEpochMillis = departureMillis,
                     )
+                ) {
+                    is StaticRouterResult.Journeys -> result.journeys.forEach { journey ->
+                        add(serviceDate to journey)
+                    }
+                    StaticRouterResult.SameOrigin -> sawSameOrigin = true
+                    StaticRouterResult.NoPath -> Unit
                 }
-                if (options.isEmpty()) LocalStaticJourneyOutcome.NoPath
-                else LocalStaticJourneyOutcome.Results(options)
             }
-            StaticRouterResult.SameOrigin -> LocalStaticJourneyOutcome.SameOrigin
-            StaticRouterResult.NoPath -> LocalStaticJourneyOutcome.NoPath
+        }
+        val options = datedJourneys
+            .sortedWith(
+                compareBy<Pair<GtfsServiceDate, StaticTransitJourney>> {
+                    it.second.arrivalEpochMillis
+                }.thenBy { it.second.transferCount }
+                    .thenBy { it.second.id }
+            )
+            .distinctBy { it.second.id }
+            .take(boundedLimit)
+            .map { (serviceDate, journey) ->
+                mapper.map(
+                    journey = journey,
+                    origin = origin,
+                    destination = destination,
+                    serviceDate = serviceDate,
+                    sourceUpdatedAtEpochSeconds = index.fetchedAt(),
+                )
+            }
+        return when {
+            options.isNotEmpty() -> LocalStaticJourneyOutcome.Results(options)
+            sawSameOrigin -> LocalStaticJourneyOutcome.SameOrigin
+            else -> LocalStaticJourneyOutcome.NoPath
         }
     }
 
     private fun walkSeconds(distanceMeters: Int): Int =
         ceil(distanceMeters.coerceAtLeast(0) / walkingMetersPerSecond).toInt()
 
-    private fun serviceDate(epochMillis: Long): GtfsServiceDate {
+    private fun serviceDates(epochMillis: Long): List<GtfsServiceDate> =
+        listOf(
+            serviceDate(epochMillis, dayOffset = -1),
+            serviceDate(epochMillis),
+        )
+
+    private fun serviceDate(epochMillis: Long, dayOffset: Int = 0): GtfsServiceDate {
         val calendar = GregorianCalendar(timeZone).apply {
             timeInMillis = epochMillis
+            add(Calendar.DAY_OF_MONTH, dayOffset)
         }
         return GtfsServiceDate(
             year = calendar.get(Calendar.YEAR),
