@@ -225,6 +225,29 @@ class GtfsScheduleRepository(
         }
     }
 
+    fun tripsForRouteDirection(
+        routeId: String,
+        directionId: Int,
+        limit: Int = 64,
+    ): List<GtfsScheduleTrip> {
+        if (routeId.isBlank()) return emptyList()
+        val boundedLimit = limit.coerceIn(1, MAX_SELECTOR_TRIPS)
+        return index.readableDatabase.rawQuery(
+            """
+            SELECT trip_id,route_id,service_id,headsign,direction_id,shape_id,wheelchair_accessible,bikes_allowed,block_id
+            FROM trips
+            WHERE route_id=? AND direction_id=?
+            ORDER BY service_id,trip_id
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf(routeId, directionId.toString(), boundedLimit.toString()),
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) add(cursor.toTrip())
+            }
+        }
+    }
+
     fun stopTimesForTrip(tripId: String, limit: Int = 512): List<GtfsScheduleStopTime> {
         if (tripId.isBlank()) return emptyList()
         val boundedLimit = limit.coerceIn(1, MAX_STOP_TIMES)
@@ -671,6 +694,7 @@ class GtfsScheduleRepository(
         private const val NEARBY_SCAN_MULTIPLIER = 8
         private const val MAX_NEARBY_SCAN_ROWS = 512
         private const val MAX_STOP_TIMES = 2_048
+        private const val MAX_SELECTOR_TRIPS = 256
         private const val MAX_TRIP_CANDIDATES = 512
         private const val MAX_TRANSFERS = 512
         private const val MAX_LINKED_TRANSFERS = 512
