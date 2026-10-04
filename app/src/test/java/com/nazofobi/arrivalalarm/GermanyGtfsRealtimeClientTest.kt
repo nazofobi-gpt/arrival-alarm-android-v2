@@ -476,6 +476,13 @@ class GermanyGtfsRealtimeClientTest {
     }
 
     @Test
+    fun defaultPayloadBoundIs64MiBAndRemainsExplicitlyBounded() {
+        assertEquals(64 * 1024 * 1024, GERMANY_REALTIME_DEFAULT_MAX_BYTES)
+        assertTrue(GERMANY_REALTIME_DEFAULT_MAX_BYTES > 32 * 1024 * 1024)
+        assertTrue(GERMANY_REALTIME_DEFAULT_MAX_BYTES < 128 * 1024 * 1024)
+    }
+
+    @Test
     fun malformedPayloadReturnsTypedParseFailure() {
         val client = GermanyGtfsRealtimeClient(
             loader = { byteArrayOf(0x08) },
