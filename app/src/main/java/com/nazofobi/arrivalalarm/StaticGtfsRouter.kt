@@ -121,8 +121,8 @@ class RepositoryStaticGtfsScheduleData(
  * Provider-independent bounded static GTFS router core.
  *
  * The caller supplies bounded access/egress stop candidates. This keeps geocoding and UI concerns
- * outside the core while still accounting for walking time. Search is intentionally capped at
- * direct and one-transfer journeys; every repository query is bounded.
+ * outside the core while still accounting for walking time. Multi-round search is bounded by
+ * transfer, state, candidate, stop-time, proximity and frequency caps; every repository query is bounded.
  */
 class StaticGtfsRouter(
     private val data: StaticGtfsScheduleData,
@@ -138,6 +138,9 @@ class StaticGtfsRouter(
     private val implicitWalkingMetersPerSecond: Double = 1.25,
     private val maxFrequencyRowsPerTrip: Int = 64,
     private val maxFrequencyInstancesPerCandidate: Int = 128,
+    private val maxTransfers: Int = 3,
+    private val maxExpandedStates: Int = 4_096,
+    private val maxCandidateQueries: Int = 4_096,
 ) {
     init {
         require(maxCandidatesPerStop in 1..512)
@@ -151,6 +154,9 @@ class StaticGtfsRouter(
         require(implicitWalkingMetersPerSecond in 0.5..3.0)
         require(maxFrequencyRowsPerTrip in 1..512)
         require(maxFrequencyInstancesPerCandidate in 1..512)
+        require(maxTransfers in 0..6)
+        require(maxExpandedStates in 1..100_000)
+        require(maxCandidateQueries in 1..100_000)
     }
 
     fun route(
@@ -166,126 +172,219 @@ class StaticGtfsRouter(
 
         val destinationByStop = to.associateBy { it.stopId }
         val found = mutableListOf<StaticTransitJourney>()
+        val budget = SearchBudget(maxExpandedStates, maxCandidateQueries)
+        val bestBoardByState = mutableMapOf<SearchStateKey, Long>()
 
         for (access in from) {
             val earliestBoard = departureEpochMillis + access.walkSeconds * 1_000L
             val earliestBoardSeconds = serviceSeconds(earliestBoard, serviceDate) ?: continue
-            for (
-                instance in candidateInstancesAtStop(
-                    stopId = access.stopId,
-                    serviceDate = serviceDate,
-                    earliestBoardSeconds = earliestBoardSeconds,
-                )
-            ) {
-                val candidate = instance.candidate
-                if (!data.isServiceActive(candidate.trip.serviceId, serviceDate)) continue
-                val first = legOnTrip(
+            if (!budget.claimCandidateQuery()) break
+            val instances = candidateInstancesAtStop(
+                stopId = access.stopId,
+                serviceDate = serviceDate,
+                earliestBoardSeconds = earliestBoardSeconds,
+            )
+            for (instance in instances) {
+                if (!data.isServiceActive(instance.candidate.trip.serviceId, serviceDate)) continue
+                found += exploreTrip(
+                    access = access,
                     instance = instance,
                     boardStopId = access.stopId,
                     earliestBoardEpochMillis = earliestBoard,
                     serviceDate = serviceDate,
                     destinationByStop = destinationByStop,
+                    priorLegs = emptyList(),
+                    remainingTransfers = maxTransfers,
+                    visitedTripIds = emptySet(),
+                    bestBoardByState = bestBoardByState,
+                    budget = budget,
                 )
-                if (first != null) {
-                    found += journey(access, first.second, listOf(first.first))
-                    continue
-                }
-
-                val stopTimes = data.stopTimesForTrip(candidate.trip.id, maxStopTimesPerTrip)
-                val boardIndex = stopTimes.indexOfFirst {
-                    it.stopId == access.stopId && it.stopSequence == candidate.stopSequence
-                }
-                if (boardIndex < 0) continue
-                val boardStopTime = stopTimes[boardIndex]
-                if (!allowsScheduledPickup(boardStopTime)) continue
-                val boardDeparture = shiftedEpoch(
-                    boardStopTime.departureTime ?: boardStopTime.arrivalTime,
-                    serviceDate,
-                    instance.shiftSeconds,
-                ) ?: continue
-                if (boardDeparture < earliestBoard) continue
-
-                for (alight in stopTimes.drop(boardIndex + 1)) {
-                    val firstArrival = shiftedEpoch(
-                        alight.arrivalTime ?: alight.departureTime,
-                        serviceDate,
-                        instance.shiftSeconds,
-                    ) ?: continue
-                    val firstLeg = StaticTransitLeg(
-                        tripId = candidate.trip.id,
-                        routeId = candidate.trip.routeId,
-                        fromStopId = access.stopId,
-                        toStopId = alight.stopId,
-                        departureEpochMillis = boardDeparture,
-                        arrivalEpochMillis = firstArrival,
-                        frequencyBased = instance.frequencyBased,
-                        approximate = instance.approximate,
-                        frequencyInstanceStartSeconds = instance.frequencyInstanceStartSeconds,
-                    )
-                    linkedContinuationLegs(
-                        fromTrip = candidate.trip,
-                        alight = alight,
-                        firstArrivalEpochMillis = firstArrival,
-                        serviceDate = serviceDate,
-                        destinationByStop = destinationByStop,
-                    ).forEach { second ->
-                        found += journey(access, second.second, listOf(firstLeg, second.first))
-                    }
-
-                    if (!allowsScheduledDropOff(alight)) continue
-                    val rules = transferRulesFor(alight.stopId)
-                    val targets = transferTargets(alight.stopId, rules)
-                    for (target in targets) {
-                        val targetStopId = target.stopId
-                        val earliestTransferReady = firstArrival + target.walkSeconds * 1_000L
-                        val earliestTransferSeconds = serviceSeconds(earliestTransferReady, serviceDate) ?: continue
-                        for (
-                            nextInstance in candidateInstancesAtStop(
-                                stopId = targetStopId,
-                                serviceDate = serviceDate,
-                                earliestBoardSeconds = earliestTransferSeconds,
-                            )
-                        ) {
-                            val next = nextInstance.candidate
-                            if (!data.isServiceActive(next.trip.serviceId, serviceDate)) continue
-                            val applicable = rules.filter { rule ->
-                                transferTargetsForRule(rule).contains(targetStopId) &&
-                                    ruleMatches(rule, candidate.trip, next.trip)
-                            }
-                            val maxSpecificity = applicable.maxOfOrNull(::ruleSpecificity)
-                            val governingRules = if (maxSpecificity == null) {
-                                emptyList()
-                            } else {
-                                applicable.filter { ruleSpecificity(it) == maxSpecificity }
-                            }
-                            if (governingRules.size > 1) continue
-                            val governing = governingRules.singleOrNull()
-                            if (governing?.transferType == 3) continue
-                            val transferSeconds = if (governing?.transferType == 2) {
-                                max(target.walkSeconds, max(0, governing.minTransferTimeSeconds ?: 0))
-                            } else {
-                                target.walkSeconds
-                            }
-                            val transferReady = firstArrival + transferSeconds * 1_000L
-                            val second = legOnTrip(
-                                instance = nextInstance,
-                                boardStopId = targetStopId,
-                                earliestBoardEpochMillis = transferReady,
-                                serviceDate = serviceDate,
-                                destinationByStop = destinationByStop,
-                            ) ?: continue
-                            found += journey(access, second.second, listOf(firstLeg, second.first))
-                        }
-                    }
-                }
+                if (budget.exhausted) break
             }
+            if (budget.exhausted) break
         }
 
         val deduped = found
-            .sortedWith(compareBy<StaticTransitJourney> { it.arrivalEpochMillis }.thenBy { it.transferCount }.thenBy { it.id })
+            .sortedWith(
+                compareBy<StaticTransitJourney> { it.arrivalEpochMillis }
+                    .thenBy { it.transferCount }
+                    .thenBy { it.id },
+            )
             .distinctBy { it.id }
             .take(maxJourneys)
         return if (deduped.isEmpty()) StaticRouterResult.NoPath else StaticRouterResult.Journeys(deduped)
+    }
+
+    private data class SearchStateKey(
+        val tripId: String,
+        val boardStopId: String,
+        val stopSequence: Int,
+        val shiftSeconds: Int,
+        val remainingTransfers: Int,
+    )
+
+    private class SearchBudget(
+        private val maxStates: Int,
+        private val maxQueries: Int,
+    ) {
+        private var states: Int = 0
+        private var queries: Int = 0
+
+        val exhausted: Boolean
+            get() = states >= maxStates || queries >= maxQueries
+
+        fun claimState(): Boolean {
+            if (states >= maxStates) return false
+            states += 1
+            return true
+        }
+
+        fun claimCandidateQuery(): Boolean {
+            if (queries >= maxQueries) return false
+            queries += 1
+            return true
+        }
+    }
+
+    private fun exploreTrip(
+        access: StaticRouterAccess,
+        instance: TripInstance,
+        boardStopId: String,
+        earliestBoardEpochMillis: Long,
+        serviceDate: GtfsServiceDate,
+        destinationByStop: Map<String, StaticRouterAccess>,
+        priorLegs: List<StaticTransitLeg>,
+        remainingTransfers: Int,
+        visitedTripIds: Set<String>,
+        bestBoardByState: MutableMap<SearchStateKey, Long>,
+        budget: SearchBudget,
+    ): List<StaticTransitJourney> {
+        if (!budget.claimState()) return emptyList()
+        val candidate = instance.candidate
+        if (candidate.trip.id in visitedTripIds) return emptyList()
+        if (!data.isServiceActive(candidate.trip.serviceId, serviceDate)) return emptyList()
+
+        val times = data.stopTimesForTrip(candidate.trip.id, maxStopTimesPerTrip)
+        val boardIndex = times.indexOfFirst {
+            it.stopId == boardStopId && it.stopSequence == candidate.stopSequence
+        }
+        if (boardIndex < 0) return emptyList()
+        val boardStopTime = times[boardIndex]
+        if (!allowsScheduledPickup(boardStopTime)) return emptyList()
+        val departure = shiftedEpoch(
+            boardStopTime.departureTime ?: boardStopTime.arrivalTime,
+            serviceDate,
+            instance.shiftSeconds,
+        ) ?: return emptyList()
+        if (departure < earliestBoardEpochMillis) return emptyList()
+
+        val journeys = mutableListOf<StaticTransitJourney>()
+        val visited = visitedTripIds + candidate.trip.id
+
+        for (alight in times.drop(boardIndex + 1)) {
+            val arrival = shiftedEpoch(
+                alight.arrivalTime ?: alight.departureTime,
+                serviceDate,
+                instance.shiftSeconds,
+            ) ?: continue
+            if (arrival < departure) continue
+            val currentLeg = StaticTransitLeg(
+                tripId = candidate.trip.id,
+                routeId = candidate.trip.routeId,
+                fromStopId = boardStopId,
+                toStopId = alight.stopId,
+                departureEpochMillis = departure,
+                arrivalEpochMillis = arrival,
+                frequencyBased = instance.frequencyBased,
+                approximate = instance.approximate,
+                frequencyInstanceStartSeconds = instance.frequencyInstanceStartSeconds,
+            )
+            val legs = priorLegs + currentLeg
+
+            if (allowsScheduledDropOff(alight)) {
+                destinationByStop[alight.stopId]?.let { egress ->
+                    journeys += journey(access, egress, legs)
+                }
+            }
+
+            linkedContinuationLegs(
+                fromTrip = candidate.trip,
+                alight = alight,
+                firstArrivalEpochMillis = arrival,
+                serviceDate = serviceDate,
+                destinationByStop = destinationByStop,
+            ).forEach { continuation ->
+                if (continuation.first.tripId !in visited) {
+                    journeys += journey(access, continuation.second, legs + continuation.first)
+                }
+            }
+
+            if (remainingTransfers <= 0 || !allowsScheduledDropOff(alight)) continue
+            val rules = transferRulesFor(alight.stopId)
+            val targets = transferTargets(alight.stopId, rules)
+            for (target in targets) {
+                val earliestTransferReady = arrival + target.walkSeconds * 1_000L
+                val earliestTransferSeconds =
+                    serviceSeconds(earliestTransferReady, serviceDate) ?: continue
+                if (!budget.claimCandidateQuery()) return journeys
+                val nextInstances = candidateInstancesAtStop(
+                    stopId = target.stopId,
+                    serviceDate = serviceDate,
+                    earliestBoardSeconds = earliestTransferSeconds,
+                )
+                for (nextInstance in nextInstances) {
+                    val next = nextInstance.candidate
+                    if (next.trip.id in visited) continue
+                    if (!data.isServiceActive(next.trip.serviceId, serviceDate)) continue
+
+                    val applicable = rules.filter { rule ->
+                        transferTargetsForRule(rule).contains(target.stopId) &&
+                            ruleMatches(rule, candidate.trip, next.trip)
+                    }
+                    val maxSpecificity = applicable.maxOfOrNull(::ruleSpecificity)
+                    val governingRules = if (maxSpecificity == null) {
+                        emptyList()
+                    } else {
+                        applicable.filter { ruleSpecificity(it) == maxSpecificity }
+                    }
+                    if (governingRules.size > 1) continue
+                    val governing = governingRules.singleOrNull()
+                    if (governing?.transferType == 3) continue
+                    val transferSeconds = if (governing?.transferType == 2) {
+                        max(target.walkSeconds, max(0, governing.minTransferTimeSeconds ?: 0))
+                    } else {
+                        target.walkSeconds
+                    }
+                    val transferReady = arrival + transferSeconds * 1_000L
+                    val state = SearchStateKey(
+                        tripId = next.trip.id,
+                        boardStopId = target.stopId,
+                        stopSequence = next.stopSequence,
+                        shiftSeconds = nextInstance.shiftSeconds,
+                        remainingTransfers = remainingTransfers - 1,
+                    )
+                    val bestKnown = bestBoardByState[state]
+                    if (bestKnown != null && bestKnown <= transferReady) continue
+                    bestBoardByState[state] = transferReady
+
+                    journeys += exploreTrip(
+                        access = access,
+                        instance = nextInstance,
+                        boardStopId = target.stopId,
+                        earliestBoardEpochMillis = transferReady,
+                        serviceDate = serviceDate,
+                        destinationByStop = destinationByStop,
+                        priorLegs = legs,
+                        remainingTransfers = remainingTransfers - 1,
+                        visitedTripIds = visited,
+                        bestBoardByState = bestBoardByState,
+                        budget = budget,
+                    )
+                    if (budget.exhausted) return journeys
+                }
+            }
+        }
+        return journeys
     }
 
     private data class TripInstance(
