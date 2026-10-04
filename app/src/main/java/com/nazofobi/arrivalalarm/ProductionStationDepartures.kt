@@ -308,13 +308,11 @@ internal class ProductionRealtimeStationOverlay(
             )
         }
 
-        val tripIds = planned.mapTo(linkedSetOf()) { it.tripId }
-        val routeIds = planned.mapNotNullTo(linkedSetOf()) { it.routeId }
         val alerts = overlay.serviceAlerts
             .filter { alert ->
-                alert.stopIds.contains(stopId) ||
-                    alert.tripIds.any { it in tripIds } ||
-                    alert.routeIds.any { it in routeIds }
+                alert.selectors.any { selector ->
+                    selectorMatchesStationBoard(selector, stopId, planned)
+                }
             }
             .map { alert ->
                 ServiceAlert(
@@ -341,6 +339,39 @@ internal class ProductionRealtimeStationOverlay(
             realtimeSourceLabel = overlay.provenance.source,
             updatedAtEpochSeconds = overlay.updatedAtEpochSeconds(),
         )
+    }
+
+    private fun selectorMatchesStationBoard(
+        selector: GermanyRealtimeAlertSelector,
+        stopId: String,
+        planned: List<Departure>,
+    ): Boolean {
+        if (selector.validity != GermanyRealtimeAlertSelectorValidity.VALID) return false
+        if (selector.stopId != null && selector.stopId != stopId) return false
+
+        val tripSelector = selector.trip
+        if (tripSelector != null) {
+            val tripId = tripSelector.tripId ?: return false
+            return planned.any { departure ->
+                departure.tripId == tripId &&
+                    (selector.routeId == null || departure.routeId == selector.routeId)
+            }
+        }
+
+        // A direction-scoped selector cannot be proven from the board projection alone.
+        // Fail closed instead of broadening it to every departure on the route.
+        if (selector.directionId != null) return false
+
+        if (selector.routeId != null) {
+            return planned.any { it.routeId == selector.routeId }
+        }
+
+        // Stop-only selectors are exact at this point. Agency/type-only (or mixed
+        // stop+agency/type) selectors need static route metadata that the board
+        // projection does not carry, so they deliberately fail closed.
+        return selector.stopId == stopId &&
+            selector.agencyId == null &&
+            selector.routeType == null
     }
 
     private fun frequencyTrip(tripId: String): Boolean =
