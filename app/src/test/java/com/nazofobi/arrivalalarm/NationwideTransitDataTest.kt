@@ -329,7 +329,7 @@ class NationwideTransitDataTest {
                     200,
                     """[{"type":"stop","id":"8000105","name":"Frankfurt(Main)Hbf","location":{"latitude":50.1071,"longitude":8.6638}}]""",
                     "Cache-Control" to "max-age=1",
-                    "ETag" to ""v1"",
+                    "ETag" to "\\\"v1\\\"",
                 ),
                 IOException("offline"),
             ),
