@@ -23,6 +23,9 @@ data class StaticTransitLeg(
     val toStopId: String,
     val departureEpochMillis: Long,
     val arrivalEpochMillis: Long,
+    val frequencyBased: Boolean = false,
+    val approximate: Boolean = false,
+    val frequencyInstanceStartSeconds: Int? = null,
 )
 
 data class StaticTransitJourney(
@@ -49,6 +52,7 @@ interface StaticGtfsScheduleData {
         limit: Int,
     ): List<GtfsScheduleTripCandidate>
     fun stopTimesForTrip(tripId: String, limit: Int): List<GtfsScheduleStopTime>
+    fun frequenciesForTrip(tripId: String, limit: Int): List<GtfsScheduleFrequency>
     fun transfersFromStop(stopId: String, limit: Int): List<GtfsScheduleTransfer>
     fun linkedTransfersFromTrip(fromTripId: String, limit: Int): List<GtfsScheduleTransfer>
     fun tripsInBlock(blockId: String, serviceId: String, limit: Int): List<GtfsScheduleTrip>
@@ -71,6 +75,9 @@ class RepositoryStaticGtfsScheduleData(
 
     override fun stopTimesForTrip(tripId: String, limit: Int) =
         repository.stopTimesForTrip(tripId, limit)
+
+    override fun frequenciesForTrip(tripId: String, limit: Int) =
+        repository.frequenciesForTrip(tripId, limit)
 
     override fun transfersFromStop(stopId: String, limit: Int) =
         repository.transfersFromStop(stopId, limit)
@@ -129,6 +136,8 @@ class StaticGtfsRouter(
     private val maxImplicitTransferRadiusMeters: Int = 350,
     private val maxImplicitTransferCandidates: Int = 16,
     private val implicitWalkingMetersPerSecond: Double = 1.25,
+    private val maxFrequencyRowsPerTrip: Int = 64,
+    private val maxFrequencyInstancesPerCandidate: Int = 128,
 ) {
     init {
         require(maxCandidatesPerStop in 1..512)
@@ -140,6 +149,8 @@ class StaticGtfsRouter(
         require(maxImplicitTransferRadiusMeters in 1..2_000)
         require(maxImplicitTransferCandidates in 1..64)
         require(implicitWalkingMetersPerSecond in 0.5..3.0)
+        require(maxFrequencyRowsPerTrip in 1..512)
+        require(maxFrequencyInstancesPerCandidate in 1..512)
     }
 
     fun route(
@@ -160,16 +171,16 @@ class StaticGtfsRouter(
             val earliestBoard = departureEpochMillis + access.walkSeconds * 1_000L
             val earliestBoardSeconds = serviceSeconds(earliestBoard, serviceDate) ?: continue
             for (
-                candidate in data.candidateTripsAtStop(
-                    access.stopId,
-                    serviceDate,
-                    earliestBoardSeconds,
-                    maxCandidatesPerStop,
+                instance in candidateInstancesAtStop(
+                    stopId = access.stopId,
+                    serviceDate = serviceDate,
+                    earliestBoardSeconds = earliestBoardSeconds,
                 )
             ) {
+                val candidate = instance.candidate
                 if (!data.isServiceActive(candidate.trip.serviceId, serviceDate)) continue
                 val first = legOnTrip(
-                    candidate = candidate,
+                    instance = instance,
                     boardStopId = access.stopId,
                     earliestBoardEpochMillis = earliestBoard,
                     serviceDate = serviceDate,
@@ -187,12 +198,19 @@ class StaticGtfsRouter(
                 if (boardIndex < 0) continue
                 val boardStopTime = stopTimes[boardIndex]
                 if (!allowsScheduledPickup(boardStopTime)) continue
-                val boardDeparture = epoch(boardStopTime.departureTime ?: boardStopTime.arrivalTime, serviceDate)
-                    ?: continue
+                val boardDeparture = shiftedEpoch(
+                    boardStopTime.departureTime ?: boardStopTime.arrivalTime,
+                    serviceDate,
+                    instance.shiftSeconds,
+                ) ?: continue
                 if (boardDeparture < earliestBoard) continue
 
                 for (alight in stopTimes.drop(boardIndex + 1)) {
-                    val firstArrival = epoch(alight.arrivalTime ?: alight.departureTime, serviceDate) ?: continue
+                    val firstArrival = shiftedEpoch(
+                        alight.arrivalTime ?: alight.departureTime,
+                        serviceDate,
+                        instance.shiftSeconds,
+                    ) ?: continue
                     val firstLeg = StaticTransitLeg(
                         tripId = candidate.trip.id,
                         routeId = candidate.trip.routeId,
@@ -200,6 +218,9 @@ class StaticGtfsRouter(
                         toStopId = alight.stopId,
                         departureEpochMillis = boardDeparture,
                         arrivalEpochMillis = firstArrival,
+                        frequencyBased = instance.frequencyBased,
+                        approximate = instance.approximate,
+                        frequencyInstanceStartSeconds = instance.frequencyInstanceStartSeconds,
                     )
                     linkedContinuationLegs(
                         fromTrip = candidate.trip,
@@ -219,13 +240,13 @@ class StaticGtfsRouter(
                         val earliestTransferReady = firstArrival + target.walkSeconds * 1_000L
                         val earliestTransferSeconds = serviceSeconds(earliestTransferReady, serviceDate) ?: continue
                         for (
-                            next in data.candidateTripsAtStop(
-                                targetStopId,
-                                serviceDate,
-                                earliestTransferSeconds,
-                                maxCandidatesPerStop,
+                            nextInstance in candidateInstancesAtStop(
+                                stopId = targetStopId,
+                                serviceDate = serviceDate,
+                                earliestBoardSeconds = earliestTransferSeconds,
                             )
                         ) {
+                            val next = nextInstance.candidate
                             if (!data.isServiceActive(next.trip.serviceId, serviceDate)) continue
                             val applicable = rules.filter { rule ->
                                 transferTargetsForRule(rule).contains(targetStopId) &&
@@ -247,7 +268,7 @@ class StaticGtfsRouter(
                             }
                             val transferReady = firstArrival + transferSeconds * 1_000L
                             val second = legOnTrip(
-                                candidate = next,
+                                instance = nextInstance,
                                 boardStopId = targetStopId,
                                 earliestBoardEpochMillis = transferReady,
                                 serviceDate = serviceDate,
@@ -266,6 +287,126 @@ class StaticGtfsRouter(
             .take(maxJourneys)
         return if (deduped.isEmpty()) StaticRouterResult.NoPath else StaticRouterResult.Journeys(deduped)
     }
+
+    private data class TripInstance(
+        val candidate: GtfsScheduleTripCandidate,
+        val shiftSeconds: Int = 0,
+        val frequencyBased: Boolean = false,
+        val approximate: Boolean = false,
+        val frequencyInstanceStartSeconds: Int? = null,
+        val boardServiceSeconds: Int,
+    )
+
+    private data class ParsedFrequency(
+        val row: GtfsScheduleFrequency,
+        val startSeconds: Int,
+        val endSeconds: Int,
+        val approximate: Boolean,
+    )
+
+    private fun candidateInstancesAtStop(
+        stopId: String,
+        serviceDate: GtfsServiceDate,
+        earliestBoardSeconds: Int,
+    ): List<TripInstance> = data.candidateTripsAtStop(
+        stopId,
+        serviceDate,
+        earliestBoardSeconds,
+        maxCandidatesPerStop,
+    ).asSequence()
+        .flatMap { candidate -> expandFrequencyCandidate(candidate, earliestBoardSeconds).asSequence() }
+        .sortedWith(
+            compareBy<TripInstance> { it.boardServiceSeconds }
+                .thenBy { it.candidate.trip.id }
+                .thenBy { it.candidate.stopSequence }
+        )
+        .take(maxCandidatesPerStop)
+        .toList()
+
+    private fun expandFrequencyCandidate(
+        candidate: GtfsScheduleTripCandidate,
+        earliestBoardSeconds: Int,
+    ): List<TripInstance> {
+        val rawBoard = candidate.departureTime ?: candidate.arrivalTime ?: return emptyList()
+        val templateBoardSeconds = parseServiceSeconds(rawBoard) ?: return emptyList()
+        val rows = data.frequenciesForTrip(candidate.trip.id, maxFrequencyRowsPerTrip)
+        if (rows.isEmpty()) {
+            return if (templateBoardSeconds >= earliestBoardSeconds) {
+                listOf(TripInstance(candidate = candidate, boardServiceSeconds = templateBoardSeconds))
+            } else {
+                emptyList()
+            }
+        }
+
+        val firstStop = data.stopTimesForTrip(candidate.trip.id, maxStopTimesPerTrip).firstOrNull()
+            ?: return emptyList()
+        val templateStartSeconds = parseServiceSeconds(
+            firstStop.departureTime ?: firstStop.arrivalTime ?: return emptyList()
+        ) ?: return emptyList()
+        val boardOffsetSeconds = templateBoardSeconds - templateStartSeconds
+        if (boardOffsetSeconds < 0) return emptyList()
+
+        val parsed = rows.map { row ->
+            val start = parseServiceSeconds(row.startTime) ?: return emptyList()
+            val end = parseServiceSeconds(row.endTime) ?: return emptyList()
+            val exact = row.exactTimes ?: 0
+            if (row.headwaySeconds <= 0 || start >= end || exact !in 0..1) return emptyList()
+            ParsedFrequency(row, start, end, approximate = exact == 0)
+        }.sortedWith(
+            compareBy<ParsedFrequency> { it.startSeconds }
+                .thenBy { it.endSeconds }
+                .thenBy { it.row.headwaySeconds }
+                .thenBy { it.approximate }
+        )
+        if (parsed.zipWithNext().any { (left, right) -> right.startSeconds < left.endSeconds }) {
+            return emptyList()
+        }
+
+        val instances = mutableListOf<TripInstance>()
+        for (frequency in parsed) {
+            if (instances.size >= maxFrequencyInstancesPerCandidate) break
+            val windowStart = frequency.startSeconds + boardOffsetSeconds
+            val windowEnd = frequency.endSeconds + boardOffsetSeconds
+            if (earliestBoardSeconds >= windowEnd) continue
+
+            if (frequency.approximate) {
+                val lowerBound = max(earliestBoardSeconds, windowStart)
+                val estimated = (lowerBound + frequency.row.headwaySeconds / 2)
+                    .coerceAtMost(windowEnd - 1)
+                instances += TripInstance(
+                    candidate = candidate,
+                    shiftSeconds = estimated - templateBoardSeconds,
+                    frequencyBased = true,
+                    approximate = true,
+                    frequencyInstanceStartSeconds = estimated - boardOffsetSeconds,
+                    boardServiceSeconds = estimated,
+                )
+                continue
+            }
+
+            var departure = windowStart
+            if (departure < earliestBoardSeconds) {
+                val delta = earliestBoardSeconds - departure
+                departure += ((delta + frequency.row.headwaySeconds - 1) / frequency.row.headwaySeconds) *
+                    frequency.row.headwaySeconds
+            }
+            while (departure < windowEnd && instances.size < maxFrequencyInstancesPerCandidate) {
+                instances += TripInstance(
+                    candidate = candidate,
+                    shiftSeconds = departure - templateBoardSeconds,
+                    frequencyBased = true,
+                    approximate = false,
+                    frequencyInstanceStartSeconds = departure - boardOffsetSeconds,
+                    boardServiceSeconds = departure,
+                )
+                departure += frequency.row.headwaySeconds
+            }
+        }
+        return instances
+    }
+
+    private fun parseServiceSeconds(raw: String): Int? =
+        runCatching { GtfsServiceTime.parse(raw).secondsFromServiceDayStart }.getOrNull()
 
     private fun linkedContinuationLegs(
         fromTrip: GtfsScheduleTrip,
@@ -478,12 +619,13 @@ class StaticGtfsRouter(
     }
 
     private fun legOnTrip(
-        candidate: GtfsScheduleTripCandidate,
+        instance: TripInstance,
         boardStopId: String,
         earliestBoardEpochMillis: Long,
         serviceDate: GtfsServiceDate,
         destinationByStop: Map<String, StaticRouterAccess>,
     ): Pair<StaticTransitLeg, StaticRouterAccess>? {
+        val candidate = instance.candidate
         val times = data.stopTimesForTrip(candidate.trip.id, maxStopTimesPerTrip)
         val boardIndex = times.indexOfFirst {
             it.stopId == boardStopId && it.stopSequence == candidate.stopSequence
@@ -491,12 +633,21 @@ class StaticGtfsRouter(
         if (boardIndex < 0) return null
         val boardStopTime = times[boardIndex]
         if (!allowsScheduledPickup(boardStopTime)) return null
-        val departure = epoch(boardStopTime.departureTime ?: boardStopTime.arrivalTime, serviceDate) ?: return null
+        val departure = shiftedEpoch(
+            boardStopTime.departureTime ?: boardStopTime.arrivalTime,
+            serviceDate,
+            instance.shiftSeconds,
+        ) ?: return null
         if (departure < earliestBoardEpochMillis) return null
         for (arrival in times.drop(boardIndex + 1)) {
             if (!allowsScheduledDropOff(arrival)) continue
             val egress = destinationByStop[arrival.stopId] ?: continue
-            val arrivalEpoch = epoch(arrival.arrivalTime ?: arrival.departureTime, serviceDate) ?: continue
+            val arrivalEpoch = shiftedEpoch(
+                arrival.arrivalTime ?: arrival.departureTime,
+                serviceDate,
+                instance.shiftSeconds,
+            ) ?: continue
+            if (arrivalEpoch < departure) continue
             return StaticTransitLeg(
                 tripId = candidate.trip.id,
                 routeId = candidate.trip.routeId,
@@ -504,6 +655,9 @@ class StaticGtfsRouter(
                 toStopId = arrival.stopId,
                 departureEpochMillis = departure,
                 arrivalEpochMillis = arrivalEpoch,
+                frequencyBased = instance.frequencyBased,
+                approximate = instance.approximate,
+                frequencyInstanceStartSeconds = instance.frequencyInstanceStartSeconds,
             ) to egress
         }
         return null
@@ -523,7 +677,10 @@ class StaticGtfsRouter(
         val arrival = legs.last().arrivalEpochMillis + egress.walkSeconds * 1_000L
         val id = buildString {
             append(access.stopId).append('>')
-            legs.forEach { append(it.tripId).append(':').append(it.fromStopId).append('-').append(it.toStopId).append('>') }
+            legs.forEach {
+                append(it.tripId).append('@').append(it.departureEpochMillis).append(':')
+                    .append(it.fromStopId).append('-').append(it.toStopId).append('>')
+            }
             append(egress.stopId)
         }
         return StaticTransitJourney(id, access, egress, legs, arrival)
@@ -539,6 +696,9 @@ class StaticGtfsRouter(
 
     private fun epoch(raw: String?, serviceDate: GtfsServiceDate): Long? =
         raw?.let { runCatching { GtfsServiceTime.parse(it).resolve(serviceDate, agencyTimeZone).epochMillis }.getOrNull() }
+
+    private fun shiftedEpoch(raw: String?, serviceDate: GtfsServiceDate, shiftSeconds: Int): Long? =
+        epoch(raw, serviceDate)?.plus(shiftSeconds * 1_000L)
 
     private companion object {
         const val MAX_CONTINUATION_WAIT_MILLIS = 6L * 60L * 60L * 1_000L
