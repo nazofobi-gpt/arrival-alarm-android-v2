@@ -51,6 +51,7 @@ data class StationDeparturesSnapshot(
     val sourceLabel: String? = null,
     val fetchedAtEpochSeconds: Long = 0L,
     val error: String? = null,
+    val realtimeState: StationRealtimeState? = null,
 )
 
 enum class NationwideJourneySource {
@@ -96,7 +97,16 @@ class NationwideTransitGateway(
     )
     private val realtimeJourneyOverlay = ProductionRealtimeJourneyOverlay(
         fetch = { realtimeFetch?.invoke() ?: realtimeClient.fetch() },
-        match = realtimeMatcher::match,
+        match = { result, now -> realtimeMatcher.match(result, now) },
+        nowEpochSeconds = { nowMillis() / 1_000L },
+    )
+    private val stationDeparturesPlanner = ProductionStationDeparturesPlanner(
+        index = store,
+        nowMillis = nowMillis,
+    )
+    private val realtimeStationOverlay = ProductionRealtimeStationOverlay(
+        fetch = { realtimeFetch?.invoke() ?: realtimeClient.fetch() },
+        match = { result, now -> realtimeMatcher.match(result, now) },
         nowEpochSeconds = { nowMillis() / 1_000L },
     )
     private val io = Executors.newSingleThreadExecutor()
@@ -206,36 +216,61 @@ class NationwideTransitGateway(
         callback: (StationDeparturesSnapshot) -> Unit,
     ) {
         io.execute {
-            val snapshot = runCatching {
-                val liveStop = if (stop.id.startsWith("db:")) {
-                    stop
-                } else {
-                    liveApi.searchStops(stop.name, 8)
-                        .minByOrNull { candidate ->
-                            haversineMeters(
-                                stop.latitude,
-                                stop.longitude,
-                                candidate.latitude,
-                                candidate.longitude,
-                            )
-                        }
-                        ?.takeIf { candidate ->
-                            haversineMeters(
-                                stop.latitude,
-                                stop.longitude,
-                                candidate.latitude,
-                                candidate.longitude,
-                            ) <= 1_000.0
-                        }
-                        ?: error("Live stop mapping unavailable")
-                }
-                liveApi.departures(liveStop.id, limit)
-            }.getOrElse { error ->
-                StationDeparturesSnapshot(
-                    error = error.message ?: appContext.getString(R.string.unknown_error),
-                )
-            }
+            val snapshot = resolveStationDepartures(stop, limit)
             main.post { callback(snapshot) }
+        }
+    }
+
+    internal fun resolveStationDepartures(
+        stop: CatalogStop,
+        limit: Int = 8,
+    ): StationDeparturesSnapshot {
+        val local = if (store.isReady() && !stop.id.startsWith("db:")) {
+            runCatching {
+                stationDeparturesPlanner.plan(stop.id, limit)
+            }.getOrDefault(emptyList())
+        } else {
+            emptyList()
+        }
+        if (local.isNotEmpty()) {
+            val enriched = realtimeStationOverlay.enrich(stop.id, local)
+            return StationDeparturesSnapshot(
+                departures = enriched.departures,
+                alerts = enriched.alerts,
+                sourceLabel = localStationDepartureSource(enriched.realtimeState),
+                fetchedAtEpochSeconds = enriched.updatedAtEpochSeconds ?: store.fetchedAt(),
+                realtimeState = enriched.realtimeState,
+            )
+        }
+
+        return runCatching {
+            val liveStop = if (stop.id.startsWith("db:")) {
+                stop
+            } else {
+                liveApi.searchStops(stop.name, 8)
+                    .minByOrNull { candidate ->
+                        haversineMeters(
+                            stop.latitude,
+                            stop.longitude,
+                            candidate.latitude,
+                            candidate.longitude,
+                        )
+                    }
+                    ?.takeIf { candidate ->
+                        haversineMeters(
+                            stop.latitude,
+                            stop.longitude,
+                            candidate.latitude,
+                            candidate.longitude,
+                        ) <= 1_000.0
+                    }
+                    ?: error("Live stop mapping unavailable")
+            }
+            liveApi.departures(liveStop.id, limit)
+        }.getOrElse { error ->
+            StationDeparturesSnapshot(
+                error = error.message ?: appContext.getString(R.string.unknown_error),
+            )
         }
     }
 
@@ -311,6 +346,19 @@ class NationwideTransitGateway(
             NationwideJourneyResolution.NoRoute(localOutcome)
         }
     }
+
+    private fun localStationDepartureSource(state: StationRealtimeState?): String =
+        when (state) {
+            StationRealtimeState.FRESH_MATCHED ->
+                appContext.getString(R.string.departures_gtfsrt_fresh)
+            StationRealtimeState.FRESH_NO_MATCH ->
+                appContext.getString(R.string.departures_gtfsrt_no_match)
+            StationRealtimeState.STALE ->
+                appContext.getString(R.string.departures_gtfsrt_stale)
+            StationRealtimeState.UNAVAILABLE ->
+                appContext.getString(R.string.departures_gtfsrt_unavailable)
+            null -> appContext.getString(R.string.source_gtfs_local)
+        }
 
     private fun localJourneyStatus(options: List<RouteOption>): String =
         when (options.firstOrNull()?.realtime?.state) {
