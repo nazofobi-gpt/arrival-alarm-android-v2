@@ -384,6 +384,133 @@ class StaticGtfsRouterTest {
         )
     }
 
+    @Test fun type4LinkedTripContinuesWithoutAlightOrReboardRestrictions() {
+        val secondTrip = trip("T2", "R2", "S")
+        val data = FakeData(
+            candidates = mapOf("A" to listOf(candidate("T1", "R1", "S", 1, "10:00:00"))),
+            times = mapOf(
+                "T1" to listOf(
+                    st("T1", 1, "A", "10:00:00"),
+                    st("T1", 2, "X", "10:05:00", dropOff = 1),
+                ),
+                "T2" to listOf(
+                    st("T2", 1, "Y", "10:05:00", pickup = 1),
+                    st("T2", 2, "B", "10:18:00"),
+                ),
+            ),
+            trips = mapOf("T2" to secondTrip),
+            linkedTransfers = mapOf(
+                "T1" to listOf(transfer("X", "Y", 4, 0, fromTrip = "T1", toTrip = "T2")),
+            ),
+        )
+
+        val result = StaticGtfsRouter(data, zone).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("09:55:00"),
+        )
+
+        assertEquals(
+            listOf("T1", "T2"),
+            (result as StaticRouterResult.Journeys).journeys.single().legs.map { it.tripId },
+        )
+    }
+
+    @Test fun type5LinkedTripOverridesBlockAndForcesReboard() {
+        val firstTrip = trip("T1", "R1", "S", block = "BLOCK")
+        val secondTrip = trip("T2", "R2", "S", block = "BLOCK")
+        val data = FakeData(
+            candidates = mapOf(
+                "A" to listOf(GtfsScheduleTripCandidate(firstTrip, 1, null, "10:00:00")),
+            ),
+            times = mapOf(
+                "T1" to listOf(
+                    st("T1", 1, "A", "10:00:00"),
+                    st("T1", 2, "X", "10:05:00", dropOff = 1),
+                ),
+                "T2" to listOf(
+                    st("T2", 1, "X", "10:05:00", pickup = 1),
+                    st("T2", 2, "B", "10:18:00"),
+                ),
+            ),
+            linkedTransfers = mapOf(
+                "T1" to listOf(
+                    GtfsScheduleTransfer(null, null, 5, null, null, null, "T1", "T2"),
+                ),
+            ),
+            blockTrips = mapOf("BLOCK" to listOf(firstTrip, secondTrip)),
+        )
+
+        val result = StaticGtfsRouter(data, zone).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("09:55:00"),
+        )
+
+        assertTrue(result is StaticRouterResult.NoPath)
+    }
+
+    @Test fun compatibleConsecutiveTripsInSameBlockContinueWithoutExplicitRule() {
+        val firstTrip = trip("T1", "R1", "S", block = "BLOCK")
+        val secondTrip = trip("T2", "R2", "S", block = "BLOCK")
+        val data = FakeData(
+            candidates = mapOf(
+                "A" to listOf(GtfsScheduleTripCandidate(firstTrip, 1, null, "10:00:00")),
+            ),
+            times = mapOf(
+                "T1" to listOf(
+                    st("T1", 1, "A", "10:00:00"),
+                    st("T1", 2, "X", "10:05:00", dropOff = 1),
+                ),
+                "T2" to listOf(
+                    st("T2", 1, "X", "10:06:00", pickup = 1),
+                    st("T2", 2, "B", "10:18:00"),
+                ),
+            ),
+            blockTrips = mapOf("BLOCK" to listOf(firstTrip, secondTrip)),
+        )
+
+        val result = StaticGtfsRouter(data, zone).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("09:55:00"),
+        )
+
+        assertEquals(
+            listOf("T1", "T2"),
+            (result as StaticRouterResult.Journeys).journeys.single().legs.map { it.tripId },
+        )
+    }
+
+    @Test fun blockContinuityRejectsMismatchedEndpointAndUnboundedWait() {
+        val firstTrip = trip("T1", "R1", "S", block = "BLOCK")
+        val wrongEndpoint = trip("T2", "R2", "S", block = "BLOCK")
+        val tooLate = trip("T3", "R3", "S", block = "BLOCK")
+        val data = FakeData(
+            candidates = mapOf(
+                "A" to listOf(GtfsScheduleTripCandidate(firstTrip, 1, null, "10:00:00")),
+            ),
+            times = mapOf(
+                "T1" to listOf(st("T1", 1, "A", "10:00:00"), st("T1", 2, "X", "10:05:00")),
+                "T2" to listOf(st("T2", 1, "Y", "10:06:00"), st("T2", 2, "B", "10:18:00")),
+                "T3" to listOf(st("T3", 1, "X", "17:00:00"), st("T3", 2, "B", "17:18:00")),
+            ),
+            blockTrips = mapOf("BLOCK" to listOf(firstTrip, wrongEndpoint, tooLate)),
+        )
+
+        val result = StaticGtfsRouter(data, zone).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("09:55:00"),
+        )
+
+        assertTrue(result is StaticRouterResult.NoPath)
+    }
+
     @Test fun inactiveServiceNoPathAndSameOriginExplicit() {
         val data=FakeData(active=false,candidates=mapOf("A" to listOf(candidate("T1","R1","S",1,"10:00:00"))))
         val router=StaticGtfsRouter(data,zone)
@@ -413,7 +540,10 @@ class StaticGtfsRouterTest {
         return FakeData(candidates=mapOf("A" to listOf(candidate("T1","R1","S",1,"10:00:00")),targetStop to cs),times=ts)
     }
     private fun at(raw:String)=GtfsServiceTime.parse(raw).resolve(date,zone).epochMillis
-    private fun candidate(trip:String,route:String,service:String,seq:Int,dep:String)=GtfsScheduleTripCandidate(GtfsScheduleTrip(trip,route,service,null,null,null,null,null),seq,null,dep)
+    private fun trip(id:String,route:String,service:String,block:String?=null)=
+        GtfsScheduleTrip(id,route,service,null,null,null,null,block)
+    private fun candidate(trip:String,route:String,service:String,seq:Int,dep:String,block:String?=null)=
+        GtfsScheduleTripCandidate(this.trip(trip,route,service,block),seq,null,dep)
     private fun st(
         trip:String,
         seq:Int,
@@ -436,6 +566,9 @@ class StaticGtfsRouterTest {
         private val candidates: Map<String, List<GtfsScheduleTripCandidate>> = emptyMap(),
         private val times: Map<String, List<GtfsScheduleStopTime>> = emptyMap(),
         val transfers: Map<String, List<GtfsScheduleTransfer>> = emptyMap(),
+        val linkedTransfers: Map<String, List<GtfsScheduleTransfer>> = emptyMap(),
+        val blockTrips: Map<String, List<GtfsScheduleTrip>> = emptyMap(),
+        val trips: Map<String, GtfsScheduleTrip> = emptyMap(),
         val stops: Map<String, GtfsScheduleStop> = emptyMap(),
         val children: Map<String, List<GtfsScheduleStop>> = emptyMap(),
         val nearby: List<GtfsScheduleNearbyStop> = emptyList(),
@@ -458,6 +591,13 @@ class StaticGtfsRouterTest {
             .take(limit)
         override fun stopTimesForTrip(tripId:String,limit:Int)=times[tripId].orEmpty().take(limit)
         override fun transfersFromStop(stopId:String,limit:Int)=transfers[stopId].orEmpty().take(limit)
+        override fun linkedTransfersFromTrip(fromTripId:String,limit:Int)=
+            linkedTransfers[fromTripId].orEmpty().take(limit)
+        override fun tripsInBlock(blockId:String,serviceId:String,limit:Int)=
+            blockTrips[blockId].orEmpty().filter { it.serviceId == serviceId }.take(limit)
+        override fun trip(tripId:String)=trips[tripId]
+            ?: blockTrips.values.asSequence().flatten().firstOrNull { it.id == tripId }
+            ?: candidates.values.asSequence().flatten().map { it.trip }.firstOrNull { it.id == tripId }
         override fun stop(stopId:String)=stops[stopId]
         override fun childStops(parentStationId:String,limit:Int)=children[parentStationId].orEmpty().sortedBy{it.id}.take(limit)
         override fun nearbyStops(stopId:String,radiusMeters:Int,limit:Int):List<GtfsScheduleNearbyStop> {
