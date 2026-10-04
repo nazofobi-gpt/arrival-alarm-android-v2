@@ -13,6 +13,8 @@ object GermanyGtfsRealtimeProvenance {
     const val LICENSE = "CC BY-SA 4.0"
 }
 
+internal const val GERMANY_REALTIME_DEFAULT_MAX_BYTES = 64 * 1024 * 1024
+
 enum class GermanyRealtimeUnavailableReason {
     HTTP,
     NETWORK,
@@ -147,7 +149,7 @@ class GermanyGtfsRealtimeClient(
     private val endpoint: String = GermanyGtfsRealtimeProvenance.ENDPOINT,
     private val connectTimeoutMs: Int = 5_000,
     private val readTimeoutMs: Int = 8_000,
-    private val maxBytes: Int = 32 * 1024 * 1024,
+    private val maxBytes: Int = GERMANY_REALTIME_DEFAULT_MAX_BYTES,
     private val clock: EpochClock = EpochClock { System.currentTimeMillis() / 1_000L },
     private val loader: ((String) -> ByteArray)? = null,
 ) {
