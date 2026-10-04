@@ -123,6 +123,7 @@ fun RouteJourneyPanel(
                         option = option,
                         selected = selectedRouteId == option.id,
                         onSelect = { onSelectRoute(option) },
+                        selectTestTag = "route-option-select-" + index,
                         modifier = Modifier.testTag("route-option-" + index),
                     )
                 }
@@ -170,6 +171,7 @@ private fun RouteOptionCard(
     option: RouteOption,
     selected: Boolean,
     onSelect: () -> Unit,
+    selectTestTag: String,
     modifier: Modifier = Modifier,
 ) {
     val duration = routeDurationMinutes(option.departure, option.arrival)
@@ -246,7 +248,10 @@ private fun RouteOptionCard(
                 onClick = onSelect,
                 enabled = !selected &&
                     option.realtime?.cancelledTripIds?.isNotEmpty() != true,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag(selectTestTag),
             ) {
                 Text(
                     if (selected) {
