@@ -26,6 +26,12 @@ enum class GermanyRealtimeStopUpdateValidity {
     ASSIGNED_STOP_ID_MISMATCH,
 }
 
+enum class GermanyRealtimeTripSelectorValidity {
+    VALID_ID_BASED,
+    VALID_IDLESS_SCHEDULED,
+    UNMATCHABLE_INCOMPLETE,
+}
+
 data class GermanyRealtimeStopUpdate(
     val stopSequence: Int?,
     val stopId: String?,
@@ -43,13 +49,20 @@ data class GermanyRealtimeStopUpdate(
 
 data class GermanyRealtimeTripUpdate(
     val entityId: String,
-    val tripId: String,
+    val tripId: String?,
     val routeId: String?,
     val startDate: String?,
     val scheduleRelationship: String?,
     val cancelled: Boolean,
     val stops: List<GermanyRealtimeStopUpdate>,
-)
+    val directionId: Int? = null,
+    val startTime: String? = null,
+    val selectorValidity: GermanyRealtimeTripSelectorValidity =
+        GermanyRealtimeTripSelectorValidity.UNMATCHABLE_INCOMPLETE,
+) {
+    val hasFrequencyInstanceIdentity: Boolean
+        get() = tripId != null && startTime != null && startDate != null
+}
 
 data class GermanyRealtimeActivePeriod(
     val startEpochSeconds: Long?,
@@ -151,18 +164,32 @@ class GermanyGtfsRealtimeClient(
                 if (!entity.hasTripUpdate()) return@forEach
                 val update = entity.tripUpdate
                 val trip = update.trip
-                val tripId = trip.tripId.takeIf { it.isNotBlank() } ?: return@forEach
+                val tripId = trip.tripId.takeIf { it.isNotBlank() }
+                val routeId = trip.routeId.takeIf { it.isNotBlank() }
+                val directionId = trip.directionId.takeIf { trip.hasDirectionId() }
+                val startTime = trip.startTime.takeIf { it.isNotBlank() }
+                val startDate = trip.startDate.takeIf { it.isNotBlank() }
                 val relationship = if (trip.hasScheduleRelationship()) {
                     trip.scheduleRelationship.name
                 } else {
                     null
                 }
+                val selectorValidity = when {
+                    tripId != null -> GermanyRealtimeTripSelectorValidity.VALID_ID_BASED
+                    routeId != null &&
+                        directionId != null &&
+                        startTime != null &&
+                        startDate != null &&
+                        (relationship == null || relationship == "SCHEDULED") ->
+                        GermanyRealtimeTripSelectorValidity.VALID_IDLESS_SCHEDULED
+                    else -> GermanyRealtimeTripSelectorValidity.UNMATCHABLE_INCOMPLETE
+                }
                 add(
                     GermanyRealtimeTripUpdate(
                         entityId = entity.id,
                         tripId = tripId,
-                        routeId = trip.routeId.takeIf { it.isNotBlank() },
-                        startDate = trip.startDate.takeIf { it.isNotBlank() },
+                        routeId = routeId,
+                        startDate = startDate,
                         scheduleRelationship = relationship,
                         cancelled = relationship == "CANCELED",
                         stops = update.stopTimeUpdateList.map { stop ->
@@ -214,6 +241,9 @@ class GermanyGtfsRealtimeClient(
                                 validity = validity,
                             )
                         },
+                        directionId = directionId,
+                        startTime = startTime,
+                        selectorValidity = selectorValidity,
                     ),
                 )
             }
