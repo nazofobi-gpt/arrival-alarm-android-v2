@@ -45,6 +45,14 @@ jobs:
           python3 tools/reduce_germany_full_for_g175.py /tmp/germany-full.zip /tmp/g175-real-feed.zip /tmp/g175-reduction-report.json
           sha256sum /tmp/g175-real-feed.zip | tee /tmp/g175-real-feed.sha256
 
+      - name: Download Germany Full visual QA feed
+        if: github.head_ref == 'interactive/g167-8screen-capture-20261005' || github.ref_name == 'interactive/g167-8screen-capture-20261005'
+        run: |
+          curl -fL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 1200 https://download.gtfs.de/germany/free/latest.zip -o /tmp/g167-germany-full.zip
+          sha256sum /tmp/g167-germany-full.zip | tee /tmp/g167-germany-full.sha256
+          python3 tools/reduce_germany_full_for_g175.py /tmp/g167-germany-full.zip /tmp/g167-visual-qa.zip /tmp/g167-visual-qa-reduction.json
+          sha256sum /tmp/g167-visual-qa.zip | tee /tmp/g167-visual-qa.sha256
+
       - name: Enable KVM access
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -73,14 +81,17 @@ jobs:
             adb shell wm density
             adb shell settings get system font_scale
             ./gradlew --no-daemon connectedDebugAndroidTest
+            test ! -s /tmp/g167-visual-qa.zip || (adb shell rm -rf /sdcard/Download/arrival-alarm-ui-qa && adb push /tmp/g167-visual-qa.zip /data/local/tmp/g167-visual-qa.zip && ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.MainActivityTest#capturePrimaryScreensForVisualQa -Pandroid.testInstrumentationRunnerArguments.visualQaFeedPath=/data/local/tmp/g167-visual-qa.zip)
             mkdir -p app/build/outputs/androidTest-results/ui-qa
             adb shell ls -l /sdcard/Download/arrival-alarm-ui-qa
             adb pull /sdcard/Download/arrival-alarm-ui-qa/. app/build/outputs/androidTest-results/ui-qa/
+            test -s app/build/outputs/androidTest-results/ui-qa/onboarding.png
             test -s app/build/outputs/androidTest-results/ui-qa/home.png
             test -s app/build/outputs/androidTest-results/ui-qa/search.png
             test -s app/build/outputs/androidTest-results/ui-qa/journey.png
             test -s app/build/outputs/androidTest-results/ui-qa/departures.png
             test -s app/build/outputs/androidTest-results/ui-qa/settings.png
+            test ! -s /tmp/g167-visual-qa.zip || (test -s app/build/outputs/androidTest-results/ui-qa/route.png && test -s app/build/outputs/androidTest-results/ui-qa/live.png && cp /tmp/g167-germany-full.sha256 /tmp/g167-visual-qa.sha256 /tmp/g167-visual-qa-reduction.json app/build/outputs/androidTest-results/ui-qa/)
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell pm clear com.nazofobi.arrivalalarm || true
             adb shell am start -W -n com.nazofobi.arrivalalarm/.MainActivity
