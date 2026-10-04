@@ -472,6 +472,13 @@ fun ArrivalAlarmApp(
     }
 
     fun armAndStartTracking() {
+        val selected = selectedRouteId?.let { id ->
+            routeOptions.firstOrNull { it.id == id }
+        }
+        if (selected?.realtime?.cancelledTripIds?.isNotEmpty() == true) {
+            routeStatus = context.getString(R.string.route_realtime_cancelled_action_blocked)
+            return
+        }
         val outcome = connectorPort.armArrivalAlarm()
         journey = controller.state
         if (!outcome.applied) {
@@ -483,6 +490,10 @@ fun ArrivalAlarmApp(
     }
 
     fun selectRouteOption(option: RouteOption) {
+        if (option.realtime?.cancelledTripIds?.isNotEmpty() == true) {
+            routeStatus = context.getString(R.string.route_realtime_cancelled_action_blocked)
+            return
+        }
         val outcome = connectorPort.selectJourney(option.id)
         journey = controller.state
         if (outcome.applied) {
