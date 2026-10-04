@@ -85,6 +85,23 @@ fun LiveTripPanel(
                 modifier = Modifier.testTag("live-trip-timing"),
             )
 
+            selectedRoute.realtime?.let { realtime ->
+                LiveTripFact(
+                    label = stringResource(R.string.live_trip_realtime_source),
+                    value = when (realtime.state) {
+                        RouteRealtimeState.FRESH_MATCHED ->
+                            stringResource(R.string.live_trip_realtime_fresh)
+                        RouteRealtimeState.FRESH_NO_MATCH ->
+                            stringResource(R.string.live_trip_realtime_no_match)
+                        RouteRealtimeState.STALE ->
+                            stringResource(R.string.live_trip_realtime_stale)
+                        RouteRealtimeState.UNAVAILABLE ->
+                            stringResource(R.string.live_trip_realtime_unavailable)
+                    },
+                    tag = "live-trip-realtime",
+                )
+            }
+
             HorizontalDivider()
 
             progress.previous?.let {
