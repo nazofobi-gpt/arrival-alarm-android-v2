@@ -15,12 +15,18 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
+import java.time.LocalDate
+import java.time.ZoneId
+import java.util.zip.ZipFile
 
 @RunWith(AndroidJUnit4::class)
 class MainActivityTest {
@@ -337,14 +343,152 @@ class MainActivityTest {
     }
 
     @Test fun capturePrimaryScreensForVisualQa() {
+        val archivePath = InstrumentationRegistry.getArguments()
+            .getString("germanyFullPath")
+            .orEmpty()
+        assumeTrue(
+            "germanyFullPath is required for production-state visual QA capture",
+            archivePath.isNotBlank(),
+        )
+        val archive = File(archivePath)
+        assertTrue(
+            "Germany Full-derived visual QA archive missing: $archivePath",
+            archive.isFile && archive.length() > 0L,
+        )
+        val fixture = realVisualQaRouteFixture(archive)
+
+        rule.activityRule.scenario.onActivity { activity ->
+            activity.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("onboarding_complete", false)
+                .commit()
+        }
+        rule.activityRule.scenario.recreate()
+        rule.waitForIdle()
+        rule.onNodeWithTag("first-run-onboarding")
+            .performScrollTo()
+            .assertIsDisplayed()
+        captureScreen("onboarding")
+
+        rule.activityRule.scenario.onActivity { activity ->
+            activity.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("onboarding_complete", true)
+                .commit()
+            activity.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+                .edit()
+                .clear()
+                .commit()
+
+            val index = NationwideTransitIndex(activity)
+            try {
+                index.importFeed(archive.toURI().toString()) { }
+                assertTrue("visual QA real feed import must be ready", index.isReady())
+                val outcome = ProductionStaticJourneyPlanner(
+                    index = index,
+                    nowMillis = { fixture.departureMillis },
+                ).plan(
+                    origin = fixture.origin,
+                    destination = fixture.destination,
+                    limit = 3,
+                )
+                val options = (outcome as? LocalStaticJourneyOutcome.Results)
+                    ?.options
+                    .orEmpty()
+                assertTrue(
+                    "real Germany Full-derived Lohne→Achim route must resolve",
+                    options.isNotEmpty(),
+                )
+
+                val routeKey =
+                    "${fixture.origin.latitude},${fixture.origin.longitude}->" +
+                        "${fixture.destination.latitude},${fixture.destination.longitude}"
+                OfflineTransitCache(
+                    backingStore = SharedPreferencesTransitCacheStore(activity),
+                ).put(
+                    CachedTransitPlan(
+                        key = routeKey,
+                        routeOptions = options,
+                        departures = emptyList(),
+                        savedAtEpochSeconds = fixture.departureMillis / 1_000L,
+                    )
+                )
+                SharedPreferencesJourneyStateStore(activity).save(
+                    JourneyUiState(
+                        phase = JourneyPhase.DESTINATION_SELECTED,
+                        start = GeoPoint(
+                            fixture.origin.latitude,
+                            fixture.origin.longitude,
+                        ),
+                        destination = GeoPoint(
+                            fixture.destination.latitude,
+                            fixture.destination.longitude,
+                        ),
+                    )
+                )
+                ArrivalAlarmRuntimeGraph.resetForTests()
+            } finally {
+                index.close()
+            }
+        }
+
+        rule.activityRule.scenario.recreate()
+        rule.waitForIdle()
+        rule.onNodeWithTag("home-overview").performScrollTo().assertIsDisplayed()
         captureScreen("home")
+
         navigateTo("nav-search")
+        rule.onNodeWithTag("catalog-search").performScrollTo().assertIsDisplayed()
         captureScreen("search")
-        navigateTo("nav-journey")
+
+        navigateTo("nav-home")
+        rule.onNodeWithTag("home-open-journey")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        rule.onNodeWithTag("route-refresh")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        waitForTag("route-option-0")
+        captureScreen("route")
+
+        rule.onNodeWithTag("route-option-select-0")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        waitForTag("journey-detail")
         captureScreen("journey")
+
+        val packageName = rule.activity.packageName
+        runShell("cmd location set-location-enabled true")
+        runShell("pm grant $packageName android.permission.ACCESS_COARSE_LOCATION")
+        runShell("pm grant $packageName android.permission.ACCESS_FINE_LOCATION")
+        runShell("pm grant $packageName android.permission.POST_NOTIFICATIONS")
+        var activeJourneyPermissionsReady = false
+        rule.activityRule.scenario.onActivity { activity ->
+            activeJourneyPermissionsReady = ActiveJourneyPermissions.hasRequired(activity)
+        }
+        assertTrue(
+            "API36 visual QA must have location + notification permissions and an enabled provider",
+            activeJourneyPermissionsReady,
+        )
+
+        rule.onNodeWithTag("arm")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        waitForTag("live-trip-panel")
+        captureScreen("live")
+
         navigateTo("nav-departures")
+        waitForTag("transit-experience-panel")
         captureScreen("departures")
+
         navigateTo("nav-settings")
+        rule.onNodeWithTag("settings-readiness-panel")
+            .performScrollTo()
+            .assertIsDisplayed()
         captureScreen("settings")
     }
 
@@ -365,6 +509,48 @@ class MainActivityTest {
         rule.onNodeWithTag("guidance-language-status")
             .performScrollTo()
             .assertTextContains("Deutsch", substring = true)
+    }
+
+    private data class VisualQaRouteFixture(
+        val origin: MapPoint,
+        val destination: MapPoint,
+        val departureMillis: Long,
+    )
+
+    private fun realVisualQaRouteFixture(archive: File): VisualQaRouteFixture {
+        val payload = ZipFile(archive).use { zip ->
+            val entry = zip.getEntry("g175_acceptance.json")
+                ?: error("g175_acceptance.json missing from real-feed visual QA archive")
+            zip.getInputStream(entry).bufferedReader().use { reader ->
+                JSONObject(reader.readText())
+            }
+        }
+        val case = payload.getJSONObject("cases").getJSONObject("lohne-achim")
+        fun point(key: String): MapPoint {
+            val raw = case.getJSONObject(key)
+            return MapPoint(
+                latitude = raw.getDouble("lat"),
+                longitude = raw.getDouble("lon"),
+                label = raw.getString("name"),
+            )
+        }
+        val departureMillis = LocalDate.parse(payload.getString("serviceDate"))
+            .atTime(8, 0)
+            .atZone(ZoneId.of("Europe/Berlin"))
+            .toInstant()
+            .toEpochMilli()
+        return VisualQaRouteFixture(
+            origin = point("origin"),
+            destination = point("destination"),
+            departureMillis = departureMillis,
+        )
+    }
+
+    private fun waitForTag(tag: String, timeoutMillis: Long = 60_000L) {
+        rule.waitUntil(timeoutMillis = timeoutMillis) {
+            rule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onNodeWithTag(tag).performScrollTo().assertIsDisplayed()
     }
 
     private fun captureScreen(name: String) {
