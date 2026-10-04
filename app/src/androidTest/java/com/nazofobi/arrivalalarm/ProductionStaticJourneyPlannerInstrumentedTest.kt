@@ -33,6 +33,7 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
                 liveCalls += 1
                 throw IOException("provider disabled")
             },
+            realtimeFetch = ::realtimeUnavailable,
         )
         try {
             val resolution = gateway.resolveJourneyOptions(
@@ -114,6 +115,81 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
     }
 
     @Test
+    fun freshGtfsRealtimeUpdateEnrichesLocalStaticJourneyWithoutCallingLiveRouter() {
+        seedReadyGraph(includeTrip = true)
+        var liveCalls = 0
+        val gateway = NationwideTransitGateway(
+            context = context,
+            nowMillis = { at("07:55:00") },
+            liveJourneyLoader = { _, _, _ ->
+                liveCalls += 1
+                throw IOException("live router must not be used")
+            },
+            realtimeFetch = {
+                GermanyRealtimeFetchResult.Available(
+                    GermanyRealtimeSnapshot(
+                        source = GermanyGtfsRealtimeProvenance.PROVIDER,
+                        license = GermanyGtfsRealtimeProvenance.LICENSE,
+                        feedTimestampEpochSeconds = at("07:54:30") / 1_000L,
+                        fetchedAtEpochSeconds = at("07:54:35") / 1_000L,
+                        tripUpdates = listOf(
+                            GermanyRealtimeTripUpdate(
+                                entityId = "rt-T1",
+                                tripId = "T1",
+                                routeId = "R1",
+                                startDate = null,
+                                scheduleRelationship = "SCHEDULED",
+                                cancelled = false,
+                                stops = listOf(
+                                    GermanyRealtimeStopUpdate(
+                                        stopSequence = 2,
+                                        stopId = "B",
+                                        arrivalDelaySeconds = 180,
+                                        departureDelaySeconds = null,
+                                        arrivalTimeEpochSeconds = null,
+                                        departureTimeEpochSeconds = null,
+                                    ),
+                                ),
+                                selectorValidity =
+                                    GermanyRealtimeTripSelectorValidity.VALID_ID_BASED,
+                            ),
+                        ),
+                        serviceAlerts = emptyList(),
+                        gtfsRealtimeVersion = "2.0",
+                        incrementality = "FULL_DATASET",
+                        feedVersion = "instrumented",
+                    ),
+                )
+            },
+        )
+        try {
+            val resolution = gateway.resolveJourneyOptions(
+                origin = MapPoint(52.665, 8.237, "Lohne"),
+                destination = MapPoint(52.700, 8.400, "Achim"),
+                limit = 1,
+            )
+
+            assertTrue(resolution is NationwideJourneyResolution.Results)
+            resolution as NationwideJourneyResolution.Results
+            assertEquals(NationwideJourneySource.LOCAL_STATIC, resolution.source)
+            assertEquals(0, liveCalls)
+            val option = resolution.options.single()
+            assertEquals(RouteRealtimeState.FRESH_MATCHED, option.realtime?.state)
+            assertEquals(listOf("T1"), option.realtime?.matchedTripIds)
+            assertEquals(
+                "2026-10-04T08:33:00+02:00",
+                option.stops.last().arrival,
+            )
+            assertEquals(
+                "2026-10-04T08:30:00+02:00",
+                option.stops.last().plannedArrival,
+            )
+        } finally {
+            gateway.close()
+        }
+    }
+
+    @Test
     fun afterMidnightPrefersPreviousServiceDayCarryoverOverNextNightTrip() {
         seedCrossMidnightGraph()
         var liveCalls = 0
@@ -124,6 +200,7 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
                 liveCalls += 1
                 throw IOException("provider disabled")
             },
+            realtimeFetch = ::realtimeUnavailable,
         )
         try {
             val resolution = gateway.resolveJourneyOptions(
@@ -168,6 +245,12 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
             index.close()
         }
     }
+
+    private fun realtimeUnavailable(): GermanyRealtimeFetchResult =
+        GermanyRealtimeFetchResult.Unavailable(
+            GermanyRealtimeUnavailableReason.NETWORK,
+            "disabled in static production test",
+        )
 
     private fun seedCrossMidnightGraph() {
         context.deleteDatabase("nationwide_transit.db")
