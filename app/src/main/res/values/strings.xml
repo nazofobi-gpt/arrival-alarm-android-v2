@@ -90,6 +90,7 @@
     <string name="route_walk_transfer_format">%1$d dk yürüme • %2$d aktarma</string>
     <string name="route_realtime_badge">Canlı güncelleme</string>
     <string name="route_realtime_cancelled_badge">Canlı veri: sefer iptal bilgisi</string>
+    <string name="route_realtime_cancelled_action_blocked">Sefer iptal edildi • farklı bir rota seç</string>
     <string name="route_realtime_stale_badge">Canlı veri eski • planlı saat</string>
     <string name="route_realtime_no_match_badge">Canlı veri güncel • eşleşen sefer yok</string>
     <string name="route_realtime_unavailable_badge">Canlı veri kullanılamıyor • planlı saat</string>
