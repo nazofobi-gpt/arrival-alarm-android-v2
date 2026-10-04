@@ -18,7 +18,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -348,11 +347,6 @@ class MainActivityTest {
         val archivePath = InstrumentationRegistry.getArguments()
             .getString("visualQaFeedPath")
             .orEmpty()
-        assumeTrue(
-            "visualQaFeedPath instrumentation argument is required for canonical 8-screen capture",
-            archivePath.isNotBlank(),
-        )
-
         rule.activityRule.scenario.onActivity { activity ->
             activity.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
                 .edit()
@@ -367,6 +361,20 @@ class MainActivityTest {
             .performScrollTo()
             .assertIsDisplayed()
             .performClick()
+
+        if (archivePath.isBlank()) {
+            rule.onNodeWithTag("home-overview").performScrollTo().assertIsDisplayed()
+            captureScreen("home")
+            navigateTo("nav-search")
+            captureScreen("search")
+            navigateTo("nav-journey")
+            captureScreen("journey")
+            navigateTo("nav-departures")
+            captureScreen("departures")
+            navigateTo("nav-settings")
+            captureScreen("settings")
+            return
+        }
 
         prepareRealStaticJourneyForVisualQa(archivePath)
         ArrivalAlarmRuntimeGraph.resetForTests()
