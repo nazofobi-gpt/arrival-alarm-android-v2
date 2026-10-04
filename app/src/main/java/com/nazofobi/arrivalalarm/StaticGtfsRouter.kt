@@ -50,6 +50,9 @@ interface StaticGtfsScheduleData {
     ): List<GtfsScheduleTripCandidate>
     fun stopTimesForTrip(tripId: String, limit: Int): List<GtfsScheduleStopTime>
     fun transfersFromStop(stopId: String, limit: Int): List<GtfsScheduleTransfer>
+    fun linkedTransfersFromTrip(fromTripId: String, limit: Int): List<GtfsScheduleTransfer>
+    fun tripsInBlock(blockId: String, serviceId: String, limit: Int): List<GtfsScheduleTrip>
+    fun trip(tripId: String): GtfsScheduleTrip?
     fun stop(stopId: String): GtfsScheduleStop?
     fun childStops(parentStationId: String, limit: Int): List<GtfsScheduleStop>
     fun nearbyStops(stopId: String, radiusMeters: Int, limit: Int): List<GtfsScheduleNearbyStop>
@@ -71,6 +74,14 @@ class RepositoryStaticGtfsScheduleData(
 
     override fun transfersFromStop(stopId: String, limit: Int) =
         repository.transfersFromStop(stopId, limit)
+
+    override fun linkedTransfersFromTrip(fromTripId: String, limit: Int) =
+        repository.linkedTransfersFromTrip(fromTripId, limit)
+
+    override fun tripsInBlock(blockId: String, serviceId: String, limit: Int) =
+        repository.tripsInBlock(blockId, serviceId, limit)
+
+    override fun trip(tripId: String) = repository.trip(tripId)
 
     override fun stop(stopId: String) = repository.stop(stopId)
 
@@ -181,8 +192,26 @@ class StaticGtfsRouter(
                 if (boardDeparture < earliestBoard) continue
 
                 for (alight in stopTimes.drop(boardIndex + 1)) {
-                    if (!allowsScheduledDropOff(alight)) continue
                     val firstArrival = epoch(alight.arrivalTime ?: alight.departureTime, serviceDate) ?: continue
+                    val firstLeg = StaticTransitLeg(
+                        tripId = candidate.trip.id,
+                        routeId = candidate.trip.routeId,
+                        fromStopId = access.stopId,
+                        toStopId = alight.stopId,
+                        departureEpochMillis = boardDeparture,
+                        arrivalEpochMillis = firstArrival,
+                    )
+                    linkedContinuationLegs(
+                        fromTrip = candidate.trip,
+                        alight = alight,
+                        firstArrivalEpochMillis = firstArrival,
+                        serviceDate = serviceDate,
+                        destinationByStop = destinationByStop,
+                    ).forEach { second ->
+                        found += journey(access, second.second, listOf(firstLeg, second.first))
+                    }
+
+                    if (!allowsScheduledDropOff(alight)) continue
                     val rules = transferRulesFor(alight.stopId)
                     val targets = transferTargets(alight.stopId, rules)
                     for (target in targets) {
@@ -224,14 +253,6 @@ class StaticGtfsRouter(
                                 serviceDate = serviceDate,
                                 destinationByStop = destinationByStop,
                             ) ?: continue
-                            val firstLeg = StaticTransitLeg(
-                                tripId = candidate.trip.id,
-                                routeId = candidate.trip.routeId,
-                                fromStopId = access.stopId,
-                                toStopId = alight.stopId,
-                                departureEpochMillis = boardDeparture,
-                                arrivalEpochMillis = firstArrival,
-                            )
                             found += journey(access, second.second, listOf(firstLeg, second.first))
                         }
                     }
@@ -244,6 +265,97 @@ class StaticGtfsRouter(
             .distinctBy { it.id }
             .take(maxJourneys)
         return if (deduped.isEmpty()) StaticRouterResult.NoPath else StaticRouterResult.Journeys(deduped)
+    }
+
+    private fun linkedContinuationLegs(
+        fromTrip: GtfsScheduleTrip,
+        alight: GtfsScheduleStopTime,
+        firstArrivalEpochMillis: Long,
+        serviceDate: GtfsServiceDate,
+        destinationByStop: Map<String, StaticRouterAccess>,
+    ): List<Pair<StaticTransitLeg, StaticRouterAccess>> {
+        val explicit = data.linkedTransfersFromTrip(fromTrip.id, maxTransfersPerStop)
+            .filter { rule ->
+                rule.transferType == 4 || rule.transferType == 5
+            }
+            .filter { rule ->
+                (rule.fromTripId == null || rule.fromTripId == fromTrip.id) &&
+                    (rule.fromRouteId == null || rule.fromRouteId == fromTrip.routeId)
+            }
+
+        if (explicit.isNotEmpty()) {
+            return explicit.asSequence()
+                .filter { it.transferType == 4 }
+                .filter { it.fromStopId == null || it.fromStopId == alight.stopId }
+                .mapNotNull { rule ->
+                    val toTripId = rule.toTripId ?: return@mapNotNull null
+                    val toTrip = data.trip(toTripId) ?: return@mapNotNull null
+                    if (!ruleMatches(rule, fromTrip, toTrip)) return@mapNotNull null
+                    if (!data.isServiceActive(toTrip.serviceId, serviceDate)) return@mapNotNull null
+                    continuationLegOnTrip(
+                        trip = toTrip,
+                        boardStopId = rule.toStopId ?: alight.stopId,
+                        earliestBoardEpochMillis = firstArrivalEpochMillis,
+                        serviceDate = serviceDate,
+                        destinationByStop = destinationByStop,
+                    )
+                }
+                .distinctBy { result ->
+                    val leg = result.first
+                    listOf(leg.tripId, leg.fromStopId, leg.toStopId).joinToString("|")
+                }
+                .toList()
+        }
+
+        val blockId = fromTrip.blockId ?: return emptyList()
+        return data.tripsInBlock(blockId, fromTrip.serviceId, maxCandidatesPerStop)
+            .asSequence()
+            .filter { it.id != fromTrip.id && it.blockId == blockId && it.serviceId == fromTrip.serviceId }
+            .filter { data.isServiceActive(it.serviceId, serviceDate) }
+            .mapNotNull { trip ->
+                continuationLegOnTrip(
+                    trip = trip,
+                    boardStopId = alight.stopId,
+                    earliestBoardEpochMillis = firstArrivalEpochMillis,
+                    serviceDate = serviceDate,
+                    destinationByStop = destinationByStop,
+                )
+            }
+            .distinctBy { result ->
+                val leg = result.first
+                listOf(leg.tripId, leg.fromStopId, leg.toStopId).joinToString("|")
+            }
+            .toList()
+    }
+
+    private fun continuationLegOnTrip(
+        trip: GtfsScheduleTrip,
+        boardStopId: String,
+        earliestBoardEpochMillis: Long,
+        serviceDate: GtfsServiceDate,
+        destinationByStop: Map<String, StaticRouterAccess>,
+    ): Pair<StaticTransitLeg, StaticRouterAccess>? {
+        val times = data.stopTimesForTrip(trip.id, maxStopTimesPerTrip)
+        val board = times.firstOrNull() ?: return null
+        if (board.stopId != boardStopId) return null
+        val departure = epoch(board.departureTime ?: board.arrivalTime, serviceDate) ?: return null
+        if (departure < earliestBoardEpochMillis) return null
+        if (departure - earliestBoardEpochMillis > MAX_CONTINUATION_WAIT_MILLIS) return null
+        for (arrival in times.drop(1)) {
+            if (!allowsScheduledDropOff(arrival)) continue
+            val egress = destinationByStop[arrival.stopId] ?: continue
+            val arrivalEpoch = epoch(arrival.arrivalTime ?: arrival.departureTime, serviceDate) ?: continue
+            if (arrivalEpoch < departure) continue
+            return StaticTransitLeg(
+                tripId = trip.id,
+                routeId = trip.routeId,
+                fromStopId = boardStopId,
+                toStopId = arrival.stopId,
+                departureEpochMillis = departure,
+                arrivalEpochMillis = arrivalEpoch,
+            ) to egress
+        }
+        return null
     }
 
     private fun transferRulesFor(alightStopId: String): List<GtfsScheduleTransfer> {
@@ -427,4 +539,8 @@ class StaticGtfsRouter(
 
     private fun epoch(raw: String?, serviceDate: GtfsServiceDate): Long? =
         raw?.let { runCatching { GtfsServiceTime.parse(it).resolve(serviceDate, agencyTimeZone).epochMillis }.getOrNull() }
+
+    private companion object {
+        const val MAX_CONTINUATION_WAIT_MILLIS = 6L * 60L * 60L * 1_000L
+    }
 }
