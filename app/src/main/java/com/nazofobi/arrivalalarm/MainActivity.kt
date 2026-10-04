@@ -210,6 +210,7 @@ fun ArrivalAlarmApp(
     var stationDepartures by remember { mutableStateOf(emptyList<Departure>()) }
     var stationAlerts by remember { mutableStateOf(emptyList<ServiceAlert>()) }
     var stationSource by remember { mutableStateOf<String?>(null) }
+    var stationRealtimeState by remember { mutableStateOf<StationRealtimeState?>(null) }
     var stationStatus by remember { mutableStateOf<String?>(null) }
     var stationLoading by remember { mutableStateOf(false) }
     var stationResolved by remember { mutableStateOf(false) }
@@ -314,6 +315,7 @@ fun ArrivalAlarmApp(
         stationDepartures = emptyList()
         stationAlerts = emptyList()
         stationSource = null
+        stationRealtimeState = null
         stationStatus = null
         stationLoading = false
         stationResolved = false
@@ -360,6 +362,7 @@ fun ArrivalAlarmApp(
         stationDepartures = emptyList()
         stationAlerts = emptyList()
         stationSource = null
+        stationRealtimeState = null
         stationStatus = null
         transit.stationDepartures(stop) { snapshot ->
             stationLoading = false
@@ -368,9 +371,11 @@ fun ArrivalAlarmApp(
                 stationDepartures = snapshot.departures
                 stationAlerts = snapshot.alerts
                 stationSource = snapshot.sourceLabel
+                stationRealtimeState = snapshot.realtimeState
                 stationStatus = null
             } else {
                 stationResolved = false
+                stationRealtimeState = null
                 stationStatus = context.getString(R.string.departures_live_unavailable)
             }
         }
@@ -396,6 +401,7 @@ fun ArrivalAlarmApp(
         stationDepartures = emptyList()
         stationAlerts = emptyList()
         stationSource = null
+        stationRealtimeState = null
         stationStatus = null
         stationLoading = false
         stationResolved = false
@@ -1029,7 +1035,7 @@ fun ArrivalAlarmApp(
                         nowEpochSeconds = boardNow,
                         providerCapabilities = TransitProviderCapabilities(
                             realtimeDepartures = stationResolved &&
-                                stationDepartures.any { it.isRealtime },
+                                stationRealtimeState == StationRealtimeState.FRESH_MATCHED,
                             serviceAlerts = stationResolved && stationAlerts.isNotEmpty(),
                         ),
                         onSelectJourney = { routeId ->
