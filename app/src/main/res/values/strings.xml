@@ -209,6 +209,10 @@
     <string name="departures_loading">Kalkışlar yükleniyor…</string>
     <string name="departures_source">Kaynak: %1$s</string>
     <string name="departures_empty">Yaklaşan kalkış bulunamadı</string>
+    <string name="departures_gtfsrt_fresh">GTFS Deutschland yerel kalkışları • GTFS-RT canlı</string>
+    <string name="departures_gtfsrt_no_match">GTFS Deutschland yerel kalkışları • GTFS-RT güncel, eşleşen sefer yok</string>
+    <string name="departures_gtfsrt_stale">GTFS Deutschland yerel kalkışları • GTFS-RT eski, planlı saatler</string>
+    <string name="departures_gtfsrt_unavailable">GTFS Deutschland yerel kalkışları • GTFS-RT kullanılamıyor, planlı saatler</string>
     <string name="departures_live_unavailable">Canlı istasyon kalkışları alınamadı • rota saatleri gösteriliyor</string>
     <string name="departures_route_fallback">İstasyon panosu yok • seçili rotaların planlı saatleri gösteriliyor</string>
     <string name="departure_time_source">%1$s • %2$s</string>
