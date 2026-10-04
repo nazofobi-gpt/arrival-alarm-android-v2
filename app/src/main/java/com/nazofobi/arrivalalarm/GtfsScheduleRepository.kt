@@ -71,6 +71,14 @@ data class GtfsScheduleTransfer(
     val toTripId: String?,
 )
 
+data class GtfsScheduleFrequency(
+    val tripId: String,
+    val startTime: String,
+    val endTime: String,
+    val headwaySeconds: Int,
+    val exactTimes: Int?,
+)
+
 data class GtfsScheduleShapePoint(
     val shapeId: String,
     val sequence: Int,
@@ -315,7 +323,13 @@ class GtfsScheduleRepository(
             JOIN trips t ON t.trip_id=st.trip_id
             WHERE st.stop_id=?
               AND $boardTime IS NOT NULL
-              AND $boardSeconds >= CAST(? AS INTEGER)
+              AND (
+                    $boardSeconds >= CAST(? AS INTEGER)
+                    OR EXISTS (
+                        SELECT 1 FROM frequencies frequency
+                        WHERE frequency.trip_id=t.trip_id
+                    )
+              )
               AND (
                     EXISTS (
                         SELECT 1
@@ -341,7 +355,12 @@ class GtfsScheduleRepository(
                         )
                     )
               )
-            ORDER BY $boardSeconds,t.trip_id,st.stop_sequence
+            ORDER BY
+                CASE WHEN EXISTS (
+                    SELECT 1 FROM frequencies frequency
+                    WHERE frequency.trip_id=t.trip_id
+                ) THEN 0 ELSE 1 END,
+                $boardSeconds,t.trip_id,st.stop_sequence
             LIMIT ?
             """.trimIndent(),
             arrayOf(
@@ -372,6 +391,52 @@ class GtfsScheduleRepository(
                             stopSequence = cursor.getInt(9),
                             arrivalTime = cursor.nullString(10),
                             departureTime = cursor.nullString(11),
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    fun frequenciesForTrip(
+        tripId: String,
+        limit: Int = 64,
+    ): List<GtfsScheduleFrequency> {
+        if (tripId.isBlank()) return emptyList()
+        val boundedLimit = limit.coerceIn(1, MAX_FREQUENCIES)
+        val startSeconds = """
+            (
+                CAST(substr(start_time,1,instr(start_time,':')-1) AS INTEGER) * 3600 +
+                CAST(substr(start_time,instr(start_time,':')+1,2) AS INTEGER) * 60 +
+                CAST(substr(start_time,instr(start_time,':')+4,2) AS INTEGER)
+            )
+        """.trimIndent()
+        val endSeconds = """
+            (
+                CAST(substr(end_time,1,instr(end_time,':')-1) AS INTEGER) * 3600 +
+                CAST(substr(end_time,instr(end_time,':')+1,2) AS INTEGER) * 60 +
+                CAST(substr(end_time,instr(end_time,':')+4,2) AS INTEGER)
+            )
+        """.trimIndent()
+        return index.readableDatabase.rawQuery(
+            """
+            SELECT trip_id,start_time,end_time,headway_secs,exact_times
+            FROM frequencies
+            WHERE trip_id=?
+            ORDER BY $startSeconds,$endSeconds,headway_secs,COALESCE(exact_times,0)
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf(tripId, boundedLimit.toString()),
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    add(
+                        GtfsScheduleFrequency(
+                            tripId = cursor.getString(0),
+                            startTime = cursor.getString(1),
+                            endTime = cursor.getString(2),
+                            headwaySeconds = cursor.getInt(3),
+                            exactTimes = cursor.nullInt(4),
                         )
                     )
                 }
@@ -610,6 +675,7 @@ class GtfsScheduleRepository(
         private const val MAX_TRANSFERS = 512
         private const val MAX_LINKED_TRANSFERS = 512
         private const val MAX_BLOCK_TRIPS = 512
+        private const val MAX_FREQUENCIES = 512
         private const val MAX_SHAPE_POINTS = 10_000
     }
 }
