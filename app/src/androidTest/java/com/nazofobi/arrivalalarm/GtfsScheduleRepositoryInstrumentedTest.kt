@@ -74,6 +74,49 @@ class GtfsScheduleRepositoryInstrumentedTest {
     }
 
     @Test
+    fun frequencyRowsAreTypedOrderedBoundedAndIndexed() {
+        context.deleteDatabase("nationwide_transit.db")
+        val index = NationwideTransitIndex(context)
+        val db = index.writableDatabase
+        db.execSQL("INSERT INTO stops(id,name,lat,lon) VALUES('A','Alpha',52.0,8.0)")
+        db.execSQL("INSERT INTO routes(route_id,short_name,route_type) VALUES('R','R',2)")
+        db.execSQL("INSERT INTO trips(trip_id,route_id,service_id) VALUES('F','R','S')")
+        db.execSQL("INSERT INTO stop_times(trip_id,stop_sequence,stop_id,arrival_time,departure_time) VALUES('F',1,'A','00:05:00','00:05:00')")
+        db.execSQL("INSERT INTO calendar(service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date) VALUES('S',0,0,0,0,0,1,0,'20260101','20261231')")
+        db.execSQL("INSERT INTO frequencies(trip_id,start_time,end_time,headway_secs,exact_times) VALUES('F','25:00:00','26:00:00',600,1)")
+        db.execSQL("INSERT INTO frequencies(trip_id,start_time,end_time,headway_secs,exact_times) VALUES('F','27:00:00','28:00:00',900,0)")
+
+        val repo = GtfsScheduleRepository(index)
+        val rows = repo.frequenciesForTrip("F")
+        assertEquals(listOf("25:00:00", "27:00:00"), rows.map { it.startTime })
+        assertEquals(listOf(1, 0), rows.map { it.exactTimes })
+        assertEquals(1, repo.frequenciesForTrip("F", limit = 1).size)
+        assertTrue(repo.frequenciesForTrip("missing").isEmpty())
+        assertEquals(
+            listOf("F"),
+            repo.candidateTripsAtStop(
+                stopId = "A",
+                serviceDate = GtfsServiceDate(2026, 10, 3),
+                earliestBoardSeconds = 25 * 3_600,
+                limit = 1,
+            ).map { it.trip.id },
+        )
+
+        val plan = db.rawQuery(
+            "EXPLAIN QUERY PLAN SELECT start_time FROM frequencies WHERE trip_id=? LIMIT ?",
+            arrayOf("F", "1"),
+        ).use { cursor ->
+            buildList {
+                val detail = cursor.getColumnIndexOrThrow("detail")
+                while (cursor.moveToNext()) add(cursor.getString(detail))
+            }
+        }
+        assertTrue(plan.any { it.contains("idx_frequencies_trip", ignoreCase = true) })
+        assertFalse(plan.any { it.contains("SCAN frequencies", ignoreCase = true) })
+        index.close()
+    }
+
+    @Test
     fun continuityQueriesAreBoundedAndUseDedicatedIndexes() {
         context.deleteDatabase("nationwide_transit.db")
         val index = NationwideTransitIndex(context)
