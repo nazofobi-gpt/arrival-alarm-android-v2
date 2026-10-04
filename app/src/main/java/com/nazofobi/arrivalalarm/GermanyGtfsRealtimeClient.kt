@@ -33,6 +33,35 @@ enum class GermanyRealtimeTripSelectorValidity {
     UNMATCHABLE_INCOMPLETE,
 }
 
+enum class GermanyRealtimeAlertSelectorValidity {
+    VALID,
+    UNMATCHABLE_EMPTY,
+    UNMATCHABLE_TRIP_SELECTOR,
+}
+
+data class GermanyRealtimeTripSelector(
+    val tripId: String?,
+    val routeId: String?,
+    val directionId: Int?,
+    val startTime: String?,
+    val startDate: String?,
+    val scheduleRelationship: String?,
+    val validity: GermanyRealtimeTripSelectorValidity,
+) {
+    val hasFrequencyInstanceIdentity: Boolean
+        get() = tripId != null && startTime != null && startDate != null
+}
+
+data class GermanyRealtimeAlertSelector(
+    val agencyId: String?,
+    val routeId: String?,
+    val routeType: Int?,
+    val directionId: Int?,
+    val stopId: String?,
+    val trip: GermanyRealtimeTripSelector?,
+    val validity: GermanyRealtimeAlertSelectorValidity,
+)
+
 data class GermanyRealtimeStopUpdate(
     val stopSequence: Int?,
     val stopId: String?,
@@ -77,11 +106,22 @@ data class GermanyRealtimeAlert(
     val effect: String?,
     val header: String?,
     val description: String?,
-    val routeIds: Set<String>,
-    val tripIds: Set<String>,
-    val stopIds: Set<String>,
+    val selectors: List<GermanyRealtimeAlertSelector>,
     val activePeriods: List<GermanyRealtimeActivePeriod>,
-)
+    val severityLevel: String? = null,
+) {
+    private val validSelectors: List<GermanyRealtimeAlertSelector>
+        get() = selectors.filter { it.validity == GermanyRealtimeAlertSelectorValidity.VALID }
+
+    val routeIds: Set<String>
+        get() = validSelectors.mapNotNull { it.routeId }.toSet()
+
+    val tripIds: Set<String>
+        get() = validSelectors.mapNotNull { it.trip?.tripId }.toSet()
+
+    val stopIds: Set<String>
+        get() = validSelectors.mapNotNull { it.stopId }.toSet()
+}
 
 data class GermanyRealtimeSnapshot(
     val source: String,
@@ -278,15 +318,34 @@ class GermanyGtfsRealtimeClient(
             feed.entityList.forEach { entity ->
                 if (!entity.hasAlert()) return@forEach
                 val alert = entity.alert
-                val routeIds = linkedSetOf<String>()
-                val tripIds = linkedSetOf<String>()
-                val stopIds = linkedSetOf<String>()
-                alert.informedEntityList.forEach { selector ->
-                    selector.routeId.takeIf { it.isNotBlank() }?.let(routeIds::add)
-                    selector.stopId.takeIf { it.isNotBlank() }?.let(stopIds::add)
-                    if (selector.hasTrip()) {
-                        selector.trip.tripId.takeIf { it.isNotBlank() }?.let(tripIds::add)
+                val selectors = alert.informedEntityList.map { selector ->
+                    val agencyId = selector.agencyId.takeIf { it.isNotBlank() }
+                    val routeId = selector.routeId.takeIf { it.isNotBlank() }
+                    val routeType = selector.routeType.takeIf { selector.hasRouteType() }
+                    val directionId = selector.directionId.takeIf { selector.hasDirectionId() }
+                    val stopId = selector.stopId.takeIf { it.isNotBlank() }
+                    val trip = selector.trip.takeIf { selector.hasTrip() }?.let(::parseTripSelector)
+                    val validity = when {
+                        trip?.validity == GermanyRealtimeTripSelectorValidity.UNMATCHABLE_INCOMPLETE ->
+                            GermanyRealtimeAlertSelectorValidity.UNMATCHABLE_TRIP_SELECTOR
+                        agencyId == null &&
+                            routeId == null &&
+                            routeType == null &&
+                            directionId == null &&
+                            stopId == null &&
+                            trip == null ->
+                            GermanyRealtimeAlertSelectorValidity.UNMATCHABLE_EMPTY
+                        else -> GermanyRealtimeAlertSelectorValidity.VALID
                     }
+                    GermanyRealtimeAlertSelector(
+                        agencyId = agencyId,
+                        routeId = routeId,
+                        routeType = routeType,
+                        directionId = directionId,
+                        stopId = stopId,
+                        trip = trip,
+                        validity = validity,
+                    )
                 }
                 add(
                     GermanyRealtimeAlert(
@@ -299,14 +358,17 @@ class GermanyGtfsRealtimeClient(
                         } else {
                             null
                         },
-                        routeIds = routeIds,
-                        tripIds = tripIds,
-                        stopIds = stopIds,
+                        selectors = selectors,
                         activePeriods = alert.activePeriodList.map { period ->
                             GermanyRealtimeActivePeriod(
                                 startEpochSeconds = period.start.takeIf { period.hasStart() },
                                 endEpochSeconds = period.end.takeIf { period.hasEnd() },
                             )
+                        },
+                        severityLevel = if (alert.hasSeverityLevel()) {
+                            alert.severityLevel.name
+                        } else {
+                            null
                         },
                     ),
                 )
@@ -327,6 +389,40 @@ class GermanyGtfsRealtimeClient(
                 incrementality = incrementality,
                 feedVersion = feedVersion,
             ),
+        )
+    }
+
+    private fun parseTripSelector(
+        trip: GtfsRealtime.TripDescriptor,
+    ): GermanyRealtimeTripSelector {
+        val tripId = trip.tripId.takeIf { it.isNotBlank() }
+        val routeId = trip.routeId.takeIf { it.isNotBlank() }
+        val directionId = trip.directionId.takeIf { trip.hasDirectionId() }
+        val startTime = trip.startTime.takeIf { it.isNotBlank() }
+        val startDate = trip.startDate.takeIf { it.isNotBlank() }
+        val scheduleRelationship = if (trip.hasScheduleRelationship()) {
+            trip.scheduleRelationship.name
+        } else {
+            null
+        }
+        val validity = when {
+            tripId != null -> GermanyRealtimeTripSelectorValidity.VALID_ID_BASED
+            routeId != null &&
+                directionId != null &&
+                startTime != null &&
+                startDate != null &&
+                (scheduleRelationship == null || scheduleRelationship == "SCHEDULED") ->
+                GermanyRealtimeTripSelectorValidity.VALID_IDLESS_SCHEDULED
+            else -> GermanyRealtimeTripSelectorValidity.UNMATCHABLE_INCOMPLETE
+        }
+        return GermanyRealtimeTripSelector(
+            tripId = tripId,
+            routeId = routeId,
+            directionId = directionId,
+            startTime = startTime,
+            startDate = startDate,
+            scheduleRelationship = scheduleRelationship,
+            validity = validity,
         )
     }
 
