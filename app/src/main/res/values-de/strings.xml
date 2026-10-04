@@ -90,7 +90,7 @@
     <string name="route_selected_action">Verbindung gewählt</string>
     <string name="journey_detail_title">Fahrtdetails</string>
     <string name="route_live_static">transport.rest / DB-Profil • Echtzeit/Fahrplan</string>
-    <string name="route_live_unavailable">Live-Verbindung nicht verfügbar: %1$s</string>
+    <string name="route_live_unavailable">Live-Routenanbieter nicht verfügbar • lokale Daten lieferten keine Verbindung</string>
     <string name="route_not_found">Für diesen Start und dieses Ziel wurde keine Verbindung gefunden</string>
     <string name="route_offline_fallback">Keine Live-Verbindung • letzte erfolgreiche Offline-Verbindung</string>
     <string name="refresh_routes">Verbindungen aktualisieren</string>

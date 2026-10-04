@@ -5,8 +5,11 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.io.IOException
 import java.util.TimeZone
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -160,6 +163,23 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
             unavailable as NationwideJourneyResolution.ProviderUnavailable
             assertEquals(LocalStaticJourneyOutcome.NoPath, unavailable.localOutcome)
             assertEquals("offline", unavailable.message)
+
+            val callbackLatch = CountDownLatch(1)
+            var callbackOptions = emptyList<RouteOption>()
+            var callbackStatus: String? = null
+            unavailableGateway.journeyOptions(
+                liveOption.origin,
+                liveOption.destination,
+                3,
+            ) { options, status ->
+                callbackOptions = options
+                callbackStatus = status
+                callbackLatch.countDown()
+            }
+            assertTrue("journey callback timed out", callbackLatch.await(5, TimeUnit.SECONDS))
+            assertTrue(callbackOptions.isEmpty())
+            assertEquals(context.getString(R.string.route_live_unavailable), callbackStatus)
+            assertFalse(callbackStatus.orEmpty().contains("offline", ignoreCase = true))
         } finally {
             unavailableGateway.close()
         }

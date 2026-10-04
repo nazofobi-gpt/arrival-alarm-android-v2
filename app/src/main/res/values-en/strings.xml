@@ -90,7 +90,7 @@
     <string name="route_selected_action">Route selected</string>
     <string name="journey_detail_title">Journey details</string>
     <string name="route_live_static">transport.rest / DB profile • live/scheduled route</string>
-    <string name="route_live_unavailable">Live route unavailable: %1$s</string>
+    <string name="route_live_unavailable">Live route provider is unavailable • local data returned no route</string>
     <string name="route_not_found">No route found for this origin and destination</string>
     <string name="route_offline_fallback">No live route • last successful offline route</string>
     <string name="refresh_routes">Refresh routes</string>
