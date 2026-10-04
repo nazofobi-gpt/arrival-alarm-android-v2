@@ -225,21 +225,38 @@ class ProductionStaticJourneyPlanner(
     ): LocalStaticJourneyOutcome {
         if (!index.isReady()) return LocalStaticJourneyOutcome.Unavailable
         val boundedLimit = limit.coerceIn(1, 6)
-        val origins = index.nearest(
+        val originNearby = index.nearest(
             origin.latitude,
             origin.longitude,
             maxAccessStops,
-        ).map { nearby ->
+        )
+        val destinationNearby = index.nearest(
+            destination.latitude,
+            destination.longitude,
+            maxAccessStops,
+        )
+        if (originNearby.isEmpty() || destinationNearby.isEmpty()) {
+            return LocalStaticJourneyOutcome.NoPath
+        }
+        if (originNearby.first().stop.id == destinationNearby.first().stop.id) {
+            return LocalStaticJourneyOutcome.SameOrigin
+        }
+
+        // Nearest-stop windows can overlap for short regional requests. StaticGtfsRouter
+        // intentionally treats any shared access/egress stop as SameOrigin, so make the
+        // candidate sets disjoint while preserving each side's closest stop.
+        val destinationPrimaryId = destinationNearby.first().stop.id
+        val originSelected = originNearby.filter { it.stop.id != destinationPrimaryId }
+        val originIds = originSelected.mapTo(linkedSetOf()) { it.stop.id }
+        val destinationSelected = destinationNearby.filter { it.stop.id !in originIds }
+
+        val origins = originSelected.map { nearby ->
             StaticRouterAccess(
                 stopId = nearby.stop.id,
                 walkSeconds = walkSeconds(nearby.distanceMeters),
             )
         }
-        val destinations = index.nearest(
-            destination.latitude,
-            destination.longitude,
-            maxAccessStops,
-        ).map { nearby ->
+        val destinations = destinationSelected.map { nearby ->
             StaticRouterAccess(
                 stopId = nearby.stop.id,
                 walkSeconds = walkSeconds(nearby.distanceMeters),
