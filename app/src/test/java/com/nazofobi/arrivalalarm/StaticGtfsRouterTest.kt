@@ -541,7 +541,7 @@ class StaticGtfsRouterTest {
     }
     private fun at(raw:String)=GtfsServiceTime.parse(raw).resolve(date,zone).epochMillis
     private fun trip(id:String,route:String,service:String,block:String?=null)=
-        GtfsScheduleTrip(id,route,service,null,null,null,null,block)
+        GtfsScheduleTrip(id,route,service,null,null,null,null,null,blockId=block)
     private fun candidate(trip:String,route:String,service:String,seq:Int,dep:String,block:String?=null)=
         GtfsScheduleTripCandidate(this.trip(trip,route,service,block),seq,null,dep)
     private fun st(
