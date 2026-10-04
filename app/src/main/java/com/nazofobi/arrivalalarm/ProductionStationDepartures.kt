@@ -238,6 +238,7 @@ internal class ProductionRealtimeStationOverlay(
     private val fetch: () -> GermanyRealtimeFetchResult,
     private val match: (GermanyRealtimeFetchResult, Long) -> GermanyRealtimeOverlayResult,
     private val nowEpochSeconds: () -> Long = { System.currentTimeMillis() / 1_000L },
+    private val isFrequencyTrip: (String) -> Boolean = { false },
 ) {
     fun enrich(
         stopId: String,
@@ -289,7 +290,9 @@ internal class ProductionRealtimeStationOverlay(
         planned: List<Departure>,
         overlay: GermanyRealtimeOverlayResult.Matched,
     ): ProductionStationDeparturesResult {
-        val byTrip = overlay.tripOverlays.associateBy { it.staticTrip.id }
+        val byTrip = overlay.tripOverlays
+            .filterNot { frequencyTrip(it.staticTrip.id) }
+            .associateBy { it.staticTrip.id }
         var matchedAny = false
         val departures = planned.map { departure ->
             val trip = byTrip[departure.tripId] ?: return@map departure
@@ -339,6 +342,9 @@ internal class ProductionRealtimeStationOverlay(
             updatedAtEpochSeconds = overlay.updatedAtEpochSeconds(),
         )
     }
+
+    private fun frequencyTrip(tripId: String): Boolean =
+        runCatching { isFrequencyTrip(tripId) }.getOrDefault(true)
 
     private fun GermanyRealtimeOverlayResult.Matched.updatedAtEpochSeconds(): Long =
         provenance.feedTimestampEpochSeconds ?: provenance.fetchedAtEpochSeconds
