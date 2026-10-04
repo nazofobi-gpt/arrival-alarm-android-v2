@@ -17,4 +17,29 @@ class NearbyStationCanonicalizerTest {
         assertEquals(1, result.size)
         assertEquals("station", result.single().stop.id)
     }
+
+    @Test
+    fun favoriteIdentityUsesParentStationAndIsStableAcrossInputOrder() {
+        val first = CatalogStop("lohne-platform-1", "gtfs", "Lohne Bahnhof", 52.66501, 8.23701, "lohne-station")
+        val second = CatalogStop("lohne-platform-2", "gtfs", "Lohne Bahnhof", 52.66502, 8.23702, "lohne-station")
+        val forward = NearbyStationCanonicalizer.canonicalize(
+            52.6645,
+            8.237,
+            listOf(NearbyStop(first, 1), NearbyStop(second, 2)),
+            5,
+        )
+        val reversed = NearbyStationCanonicalizer.canonicalize(
+            52.6645,
+            8.237,
+            listOf(NearbyStop(second, 2), NearbyStop(first, 1)),
+            5,
+        )
+
+        assertEquals(1, forward.size)
+        assertEquals(1, reversed.size)
+        assertEquals("lohne-station", forward.single().stop.id)
+        assertEquals(forward.single().stop.id, reversed.single().stop.id)
+        assertEquals(forward.single().distanceMeters, reversed.single().distanceMeters)
+        assertEquals(forward.single().bearingDegrees, reversed.single().bearingDegrees)
+    }
 }
