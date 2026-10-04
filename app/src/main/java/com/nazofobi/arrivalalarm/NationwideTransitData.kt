@@ -936,25 +936,24 @@ class GermanyLiveTransitApi(
                 provenance = provenance,
             )
         }
+        if (stale) {
+            return TransitProviderOutcome.Stale(
+                value = values,
+                provenance = provenance,
+                freshness = freshness,
+            )
+        }
         if (values.isEmpty()) {
             return TransitProviderOutcome.NoResult(
                 provenance = provenance,
                 freshness = freshness,
             )
         }
-        return if (stale) {
-            TransitProviderOutcome.Stale(
-                value = values,
-                provenance = provenance,
-                freshness = freshness,
-            )
-        } else {
-            TransitProviderOutcome.Results(
-                value = values,
-                provenance = provenance,
-                freshness = freshness,
-            )
-        }
+        return TransitProviderOutcome.Results(
+            value = values,
+            provenance = provenance,
+            freshness = freshness,
+        )
     }
 
     private fun get(url: String): String = when (val outcome = fetchJsonOutcome(url)) {
