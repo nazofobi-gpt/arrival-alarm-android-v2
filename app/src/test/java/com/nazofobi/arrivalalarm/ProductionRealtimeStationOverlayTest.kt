@@ -81,6 +81,42 @@ class ProductionRealtimeStationOverlayTest {
     }
 
     @Test
+    fun routeAndStopAlertSelectorDoesNotLeakToAnotherStopOnSameRoute() {
+        val matched = GermanyRealtimeOverlayResult.Matched(
+            tripOverlays = emptyList(),
+            serviceAlerts = listOf(
+                GermanyRealtimeAlert(
+                    entityId = "alert-other-stop",
+                    cause = "TECHNICAL_PROBLEM",
+                    effect = "SIGNIFICANT_DELAYS",
+                    header = "Other stop",
+                    description = "Only stop B is affected",
+                    selectors = listOf(
+                        GermanyRealtimeAlertSelector(
+                            agencyId = null,
+                            routeId = "R1",
+                            routeType = null,
+                            directionId = null,
+                            stopId = "B",
+                            trip = null,
+                            validity = GermanyRealtimeAlertSelectorValidity.VALID,
+                        ),
+                    ),
+                    activePeriods = emptyList(),
+                ),
+            ),
+            freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+            ageSeconds = 10L,
+            provenance = provenance(),
+        )
+
+        val result = overlay(matched).enrich("A", listOf(planned))
+
+        assertEquals(emptyList<ServiceAlert>(), result.alerts)
+        assertEquals(StationRealtimeState.FRESH_NO_MATCH, result.realtimeState)
+    }
+
+    @Test
     fun staleNoMatchAndUnavailablePreservePlannedDeparture() {
         val stale = GermanyRealtimeOverlayResult.Matched(
             tripOverlays = emptyList(),
