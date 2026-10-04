@@ -532,6 +532,8 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
             "INSERT INTO stops(id,name,lat,lon,parent_station,location_type) " +
                 "VALUES('B','Achim',52.700,8.400,NULL,0)",
         )
+        db.execSQL("INSERT INTO stop_search(stop_id,name) VALUES('A','Lohne')")
+        db.execSQL("INSERT INTO stop_search(stop_id,name) VALUES('B','Achim')")
         db.execSQL(
             "INSERT INTO routes(route_id,agency_id,short_name,long_name,route_type) " +
                 "VALUES('R1','AG','RE 1','Regional Express',2)",
