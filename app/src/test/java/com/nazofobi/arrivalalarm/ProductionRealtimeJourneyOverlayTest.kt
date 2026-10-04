@@ -81,7 +81,7 @@ class ProductionRealtimeJourneyOverlayTest {
                     staticTrip = trip("T1"),
                     startDate = null,
                     startTime = null,
-                    cancelled = false,
+                    cancelled = true,
                     scheduleRelationship = "SCHEDULED",
                     stopUpdates = listOf(
                         GermanyRealtimeMatchedStopUpdate(
@@ -115,6 +115,7 @@ class ProductionRealtimeJourneyOverlayTest {
         assertNull(result.stops.last().arrival)
         assertNull(result.stops.last().platform)
         assertEquals("2", result.stops.last().plannedPlatform)
+        assertEquals(emptyList<String>(), result.realtime?.cancelledTripIds)
     }
 
     @Test
