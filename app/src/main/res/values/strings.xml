@@ -89,6 +89,12 @@
     <string name="route_duration_minutes">%1$d dk</string>
     <string name="route_walk_transfer_format">%1$d dk yürüme • %2$d aktarma</string>
     <string name="route_realtime_badge">Canlı güncelleme</string>
+    <string name="route_realtime_cancelled_badge">Canlı veri: sefer iptal bilgisi</string>
+    <string name="route_realtime_stale_badge">Canlı veri eski • planlı saat</string>
+    <string name="route_realtime_no_match_badge">Canlı veri güncel • eşleşen sefer yok</string>
+    <string name="route_realtime_unavailable_badge">Canlı veri kullanılamıyor • planlı saat</string>
+    <string name="route_realtime_platform_format">Canlı peron: %1$s</string>
+    <string name="route_planned_platform_format">Planlı peron: %1$s</string>
     <string name="route_planned_badge">Planlı saat</string>
     <string name="route_select_action">Bu rotayı seç</string>
     <string name="route_selected_action">Rota seçildi</string>
@@ -183,6 +189,11 @@
     <string name="live_trip_timing_unknown">sağlayıcı zamanı yok</string>
     <string name="live_trip_timing_realtime">sağlayıcı canlı zamanları</string>
     <string name="live_trip_timing_scheduled">sağlayıcı planlı zamanları</string>
+    <string name="live_trip_realtime_source">GTFS-RT durumu</string>
+    <string name="live_trip_realtime_fresh">güncel • statik rota canlı veriyle zenginleştirildi</string>
+    <string name="live_trip_realtime_no_match">güncel • eşleşen sefer yok • planlı rota korunuyor</string>
+    <string name="live_trip_realtime_stale">eski • planlı rota korunuyor</string>
+    <string name="live_trip_realtime_unavailable">kullanılamıyor • planlı rota korunuyor</string>
     <string name="live_trip_previous">Geçilen durak</string>
     <string name="live_trip_current">Saat verisine göre mevcut durak</string>
     <string name="live_trip_between_stops">Duraklar arasında • fiziksel durak konumu doğrulanmadı</string>
