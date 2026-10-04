@@ -358,6 +358,29 @@ class NationwideTransitDataTest {
         )
     }
 
+    @Test fun staleEmptyCacheIsNotReclassifiedAsFreshNoResult() {
+        var nowSeconds = 10_500L
+        val api = cacheApi(
+            RecordingExchange(
+                httpResponse(
+                    200,
+                    "[]",
+                    "Cache-Control" to "max-age=1",
+                    "ETag" to "\"empty-v1\"",
+                ),
+                IOException("offline"),
+            ),
+            { nowSeconds },
+        )
+
+        assertTrue(api.searchStopsOutcome("Nowhere", 5) is TransitProviderOutcome.NoResult)
+        nowSeconds += 2
+        val stale = api.searchStopsOutcome("Nowhere", 5)
+        assertTrue(stale is TransitProviderOutcome.Stale)
+        assertTrue((stale as TransitProviderOutcome.Stale).value.isEmpty())
+        assertEquals(TransitProviderFreshnessState.STALE, stale.freshness.state)
+    }
+
     @Test fun stationDepartureParserPreservesRealtimePlatformCancellationAndRemarks() {
         val json = JSONArray(
             """[
