@@ -2,6 +2,7 @@ package com.nazofobi.arrivalalarm
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -21,6 +22,61 @@ class OfflineTransitCacheTest {
         assertEquals(listOf(route), cache.routeOptions("trip"))
     }
 
+
+    @Test fun realtimeRouteDeltasAreRemovedBeforeOfflinePersistence() {
+        val origin = MapPoint(52.665, 8.237, "Lohne")
+        val destination = MapPoint(52.700, 8.400, "Achim")
+        val route = RouteOption(
+            id = "rt",
+            origin = origin,
+            destination = destination,
+            line = "RE 1",
+            direction = "Achim",
+            departure = "08:00",
+            arrival = "08:30",
+            walkingMinutes = 0,
+            transfers = 0,
+            tripIds = listOf("T1"),
+            stops = listOf(
+                RouteStop(
+                    id = "A",
+                    name = "Lohne",
+                    departure = "2026-10-04T08:03:00+02:00",
+                    plannedDeparture = "2026-10-04T08:00:00+02:00",
+                    platform = "5",
+                    plannedPlatform = "1",
+                ),
+                RouteStop(
+                    id = "B",
+                    name = "Achim",
+                    arrival = "2026-10-04T08:33:00+02:00",
+                    plannedArrival = "2026-10-04T08:30:00+02:00",
+                    platform = "7",
+                    plannedPlatform = "2",
+                ),
+            ),
+            realtime = RouteRealtimeInfo(
+                state = RouteRealtimeState.FRESH_MATCHED,
+                sourceLabel = "GTFS-RT",
+                updatedAtEpochSeconds = 100L,
+                ageSeconds = 5L,
+                matchedTripIds = listOf("T1"),
+            ),
+        )
+        val cache = OfflineTransitCache()
+        cache.put(CachedTransitPlan("rt", listOf(route), emptyList(), 100L))
+
+        val restored = cache.routeOptions("rt").single()
+        assertNull(restored.realtime)
+        assertNull(restored.stops.first().departure)
+        assertNull(restored.stops.first().platform)
+        assertEquals("2026-10-04T08:00:00+02:00", restored.stops.first().plannedDeparture)
+        assertEquals("1", restored.stops.first().plannedPlatform)
+        assertNull(restored.stops.last().arrival)
+        assertNull(restored.stops.last().platform)
+        assertEquals("2026-10-04T08:30:00+02:00", restored.stops.last().plannedArrival)
+        assertEquals("2", restored.stops.last().plannedPlatform)
+    }
 
     @Test fun backingStoreIsLoadedAndPublishedOnMutation() {
         val origin = MapPoint(52.665, 8.237, "Lohne")
