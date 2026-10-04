@@ -23,6 +23,8 @@ data class RouteStop(
     val plannedArrival: String? = null,
     val departure: String? = null,
     val plannedDeparture: String? = null,
+    val platform: String? = null,
+    val plannedPlatform: String? = null,
 )
 
 data class RouteOption(
