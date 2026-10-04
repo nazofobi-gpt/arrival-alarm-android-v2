@@ -51,6 +51,7 @@ data class StationDeparturesSnapshot(
     val sourceLabel: String? = null,
     val fetchedAtEpochSeconds: Long = 0L,
     val error: String? = null,
+    val realtimeState: StationRealtimeState? = null,
 )
 
 enum class NationwideJourneySource {
@@ -80,12 +81,40 @@ class NationwideTransitGateway(
     private val liveApi: GermanyLiveTransitApi = GermanyLiveTransitApi(),
     private val nowMillis: () -> Long = { System.currentTimeMillis() },
     private val liveJourneyLoader: ((MapPoint, MapPoint, Int) -> List<RouteOption>)? = null,
+    private val realtimeFetch: (() -> GermanyRealtimeFetchResult)? = null,
 ) {
     private val appContext = context.applicationContext
     private val store = NationwideTransitIndex(appContext)
     private val staticJourneyPlanner = ProductionStaticJourneyPlanner(
         index = store,
         nowMillis = nowMillis,
+    )
+    private val realtimeClient = GermanyGtfsRealtimeClient(
+        clock = EpochClock { nowMillis() / 1_000L },
+    )
+    private val realtimeScheduleRepository = GtfsScheduleRepository(store)
+    private val realtimeMatcher = GermanyRealtimeMatcher(
+        RepositoryGermanyRealtimeStaticData(realtimeScheduleRepository),
+    )
+    private val realtimeJourneyOverlay = ProductionRealtimeJourneyOverlay(
+        fetch = { realtimeFetch?.invoke() ?: realtimeClient.fetch() },
+        match = { result, now -> realtimeMatcher.match(result, now) },
+        nowEpochSeconds = { nowMillis() / 1_000L },
+        isFrequencyTrip = { tripId ->
+            realtimeScheduleRepository.frequenciesForTrip(tripId, 1).isNotEmpty()
+        },
+    )
+    private val stationDeparturesPlanner = ProductionStationDeparturesPlanner(
+        index = store,
+        nowMillis = nowMillis,
+    )
+    private val realtimeStationOverlay = ProductionRealtimeStationOverlay(
+        fetch = { realtimeFetch?.invoke() ?: realtimeClient.fetch() },
+        match = { result, now -> realtimeMatcher.match(result, now) },
+        nowEpochSeconds = { nowMillis() / 1_000L },
+        isFrequencyTrip = { tripId ->
+            realtimeScheduleRepository.frequenciesForTrip(tripId, 1).isNotEmpty()
+        },
     )
     private val io = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
@@ -194,36 +223,61 @@ class NationwideTransitGateway(
         callback: (StationDeparturesSnapshot) -> Unit,
     ) {
         io.execute {
-            val snapshot = runCatching {
-                val liveStop = if (stop.id.startsWith("db:")) {
-                    stop
-                } else {
-                    liveApi.searchStops(stop.name, 8)
-                        .minByOrNull { candidate ->
-                            haversineMeters(
-                                stop.latitude,
-                                stop.longitude,
-                                candidate.latitude,
-                                candidate.longitude,
-                            )
-                        }
-                        ?.takeIf { candidate ->
-                            haversineMeters(
-                                stop.latitude,
-                                stop.longitude,
-                                candidate.latitude,
-                                candidate.longitude,
-                            ) <= 1_000.0
-                        }
-                        ?: error("Live stop mapping unavailable")
-                }
-                liveApi.departures(liveStop.id, limit)
-            }.getOrElse { error ->
-                StationDeparturesSnapshot(
-                    error = error.message ?: appContext.getString(R.string.unknown_error),
-                )
-            }
+            val snapshot = resolveStationDepartures(stop, limit)
             main.post { callback(snapshot) }
+        }
+    }
+
+    internal fun resolveStationDepartures(
+        stop: CatalogStop,
+        limit: Int = 8,
+    ): StationDeparturesSnapshot {
+        val local = if (store.isReady() && !stop.id.startsWith("db:")) {
+            runCatching {
+                stationDeparturesPlanner.plan(stop.id, limit)
+            }.getOrDefault(emptyList())
+        } else {
+            emptyList()
+        }
+        if (local.isNotEmpty()) {
+            val enriched = realtimeStationOverlay.enrich(stop.id, local)
+            return StationDeparturesSnapshot(
+                departures = enriched.departures,
+                alerts = enriched.alerts,
+                sourceLabel = localStationDepartureSource(enriched.realtimeState),
+                fetchedAtEpochSeconds = enriched.updatedAtEpochSeconds ?: store.fetchedAt(),
+                realtimeState = enriched.realtimeState,
+            )
+        }
+
+        return runCatching {
+            val liveStop = if (stop.id.startsWith("db:")) {
+                stop
+            } else {
+                liveApi.searchStops(stop.name, 8)
+                    .minByOrNull { candidate ->
+                        haversineMeters(
+                            stop.latitude,
+                            stop.longitude,
+                            candidate.latitude,
+                            candidate.longitude,
+                        )
+                    }
+                    ?.takeIf { candidate ->
+                        haversineMeters(
+                            stop.latitude,
+                            stop.longitude,
+                            candidate.latitude,
+                            candidate.longitude,
+                        ) <= 1_000.0
+                    }
+                    ?: error("Live stop mapping unavailable")
+            }
+            liveApi.departures(liveStop.id, limit)
+        }.getOrElse { error ->
+            StationDeparturesSnapshot(
+                error = error.message ?: appContext.getString(R.string.unknown_error),
+            )
         }
     }
 
@@ -243,7 +297,7 @@ class NationwideTransitGateway(
             val status = when (resolution) {
                 is NationwideJourneyResolution.Results -> when (resolution.source) {
                     NationwideJourneySource.LOCAL_STATIC ->
-                        appContext.getString(R.string.source_gtfs_local)
+                        localJourneyStatus(resolution.options)
                     NationwideJourneySource.LIVE_FALLBACK ->
                         appContext.getString(R.string.route_live_static)
                 }
@@ -270,7 +324,7 @@ class NationwideTransitGateway(
 
         if (localOutcome is LocalStaticJourneyOutcome.Results) {
             return NationwideJourneyResolution.Results(
-                options = localOutcome.options,
+                options = realtimeJourneyOverlay.enrich(localOutcome.options),
                 source = NationwideJourneySource.LOCAL_STATIC,
             )
         }
@@ -299,6 +353,32 @@ class NationwideTransitGateway(
             NationwideJourneyResolution.NoRoute(localOutcome)
         }
     }
+
+    private fun localStationDepartureSource(state: StationRealtimeState?): String =
+        when (state) {
+            StationRealtimeState.FRESH_MATCHED ->
+                appContext.getString(R.string.departures_gtfsrt_fresh)
+            StationRealtimeState.FRESH_NO_MATCH ->
+                appContext.getString(R.string.departures_gtfsrt_no_match)
+            StationRealtimeState.STALE ->
+                appContext.getString(R.string.departures_gtfsrt_stale)
+            StationRealtimeState.UNAVAILABLE ->
+                appContext.getString(R.string.departures_gtfsrt_unavailable)
+            null -> appContext.getString(R.string.source_gtfs_local)
+        }
+
+    private fun localJourneyStatus(options: List<RouteOption>): String =
+        when (options.firstOrNull()?.realtime?.state) {
+            RouteRealtimeState.FRESH_MATCHED ->
+                appContext.getString(R.string.route_gtfsrt_fresh)
+            RouteRealtimeState.FRESH_NO_MATCH ->
+                appContext.getString(R.string.route_gtfsrt_no_match)
+            RouteRealtimeState.STALE ->
+                appContext.getString(R.string.route_gtfsrt_stale)
+            RouteRealtimeState.UNAVAILABLE ->
+                appContext.getString(R.string.route_gtfsrt_unavailable)
+            null -> appContext.getString(R.string.source_gtfs_local)
+        }
 
     fun close() {
         io.shutdownNow()

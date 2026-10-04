@@ -23,6 +23,8 @@ data class RouteStop(
     val plannedArrival: String? = null,
     val departure: String? = null,
     val plannedDeparture: String? = null,
+    val platform: String? = null,
+    val plannedPlatform: String? = null,
 )
 
 data class RouteOption(
@@ -39,6 +41,7 @@ data class RouteOption(
     val stops: List<RouteStop> = emptyList(),
     val refreshToken: String? = null,
     val sourceUpdatedAtEpochSeconds: Long? = null,
+    val realtime: RouteRealtimeInfo? = null,
 )
 
 interface GeocodeProvider { fun search(query: String): List<MapPoint> }

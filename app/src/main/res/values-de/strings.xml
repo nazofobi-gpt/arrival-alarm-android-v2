@@ -208,4 +208,25 @@
     <string name="departures_empty_title">Abfahrtstafel noch nicht bereit</string>
     <string name="departures_empty_body">Wählen Sie zuerst eine Verbindung oder Zielhaltestelle.</string>
     <string name="departures_empty_action">Route planen</string>
+
+    <string name="route_realtime_cancelled_badge">Echtzeit: Fahrt fällt aus</string>
+    <string name="route_realtime_cancelled_action_blocked">Fahrt fällt aus • andere Route wählen</string>
+    <string name="route_realtime_stale_badge">Echtzeitdaten veraltet • Fahrplanzeit</string>
+    <string name="route_realtime_no_match_badge">Echtzeitdaten aktuell • keine passende Fahrt</string>
+    <string name="route_realtime_unavailable_badge">Echtzeitdaten nicht verfügbar • Fahrplanzeit</string>
+    <string name="route_realtime_platform_format">Echtzeit-Gleis: %1$s</string>
+    <string name="route_planned_platform_format">Planmäßiges Gleis: %1$s</string>
+    <string name="route_gtfsrt_fresh">GTFS Deutschland lokaler Index • GTFS-RT live</string>
+    <string name="route_gtfsrt_no_match">GTFS Deutschland lokaler Index • GTFS-RT aktuell, keine passende Fahrt</string>
+    <string name="route_gtfsrt_stale">GTFS Deutschland lokaler Index • GTFS-RT veraltet, Fahrplanzeiten</string>
+    <string name="route_gtfsrt_unavailable">GTFS Deutschland lokaler Index • GTFS-RT nicht verfügbar, Fahrplanzeiten</string>
+    <string name="live_trip_realtime_source">GTFS-RT-Status</string>
+    <string name="live_trip_realtime_fresh">aktuell • statische Route mit Echtzeitdaten ergänzt</string>
+    <string name="live_trip_realtime_no_match">aktuell • keine passende Fahrt • Fahrplanroute bleibt erhalten</string>
+    <string name="live_trip_realtime_stale">veraltet • Fahrplanroute bleibt erhalten</string>
+    <string name="live_trip_realtime_unavailable">nicht verfügbar • Fahrplanroute bleibt erhalten</string>
+    <string name="departures_gtfsrt_fresh">GTFS Deutschland lokale Abfahrten • GTFS-RT live</string>
+    <string name="departures_gtfsrt_no_match">GTFS Deutschland lokale Abfahrten • GTFS-RT aktuell, keine passende Fahrt</string>
+    <string name="departures_gtfsrt_stale">GTFS Deutschland lokale Abfahrten • GTFS-RT veraltet, Fahrplanzeiten</string>
+    <string name="departures_gtfsrt_unavailable">GTFS Deutschland lokale Abfahrten • GTFS-RT nicht verfügbar, Fahrplanzeiten</string>
 </resources>

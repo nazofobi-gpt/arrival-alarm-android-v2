@@ -33,6 +33,7 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
                 liveCalls += 1
                 throw IOException("provider disabled")
             },
+            realtimeFetch = ::realtimeUnavailable,
         )
         try {
             val resolution = gateway.resolveJourneyOptions(
@@ -114,6 +115,192 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
     }
 
     @Test
+    fun freshGtfsRealtimeUpdateEnrichesLocalStaticJourneyWithoutCallingLiveRouter() {
+        seedReadyGraph(includeTrip = true)
+        var liveCalls = 0
+        val gateway = NationwideTransitGateway(
+            context = context,
+            nowMillis = { at("07:55:00") },
+            liveJourneyLoader = { _, _, _ ->
+                liveCalls += 1
+                throw IOException("live router must not be used")
+            },
+            realtimeFetch = {
+                GermanyRealtimeFetchResult.Available(
+                    GermanyRealtimeSnapshot(
+                        source = GermanyGtfsRealtimeProvenance.PROVIDER,
+                        license = GermanyGtfsRealtimeProvenance.LICENSE,
+                        feedTimestampEpochSeconds = at("07:54:30") / 1_000L,
+                        fetchedAtEpochSeconds = at("07:54:35") / 1_000L,
+                        tripUpdates = listOf(
+                            GermanyRealtimeTripUpdate(
+                                entityId = "rt-T1",
+                                tripId = "T1",
+                                routeId = "R1",
+                                startDate = null,
+                                scheduleRelationship = "SCHEDULED",
+                                cancelled = false,
+                                stops = listOf(
+                                    GermanyRealtimeStopUpdate(
+                                        stopSequence = 2,
+                                        stopId = "B",
+                                        arrivalDelaySeconds = 180,
+                                        departureDelaySeconds = null,
+                                        arrivalTimeEpochSeconds = null,
+                                        departureTimeEpochSeconds = null,
+                                    ),
+                                ),
+                                selectorValidity =
+                                    GermanyRealtimeTripSelectorValidity.VALID_ID_BASED,
+                            ),
+                        ),
+                        serviceAlerts = emptyList(),
+                        gtfsRealtimeVersion = "2.0",
+                        incrementality = "FULL_DATASET",
+                        feedVersion = "instrumented",
+                    ),
+                )
+            },
+        )
+        try {
+            val resolution = gateway.resolveJourneyOptions(
+                origin = MapPoint(52.665, 8.237, "Lohne"),
+                destination = MapPoint(52.700, 8.400, "Achim"),
+                limit = 1,
+            )
+
+            assertTrue(resolution is NationwideJourneyResolution.Results)
+            resolution as NationwideJourneyResolution.Results
+            assertEquals(NationwideJourneySource.LOCAL_STATIC, resolution.source)
+            assertEquals(0, liveCalls)
+            val option = resolution.options.single()
+            assertEquals(RouteRealtimeState.FRESH_MATCHED, option.realtime?.state)
+            assertEquals(listOf("T1"), option.realtime?.matchedTripIds)
+            assertEquals(
+                "2026-10-04T08:33:00+02:00",
+                option.stops.last().arrival,
+            )
+            assertEquals(
+                "2026-10-04T08:30:00+02:00",
+                option.stops.last().plannedArrival,
+            )
+        } finally {
+            gateway.close()
+        }
+    }
+
+    @Test
+    fun stationDeparturesExpandExactFrequencyInstancesWithoutInventingInexactTimes() {
+        seedFrequencyGraph(exactTimes = 1)
+        val index = NationwideTransitIndex(context)
+        try {
+            val planner = ProductionStationDeparturesPlanner(
+                index = index,
+                nowMillis = { at("08:11:00") },
+            )
+            val departures = planner.plan("A", 3)
+            assertEquals(
+                listOf(
+                    at("08:20:00") / 1_000L,
+                    at("08:30:00") / 1_000L,
+                    at("08:40:00") / 1_000L,
+                ),
+                departures.map { it.scheduledEpochSeconds },
+            )
+            assertEquals(
+                listOf("20261004", "20261004", "20261004"),
+                departures.map { it.realtimeTripStartDate },
+            )
+            assertEquals(
+                listOf("08:20:00", "08:30:00", "08:40:00"),
+                departures.map { it.realtimeTripStartTime },
+            )
+        } finally {
+            index.close()
+        }
+
+        seedFrequencyGraph(exactTimes = 0)
+        val approximateIndex = NationwideTransitIndex(context)
+        try {
+            val planner = ProductionStationDeparturesPlanner(
+                index = approximateIndex,
+                nowMillis = { at("08:11:00") },
+            )
+            assertTrue(planner.plan("A", 3).isEmpty())
+        } finally {
+            approximateIndex.close()
+        }
+    }
+
+    @Test
+    fun stationDeparturesUseLocalScheduleAndFreshGtfsRealtimeOverlay() {
+        seedReadyGraph(includeTrip = true)
+        val gateway = NationwideTransitGateway(
+            context = context,
+            nowMillis = { at("07:55:00") },
+            realtimeFetch = {
+                GermanyRealtimeFetchResult.Available(
+                    GermanyRealtimeSnapshot(
+                        source = GermanyGtfsRealtimeProvenance.PROVIDER,
+                        license = GermanyGtfsRealtimeProvenance.LICENSE,
+                        feedTimestampEpochSeconds = at("07:54:30") / 1_000L,
+                        fetchedAtEpochSeconds = at("07:54:35") / 1_000L,
+                        tripUpdates = listOf(
+                            GermanyRealtimeTripUpdate(
+                                entityId = "rt-departure-T1",
+                                tripId = "T1",
+                                routeId = "R1",
+                                startDate = null,
+                                scheduleRelationship = "SCHEDULED",
+                                cancelled = false,
+                                stops = listOf(
+                                    GermanyRealtimeStopUpdate(
+                                        stopSequence = 1,
+                                        stopId = "A",
+                                        arrivalDelaySeconds = null,
+                                        departureDelaySeconds = 120,
+                                        arrivalTimeEpochSeconds = null,
+                                        departureTimeEpochSeconds = null,
+                                    ),
+                                ),
+                                selectorValidity =
+                                    GermanyRealtimeTripSelectorValidity.VALID_ID_BASED,
+                            ),
+                        ),
+                        serviceAlerts = emptyList(),
+                        gtfsRealtimeVersion = "2.0",
+                        incrementality = "FULL_DATASET",
+                        feedVersion = "instrumented",
+                    ),
+                )
+            },
+        )
+        try {
+            val snapshot = gateway.resolveStationDepartures(
+                stop = CatalogStop(
+                    id = "A",
+                    providerId = "local-static",
+                    name = "Lohne",
+                    latitude = 52.665,
+                    longitude = 8.237,
+                ),
+                limit = 8,
+            )
+
+            assertEquals(null, snapshot.error)
+            assertEquals(StationRealtimeState.FRESH_MATCHED, snapshot.realtimeState)
+            assertEquals(listOf("T1"), snapshot.departures.map { it.tripId })
+            val departure = snapshot.departures.single()
+            assertEquals(at("08:00:00") / 1_000L, departure.scheduledEpochSeconds)
+            assertEquals(at("08:02:00") / 1_000L, departure.realtimeEpochSeconds)
+            assertEquals("RE 1", departure.line)
+            assertEquals("Achim", departure.direction)
+        } finally {
+            gateway.close()
+        }
+    }
+
+    @Test
     fun afterMidnightPrefersPreviousServiceDayCarryoverOverNextNightTrip() {
         seedCrossMidnightGraph()
         var liveCalls = 0
@@ -124,6 +311,7 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
                 liveCalls += 1
                 throw IOException("provider disabled")
             },
+            realtimeFetch = ::realtimeUnavailable,
         )
         try {
             val resolution = gateway.resolveJourneyOptions(
@@ -168,6 +356,12 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
             index.close()
         }
     }
+
+    private fun realtimeUnavailable(): GermanyRealtimeFetchResult =
+        GermanyRealtimeFetchResult.Unavailable(
+            GermanyRealtimeUnavailableReason.NETWORK,
+            "disabled in static production test",
+        )
 
     private fun seedCrossMidnightGraph() {
         context.deleteDatabase("nationwide_transit.db")
@@ -221,6 +415,51 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
         db.execSQL(
             "INSERT INTO stop_times(trip_id,stop_sequence,stop_id,arrival_time,departure_time,pickup_type,drop_off_type) " +
                 "VALUES('NEXT',2,'B','24:40:00','24:40:00',0,0)",
+        )
+        index.close()
+    }
+
+    private fun seedFrequencyGraph(exactTimes: Int) {
+        context.deleteDatabase("nationwide_transit.db")
+        val index = NationwideTransitIndex(context)
+        val db = index.writableDatabase
+        db.execSQL(
+            "INSERT OR REPLACE INTO metadata(key,value) VALUES" +
+                "('ready','1'),('fetched_at','1234'),('stop_count','2')," +
+                "('source_version','fixture'),('schema_version','4')",
+        )
+        db.execSQL(
+            "INSERT INTO stops(id,name,lat,lon,parent_station,location_type) " +
+                "VALUES('A','Lohne',52.665,8.237,NULL,0)",
+        )
+        db.execSQL(
+            "INSERT INTO stops(id,name,lat,lon,parent_station,location_type) " +
+                "VALUES('B','Achim',52.700,8.400,NULL,0)",
+        )
+        db.execSQL(
+            "INSERT INTO routes(route_id,agency_id,short_name,long_name,route_type) " +
+                "VALUES('R1','AG','RE 1','Regional Express',2)",
+        )
+        db.execSQL(
+            "INSERT INTO calendar(service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date) " +
+                "VALUES('S',0,0,0,0,0,0,1,'20260101','20261231')",
+        )
+        db.execSQL(
+            "INSERT INTO trips(trip_id,route_id,service_id,headsign,direction_id) " +
+                "VALUES('F1','R1','S','Achim',0)",
+        )
+        db.execSQL(
+            "INSERT INTO stop_times(trip_id,stop_sequence,stop_id,arrival_time,departure_time,pickup_type,drop_off_type) " +
+                "VALUES('F1',1,'A','00:05:00','00:05:00',0,0)",
+        )
+        db.execSQL(
+            "INSERT INTO stop_times(trip_id,stop_sequence,stop_id,arrival_time,departure_time,pickup_type,drop_off_type) " +
+                "VALUES('F1',2,'B','00:15:00','00:15:00',0,0)",
+        )
+        db.execSQL(
+            "INSERT INTO frequencies(trip_id,start_time,end_time,headway_secs,exact_times) " +
+                "VALUES('F1','08:00:00','09:00:00',600,?)",
+            arrayOf(exactTimes),
         )
         index.close()
     }

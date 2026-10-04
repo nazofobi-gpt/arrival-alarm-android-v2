@@ -34,8 +34,18 @@ class OfflineTransitCache(
     }
 
     fun put(plan: CachedTransitPlan) {
-        entries.remove(plan.key)
-        entries[plan.key] = plan
+        val cacheSafe = plan.copy(
+            routeOptions = plan.routeOptions.map { it.forOfflineCache() },
+            departures = plan.departures.map {
+                it.copy(
+                    realtimeEpochSeconds = null,
+                    cancelled = false,
+                    platform = null,
+                )
+            },
+        )
+        entries.remove(cacheSafe.key)
+        entries[cacheSafe.key] = cacheSafe
         while (entries.size > maxEntries.coerceAtLeast(1)) entries.remove(entries.keys.first())
         backingStore.save(entries.values.toList())
     }
@@ -55,3 +65,19 @@ class OfflineTransitCache(
 
     fun routeOptions(key: String): List<RouteOption> = entries[key]?.routeOptions.orEmpty()
 }
+
+private fun RouteOption.forOfflineCache(): RouteOption =
+    if (realtime == null) {
+        this
+    } else {
+        copy(
+            stops = stops.map { stop ->
+                stop.copy(
+                    arrival = null,
+                    departure = null,
+                    platform = null,
+                )
+            },
+            realtime = null,
+        )
+    }

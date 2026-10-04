@@ -174,6 +174,18 @@ private fun RouteOptionCard(
 ) {
     val duration = routeDurationMinutes(option.departure, option.arrival)
     val hasRealtime = option.stops.any(::hasRealtimeDelta)
+    val realtimeLabel = when {
+        option.realtime?.cancelledTripIds?.isNotEmpty() == true ->
+            R.string.route_realtime_cancelled_badge
+        hasRealtime -> R.string.route_realtime_badge
+        option.realtime?.state == RouteRealtimeState.STALE ->
+            R.string.route_realtime_stale_badge
+        option.realtime?.state == RouteRealtimeState.FRESH_NO_MATCH ->
+            R.string.route_realtime_no_match_badge
+        option.realtime?.state == RouteRealtimeState.UNAVAILABLE ->
+            R.string.route_realtime_unavailable_badge
+        else -> R.string.route_planned_badge
+    }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -221,21 +233,19 @@ private fun RouteOptionCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = if (hasRealtime) {
-                    stringResource(R.string.route_realtime_badge)
-                } else {
-                    stringResource(R.string.route_planned_badge)
-                },
+                text = stringResource(realtimeLabel),
                 style = MaterialTheme.typography.labelMedium,
-                color = if (hasRealtime) {
-                    MaterialTheme.colorScheme.secondary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
+                color = when {
+                    option.realtime?.cancelledTripIds?.isNotEmpty() == true ->
+                        MaterialTheme.colorScheme.error
+                    hasRealtime -> MaterialTheme.colorScheme.secondary
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
                 },
             )
             OutlinedButton(
                 onClick = onSelect,
-                enabled = !selected,
+                enabled = !selected &&
+                    option.realtime?.cancelledTripIds?.isNotEmpty() != true,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             ) {
                 Text(
@@ -330,6 +340,24 @@ private fun JourneyDetailCard(option: RouteOption) {
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Medium,
                         )
+                        (stop.platform ?: stop.plannedPlatform)?.let { platform ->
+                            Text(
+                                text = stringResource(
+                                    if (stop.platform != null) {
+                                        R.string.route_realtime_platform_format
+                                    } else {
+                                        R.string.route_planned_platform_format
+                                    },
+                                    platform,
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (stop.platform != null) {
+                                    MaterialTheme.colorScheme.secondary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
                         if (realtime) {
                             Text(
                                 text = stringResource(R.string.route_realtime_badge),

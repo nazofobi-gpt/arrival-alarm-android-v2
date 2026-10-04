@@ -100,6 +100,8 @@ private fun RouteStop.toJson(): JSONObject = JSONObject()
     .putNullable("plannedArrival", plannedArrival)
     .putNullable("departure", departure)
     .putNullable("plannedDeparture", plannedDeparture)
+    .putNullable("platform", platform)
+    .putNullable("plannedPlatform", plannedPlatform)
 
 private fun JSONObject.toRouteStop(): RouteStop? {
     val name = optString("name").takeIf { it.isNotBlank() } ?: return null
@@ -112,6 +114,8 @@ private fun JSONObject.toRouteStop(): RouteStop? {
         plannedArrival = optNullableString("plannedArrival"),
         departure = optNullableString("departure"),
         plannedDeparture = optNullableString("plannedDeparture"),
+        platform = optNullableString("platform"),
+        plannedPlatform = optNullableString("plannedPlatform"),
     )
 }
 
