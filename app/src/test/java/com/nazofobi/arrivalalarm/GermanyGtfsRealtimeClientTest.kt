@@ -235,6 +235,101 @@ class GermanyGtfsRealtimeClientTest {
     }
 
     @Test
+    fun retainsTripSelectorIdentityAndFailsClosedForIncompleteSelectors() {
+        fun tripEntity(
+            entityId: String,
+            descriptor: GtfsRealtime.TripDescriptor,
+        ): GtfsRealtime.FeedEntity =
+            GtfsRealtime.FeedEntity.newBuilder()
+                .setId(entityId)
+                .setTripUpdate(
+                    GtfsRealtime.TripUpdate.newBuilder()
+                        .setTrip(descriptor),
+                )
+                .build()
+
+        val idBased = GtfsRealtime.TripDescriptor.newBuilder()
+            .setTripId("frequency-template")
+            .setRouteId("route-frequency")
+            .setDirectionId(1)
+            .setStartTime("25:15:00")
+            .setStartDate("20261004")
+            .setScheduleRelationship(GtfsRealtime.TripDescriptor.ScheduleRelationship.SCHEDULED)
+            .build()
+        val idlessComplete = GtfsRealtime.TripDescriptor.newBuilder()
+            .setRouteId("route-idless")
+            .setDirectionId(0)
+            .setStartTime("08:10:00")
+            .setStartDate("20261004")
+            .setScheduleRelationship(GtfsRealtime.TripDescriptor.ScheduleRelationship.SCHEDULED)
+            .build()
+        val incomplete = GtfsRealtime.TripDescriptor.newBuilder()
+            .setRouteId("route-incomplete")
+            .setStartTime("09:00:00")
+            .setScheduleRelationship(GtfsRealtime.TripDescriptor.ScheduleRelationship.SCHEDULED)
+            .build()
+        val cancelled = GtfsRealtime.TripDescriptor.newBuilder()
+            .setTripId("trip-cancelled")
+            .setRouteId("route-cancelled")
+            .setScheduleRelationship(GtfsRealtime.TripDescriptor.ScheduleRelationship.CANCELED)
+            .build()
+
+        val feed = GtfsRealtime.FeedMessage.newBuilder()
+            .setHeader(
+                GtfsRealtime.FeedHeader.newBuilder().setGtfsRealtimeVersion("2.0"),
+            )
+            .addEntity(tripEntity("id-based", idBased))
+            .addEntity(tripEntity("idless-complete", idlessComplete))
+            .addEntity(tripEntity("incomplete", incomplete))
+            .addEntity(tripEntity("cancelled", cancelled))
+            .build()
+
+        val result = GermanyGtfsRealtimeClient(
+            loader = { feed.toByteArray() },
+        ).fetch()
+        val updates = (result as GermanyRealtimeFetchResult.Available)
+            .snapshot.tripUpdates.associateBy { it.entityId }
+
+        val parsedIdBased = updates.getValue("id-based")
+        assertEquals("frequency-template", parsedIdBased.tripId)
+        assertEquals("route-frequency", parsedIdBased.routeId)
+        assertEquals(1, parsedIdBased.directionId)
+        assertEquals("25:15:00", parsedIdBased.startTime)
+        assertEquals("20261004", parsedIdBased.startDate)
+        assertEquals(
+            GermanyRealtimeTripSelectorValidity.VALID_ID_BASED,
+            parsedIdBased.selectorValidity,
+        )
+        assertTrue(parsedIdBased.hasFrequencyInstanceIdentity)
+
+        val parsedIdless = updates.getValue("idless-complete")
+        assertNull(parsedIdless.tripId)
+        assertEquals("route-idless", parsedIdless.routeId)
+        assertEquals(0, parsedIdless.directionId)
+        assertEquals("08:10:00", parsedIdless.startTime)
+        assertEquals("20261004", parsedIdless.startDate)
+        assertEquals(
+            GermanyRealtimeTripSelectorValidity.VALID_IDLESS_SCHEDULED,
+            parsedIdless.selectorValidity,
+        )
+
+        val parsedIncomplete = updates.getValue("incomplete")
+        assertNull(parsedIncomplete.tripId)
+        assertEquals(
+            GermanyRealtimeTripSelectorValidity.UNMATCHABLE_INCOMPLETE,
+            parsedIncomplete.selectorValidity,
+        )
+
+        val parsedCancelled = updates.getValue("cancelled")
+        assertEquals("CANCELED", parsedCancelled.scheduleRelationship)
+        assertTrue(parsedCancelled.cancelled)
+        assertEquals(
+            GermanyRealtimeTripSelectorValidity.VALID_ID_BASED,
+            parsedCancelled.selectorValidity,
+        )
+    }
+
+    @Test
     fun malformedPayloadReturnsTypedParseFailure() {
         val client = GermanyGtfsRealtimeClient(
             loader = { byteArrayOf(0x08) },
