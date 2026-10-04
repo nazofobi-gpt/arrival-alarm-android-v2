@@ -74,6 +74,52 @@ class ProductionRealtimeJourneyOverlayTest {
     }
 
     @Test
+    fun frequencyTripRealtimeFailsClosedWithoutRouteInstanceIdentity() {
+        val matched = GermanyRealtimeOverlayResult.Matched(
+            tripOverlays = listOf(
+                GermanyRealtimeTripOverlay(
+                    staticTrip = trip("T1"),
+                    startDate = "20261004",
+                    startTime = "08:00:00",
+                    cancelled = false,
+                    scheduleRelationship = "SCHEDULED",
+                    stopUpdates = listOf(
+                        GermanyRealtimeMatchedStopUpdate(
+                            stopSequence = 2,
+                            scheduledStopId = "B",
+                            realtimeStopId = "B",
+                            assignedStopId = null,
+                            platformCode = "9",
+                            arrivalDelaySeconds = 600,
+                            departureDelaySeconds = null,
+                            arrivalTimeEpochSeconds = null,
+                            departureTimeEpochSeconds = null,
+                            scheduleRelationship = "SCHEDULED",
+                            pickupType = null,
+                            dropOffType = null,
+                            stopHeadsign = null,
+                        ),
+                    ),
+                    sourceTimestampEpochSeconds = at("07:59:00") / 1_000L,
+                ),
+            ),
+            serviceAlerts = emptyList(),
+            freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+            ageSeconds = 30,
+            provenance = provenance(),
+        )
+
+        val result = overlay(matched, isFrequencyTrip = { true })
+            .enrich(listOf(option()))
+            .single()
+
+        assertEquals(RouteRealtimeState.FRESH_NO_MATCH, result.realtime?.state)
+        assertNull(result.stops.last().arrival)
+        assertNull(result.stops.last().platform)
+        assertEquals("2", result.stops.last().plannedPlatform)
+    }
+
+    @Test
     fun staleOverlayPreservesStaticTruthWithoutApplyingRealtimeDeltas() {
         val matched = GermanyRealtimeOverlayResult.Matched(
             tripOverlays = listOf(
@@ -139,7 +185,10 @@ class ProductionRealtimeJourneyOverlayTest {
         assertNull(unavailableResult.stops.last().arrival)
     }
 
-    private fun overlay(result: GermanyRealtimeOverlayResult) =
+    private fun overlay(
+        result: GermanyRealtimeOverlayResult,
+        isFrequencyTrip: (String) -> Boolean = { false },
+    ) =
         ProductionRealtimeJourneyOverlay(
             fetch = {
                 GermanyRealtimeFetchResult.Unavailable(
@@ -150,6 +199,7 @@ class ProductionRealtimeJourneyOverlayTest {
             match = { _, _ -> result },
             nowEpochSeconds = { at("08:00:00") / 1_000L },
             agencyTimeZone = zone,
+            isFrequencyTrip = isFrequencyTrip,
         )
 
     private fun option() = RouteOption(
