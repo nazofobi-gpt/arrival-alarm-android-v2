@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import java.io.IOException
+import java.net.SocketTimeoutException
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
@@ -24,7 +25,7 @@ sealed class HttpTransportResult {
         val attempts: Int,
         val message: String? = null,
     ) : HttpTransportResult() {
-        enum class Kind { NETWORK, CIRCUIT_OPEN }
+        enum class Kind { NETWORK, TIMEOUT, CIRCUIT_OPEN }
     }
 }
 
@@ -87,7 +88,11 @@ class BoundedHttpTransport(
                 if (attempts > maxRetries) {
                     recordFailure()
                     return HttpTransportResult.Failure(
-                        HttpTransportResult.Failure.Kind.NETWORK,
+                        if (error is SocketTimeoutException) {
+                            HttpTransportResult.Failure.Kind.TIMEOUT
+                        } else {
+                            HttpTransportResult.Failure.Kind.NETWORK
+                        },
                         attempts,
                         error.message,
                     )
