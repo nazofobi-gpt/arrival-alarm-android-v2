@@ -642,7 +642,12 @@ class StaticGtfsRouter(
         for (arrival in times.drop(boardIndex + 1)) {
             if (!allowsScheduledDropOff(arrival)) continue
             val egress = destinationByStop[arrival.stopId] ?: continue
-            val arrivalEpoch = epoch(arrival.arrivalTime ?: arrival.departureTime, serviceDate) ?: continue
+            val arrivalEpoch = shiftedEpoch(
+                arrival.arrivalTime ?: arrival.departureTime,
+                serviceDate,
+                instance.shiftSeconds,
+            ) ?: continue
+            if (arrivalEpoch < departure) continue
             return StaticTransitLeg(
                 tripId = candidate.trip.id,
                 routeId = candidate.trip.routeId,
@@ -650,6 +655,9 @@ class StaticGtfsRouter(
                 toStopId = arrival.stopId,
                 departureEpochMillis = departure,
                 arrivalEpochMillis = arrivalEpoch,
+                frequencyBased = instance.frequencyBased,
+                approximate = instance.approximate,
+                frequencyInstanceStartSeconds = instance.frequencyInstanceStartSeconds,
             ) to egress
         }
         return null
