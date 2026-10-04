@@ -25,7 +25,10 @@ class GermanyGtfsRealtimeClientInstrumentedTest {
                             .setTrip(
                                 GtfsRealtime.TripDescriptor.newBuilder()
                                     .setTripId("trip-1")
-                                    .setRouteId("route-1"),
+                                    .setRouteId("route-1")
+                                    .setDirectionId(1)
+                                    .setStartTime("12:34:00")
+                                    .setStartDate("20261004"),
                             )
                             .addStopTimeUpdate(
                                 GtfsRealtime.TripUpdate.StopTimeUpdate.newBuilder()
@@ -82,7 +85,16 @@ class GermanyGtfsRealtimeClientInstrumentedTest {
         assertTrue(result is GermanyRealtimeFetchResult.Available)
         val snapshot = (result as GermanyRealtimeFetchResult.Available).snapshot
         assertEquals(1_800_000_000L, snapshot.feedTimestampEpochSeconds)
-        val stop = snapshot.tripUpdates.single().stops.single()
+        val tripUpdate = snapshot.tripUpdates.single()
+        assertEquals(1, tripUpdate.directionId)
+        assertEquals("12:34:00", tripUpdate.startTime)
+        assertEquals("20261004", tripUpdate.startDate)
+        assertEquals(
+            GermanyRealtimeTripSelectorValidity.VALID_ID_BASED,
+            tripUpdate.selectorValidity,
+        )
+        assertTrue(tripUpdate.hasFrequencyInstanceIdentity)
+        val stop = tripUpdate.stops.single()
         assertEquals(90, stop.departureDelaySeconds)
         assertEquals("SCHEDULED", stop.scheduleRelationship)
         assertEquals("platform-2", stop.assignedStopId)
