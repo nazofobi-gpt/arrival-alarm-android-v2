@@ -17,7 +17,7 @@ jobs:
   api36:
     name: API 36 instrumentation + field RC
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
 
     steps:
       - name: Checkout exact source
@@ -37,6 +37,14 @@ jobs:
       - name: Verify wrapper
         uses: gradle/actions/wrapper-validation@v4
 
+      - name: Download Germany Full acceptance feed
+        if: github.head_ref == 'exec1/g175-real-feed-verify-20261004' || github.ref_name == 'exec1/g175-real-feed-verify-20261004'
+        run: |
+          curl -fL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 1200 https://download.gtfs.de/germany/free/latest.zip -o /tmp/germany-full.zip
+          sha256sum /tmp/germany-full.zip | tee /tmp/germany-full.sha256
+          python3 tools/reduce_germany_full_for_g175.py /tmp/germany-full.zip /tmp/g175-real-feed.zip /tmp/g175-reduction-report.json
+          sha256sum /tmp/g175-real-feed.zip | tee /tmp/g175-real-feed.sha256
+
       - name: Enable KVM access
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -55,6 +63,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
             set -eu
+            test ! -s /tmp/g175-real-feed.zip || (adb shell rm -f /sdcard/Download/g175-real-feed-report.json && adb push /tmp/g175-real-feed.zip /data/local/tmp/g175-real-feed.zip && ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.G175RealFeedInstrumentedTest -Pandroid.testInstrumentationRunnerArguments.germanyFullPath=/data/local/tmp/g175-real-feed.zip && mkdir -p app/build/outputs/androidTest-results/g175-real-feed && adb pull /sdcard/Download/g175-real-feed-report.json app/build/outputs/androidTest-results/g175-real-feed/ && cp /tmp/germany-full.sha256 /tmp/g175-real-feed.sha256 /tmp/g175-reduction-report.json app/build/outputs/androidTest-results/g175-real-feed/ && test -s app/build/outputs/androidTest-results/g175-real-feed/g175-real-feed-report.json)
 
             adb shell wm size 412x915
             adb shell wm density 160
