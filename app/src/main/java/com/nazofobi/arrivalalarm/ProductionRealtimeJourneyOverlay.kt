@@ -157,16 +157,37 @@ internal class ProductionRealtimeJourneyOverlay(
     ): String? {
         epochSeconds?.let { return iso(it * 1_000L) }
         if (plannedIso == null || delaySeconds == null) return null
-        val plannedMillis = runCatching {
-            SimpleDateFormat(ISO_PATTERN, Locale.ROOT).parse(plannedIso)?.time
-        }.getOrNull() ?: return null
+        val plannedMillis = parseIsoMillis(plannedIso) ?: return null
         return iso(plannedMillis + delaySeconds * 1_000L)
     }
 
-    private fun iso(epochMillis: Long): String =
-        SimpleDateFormat(ISO_PATTERN, Locale.ROOT).apply {
+    private fun parseIsoMillis(raw: String): Long? {
+        val normalized = if (
+            raw.length >= 6 &&
+            raw[raw.length - 3] == ':' &&
+            (raw[raw.length - 6] == '+' || raw[raw.length - 6] == '-')
+        ) {
+            raw.removeRange(raw.length - 3, raw.length - 2)
+        } else {
+            raw
+        }
+        return runCatching {
+            SimpleDateFormat(ISO_PATTERN, Locale.ROOT).apply {
+                isLenient = false
+            }.parse(normalized)?.time
+        }.getOrNull()
+    }
+
+    private fun iso(epochMillis: Long): String {
+        val compact = SimpleDateFormat(ISO_PATTERN, Locale.ROOT).apply {
             timeZone = agencyTimeZone
         }.format(Date(epochMillis))
+        if (compact.length < 5) return compact
+        val offsetStart = compact.length - 5
+        return compact.substring(0, offsetStart) +
+            compact.substring(offsetStart, offsetStart + 3) + ":" +
+            compact.substring(offsetStart + 3)
+    }
 
     private fun GermanyRealtimeOverlayResult.Matched.updatedAtEpochSeconds(): Long =
         provenance.feedTimestampEpochSeconds ?: provenance.fetchedAtEpochSeconds
@@ -175,6 +196,6 @@ internal class ProductionRealtimeJourneyOverlay(
         provenance.feedTimestampEpochSeconds ?: provenance.fetchedAtEpochSeconds
 
     private companion object {
-        const val ISO_PATTERN = "yyyy-MM-dd'T'HH:mm:ssXXX"
+        const val ISO_PATTERN = "yyyy-MM-dd'T'HH:mm:ssZ"
     }
 }
