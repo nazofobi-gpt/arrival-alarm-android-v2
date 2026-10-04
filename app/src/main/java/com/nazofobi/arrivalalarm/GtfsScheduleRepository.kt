@@ -210,6 +210,46 @@ class GtfsScheduleRepository(
         }
     }
 
+    fun routesMatching(
+        agencyId: String?,
+        routeType: Int?,
+        limit: Int = 64,
+    ): List<GtfsScheduleRoute> {
+        val normalizedAgency = agencyId?.takeIf { it.isNotBlank() }
+        if (normalizedAgency == null && routeType == null) return emptyList()
+        val boundedLimit = limit.coerceIn(1, MAX_SELECTOR_ROUTES)
+        val where: String
+        val args: Array<String>
+        when {
+            normalizedAgency != null && routeType != null -> {
+                where = "agency_id=? AND route_type=?"
+                args = arrayOf(normalizedAgency, routeType.toString())
+            }
+            normalizedAgency != null -> {
+                where = "agency_id=?"
+                args = arrayOf(normalizedAgency)
+            }
+            else -> {
+                where = "route_type=?"
+                args = arrayOf(routeType.toString())
+            }
+        }
+        return index.readableDatabase.rawQuery(
+            """
+            SELECT route_id,agency_id,short_name,long_name,route_type
+            FROM routes
+            WHERE $where
+            ORDER BY route_id
+            LIMIT ?
+            """.trimIndent(),
+            args + boundedLimit.toString(),
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) add(cursor.toRoute())
+            }
+        }
+    }
+
     fun trip(tripId: String): GtfsScheduleTrip? {
         if (tripId.isBlank()) return null
         return index.readableDatabase.rawQuery(
@@ -222,6 +262,29 @@ class GtfsScheduleRepository(
             arrayOf(tripId),
         ).use { cursor ->
             if (cursor.moveToFirst()) cursor.toTrip() else null
+        }
+    }
+
+    fun tripsForRouteDirection(
+        routeId: String,
+        directionId: Int,
+        limit: Int = 64,
+    ): List<GtfsScheduleTrip> {
+        if (routeId.isBlank()) return emptyList()
+        val boundedLimit = limit.coerceIn(1, MAX_SELECTOR_TRIPS)
+        return index.readableDatabase.rawQuery(
+            """
+            SELECT trip_id,route_id,service_id,headsign,direction_id,shape_id,wheelchair_accessible,bikes_allowed,block_id
+            FROM trips
+            WHERE route_id=? AND direction_id=?
+            ORDER BY service_id,trip_id
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf(routeId, directionId.toString(), boundedLimit.toString()),
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) add(cursor.toTrip())
+            }
         }
     }
 
@@ -671,6 +734,8 @@ class GtfsScheduleRepository(
         private const val NEARBY_SCAN_MULTIPLIER = 8
         private const val MAX_NEARBY_SCAN_ROWS = 512
         private const val MAX_STOP_TIMES = 2_048
+        private const val MAX_SELECTOR_ROUTES = 256
+        private const val MAX_SELECTOR_TRIPS = 256
         private const val MAX_TRIP_CANDIDATES = 512
         private const val MAX_TRANSFERS = 512
         private const val MAX_LINKED_TRANSFERS = 512
