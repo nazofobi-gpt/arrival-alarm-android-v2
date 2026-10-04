@@ -82,7 +82,7 @@ class BoundedHttpTransport(
                     recordFailure()
                     return HttpTransportResult.Response(response, attempts)
                 }
-                sleeper.sleep(retryDelayMs(response, attempts))
+                sleepOrStop(retryDelayMs(response, attempts), attempts)?.let { return it }
             } catch (error: IOException) {
                 if (attempts > maxRetries) {
                     recordFailure()
@@ -92,10 +92,23 @@ class BoundedHttpTransport(
                         error.message,
                     )
                 }
-                sleeper.sleep(backoffMs(attempts))
+                sleepOrStop(backoffMs(attempts), attempts)?.let { return it }
             }
         }
     }
+
+    private fun sleepOrStop(delayMillis: Long, attempts: Int): HttpTransportResult.Failure? =
+        try {
+            sleeper.sleep(delayMillis)
+            null
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            HttpTransportResult.Failure(
+                kind = HttpTransportResult.Failure.Kind.NETWORK,
+                attempts = attempts,
+                message = "retry interrupted",
+            )
+        }
 
     private fun retryDelayMs(response: HttpTransportResponse, attempts: Int): Long {
         val retryAfter = if (response.status == 429 || response.status == 503) {
