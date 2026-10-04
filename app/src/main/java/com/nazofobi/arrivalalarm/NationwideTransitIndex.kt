@@ -152,7 +152,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             .map { it.replace(Regex("[^\\p{L}\\p{N}]"), "") }
             .filter { it.isNotBlank() }
         if (tokens.isEmpty()) return emptyList()
-        val match = tokens.joinToString(" AND ") { "$it*" }
+        val match = tokens.joinToString(" ") { "$it*" }
         val sql = "SELECT s.id,s.name,s.lat,s.lon FROM stop_search f JOIN stops s ON s.id=f.stop_id WHERE stop_search MATCH ? LIMIT ?"
         return readableDatabase.rawQuery(sql, arrayOf(match, limit.toString())).use { c ->
             buildList {
