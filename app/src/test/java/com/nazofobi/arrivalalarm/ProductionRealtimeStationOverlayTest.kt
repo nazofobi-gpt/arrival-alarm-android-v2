@@ -125,6 +125,60 @@ class ProductionRealtimeStationOverlayTest {
     }
 
     @Test
+    fun frequencyRealtimeAppliesOnlyToMatchingStartDateAndStartTimeInstance() {
+        val matched = GermanyRealtimeOverlayResult.Matched(
+            tripOverlays = listOf(
+                GermanyRealtimeTripOverlay(
+                    staticTrip = trip(),
+                    startDate = "20261004",
+                    startTime = "08:00:00",
+                    cancelled = false,
+                    scheduleRelationship = "SCHEDULED",
+                    stopUpdates = listOf(
+                        GermanyRealtimeMatchedStopUpdate(
+                            stopSequence = 1,
+                            scheduledStopId = "A",
+                            realtimeStopId = "A",
+                            assignedStopId = null,
+                            platformCode = "9",
+                            arrivalDelaySeconds = null,
+                            departureDelaySeconds = 300,
+                            arrivalTimeEpochSeconds = null,
+                            departureTimeEpochSeconds = null,
+                            scheduleRelationship = "SCHEDULED",
+                            pickupType = null,
+                            dropOffType = null,
+                            stopHeadsign = null,
+                        ),
+                    ),
+                    sourceTimestampEpochSeconds = 990L,
+                ),
+            ),
+            serviceAlerts = emptyList(),
+            freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+            ageSeconds = 10L,
+            provenance = provenance(),
+        )
+        val first = planned.copy(
+            realtimeTripStartDate = "20261004",
+            realtimeTripStartTime = "08:00:00",
+        )
+        val second = planned.copy(
+            scheduledEpochSeconds = 1_600L,
+            realtimeTripStartDate = "20261004",
+            realtimeTripStartTime = "08:10:00",
+        )
+
+        val result = overlay(matched, isFrequencyTrip = { true })
+            .enrich("A", listOf(first, second))
+
+        assertEquals(1_300L, result.departures[0].realtimeEpochSeconds)
+        assertEquals("9", result.departures[0].platform)
+        assertNull(result.departures[1].realtimeEpochSeconds)
+        assertEquals("1", result.departures[1].platform)
+    }
+
+    @Test
     fun routeAndStopAlertSelectorDoesNotLeakToAnotherStopOnSameRoute() {
         val matched = GermanyRealtimeOverlayResult.Matched(
             tripOverlays = emptyList(),
