@@ -52,9 +52,7 @@ internal class ProductionRealtimeJourneyOverlay(
                                 matchedTripIds = overlay.tripOverlays
                                     .map { it.staticTrip.id }
                                     .filter { it in option.tripIds },
-                                cancelledTripIds = overlay.tripOverlays
-                                    .filter { it.cancelled && it.staticTrip.id in option.tripIds }
-                                    .map { it.staticTrip.id },
+                                cancelledTripIds = emptyList(),
                             ),
                         )
                     }
