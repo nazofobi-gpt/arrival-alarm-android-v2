@@ -629,6 +629,116 @@ class StaticGtfsRouterTest {
         assertEquals(listOf(at("08:00:00"), at("08:01:00")), journeys.map { it.legs.single().departureEpochMillis })
     }
 
+    @Test fun twoTransferJourneyRequiresMultiRoundBudget() {
+        val data = FakeData(
+            candidates = mapOf(
+                "A" to listOf(candidate("T1", "R1", "S", 1, "10:00:00")),
+                "X" to listOf(candidate("T2", "R2", "S", 1, "10:08:00")),
+                "Y" to listOf(candidate("T3", "R3", "S", 1, "10:18:00")),
+            ),
+            times = mapOf(
+                "T1" to listOf(
+                    st("T1", 1, "A", "10:00:00"),
+                    st("T1", 2, "X", "10:05:00"),
+                ),
+                "T2" to listOf(
+                    st("T2", 1, "X", "10:08:00"),
+                    st("T2", 2, "Y", "10:15:00"),
+                ),
+                "T3" to listOf(
+                    st("T3", 1, "Y", "10:18:00"),
+                    st("T3", 2, "B", "10:30:00"),
+                ),
+            ),
+        )
+
+        val oneTransfer = StaticGtfsRouter(data, zone, maxTransfers = 1).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("09:55:00"),
+        )
+        assertTrue(oneTransfer is StaticRouterResult.NoPath)
+
+        val multiRound = StaticGtfsRouter(data, zone, maxTransfers = 2).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("09:55:00"),
+        )
+        val journey = (multiRound as StaticRouterResult.Journeys).journeys.single()
+        assertEquals(listOf("T1", "T2", "T3"), journey.legs.map { it.tripId })
+        assertEquals(2, journey.transferCount)
+    }
+
+    @Test fun multiRoundSearchHonorsHardStateAndCandidateQueryCaps() {
+        val data = FakeData(
+            candidates = mapOf(
+                "A" to listOf(candidate("T1", "R1", "S", 1, "10:00:00")),
+                "X" to listOf(candidate("T2", "R2", "S", 1, "10:08:00")),
+                "Y" to listOf(candidate("T3", "R3", "S", 1, "10:18:00")),
+            ),
+            times = mapOf(
+                "T1" to listOf(st("T1", 1, "A", "10:00:00"), st("T1", 2, "X", "10:05:00")),
+                "T2" to listOf(st("T2", 1, "X", "10:08:00"), st("T2", 2, "Y", "10:15:00")),
+                "T3" to listOf(st("T3", 1, "Y", "10:18:00"), st("T3", 2, "B", "10:30:00")),
+            ),
+        )
+
+        val stateCapped = StaticGtfsRouter(
+            data,
+            zone,
+            maxTransfers = 2,
+            maxExpandedStates = 2,
+        ).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("09:55:00"),
+        )
+        assertTrue(stateCapped is StaticRouterResult.NoPath)
+
+        data.candidateQueryCount = 0
+        val queryCapped = StaticGtfsRouter(
+            data,
+            zone,
+            maxTransfers = 2,
+            maxCandidateQueries = 2,
+        ).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("09:55:00"),
+        )
+        assertTrue(queryCapped is StaticRouterResult.NoPath)
+        assertTrue(data.candidateQueryCount <= 2)
+    }
+
+    @Test fun multiRoundCycleDoesNotReboardVisitedTrips() {
+        val data = FakeData(
+            candidates = mapOf(
+                "A" to listOf(candidate("T1", "R1", "S", 1, "10:00:00")),
+                "X" to listOf(candidate("T2", "R2", "S", 1, "10:08:00")),
+                "Y" to listOf(candidate("T3", "R3", "S", 1, "10:18:00")),
+            ),
+            times = mapOf(
+                "T1" to listOf(st("T1", 1, "A", "10:00:00"), st("T1", 2, "X", "10:05:00")),
+                "T2" to listOf(st("T2", 1, "X", "10:08:00"), st("T2", 2, "Y", "10:15:00")),
+                "T3" to listOf(st("T3", 1, "Y", "10:18:00"), st("T3", 2, "X", "10:25:00")),
+            ),
+        )
+
+        val result = StaticGtfsRouter(data, zone, maxTransfers = 6).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("09:55:00"),
+        )
+
+        assertTrue(result is StaticRouterResult.NoPath)
+        assertTrue(data.candidateQueryCount <= 4)
+    }
+
     @Test fun inactiveServiceNoPathAndSameOriginExplicit() {
         val data=FakeData(active=false,candidates=mapOf("A" to listOf(candidate("T1","R1","S",1,"10:00:00"))))
         val router=StaticGtfsRouter(data,zone)
@@ -694,24 +804,28 @@ class StaticGtfsRouterTest {
         val nearby: List<GtfsScheduleNearbyStop> = emptyList(),
     ):StaticGtfsScheduleData {
         var lastNearbyLimit: Int = 0
+        var candidateQueryCount: Int = 0
         override fun candidateTripsAtStop(
             stopId:String,
             serviceDate:GtfsServiceDate,
             earliestBoardSeconds:Int,
             limit:Int,
-        )=candidates[stopId].orEmpty()
-            .filter { candidate ->
-                active && (
-                    frequencies[candidate.trip.id].orEmpty().isNotEmpty() ||
-                        candidateBoardSeconds(candidate)?.let { it >= earliestBoardSeconds } == true
-                    )
-            }
-            .sortedWith(
-                compareBy<GtfsScheduleTripCandidate> { candidateBoardSeconds(it) ?: Int.MAX_VALUE }
-                    .thenBy { it.trip.id }
-                    .thenBy { it.stopSequence }
-            )
-            .take(limit)
+        ): List<GtfsScheduleTripCandidate> {
+            candidateQueryCount += 1
+            return candidates[stopId].orEmpty()
+                .filter { candidate ->
+                    active && (
+                        frequencies[candidate.trip.id].orEmpty().isNotEmpty() ||
+                            candidateBoardSeconds(candidate)?.let { it >= earliestBoardSeconds } == true
+                        )
+                }
+                .sortedWith(
+                    compareBy<GtfsScheduleTripCandidate> { candidateBoardSeconds(it) ?: Int.MAX_VALUE }
+                        .thenBy { it.trip.id }
+                        .thenBy { it.stopSequence }
+                )
+                .take(limit)
+        }
         override fun stopTimesForTrip(tripId:String,limit:Int)=times[tripId].orEmpty().take(limit)
         override fun frequenciesForTrip(tripId:String,limit:Int)=frequencies[tripId].orEmpty().take(limit)
         override fun transfersFromStop(stopId:String,limit:Int)=transfers[stopId].orEmpty().take(limit)
