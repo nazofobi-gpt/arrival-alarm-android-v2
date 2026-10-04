@@ -511,6 +511,124 @@ class StaticGtfsRouterTest {
         assertTrue(result is StaticRouterResult.NoPath)
     }
 
+    @Test fun exactFrequencyExpandsTemplateOffsetsAcrossServiceMidnight() {
+        val data = FakeData(
+            candidates = mapOf("A" to listOf(candidate("F1", "R1", "S", 1, "00:05:00"))),
+            times = mapOf(
+                "F1" to listOf(
+                    st("F1", 1, "A", "00:05:00"),
+                    st("F1", 2, "B", "00:15:00"),
+                ),
+            ),
+            frequencies = mapOf(
+                "F1" to listOf(frequency("F1", "25:00:00", "26:00:00", 600, exact = 1)),
+            ),
+        )
+
+        val result = StaticGtfsRouter(data, zone).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("25:07:00"),
+        )
+        val leg = (result as StaticRouterResult.Journeys).journeys.first().legs.single()
+        assertEquals(at("25:15:00"), leg.departureEpochMillis)
+        assertEquals(at("25:25:00"), leg.arrivalEpochMillis)
+        assertTrue(leg.frequencyBased)
+        assertTrue(!leg.approximate)
+        assertEquals(25 * 3_600 + 10 * 60, leg.frequencyInstanceStartSeconds)
+    }
+
+    @Test fun inexactFrequencyIsExplicitlyApproximate() {
+        val data = FakeData(
+            candidates = mapOf("A" to listOf(candidate("F0", "R1", "S", 1, "08:02:00"))),
+            times = mapOf(
+                "F0" to listOf(
+                    st("F0", 1, "A", "08:02:00"),
+                    st("F0", 2, "B", "08:12:00"),
+                ),
+            ),
+            frequencies = mapOf(
+                "F0" to listOf(frequency("F0", "08:00:00", "09:00:00", 600, exact = 0)),
+            ),
+        )
+
+        val result = StaticGtfsRouter(data, zone).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("08:11:00"),
+        )
+        val leg = (result as StaticRouterResult.Journeys).journeys.single().legs.single()
+        assertTrue(leg.frequencyBased)
+        assertTrue(leg.approximate)
+        assertTrue(leg.frequencyInstanceStartSeconds in (8 * 3_600) until (9 * 3_600))
+    }
+
+    @Test fun malformedOrOverlappingFrequencyRowsFailSafe() {
+        val base = FakeData(
+            candidates = mapOf("A" to listOf(candidate("BAD", "R1", "S", 1, "08:00:00"))),
+            times = mapOf(
+                "BAD" to listOf(
+                    st("BAD", 1, "A", "08:00:00"),
+                    st("BAD", 2, "B", "08:10:00"),
+                ),
+            ),
+        )
+        val nonPositive = base.copy(
+            frequencies = mapOf("BAD" to listOf(frequency("BAD", "08:00:00", "09:00:00", 0, 1))),
+        )
+        val overlapping = base.copy(
+            frequencies = mapOf(
+                "BAD" to listOf(
+                    frequency("BAD", "08:00:00", "09:00:00", 600, 1),
+                    frequency("BAD", "08:30:00", "09:30:00", 600, 1),
+                ),
+            ),
+        )
+
+        listOf(nonPositive, overlapping).forEach { data ->
+            assertTrue(
+                StaticGtfsRouter(data, zone).route(
+                    listOf(StaticRouterAccess("A")),
+                    listOf(StaticRouterAccess("B")),
+                    date,
+                    at("07:55:00"),
+                ) is StaticRouterResult.NoPath,
+            )
+        }
+    }
+
+    @Test fun frequencyExpansionHonorsHardInstanceCap() {
+        val data = FakeData(
+            candidates = mapOf("A" to listOf(candidate("CAP", "R1", "S", 1, "00:00:00"))),
+            times = mapOf(
+                "CAP" to listOf(
+                    st("CAP", 1, "A", "00:00:00"),
+                    st("CAP", 2, "B", "00:05:00"),
+                ),
+            ),
+            frequencies = mapOf(
+                "CAP" to listOf(frequency("CAP", "08:00:00", "12:00:00", 60, 1)),
+            ),
+        )
+
+        val result = StaticGtfsRouter(
+            data,
+            zone,
+            maxFrequencyInstancesPerCandidate = 2,
+            maxJourneys = 6,
+        ).route(
+            listOf(StaticRouterAccess("A")),
+            listOf(StaticRouterAccess("B")),
+            date,
+            at("08:00:00"),
+        )
+        val journeys = (result as StaticRouterResult.Journeys).journeys
+        assertEquals(2, journeys.size)
+        assertEquals(listOf(at("08:00:00"), at("08:01:00")), journeys.map { it.legs.single().departureEpochMillis })
+    }
+
     @Test fun inactiveServiceNoPathAndSameOriginExplicit() {
         val data=FakeData(active=false,candidates=mapOf("A" to listOf(candidate("T1","R1","S",1,"10:00:00"))))
         val router=StaticGtfsRouter(data,zone)
@@ -553,6 +671,7 @@ class StaticGtfsRouterTest {
         dropOff:Int?=null,
     )=GtfsScheduleStopTime(trip,seq,stop,time,time,pickup,dropOff,null,null)
     private fun transfer(from:String,to:String,type:Int,min:Int,fromRoute:String?=null,toRoute:String?=null,fromTrip:String?=null,toTrip:String?=null)=GtfsScheduleTransfer(from,to,type,min,fromRoute,toRoute,fromTrip,toTrip)
+    private fun frequency(trip:String,start:String,end:String,headway:Int,exact:Int?)=GtfsScheduleFrequency(trip,start,end,headway,exact)
     private fun stop(
         id:String,
         parent:String?=null,
@@ -568,6 +687,7 @@ class StaticGtfsRouterTest {
         val transfers: Map<String, List<GtfsScheduleTransfer>> = emptyMap(),
         val linkedTransfers: Map<String, List<GtfsScheduleTransfer>> = emptyMap(),
         val blockTrips: Map<String, List<GtfsScheduleTrip>> = emptyMap(),
+        val frequencies: Map<String, List<GtfsScheduleFrequency>> = emptyMap(),
         val trips: Map<String, GtfsScheduleTrip> = emptyMap(),
         val stops: Map<String, GtfsScheduleStop> = emptyMap(),
         val children: Map<String, List<GtfsScheduleStop>> = emptyMap(),
@@ -581,7 +701,10 @@ class StaticGtfsRouterTest {
             limit:Int,
         )=candidates[stopId].orEmpty()
             .filter { candidate ->
-                active && candidateBoardSeconds(candidate)?.let { it >= earliestBoardSeconds } == true
+                active && (
+                    frequencies[candidate.trip.id].orEmpty().isNotEmpty() ||
+                        candidateBoardSeconds(candidate)?.let { it >= earliestBoardSeconds } == true
+                    )
             }
             .sortedWith(
                 compareBy<GtfsScheduleTripCandidate> { candidateBoardSeconds(it) ?: Int.MAX_VALUE }
@@ -590,6 +713,7 @@ class StaticGtfsRouterTest {
             )
             .take(limit)
         override fun stopTimesForTrip(tripId:String,limit:Int)=times[tripId].orEmpty().take(limit)
+        override fun frequenciesForTrip(tripId:String,limit:Int)=frequencies[tripId].orEmpty().take(limit)
         override fun transfersFromStop(stopId:String,limit:Int)=transfers[stopId].orEmpty().take(limit)
         override fun linkedTransfersFromTrip(fromTripId:String,limit:Int)=
             linkedTransfers[fromTripId].orEmpty().take(limit)
