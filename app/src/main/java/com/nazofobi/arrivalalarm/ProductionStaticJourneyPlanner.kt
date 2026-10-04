@@ -16,7 +16,7 @@ sealed interface LocalStaticJourneyOutcome {
     data object Unavailable : LocalStaticJourneyOutcome
 }
 
-private interface StaticRouteOptionData {
+internal interface StaticRouteOptionData {
     fun route(routeId: String): GtfsScheduleRoute?
     fun trip(tripId: String): GtfsScheduleTrip?
     fun stop(stopId: String): GtfsScheduleStop?
