@@ -2,8 +2,6 @@ package com.nazofobi.arrivalalarm
 
 import com.google.protobuf.CodedInputStream
 import com.google.protobuf.ExtensionRegistryLite
-import com.google.protobuf.CodedInputStream
-import com.google.protobuf.ExtensionRegistryLite
 import com.google.protobuf.InvalidProtocolBufferException
 import com.google.transit.realtime.GtfsRealtime
 import java.io.ByteArrayInputStream
