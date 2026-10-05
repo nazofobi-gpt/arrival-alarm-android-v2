@@ -161,7 +161,19 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         }
     }
 
-    fun nearest(latitude: Double, longitude: Double, limit: Int): List<NearbyStop> {
+    fun nearest(latitude: Double, longitude: Double, limit: Int): List<NearbyStop> =
+        nearestInternal(latitude, longitude, limit, canonicalizeStations = false)
+
+    fun nearestCanonicalStations(latitude: Double, longitude: Double, limit: Int): List<NearbyStop> =
+        nearestInternal(latitude, longitude, limit, canonicalizeStations = true)
+
+    private fun nearestInternal(
+        latitude: Double,
+        longitude: Double,
+        limit: Int,
+        canonicalizeStations: Boolean,
+    ): List<NearbyStop> {
+        if (limit <= 0) return emptyList()
         val radii = listOf(5_000.0, 20_000.0, 80_000.0)
         for (radius in radii) {
             val latDelta = radius / 111_320.0
@@ -179,8 +191,12 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
                     }
                 }
             }
-            val canonical = NearbyStationCanonicalizer.canonicalize(latitude, longitude, candidates, limit)
-            if (canonical.size >= limit || (canonical.isNotEmpty() && radius == radii.last())) return canonical
+            val resolved = if (canonicalizeStations) {
+                NearbyStationCanonicalizer.canonicalize(latitude, longitude, candidates, limit)
+            } else {
+                candidates.sortedWith(compareBy<NearbyStop>({ it.distanceMeters }, { it.stop.id })).take(limit)
+            }
+            if (resolved.size >= limit || (resolved.isNotEmpty() && radius == radii.last())) return resolved
         }
         return emptyList()
     }
