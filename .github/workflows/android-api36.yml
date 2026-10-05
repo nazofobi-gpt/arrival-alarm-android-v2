@@ -46,7 +46,7 @@ jobs:
           sha256sum /tmp/g175-real-feed.zip | tee /tmp/g175-real-feed.sha256
 
       - name: Fetch current Germany GTFS-RT for G-176 acceptance
-        if: github.head_ref == 'interactive/g176-live-smoke-20261004' || github.ref_name == 'interactive/g176-live-smoke-20261004'
+        if: github.head_ref == 'interactive/g176-live-smoke-20261004' || github.ref_name == 'interactive/g176-live-smoke-20261004' || github.head_ref == 'g176-real-sample-acceptance-20261005' || github.ref_name == 'g176-real-sample-acceptance-20261005'
         run: |
           set -eu
           curl -fL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 300 \
