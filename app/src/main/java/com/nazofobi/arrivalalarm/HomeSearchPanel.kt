@@ -292,11 +292,11 @@ fun HomeSearchPanel(
                                     stringResource(
                                         R.string.nearby_stop_format,
                                         action,
-                                        if (candidate.stop.id in favoriteStopIds) {
+                                        (if (candidate.stop.id in favoriteStopIds) {
                                             "★ " + candidate.stop.name
                                         } else {
                                             candidate.stop.name
-                                        },
+                                        }) + candidate.bearingDegrees?.let { " • $it°" }.orEmpty(),
                                         candidate.distanceMeters,
                                     )
                                 )

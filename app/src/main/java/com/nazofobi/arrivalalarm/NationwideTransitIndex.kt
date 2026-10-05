@@ -166,20 +166,21 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         for (radius in radii) {
             val latDelta = radius / 111_320.0
             val lonDelta = radius / (111_320.0 * cos(Math.toRadians(latitude)).absoluteValue.coerceAtLeast(0.2))
-            val sql = "SELECT id,name,lat,lon FROM stops WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? LIMIT 6000"
+            val sql = "SELECT id,name,lat,lon,parent_station FROM stops WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? LIMIT 6000"
             val candidates = readableDatabase.rawQuery(
                 sql,
                 arrayOf((latitude - latDelta).toString(), (latitude + latDelta).toString(), (longitude - lonDelta).toString(), (longitude + lonDelta).toString()),
             ).use { c ->
                 buildList {
                     while (c.moveToNext()) {
-                        val stop = CatalogStop(c.getString(0), PROVIDER_ID, c.getString(1), c.getDouble(2), c.getDouble(3))
+                        val stop = CatalogStop(c.getString(0), PROVIDER_ID, c.getString(1), c.getDouble(2), c.getDouble(3), if (c.isNull(4)) null else c.getString(4))
                         val distance = haversineMeters(latitude, longitude, stop.latitude, stop.longitude).roundToInt()
                         if (distance <= radius) add(NearbyStop(stop, distance))
                     }
                 }
-            }.sortedBy { it.distanceMeters }.take(limit)
-            if (candidates.size >= limit || (candidates.isNotEmpty() && radius == radii.last())) return candidates
+            }
+            val canonical = NearbyStationCanonicalizer.canonicalize(latitude, longitude, candidates, limit)
+            if (canonical.size >= limit || (canonical.isNotEmpty() && radius == radii.last())) return canonical
         }
         return emptyList()
     }
