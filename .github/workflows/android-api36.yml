@@ -96,6 +96,7 @@ jobs:
             adb shell settings get system font_scale
             adb push /tmp/g167-visual-qa.zip /data/local/tmp/g167-visual-qa.zip
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.MainActivityTest#capturePrimaryScreensForVisualQa -Pandroid.testInstrumentationRunnerArguments.germanyFullPath=/data/local/tmp/g167-visual-qa.zip
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.G170NearbyVisualInstrumentedTest#realGermanyFeedLohneNearbyHasOneCanonicalStationAndRetainsScreenshot -Pandroid.testInstrumentationRunnerArguments.germanyFullPath=/data/local/tmp/g167-visual-qa.zip
             adb shell pm clear com.nazofobi.arrivalalarm || true
             ./gradlew --no-daemon connectedDebugAndroidTest
             mkdir -p app/build/outputs/androidTest-results/ui-qa
@@ -110,6 +111,7 @@ jobs:
             test -s app/build/outputs/androidTest-results/ui-qa/live.png
             test -s app/build/outputs/androidTest-results/ui-qa/departures.png
             test -s app/build/outputs/androidTest-results/ui-qa/settings.png
+            test -s app/build/outputs/androidTest-results/ui-qa/g170-lohne-nearby.png
             printf '%s\n' onboarding.png home.png search.png route.png journey.png live.png departures.png settings.png > app/build/outputs/androidTest-results/ui-qa/SCREENSHOT_MANIFEST.txt
             sha256sum app/build/outputs/androidTest-results/ui-qa/onboarding.png app/build/outputs/androidTest-results/ui-qa/home.png app/build/outputs/androidTest-results/ui-qa/search.png app/build/outputs/androidTest-results/ui-qa/route.png app/build/outputs/androidTest-results/ui-qa/journey.png app/build/outputs/androidTest-results/ui-qa/live.png app/build/outputs/androidTest-results/ui-qa/departures.png app/build/outputs/androidTest-results/ui-qa/settings.png > app/build/outputs/androidTest-results/ui-qa/SCREENSHOT_SHA256SUMS.txt
             adb install -r app/build/outputs/apk/debug/app-debug.apk
