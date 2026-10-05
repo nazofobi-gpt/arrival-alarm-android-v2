@@ -1,5 +1,7 @@
 package com.nazofobi.arrivalalarm
 
+import com.google.protobuf.CodedInputStream
+import com.google.protobuf.ExtensionRegistryLite
 import com.google.protobuf.InvalidProtocolBufferException
 import com.google.transit.realtime.GtfsRealtime
 import java.io.ByteArrayInputStream
@@ -16,6 +18,8 @@ object GermanyGtfsRealtimeProvenance {
 }
 
 internal const val GERMANY_REALTIME_DEFAULT_MAX_BYTES = 64 * 1024 * 1024
+private const val GERMANY_REALTIME_PROTO_RECURSION_LIMIT = 64
+private const val PROTOBUF_LENGTH_DELIMITED_WIRE_TYPE = 2
 
 enum class GermanyRealtimeUnavailableReason {
     HTTP,
@@ -213,8 +217,55 @@ class GermanyGtfsRealtimeClient(
         input: InputStream,
         fetchedAtEpochSeconds: Long,
     ): GermanyRealtimeFetchResult {
-        val feed = try {
-            GtfsRealtime.FeedMessage.parseFrom(input)
+        val coded = CodedInputStream.newInstance(input).apply {
+            setSizeLimit(maxBytes)
+            setRecursionLimit(GERMANY_REALTIME_PROTO_RECURSION_LIMIT)
+        }
+        val extensionRegistry = ExtensionRegistryLite.getEmptyRegistry()
+        val headerTag =
+            (GtfsRealtime.FeedMessage.HEADER_FIELD_NUMBER shl 3) or
+                PROTOBUF_LENGTH_DELIMITED_WIRE_TYPE
+        val entityTag =
+            (GtfsRealtime.FeedMessage.ENTITY_FIELD_NUMBER shl 3) or
+                PROTOBUF_LENGTH_DELIMITED_WIRE_TYPE
+
+        var header: GtfsRealtime.FeedHeader? = null
+        val tripUpdates = mutableListOf<GermanyRealtimeTripUpdate>()
+        val alerts = mutableListOf<GermanyRealtimeAlert>()
+
+        try {
+            while (true) {
+                when (val tag = coded.readTag()) {
+                    0 -> break
+                    headerTag -> {
+                        val parsedHeader = coded.readMessage(
+                            GtfsRealtime.FeedHeader.parser(),
+                            extensionRegistry,
+                        )
+                        header = parsedHeader
+                        val incrementality = parsedHeader.incrementalityName()
+                        if (incrementality != "FULL_DATASET") {
+                            return GermanyRealtimeFetchResult.Unavailable(
+                                GermanyRealtimeUnavailableReason.UNSUPPORTED_INCREMENTALITY,
+                                "GTFS-RT incrementality $incrementality is not supported as snapshot state",
+                            )
+                        }
+                    }
+                    entityTag -> {
+                        val entity = coded.readMessage(
+                            GtfsRealtime.FeedEntity.parser(),
+                            extensionRegistry,
+                        )
+                        if (entity.hasTripUpdate()) {
+                            tripUpdates += parseTripUpdate(entity)
+                        }
+                        if (entity.hasAlert()) {
+                            alerts += parseAlert(entity)
+                        }
+                    }
+                    else -> coded.skipField(tag)
+                }
+            }
         } catch (failure: InvalidProtocolBufferException) {
             return GermanyRealtimeFetchResult.Unavailable(
                 GermanyRealtimeUnavailableReason.PARSE,
@@ -222,191 +273,187 @@ class GermanyGtfsRealtimeClient(
             )
         }
 
-        val header = feed.header
-        val incrementality = if (header.hasIncrementality()) {
-            header.incrementality.name
-        } else {
-            "FULL_DATASET"
-        }
+        val parsedHeader = header ?: return GermanyRealtimeFetchResult.Unavailable(
+            GermanyRealtimeUnavailableReason.PARSE,
+            "GTFS-RT payload is missing required FeedHeader",
+        )
+        val incrementality = parsedHeader.incrementalityName()
         if (incrementality != "FULL_DATASET") {
             return GermanyRealtimeFetchResult.Unavailable(
                 GermanyRealtimeUnavailableReason.UNSUPPORTED_INCREMENTALITY,
                 "GTFS-RT incrementality $incrementality is not supported as snapshot state",
             )
         }
-        val gtfsRealtimeVersion = header.gtfsRealtimeVersion.takeIf { it.isNotBlank() }
-        val feedVersion = header.feedVersion.takeIf {
-            header.hasFeedVersion() && it.isNotBlank()
-        }
-
-        val tripUpdates = buildList {
-            for (entity in feed.entityList) {
-                if (!entity.hasTripUpdate()) continue
-                val update = entity.tripUpdate
-                val trip = update.trip
-                val tripId = trip.tripId.takeIf { it.isNotBlank() }
-                val routeId = trip.routeId.takeIf { it.isNotBlank() }
-                val directionId = trip.directionId.takeIf { trip.hasDirectionId() }
-                val startTime = trip.startTime.takeIf { it.isNotBlank() }
-                val startDate = trip.startDate.takeIf { it.isNotBlank() }
-                val relationship = if (trip.hasScheduleRelationship()) {
-                    trip.scheduleRelationship.name
-                } else {
-                    null
-                }
-                val selectorValidity = when {
-                    tripId != null -> GermanyRealtimeTripSelectorValidity.VALID_ID_BASED
-                    routeId != null &&
-                        directionId != null &&
-                        startTime != null &&
-                        startDate != null &&
-                        (relationship == null || relationship == "SCHEDULED") ->
-                        GermanyRealtimeTripSelectorValidity.VALID_IDLESS_SCHEDULED
-                    else -> GermanyRealtimeTripSelectorValidity.UNMATCHABLE_INCOMPLETE
-                }
-                add(
-                    GermanyRealtimeTripUpdate(
-                        entityId = entity.id,
-                        tripId = tripId,
-                        routeId = routeId,
-                        startDate = startDate,
-                        scheduleRelationship = relationship,
-                        cancelled = relationship == "CANCELED",
-                        stops = update.stopTimeUpdateList.map { stop ->
-                            val stopSequence = stop.stopSequence.takeIf { stop.hasStopSequence() }
-                            val stopId = stop.stopId.takeIf { it.isNotBlank() }
-                            val stopRelationship = if (stop.hasScheduleRelationship()) {
-                                stop.scheduleRelationship.name
-                            } else {
-                                null
-                            }
-                            val properties = stop.stopTimeProperties.takeIf {
-                                stop.hasStopTimeProperties()
-                            }
-                            val assignedStopId = properties?.assignedStopId?.takeIf { it.isNotBlank() }
-                            val validity = when {
-                                assignedStopId != null && stopSequence == null ->
-                                    GermanyRealtimeStopUpdateValidity.ASSIGNED_STOP_REQUIRES_SEQUENCE
-                                assignedStopId != null && stopId != null && assignedStopId != stopId ->
-                                    GermanyRealtimeStopUpdateValidity.ASSIGNED_STOP_ID_MISMATCH
-                                else -> GermanyRealtimeStopUpdateValidity.VALID
-                            }
-                            val noRealtimeTiming = stopRelationship == "NO_DATA"
-                            GermanyRealtimeStopUpdate(
-                                stopSequence = stopSequence,
-                                stopId = stopId,
-                                arrivalDelaySeconds = stop.arrival.delay.takeIf {
-                                    !noRealtimeTiming && stop.hasArrival() && stop.arrival.hasDelay()
-                                },
-                                departureDelaySeconds = stop.departure.delay.takeIf {
-                                    !noRealtimeTiming && stop.hasDeparture() && stop.departure.hasDelay()
-                                },
-                                arrivalTimeEpochSeconds = stop.arrival.time.takeIf {
-                                    !noRealtimeTiming && stop.hasArrival() && stop.arrival.hasTime()
-                                },
-                                departureTimeEpochSeconds = stop.departure.time.takeIf {
-                                    !noRealtimeTiming && stop.hasDeparture() && stop.departure.hasTime()
-                                },
-                                scheduleRelationship = stopRelationship,
-                                assignedStopId = assignedStopId,
-                                pickupType = properties?.pickupType?.name?.takeIf {
-                                    properties.hasPickupType()
-                                },
-                                dropOffType = properties?.dropOffType?.name?.takeIf {
-                                    properties.hasDropOffType()
-                                },
-                                stopHeadsign = properties?.stopHeadsign?.takeIf {
-                                    properties.hasStopHeadsign() && it.isNotBlank()
-                                },
-                                validity = validity,
-                            )
-                        },
-                        directionId = directionId,
-                        startTime = startTime,
-                        selectorValidity = selectorValidity,
-                        updateTimestampEpochSeconds = update.timestamp.takeIf {
-                            update.hasTimestamp()
-                        },
-                    ),
-                )
-            }
-        }
-
-        val alerts = buildList {
-            for (entity in feed.entityList) {
-                if (!entity.hasAlert()) continue
-                val alert = entity.alert
-                val selectors = alert.informedEntityList.map { selector ->
-                    val agencyId = selector.agencyId.takeIf { it.isNotBlank() }
-                    val routeId = selector.routeId.takeIf { it.isNotBlank() }
-                    val routeType = selector.routeType.takeIf { selector.hasRouteType() }
-                    val directionId = selector.directionId.takeIf { selector.hasDirectionId() }
-                    val stopId = selector.stopId.takeIf { it.isNotBlank() }
-                    val trip = selector.trip.takeIf { selector.hasTrip() }?.let(::parseTripSelector)
-                    val validity = when {
-                        trip?.validity == GermanyRealtimeTripSelectorValidity.UNMATCHABLE_INCOMPLETE ->
-                            GermanyRealtimeAlertSelectorValidity.UNMATCHABLE_TRIP_SELECTOR
-                        agencyId == null &&
-                            routeId == null &&
-                            routeType == null &&
-                            directionId == null &&
-                            stopId == null &&
-                            trip == null ->
-                            GermanyRealtimeAlertSelectorValidity.UNMATCHABLE_EMPTY
-                        else -> GermanyRealtimeAlertSelectorValidity.VALID
-                    }
-                    GermanyRealtimeAlertSelector(
-                        agencyId = agencyId,
-                        routeId = routeId,
-                        routeType = routeType,
-                        directionId = directionId,
-                        stopId = stopId,
-                        trip = trip,
-                        validity = validity,
-                    )
-                }
-                add(
-                    GermanyRealtimeAlert(
-                        entityId = entity.id,
-                        cause = if (alert.hasCause()) alert.cause.name else null,
-                        effect = if (alert.hasEffect()) alert.effect.name else null,
-                        header = if (alert.hasHeaderText()) preferredText(alert.headerText) else null,
-                        description = if (alert.hasDescriptionText()) {
-                            preferredText(alert.descriptionText)
-                        } else {
-                            null
-                        },
-                        selectors = selectors,
-                        activePeriods = alert.activePeriodList.map { period ->
-                            GermanyRealtimeActivePeriod(
-                                startEpochSeconds = period.start.takeIf { period.hasStart() },
-                                endEpochSeconds = period.end.takeIf { period.hasEnd() },
-                            )
-                        },
-                        severityLevel = if (alert.hasSeverityLevel()) {
-                            alert.severityLevel.name
-                        } else {
-                            null
-                        },
-                    ),
-                )
-            }
-        }
 
         return GermanyRealtimeFetchResult.Available(
             GermanyRealtimeSnapshot(
                 source = GermanyGtfsRealtimeProvenance.PROVIDER,
                 license = GermanyGtfsRealtimeProvenance.LICENSE,
-                feedTimestampEpochSeconds = header.timestamp.takeIf {
-                    header.hasTimestamp()
+                feedTimestampEpochSeconds = parsedHeader.timestamp.takeIf {
+                    parsedHeader.hasTimestamp()
                 },
                 fetchedAtEpochSeconds = fetchedAtEpochSeconds,
                 tripUpdates = tripUpdates,
                 serviceAlerts = alerts,
-                gtfsRealtimeVersion = gtfsRealtimeVersion,
+                gtfsRealtimeVersion = parsedHeader.gtfsRealtimeVersion.takeIf { it.isNotBlank() },
                 incrementality = incrementality,
-                feedVersion = feedVersion,
+                feedVersion = parsedHeader.feedVersion.takeIf {
+                    parsedHeader.hasFeedVersion() && it.isNotBlank()
+                },
             ),
+        )
+    }
+
+    private fun GtfsRealtime.FeedHeader.incrementalityName(): String =
+        if (hasIncrementality()) incrementality.name else "FULL_DATASET"
+
+    private fun parseTripUpdate(
+        entity: GtfsRealtime.FeedEntity,
+    ): GermanyRealtimeTripUpdate {
+        val update = entity.tripUpdate
+        val trip = update.trip
+        val tripId = trip.tripId.takeIf { it.isNotBlank() }
+        val routeId = trip.routeId.takeIf { it.isNotBlank() }
+        val directionId = trip.directionId.takeIf { trip.hasDirectionId() }
+        val startTime = trip.startTime.takeIf { it.isNotBlank() }
+        val startDate = trip.startDate.takeIf { it.isNotBlank() }
+        val relationship = if (trip.hasScheduleRelationship()) {
+            trip.scheduleRelationship.name
+        } else {
+            null
+        }
+        val selectorValidity = when {
+            tripId != null -> GermanyRealtimeTripSelectorValidity.VALID_ID_BASED
+            routeId != null &&
+                directionId != null &&
+                startTime != null &&
+                startDate != null &&
+                (relationship == null || relationship == "SCHEDULED") ->
+                GermanyRealtimeTripSelectorValidity.VALID_IDLESS_SCHEDULED
+            else -> GermanyRealtimeTripSelectorValidity.UNMATCHABLE_INCOMPLETE
+        }
+
+        return GermanyRealtimeTripUpdate(
+            entityId = entity.id,
+            tripId = tripId,
+            routeId = routeId,
+            startDate = startDate,
+            scheduleRelationship = relationship,
+            cancelled = relationship == "CANCELED",
+            stops = update.stopTimeUpdateList.map { stop ->
+                val stopSequence = stop.stopSequence.takeIf { stop.hasStopSequence() }
+                val stopId = stop.stopId.takeIf { it.isNotBlank() }
+                val stopRelationship = if (stop.hasScheduleRelationship()) {
+                    stop.scheduleRelationship.name
+                } else {
+                    null
+                }
+                val properties = stop.stopTimeProperties.takeIf {
+                    stop.hasStopTimeProperties()
+                }
+                val assignedStopId = properties?.assignedStopId?.takeIf { it.isNotBlank() }
+                val validity = when {
+                    assignedStopId != null && stopSequence == null ->
+                        GermanyRealtimeStopUpdateValidity.ASSIGNED_STOP_REQUIRES_SEQUENCE
+                    assignedStopId != null && stopId != null && assignedStopId != stopId ->
+                        GermanyRealtimeStopUpdateValidity.ASSIGNED_STOP_ID_MISMATCH
+                    else -> GermanyRealtimeStopUpdateValidity.VALID
+                }
+                val noRealtimeTiming = stopRelationship == "NO_DATA"
+                GermanyRealtimeStopUpdate(
+                    stopSequence = stopSequence,
+                    stopId = stopId,
+                    arrivalDelaySeconds = stop.arrival.delay.takeIf {
+                        !noRealtimeTiming && stop.hasArrival() && stop.arrival.hasDelay()
+                    },
+                    departureDelaySeconds = stop.departure.delay.takeIf {
+                        !noRealtimeTiming && stop.hasDeparture() && stop.departure.hasDelay()
+                    },
+                    arrivalTimeEpochSeconds = stop.arrival.time.takeIf {
+                        !noRealtimeTiming && stop.hasArrival() && stop.arrival.hasTime()
+                    },
+                    departureTimeEpochSeconds = stop.departure.time.takeIf {
+                        !noRealtimeTiming && stop.hasDeparture() && stop.departure.hasTime()
+                    },
+                    scheduleRelationship = stopRelationship,
+                    assignedStopId = assignedStopId,
+                    pickupType = properties?.pickupType?.name?.takeIf {
+                        properties.hasPickupType()
+                    },
+                    dropOffType = properties?.dropOffType?.name?.takeIf {
+                        properties.hasDropOffType()
+                    },
+                    stopHeadsign = properties?.stopHeadsign?.takeIf {
+                        properties.hasStopHeadsign() && it.isNotBlank()
+                    },
+                    validity = validity,
+                )
+            },
+            directionId = directionId,
+            startTime = startTime,
+            selectorValidity = selectorValidity,
+            updateTimestampEpochSeconds = update.timestamp.takeIf {
+                update.hasTimestamp()
+            },
+        )
+    }
+
+    private fun parseAlert(
+        entity: GtfsRealtime.FeedEntity,
+    ): GermanyRealtimeAlert {
+        val alert = entity.alert
+        val selectors = alert.informedEntityList.map { selector ->
+            val agencyId = selector.agencyId.takeIf { it.isNotBlank() }
+            val routeId = selector.routeId.takeIf { it.isNotBlank() }
+            val routeType = selector.routeType.takeIf { selector.hasRouteType() }
+            val directionId = selector.directionId.takeIf { selector.hasDirectionId() }
+            val stopId = selector.stopId.takeIf { it.isNotBlank() }
+            val trip = selector.trip.takeIf { selector.hasTrip() }?.let(::parseTripSelector)
+            val validity = when {
+                trip?.validity == GermanyRealtimeTripSelectorValidity.UNMATCHABLE_INCOMPLETE ->
+                    GermanyRealtimeAlertSelectorValidity.UNMATCHABLE_TRIP_SELECTOR
+                agencyId == null &&
+                    routeId == null &&
+                    routeType == null &&
+                    directionId == null &&
+                    stopId == null &&
+                    trip == null ->
+                    GermanyRealtimeAlertSelectorValidity.UNMATCHABLE_EMPTY
+                else -> GermanyRealtimeAlertSelectorValidity.VALID
+            }
+            GermanyRealtimeAlertSelector(
+                agencyId = agencyId,
+                routeId = routeId,
+                routeType = routeType,
+                directionId = directionId,
+                stopId = stopId,
+                trip = trip,
+                validity = validity,
+            )
+        }
+
+        return GermanyRealtimeAlert(
+            entityId = entity.id,
+            cause = if (alert.hasCause()) alert.cause.name else null,
+            effect = if (alert.hasEffect()) alert.effect.name else null,
+            header = if (alert.hasHeaderText()) preferredText(alert.headerText) else null,
+            description = if (alert.hasDescriptionText()) {
+                preferredText(alert.descriptionText)
+            } else {
+                null
+            },
+            selectors = selectors,
+            activePeriods = alert.activePeriodList.map { period ->
+                GermanyRealtimeActivePeriod(
+                    startEpochSeconds = period.start.takeIf { period.hasStart() },
+                    endEpochSeconds = period.end.takeIf { period.hasEnd() },
+                )
+            },
+            severityLevel = if (alert.hasSeverityLevel()) {
+                alert.severityLevel.name
+            } else {
+                null
+            },
         )
     }
 
