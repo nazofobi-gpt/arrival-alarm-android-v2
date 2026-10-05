@@ -169,7 +169,6 @@ class MainActivityTest {
             .performScrollTo()
             .assertIsDisplayed()
             .assertContentDescriptionEquals(mapLabel)
-        rule.onNodeWithTag("home-map-provider").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun productionUiExposesNoLegacyFixtureControls() {

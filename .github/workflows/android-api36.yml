@@ -97,7 +97,7 @@ jobs:
             adb push /tmp/g167-visual-qa.zip /data/local/tmp/g167-visual-qa.zip
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.MainActivityTest#capturePrimaryScreensForVisualQa -Pandroid.testInstrumentationRunnerArguments.germanyFullPath=/data/local/tmp/g167-visual-qa.zip
             adb shell pm clear com.nazofobi.arrivalalarm || true
-            ./gradlew --no-daemon connectedDebugAndroidTest
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.germanyFullPath=/data/local/tmp/g167-visual-qa.zip
             mkdir -p app/build/outputs/androidTest-results/ui-qa
             adb shell ls -l /sdcard/Download/arrival-alarm-ui-qa
             adb pull /sdcard/Download/arrival-alarm-ui-qa/. app/build/outputs/androidTest-results/ui-qa/
