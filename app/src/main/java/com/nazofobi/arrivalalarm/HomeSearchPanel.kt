@@ -5,14 +5,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.DirectionsTransit
+import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.LocationOn
+import androidx.compose.material.icons.rounded.MyLocation
+import androidx.compose.material.icons.rounded.Place
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -62,7 +68,7 @@ fun HomeSearchPanel(
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(
             text = if (mode == HomeSearchMode.HOME) {
@@ -70,8 +76,8 @@ fun HomeSearchPanel(
             } else {
                 stringResource(R.string.search_stops_label)
             },
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
             modifier = Modifier.semantics { heading() },
         )
         Text(
@@ -86,159 +92,36 @@ fun HomeSearchPanel(
         )
 
         if (mode == HomeSearchMode.HOME) {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+            Surface(
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surface,
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.journey_points_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-
-                    FilledTonalButton(
-                        onClick = onSelectOriginTarget,
-                        enabled = !selectingOrigin,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .testTag("search-target-origin"),
-                    ) {
-                        Text(
-                            if (selectingOrigin) {
-                                stringResource(R.string.selecting_origin)
-                            } else {
-                                stringResource(R.string.select_origin)
-                            }
-                        )
-                    }
-
-                    FilledTonalButton(
-                        onClick = onSelectDestinationTarget,
-                        enabled = origin != null && selectingOrigin,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .testTag("search-target-destination"),
-                    ) {
-                        Text(
-                            if (!selectingOrigin) {
-                                stringResource(R.string.selecting_destination)
-                            } else {
-                                stringResource(R.string.select_destination)
-                            }
-                        )
-                    }
-
-                    FilledTonalButton(
-                        onClick = onUseCurrentLocation,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .testTag("current-location-origin"),
-                    ) {
-                        Text(stringResource(R.string.current_location_origin))
-                    }
-                    locationMessage?.let {
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.testTag("location-status"),
-                        )
-                    }
-
-                    HorizontalDivider()
-
-                    if (origin == null && destination == null) {
-                        Text(
-                            text = stringResource(R.string.journey_points_empty),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    } else {
-                        origin?.let {
-                            Text(
-                                text = stringResource(R.string.origin_format, it.label),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.testTag("origin-label"),
-                            )
-                        }
-                        destination?.let {
-                            Text(
-                                text = stringResource(R.string.destination_format, it.label),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.testTag("destination-label"),
-                            )
-                        }
-                    }
-                }
-            }
-
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(
-                        text = stringResource(R.string.map_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.semantics { heading() },
+                    ArrivalSelectionRow(
+                        title = stringResource(R.string.select_origin),
+                        value = origin?.label ?: stringResource(R.string.home_origin_missing),
+                        icon = if (origin == null) Icons.Rounded.MyLocation else Icons.Rounded.LocationOn,
+                        onClick = onSelectOriginTarget,
+                        testTag = "search-target-origin",
                     )
-                    Text(
-                        text = if (selectingOrigin) {
-                            stringResource(R.string.map_instruction_origin)
-                        } else {
-                            stringResource(R.string.map_instruction_destination)
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.testTag("map-instruction"),
+                    ArrivalSelectionRow(
+                        title = stringResource(R.string.select_destination),
+                        value = destination?.label ?: stringResource(R.string.home_destination_missing),
+                        icon = Icons.Rounded.Flag,
+                        onClick = onSelectDestinationTarget,
+                        enabled = origin != null,
+                        testTag = "search-target-destination",
                     )
-
-                    val mapCenter = origin ?: destination ?: MapPoint(
-                        latitude = 51.1657,
-                        longitude = 10.4515,
-                        label = "Deutschland",
-                    )
-                    TransitSelectionMap(
-                        center = mapCenter,
-                        nearbyStops = nearby,
-                        origin = origin,
-                        destination = destination,
-                        mapPointLabel = stringResource(R.string.map_point_label),
-                        onStopSelected = onMapStopSelected,
-                        onMapPointSelected = onMapPointSelected,
-                        onMapError = onMapError,
-                    )
-
-                    mapMessage?.let {
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.testTag("map-status"),
-                        )
-                    }
-                    Text(
-                        text = stringResource(R.string.map_provider_note),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.testTag("map-provider"),
+                    ArrivalSelectionRow(
+                        title = stringResource(R.string.current_location_origin),
+                        value = stringResource(R.string.current_location_label),
+                        icon = Icons.Rounded.MyLocation,
+                        onClick = onUseCurrentLocation,
+                        testTag = "current-location-origin",
+                        supporting = locationMessage,
                     )
                 }
             }
@@ -253,82 +136,102 @@ fun HomeSearchPanel(
             }
 
             if (nearby.isNotEmpty()) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    ),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ArrivalSectionHeader(title = stringResource(R.string.nearby_stops))
+                    nearbySource?.let {
                         Text(
-                            text = stringResource(R.string.nearby_stops),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.semantics { heading() },
+                            text = stringResource(R.string.source_format, it),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        nearbySource?.let {
-                            Text(
-                                text = stringResource(R.string.source_format, it),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            )
-                        }
-                        nearby.take(8).forEachIndexed { index, candidate ->
-                            OutlinedButton(
-                                onClick = { onNearbyStopSelected(candidate) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("nearby-stop-$index"),
-                            ) {
+                    }
+                    Surface(
+                        shape = MaterialTheme.shapes.large,
+                        color = MaterialTheme.colorScheme.surface,
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                            nearby.take(8).forEachIndexed { index, candidate ->
                                 val action = if (selectingOrigin) {
                                     stringResource(R.string.select_origin)
                                 } else {
                                     stringResource(R.string.select_destination)
                                 }
-                                Text(
-                                    stringResource(
-                                        R.string.nearby_stop_format,
-                                        action,
-                                        if (candidate.stop.id in favoriteStopIds) {
-                                            "★ " + candidate.stop.name
-                                        } else {
-                                            candidate.stop.name
-                                        },
-                                        candidate.distanceMeters,
-                                    )
+                                ArrivalListRow(
+                                    title = candidate.stop.name,
+                                    subtitle = action,
+                                    icon = Icons.Rounded.DirectionsTransit,
+                                    trailing = "${candidate.distanceMeters.toInt()} m",
+                                    selected = candidate.stop.id in favoriteStopIds,
+                                    onClick = { onNearbyStopSelected(candidate) },
+                                    testTag = "nearby-stop-$index",
                                 )
                             }
                         }
                     }
                 }
             }
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ArrivalSectionHeader(title = stringResource(R.string.map_title))
+                Text(
+                    text = if (selectingOrigin) {
+                        stringResource(R.string.map_instruction_origin)
+                    } else {
+                        stringResource(R.string.map_instruction_destination)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("map-instruction"),
+                )
+                val mapCenter = origin ?: destination ?: MapPoint(
+                    latitude = 51.1657,
+                    longitude = 10.4515,
+                    label = "Deutschland",
+                )
+                Surface(
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                ) {
+                    TransitSelectionMap(
+                        center = mapCenter,
+                        nearbyStops = nearby,
+                        origin = origin,
+                        destination = destination,
+                        mapPointLabel = stringResource(R.string.map_point_label),
+                        onStopSelected = onMapStopSelected,
+                        onMapPointSelected = onMapPointSelected,
+                        onMapError = onMapError,
+                    )
+                }
+                mapMessage?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.testTag("map-status"),
+                    )
+                }
+            }
         } else {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+            Surface(
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surface,
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     OutlinedTextField(
                         value = query,
                         onValueChange = onQueryChange,
                         label = { Text(stringResource(R.string.search_stops_label)) },
-                        supportingText = {
-                            Text(stringResource(R.string.search_supporting_text))
-                        },
+                        supportingText = { Text(stringResource(R.string.search_supporting_text)) },
+                        leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("catalog-search"),
                         singleLine = true,
                     )
-
                     Button(
                         onClick = onSearch,
                         enabled = !searchBusy && query.trim().length >= 2,
@@ -338,86 +241,85 @@ fun HomeSearchPanel(
                             .testTag("catalog-search-submit"),
                     ) {
                         Text(
-                            if (searchBusy) {
-                                stringResource(R.string.searching)
-                            } else {
-                                stringResource(R.string.search_action)
-                            }
+                            if (searchBusy) stringResource(R.string.searching)
+                            else stringResource(R.string.search_action)
                         )
                     }
+                }
+            }
 
-                    searchSource?.let {
-                        Text(
-                            text = stringResource(R.string.source_format, it),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.testTag("search-source"),
-                        )
-                    }
-                    searchMessage?.let {
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.testTag("search-message"),
-                        )
-                    }
+            searchSource?.let {
+                Text(
+                    text = stringResource(R.string.source_format, it),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("search-source"),
+                )
+            }
+            searchMessage?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("search-message"),
+                )
+            }
 
-                    searchResults.take(12).forEachIndexed { index, result ->
-                        OutlinedButton(
-                            onClick = { onSearchResultSelected(result) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp)
-                                .testTag("search-result-$index"),
-                        ) {
-                            val action = if (selectingOrigin) {
-                                stringResource(R.string.select_origin)
-                            } else {
-                                stringResource(R.string.select_destination)
-                            }
+            if (searchResults.isNotEmpty()) {
+                Surface(
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surface,
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                        searchResults.take(12).forEachIndexed { index, result ->
                             val kind = when (result.kind) {
                                 TransitLocationKind.STOP -> stringResource(R.string.location_kind_stop)
                                 TransitLocationKind.ADDRESS -> stringResource(R.string.location_kind_address)
                                 TransitLocationKind.POI -> stringResource(R.string.location_kind_poi)
                             }
-                            Text(
-                                stringResource(
-                                    R.string.search_location_result_format,
-                                    action,
-                                    kind,
-                                    result.label,
-                                )
+                            ArrivalListRow(
+                                title = result.label,
+                                subtitle = kind,
+                                icon = if (result.kind == TransitLocationKind.STOP) {
+                                    Icons.Rounded.DirectionsTransit
+                                } else {
+                                    Icons.Rounded.Place
+                                },
+                                onClick = { onSearchResultSelected(result) },
+                                testTag = "search-result-$index",
                             )
                         }
                     }
+                }
+            }
 
-                    if (recentSearches.isNotEmpty()) {
-                        HorizontalDivider()
-                        Text(
-                            text = stringResource(R.string.search_recents_title),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        recentSearches.take(5).forEachIndexed { index, recent ->
-                            OutlinedButton(
-                                onClick = { onRecentSearchSelected(recent) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("search-recent-$index"),
-                            ) {
-                                Text(recent)
+            if (recentSearches.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ArrivalSectionHeader(title = stringResource(R.string.search_recents_title))
+                    Surface(
+                        shape = MaterialTheme.shapes.large,
+                        color = MaterialTheme.colorScheme.surface,
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                            recentSearches.take(5).forEachIndexed { index, recent ->
+                                ArrivalListRow(
+                                    title = recent,
+                                    subtitle = null,
+                                    icon = Icons.Rounded.History,
+                                    onClick = { onRecentSearchSelected(recent) },
+                                    testTag = "search-recent-$index",
+                                )
                             }
                         }
-                        OutlinedButton(
-                            onClick = onClearRecentSearches,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp)
-                                .testTag("search-recents-clear"),
-                        ) {
-                            Text(stringResource(R.string.search_recents_clear))
-                        }
+                    }
+                    OutlinedButton(
+                        onClick = onClearRecentSearches,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("search-recents-clear"),
+                    ) {
+                        Text(stringResource(R.string.search_recents_clear))
                     }
                 }
             }
