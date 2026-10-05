@@ -15,7 +15,7 @@ import kotlin.math.absoluteValue
 import kotlin.math.cos
 import kotlin.math.roundToInt
 
-class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nationwide_transit.db", null, 4) {
+class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nationwide_transit.db", null, 5) {
     companion object {
         private const val PROVIDER_ID = "gtfs-de-full"
         private const val READY_KEY = "ready"
@@ -46,7 +46,10 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         } else if (oldVersion < 4) {
             migrateScheduleSchemaV4(db)
         }
-        if (oldVersion < 4) putMetadata(db, SCHEMA_KEY, "4")
+        if (oldVersion < 5) {
+            createAutocompleteIndexes(db)
+            putMetadata(db, SCHEMA_KEY, "5")
+        }
     }
 
     fun isReady(): Boolean = metadata(READY_KEY) == "1"
@@ -137,7 +140,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             putMetadata(db, FETCHED_KEY, (System.currentTimeMillis() / 1000).toString())
             putMetadata(db, COUNT_KEY, stops.toString())
             putMetadata(db, VERSION_KEY, sourceVersion)
-            putMetadata(db, SCHEMA_KEY, "4")
+            putMetadata(db, SCHEMA_KEY, "5")
             counts.forEach { (file, count) -> putMetadata(db, "count_$file", count.toString()) }
             db.setTransactionSuccessful()
         } finally {
@@ -159,6 +162,108 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
                 while (c.moveToNext()) add(CatalogStop(c.getString(0), PROVIDER_ID, c.getString(1), c.getDouble(2), c.getDouble(3)))
             }
         }
+    }
+
+    fun searchRouteAndTripLocations(
+        query: String,
+        limit: Int,
+    ): List<TransitLocationResult> {
+        val q = query.trim()
+        if (q.length < 2 || limit <= 0) return emptyList()
+        val prefix = "$q%"
+        val lineLimit = (limit + 1) / 2
+        val tripLimit = limit - lineLimit
+
+        val lines = readableDatabase.rawQuery(
+            """
+            SELECT route_id, COALESCE(short_name, ''), COALESCE(long_name, '')
+            FROM routes
+            WHERE short_name LIKE ? COLLATE NOCASE
+               OR long_name LIKE ? COLLATE NOCASE
+            ORDER BY
+                CASE WHEN short_name LIKE ? COLLATE NOCASE THEN 0 ELSE 1 END,
+                short_name COLLATE NOCASE,
+                long_name COLLATE NOCASE,
+                route_id
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf(prefix, prefix, prefix, lineLimit.toString()),
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    val routeId = cursor.getString(0)
+                    val shortName = cursor.getString(1).trim()
+                    val longName = cursor.getString(2).trim()
+                    val completion = shortName.ifBlank { longName }.ifBlank { routeId }
+                    val label = if (
+                        shortName.isNotBlank() &&
+                        longName.isNotBlank() &&
+                        !shortName.equals(longName, ignoreCase = true)
+                    ) {
+                        "$shortName • $longName"
+                    } else {
+                        completion
+                    }
+                    add(
+                        TransitLocationResult(
+                            key = "line:$routeId",
+                            kind = TransitLocationKind.LINE,
+                            label = label,
+                            latitude = 0.0,
+                            longitude = 0.0,
+                            routeId = routeId,
+                            autocompleteText = completion,
+                        )
+                    )
+                }
+            }
+        }
+
+        if (tripLimit <= 0) return lines.take(limit)
+
+        val trips = readableDatabase.rawQuery(
+            """
+            SELECT t.trip_id, COALESCE(r.short_name, ''), COALESCE(t.headsign, '')
+            FROM trips t
+            JOIN routes r ON r.route_id = t.route_id
+            WHERE t.headsign LIKE ? COLLATE NOCASE
+               OR t.trip_id LIKE ? COLLATE NOCASE
+            ORDER BY
+                t.headsign COLLATE NOCASE,
+                r.short_name COLLATE NOCASE,
+                t.trip_id
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf(prefix, prefix, tripLimit.toString()),
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    val tripId = cursor.getString(0)
+                    val shortName = cursor.getString(1).trim()
+                    val headsign = cursor.getString(2).trim()
+                    val completion = headsign.ifBlank { shortName }.ifBlank { tripId }
+                    val label = when {
+                        shortName.isNotBlank() && headsign.isNotBlank() -> "$shortName → $headsign"
+                        headsign.isNotBlank() -> headsign
+                        shortName.isNotBlank() -> shortName
+                        else -> tripId
+                    }
+                    add(
+                        TransitLocationResult(
+                            key = "trip:$tripId",
+                            kind = TransitLocationKind.TRIP,
+                            label = label,
+                            latitude = 0.0,
+                            longitude = 0.0,
+                            tripId = tripId,
+                            autocompleteText = completion,
+                        )
+                    )
+                }
+            }
+        }
+
+        return (lines + trips).take(limit)
     }
 
     fun nearest(latitude: Double, longitude: Double, limit: Int): List<NearbyStop> {
@@ -217,6 +322,13 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_frequencies_trip ON frequencies(trip_id)")
         db.execSQL("CREATE TABLE IF NOT EXISTS attributions(attribution_id TEXT, agency_id TEXT, route_id TEXT, trip_id TEXT, organization_name TEXT, is_producer INTEGER, is_operator INTEGER, is_authority INTEGER, url TEXT, email TEXT, phone TEXT)")
         db.execSQL("CREATE TABLE IF NOT EXISTS feed_info(publisher_name TEXT, publisher_url TEXT, lang TEXT, start_date TEXT, end_date TEXT, version TEXT)")
+        createAutocompleteIndexes(db)
+    }
+
+    private fun createAutocompleteIndexes(db: SQLiteDatabase) {
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_routes_short_name_nocase ON routes(short_name COLLATE NOCASE)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_routes_long_name_nocase ON routes(long_name COLLATE NOCASE)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_trips_headsign_nocase ON trips(headsign COLLATE NOCASE)")
     }
 
     private fun clearTransitData(db: SQLiteDatabase) {
