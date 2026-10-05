@@ -2,8 +2,10 @@ package com.nazofobi.arrivalalarm
 
 import com.google.protobuf.InvalidProtocolBufferException
 import com.google.transit.realtime.GtfsRealtime
-import java.io.ByteArrayOutputStream
+import java.io.ByteArrayInputStream
+import java.io.FilterInputStream
 import java.io.IOException
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -152,6 +154,7 @@ class GermanyGtfsRealtimeClient(
     private val maxBytes: Int = GERMANY_REALTIME_DEFAULT_MAX_BYTES,
     private val clock: EpochClock = EpochClock { System.currentTimeMillis() / 1_000L },
     private val loader: ((String) -> ByteArray)? = null,
+    private val streamLoader: ((String) -> InputStream)? = null,
 ) {
     init {
         require(connectTimeoutMs > 0)
@@ -161,14 +164,21 @@ class GermanyGtfsRealtimeClient(
 
     fun fetch(): GermanyRealtimeFetchResult {
         return try {
-            val bytes = loader?.invoke(endpoint) ?: loadBounded(endpoint)
-            if (bytes.size > maxBytes) {
-                GermanyRealtimeFetchResult.Unavailable(
-                    GermanyRealtimeUnavailableReason.TOO_LARGE,
-                    "GTFS-RT payload exceeded $maxBytes bytes",
-                )
-            } else {
-                parse(bytes, clock.nowEpochSeconds())
+            val fetchedAtEpochSeconds = clock.nowEpochSeconds()
+            when {
+                streamLoader != null -> streamLoader.invoke(endpoint).use { input ->
+                    parse(BoundedInputStream(input, maxBytes), fetchedAtEpochSeconds)
+                }
+                loader != null -> {
+                    val bytes = loader.invoke(endpoint)
+                    if (bytes.size > maxBytes) {
+                        GermanyRealtimeFetchResult.Unavailable(
+                            GermanyRealtimeUnavailableReason.TOO_LARGE,
+                            "GTFS-RT payload exceeded $maxBytes bytes",
+                        )
+                    } else parse(bytes, fetchedAtEpochSeconds)
+                }
+                else -> loadAndParseBounded(endpoint, fetchedAtEpochSeconds)
             }
         } catch (failure: HttpStatusException) {
             GermanyRealtimeFetchResult.Unavailable(
@@ -196,9 +206,15 @@ class GermanyGtfsRealtimeClient(
     internal fun parse(
         bytes: ByteArray,
         fetchedAtEpochSeconds: Long,
+    ): GermanyRealtimeFetchResult =
+        ByteArrayInputStream(bytes).use { input -> parse(input, fetchedAtEpochSeconds) }
+
+    private fun parse(
+        input: InputStream,
+        fetchedAtEpochSeconds: Long,
     ): GermanyRealtimeFetchResult {
         val feed = try {
-            GtfsRealtime.FeedMessage.parseFrom(bytes).toBuilder()
+            GtfsRealtime.FeedMessage.parseFrom(input)
         } catch (failure: InvalidProtocolBufferException) {
             return GermanyRealtimeFetchResult.Unavailable(
                 GermanyRealtimeUnavailableReason.PARSE,
@@ -224,8 +240,7 @@ class GermanyGtfsRealtimeClient(
         }
 
         val tripUpdates = buildList {
-            for (index in feed.entityCount - 1 downTo 0) {
-                val entity = feed.getEntity(index)
+            for (entity in feed.entityList) {
                 if (!entity.hasTripUpdate()) continue
                 val update = entity.tripUpdate
                 val trip = update.trip
@@ -314,16 +329,11 @@ class GermanyGtfsRealtimeClient(
                         },
                     ),
                 )
-                feed.setEntity(
-                    index,
-                    entity.toBuilder().clearTripUpdate().build(),
-                )
             }
-        }.asReversed()
+        }
 
         val alerts = buildList {
-            for (index in feed.entityCount - 1 downTo 0) {
-                val entity = feed.getEntity(index)
+            for (entity in feed.entityList) {
                 if (!entity.hasAlert()) continue
                 val alert = entity.alert
                 val selectors = alert.informedEntityList.map { selector ->
@@ -380,13 +390,8 @@ class GermanyGtfsRealtimeClient(
                         },
                     ),
                 )
-                feed.setEntity(
-                    index,
-                    entity.toBuilder().clearAlert().build(),
-                )
             }
-        }.asReversed()
-        feed.clearEntity()
+        }
 
         return GermanyRealtimeFetchResult.Available(
             GermanyRealtimeSnapshot(
@@ -446,7 +451,10 @@ class GermanyGtfsRealtimeClient(
             ?: translations.firstOrNull()?.text?.takeIf { it.isNotBlank() }
     }
 
-    private fun loadBounded(url: String): ByteArray {
+    private fun loadAndParseBounded(
+        url: String,
+        fetchedAtEpochSeconds: Long,
+    ): GermanyRealtimeFetchResult {
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = connectTimeoutMs
             readTimeout = readTimeoutMs
@@ -461,24 +469,32 @@ class GermanyGtfsRealtimeClient(
             if (status !in 200..299) throw HttpStatusException(status)
             val contentLength = connection.contentLength
             if (contentLength > maxBytes) throw PayloadTooLargeException()
-
             return connection.inputStream.use { input ->
-                val output = ByteArrayOutputStream(
-                    contentLength.takeIf { it in 1..maxBytes } ?: 16 * 1024,
-                )
-                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                var total = 0
-                while (true) {
-                    val read = input.read(buffer)
-                    if (read < 0) break
-                    total += read
-                    if (total > maxBytes) throw PayloadTooLargeException()
-                    output.write(buffer, 0, read)
-                }
-                output.toByteArray()
+                parse(BoundedInputStream(input, maxBytes), fetchedAtEpochSeconds)
             }
         } finally {
             connection.disconnect()
+        }
+    }
+
+    private class BoundedInputStream(
+        input: InputStream,
+        private val maxBytes: Int,
+    ) : FilterInputStream(input) {
+        private var total = 0L
+        override fun read(): Int {
+            val value = super.read()
+            if (value >= 0) account(1)
+            return value
+        }
+        override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            val read = super.read(buffer, offset, length)
+            if (read > 0) account(read)
+            return read
+        }
+        private fun account(read: Int) {
+            total += read
+            if (total > maxBytes.toLong()) throw PayloadTooLargeException()
         }
     }
 
