@@ -1,8 +1,6 @@
 package com.nazofobi.arrivalalarm
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,15 +9,20 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.DirectionsTransit
+import androidx.compose.material.icons.rounded.LocationOn
+import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
@@ -32,34 +35,38 @@ fun FirstRunOnboarding(
     onContinue: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Card(
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .testTag("first-run-onboarding"),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+        Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .background(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.shapes.large),
-                contentAlignment = Alignment.Center,
+            Column(
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(
-                    text = "🚆",
-                    style = MaterialTheme.typography.headlineMedium,
-                )
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Surface(
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(76.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.DirectionsTransit,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.padding(18.dp),
+                    )
+                }
                 Text(
                     text = stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier.semantics { heading() },
                 )
                 Text(
@@ -68,67 +75,68 @@ fun FirstRunOnboarding(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
 
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             OnboardingFeature(
-                marker = "A",
+                icon = Icons.Rounded.LocationOn,
                 title = stringResource(R.string.onboarding_route_title),
                 body = stringResource(R.string.onboarding_route_body),
             )
             OnboardingFeature(
-                marker = "C",
+                icon = Icons.Rounded.Schedule,
                 title = stringResource(R.string.onboarding_live_title),
                 body = stringResource(R.string.onboarding_live_body),
             )
             OnboardingFeature(
-                marker = "!",
+                icon = Icons.Rounded.NotificationsActive,
                 title = stringResource(R.string.onboarding_alarm_title),
                 body = stringResource(R.string.onboarding_alarm_body),
             )
+        }
 
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                ),
+        Surface(
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.secondaryContainer,
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
             ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.onboarding_privacy_title),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = stringResource(R.string.onboarding_permission_note),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    )
-                    Text(
-                        text = stringResource(R.string.onboarding_background_note),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.testTag("onboarding-privacy-note"),
-                    )
-                }
+                Text(
+                    text = stringResource(R.string.onboarding_privacy_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = stringResource(R.string.onboarding_permission_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Text(
+                    text = stringResource(R.string.onboarding_background_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.testTag("onboarding-privacy-note"),
+                )
             }
+        }
 
-            Button(
-                onClick = onContinue,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .testTag("onboarding-complete"),
-            ) {
-                Text(stringResource(R.string.onboarding_start_action))
-            }
+        Button(
+            onClick = onContinue,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
+                .testTag("onboarding-complete"),
+        ) {
+            Text(stringResource(R.string.onboarding_start_action))
         }
     }
 }
 
 @Composable
 private fun OnboardingFeature(
-    marker: String,
+    icon: ImageVector,
     title: String,
     body: String,
 ) {
@@ -136,17 +144,16 @@ private fun OnboardingFeature(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-            contentAlignment = Alignment.Center,
+        Surface(
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.size(48.dp),
         ) {
-            Text(
-                text = marker,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(12.dp),
             )
         }
         Spacer(Modifier.width(12.dp))
