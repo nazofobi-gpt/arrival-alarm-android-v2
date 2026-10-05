@@ -148,17 +148,119 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
     }
 
     fun search(query: String, limit: Int): List<CatalogStop> {
-        val tokens = query.lowercase(Locale.GERMANY).split(Regex("\\s+"))
-            .map { it.replace(Regex("[^\\p{L}\\p{N}]"), "") }
+        val tokens = query.lowercase(Locale.GERMANY)
+            .split(Regex("[^\\p{L}\\p{N}]+"))
             .filter { it.isNotBlank() }
         if (tokens.isEmpty()) return emptyList()
-        val match = tokens.joinToString(" AND ") { "$it*" }
+        val match = tokens.joinToString(" ") { "$it*" }
         val sql = "SELECT s.id,s.name,s.lat,s.lon FROM stop_search f JOIN stops s ON s.id=f.stop_id WHERE stop_search MATCH ? LIMIT ?"
         return readableDatabase.rawQuery(sql, arrayOf(match, limit.toString())).use { c ->
             buildList {
                 while (c.moveToNext()) add(CatalogStop(c.getString(0), PROVIDER_ID, c.getString(1), c.getDouble(2), c.getDouble(3)))
             }
         }
+    }
+
+    fun searchRouteAndTripLocations(
+        query: String,
+        limit: Int,
+    ): List<TransitLocationResult> {
+        val q = query.trim()
+        if (q.length < 2 || limit <= 0) return emptyList()
+        val prefix = "$q%"
+        val lineLimit = (limit + 1) / 2
+        val tripLimit = limit - lineLimit
+
+        val lines = readableDatabase.rawQuery(
+            """
+            SELECT route_id, COALESCE(short_name, ''), COALESCE(long_name, '')
+            FROM routes
+            WHERE short_name LIKE ? COLLATE NOCASE
+               OR long_name LIKE ? COLLATE NOCASE
+            ORDER BY
+                CASE WHEN short_name LIKE ? COLLATE NOCASE THEN 0 ELSE 1 END,
+                short_name COLLATE NOCASE,
+                long_name COLLATE NOCASE,
+                route_id
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf(prefix, prefix, prefix, lineLimit.toString()),
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    val routeId = cursor.getString(0)
+                    val shortName = cursor.getString(1).trim()
+                    val longName = cursor.getString(2).trim()
+                    val completion = shortName.ifBlank { longName }.ifBlank { routeId }
+                    val label = if (
+                        shortName.isNotBlank() &&
+                        longName.isNotBlank() &&
+                        !shortName.equals(longName, ignoreCase = true)
+                    ) {
+                        "$shortName • $longName"
+                    } else {
+                        completion
+                    }
+                    add(
+                        TransitLocationResult(
+                            key = "line:$routeId",
+                            kind = TransitLocationKind.LINE,
+                            label = label,
+                            latitude = 0.0,
+                            longitude = 0.0,
+                            routeId = routeId,
+                            autocompleteText = completion,
+                        )
+                    )
+                }
+            }
+        }
+
+        if (tripLimit <= 0) return lines.take(limit)
+
+        val trips = readableDatabase.rawQuery(
+            """
+            SELECT t.trip_id, COALESCE(r.short_name, ''), COALESCE(t.headsign, '')
+            FROM trips t
+            JOIN routes r ON r.route_id = t.route_id
+            WHERE t.headsign LIKE ? COLLATE NOCASE
+               OR t.trip_id LIKE ? COLLATE NOCASE
+            ORDER BY
+                t.headsign COLLATE NOCASE,
+                r.short_name COLLATE NOCASE,
+                t.trip_id
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf(prefix, prefix, tripLimit.toString()),
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    val tripId = cursor.getString(0)
+                    val shortName = cursor.getString(1).trim()
+                    val headsign = cursor.getString(2).trim()
+                    val completion = headsign.ifBlank { shortName }.ifBlank { tripId }
+                    val label = when {
+                        shortName.isNotBlank() && headsign.isNotBlank() -> "$shortName → $headsign"
+                        headsign.isNotBlank() -> headsign
+                        shortName.isNotBlank() -> shortName
+                        else -> tripId
+                    }
+                    add(
+                        TransitLocationResult(
+                            key = "trip:$tripId",
+                            kind = TransitLocationKind.TRIP,
+                            label = label,
+                            latitude = 0.0,
+                            longitude = 0.0,
+                            tripId = tripId,
+                            autocompleteText = completion,
+                        )
+                    )
+                }
+            }
+        }
+
+        return (lines + trips).take(limit)
     }
 
     fun nearest(latitude: Double, longitude: Double, limit: Int): List<NearbyStop> {

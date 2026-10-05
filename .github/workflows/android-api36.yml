@@ -38,7 +38,7 @@ jobs:
         uses: gradle/actions/wrapper-validation@v4
 
       - name: Download Germany Full acceptance feed
-        if: github.head_ref == 'exec1/g175-real-feed-verify-20261004' || github.ref_name == 'exec1/g175-real-feed-verify-20261004'
+        if: github.head_ref == 'exec1/g175-real-feed-verify-20261004' || github.ref_name == 'exec1/g175-real-feed-verify-20261004' || github.head_ref == 'g168-search-fix' || github.ref_name == 'g168-search-fix'
         run: |
           curl -fL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 1200 https://download.gtfs.de/germany/free/latest.zip -o /tmp/germany-full.zip
           sha256sum /tmp/germany-full.zip | tee /tmp/germany-full.sha256
@@ -86,6 +86,7 @@ jobs:
           script: |
             set -eu
             test ! -s /tmp/g175-real-feed.zip || (adb shell rm -f /sdcard/Download/g175-real-feed-report.json && adb push /tmp/g175-real-feed.zip /data/local/tmp/g175-real-feed.zip && ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.G175RealFeedInstrumentedTest -Pandroid.testInstrumentationRunnerArguments.germanyFullPath=/data/local/tmp/g175-real-feed.zip && mkdir -p app/build/outputs/androidTest-results/g175-real-feed && adb pull /sdcard/Download/g175-real-feed-report.json app/build/outputs/androidTest-results/g175-real-feed/ && cp /tmp/germany-full.sha256 /tmp/g175-real-feed.sha256 /tmp/g175-reduction-report.json app/build/outputs/androidTest-results/g175-real-feed/ && test -s app/build/outputs/androidTest-results/g175-real-feed/g175-real-feed-report.json)
+            test ! -s /tmp/g175-real-feed.zip || ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.G168RealFeedSearchInstrumentedTest -Pandroid.testInstrumentationRunnerArguments.germanyFullPath=/data/local/tmp/g175-real-feed.zip
 
             adb shell wm size 412x915
             adb shell wm density 160

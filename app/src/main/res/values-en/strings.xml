@@ -51,8 +51,9 @@
     <string name="select_origin">Select origin</string>
     <string name="selecting_destination">Selecting destination</string>
     <string name="select_destination">Select destination</string>
-    <string name="search_stops_label">Search stop, address or place</string>
-    <string name="search_supporting_text">Enter a stop, address, or POI.</string>
+    <string name="search_stops_label">Search stop, address, line, or trip</string>
+    <string name="search_supporting_text">Enter a stop, address, POI, line, or trip.</string>
+    <string name="search_autocomplete_action">Complete</string>
     <string name="journey_points_title">Journey points</string>
     <string name="journey_points_empty">Choose an origin first.</string>
     <string name="search_recents_title">Recent searches</string>
@@ -162,6 +163,8 @@
     <string name="location_kind_stop">Stop</string>
     <string name="location_kind_address">Address</string>
     <string name="location_kind_poi">Place/POI</string>
+    <string name="location_kind_line">Line</string>
+    <string name="location_kind_trip">Trip</string>
 
     <string name="live_trip_title">Live trip</string>
     <string name="live_trip_route_format">%1$s • %2$s</string>
