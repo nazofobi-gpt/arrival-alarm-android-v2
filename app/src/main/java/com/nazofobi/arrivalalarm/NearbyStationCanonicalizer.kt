@@ -42,6 +42,16 @@ internal object NearbyStationCanonicalizer {
                 } else {
                     base.copy(parentStationId = null)
                 }
+                val childStops = members
+                    .map { it.stop }
+                    .filter { it.id != canonical.id }
+                    .distinctBy { it.id }
+                    .sortedWith(
+                        compareBy<CatalogStop>(
+                            { it.name.lowercase(Locale.GERMANY) },
+                            { it.id },
+                        ),
+                    )
                 NearbyStop(
                     stop = canonical,
                     distanceMeters = haversineMeters(
@@ -50,6 +60,7 @@ internal object NearbyStationCanonicalizer {
                     bearingDegrees = initialBearingDegrees(
                         latitude, longitude, canonical.latitude, canonical.longitude,
                     ),
+                    childStops = childStops,
                 )
             }
             .sortedWith(
