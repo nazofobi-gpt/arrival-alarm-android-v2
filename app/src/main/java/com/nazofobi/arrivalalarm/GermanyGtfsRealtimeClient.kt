@@ -2,6 +2,8 @@ package com.nazofobi.arrivalalarm
 
 import com.google.protobuf.CodedInputStream
 import com.google.protobuf.ExtensionRegistryLite
+import com.google.protobuf.CodedInputStream
+import com.google.protobuf.ExtensionRegistryLite
 import com.google.protobuf.InvalidProtocolBufferException
 import com.google.transit.realtime.GtfsRealtime
 import java.io.ByteArrayInputStream
@@ -217,53 +219,43 @@ class GermanyGtfsRealtimeClient(
         input: InputStream,
         fetchedAtEpochSeconds: Long,
     ): GermanyRealtimeFetchResult {
-        val coded = CodedInputStream.newInstance(input).apply {
+        val codedInput = CodedInputStream.newInstance(input).apply {
             setSizeLimit(maxBytes)
-            setRecursionLimit(GERMANY_REALTIME_PROTO_RECURSION_LIMIT)
+            setRecursionLimit(64)
         }
-        val extensionRegistry = ExtensionRegistryLite.getEmptyRegistry()
-        val headerTag =
-            (GtfsRealtime.FeedMessage.HEADER_FIELD_NUMBER shl 3) or
-                PROTOBUF_LENGTH_DELIMITED_WIRE_TYPE
-        val entityTag =
-            (GtfsRealtime.FeedMessage.ENTITY_FIELD_NUMBER shl 3) or
-                PROTOBUF_LENGTH_DELIMITED_WIRE_TYPE
-
+        val registry = ExtensionRegistryLite.getEmptyRegistry()
         var header: GtfsRealtime.FeedHeader? = null
         val tripUpdates = mutableListOf<GermanyRealtimeTripUpdate>()
         val alerts = mutableListOf<GermanyRealtimeAlert>()
 
         try {
-            while (true) {
-                when (val tag = coded.readTag()) {
+            while (!codedInput.isAtEnd) {
+                when (val tag = codedInput.readTag()) {
                     0 -> break
-                    headerTag -> {
-                        val parsedHeader = coded.readMessage(
-                            GtfsRealtime.FeedHeader.parser(),
-                            extensionRegistry,
-                        )
-                        header = parsedHeader
-                        val incrementality = parsedHeader.incrementalityName()
-                        if (incrementality != "FULL_DATASET") {
+                    10 -> {
+                        val parsedHeader =
+                            codedInput.readMessage(GtfsRealtime.FeedHeader.parser(), registry)
+                        if (!parsedHeader.isInitialized) {
                             return GermanyRealtimeFetchResult.Unavailable(
-                                GermanyRealtimeUnavailableReason.UNSUPPORTED_INCREMENTALITY,
-                                "GTFS-RT incrementality $incrementality is not supported as snapshot state",
+                                GermanyRealtimeUnavailableReason.PARSE,
+                                "GTFS-RT FeedHeader is missing required fields",
                             )
                         }
+                        header = parsedHeader
                     }
-                    entityTag -> {
-                        val entity = coded.readMessage(
-                            GtfsRealtime.FeedEntity.parser(),
-                            extensionRegistry,
-                        )
-                        if (entity.hasTripUpdate()) {
-                            tripUpdates += parseTripUpdate(entity)
+                    18 -> {
+                        val entity =
+                            codedInput.readMessage(GtfsRealtime.FeedEntity.parser(), registry)
+                        if (!entity.isInitialized) {
+                            return GermanyRealtimeFetchResult.Unavailable(
+                                GermanyRealtimeUnavailableReason.PARSE,
+                                "GTFS-RT FeedEntity is missing required fields",
+                            )
                         }
-                        if (entity.hasAlert()) {
-                            alerts += parseAlert(entity)
-                        }
+                        if (entity.hasTripUpdate()) tripUpdates += projectTripUpdate(entity)
+                        if (entity.hasAlert()) alerts += projectAlert(entity)
                     }
-                    else -> coded.skipField(tag)
+                    else -> if (!codedInput.skipField(tag)) break
                 }
             }
         } catch (failure: InvalidProtocolBufferException) {
@@ -273,11 +265,15 @@ class GermanyGtfsRealtimeClient(
             )
         }
 
-        val parsedHeader = header ?: return GermanyRealtimeFetchResult.Unavailable(
+        val resolvedHeader = header ?: return GermanyRealtimeFetchResult.Unavailable(
             GermanyRealtimeUnavailableReason.PARSE,
-            "GTFS-RT payload is missing required FeedHeader",
+            "GTFS-RT FeedHeader missing",
         )
-        val incrementality = parsedHeader.incrementalityName()
+        val incrementality = if (resolvedHeader.hasIncrementality()) {
+            resolvedHeader.incrementality.name
+        } else {
+            "FULL_DATASET"
+        }
         if (incrementality != "FULL_DATASET") {
             return GermanyRealtimeFetchResult.Unavailable(
                 GermanyRealtimeUnavailableReason.UNSUPPORTED_INCREMENTALITY,
@@ -289,25 +285,22 @@ class GermanyGtfsRealtimeClient(
             GermanyRealtimeSnapshot(
                 source = GermanyGtfsRealtimeProvenance.PROVIDER,
                 license = GermanyGtfsRealtimeProvenance.LICENSE,
-                feedTimestampEpochSeconds = parsedHeader.timestamp.takeIf {
-                    parsedHeader.hasTimestamp()
+                feedTimestampEpochSeconds = resolvedHeader.timestamp.takeIf {
+                    resolvedHeader.hasTimestamp()
                 },
                 fetchedAtEpochSeconds = fetchedAtEpochSeconds,
                 tripUpdates = tripUpdates,
                 serviceAlerts = alerts,
-                gtfsRealtimeVersion = parsedHeader.gtfsRealtimeVersion.takeIf { it.isNotBlank() },
+                gtfsRealtimeVersion = resolvedHeader.gtfsRealtimeVersion.takeIf { it.isNotBlank() },
                 incrementality = incrementality,
-                feedVersion = parsedHeader.feedVersion.takeIf {
-                    parsedHeader.hasFeedVersion() && it.isNotBlank()
+                feedVersion = resolvedHeader.feedVersion.takeIf {
+                    resolvedHeader.hasFeedVersion() && it.isNotBlank()
                 },
             ),
         )
     }
 
-    private fun GtfsRealtime.FeedHeader.incrementalityName(): String =
-        if (hasIncrementality()) incrementality.name else "FULL_DATASET"
-
-    private fun parseTripUpdate(
+    private fun projectTripUpdate(
         entity: GtfsRealtime.FeedEntity,
     ): GermanyRealtimeTripUpdate {
         val update = entity.tripUpdate
@@ -317,11 +310,7 @@ class GermanyGtfsRealtimeClient(
         val directionId = trip.directionId.takeIf { trip.hasDirectionId() }
         val startTime = trip.startTime.takeIf { it.isNotBlank() }
         val startDate = trip.startDate.takeIf { it.isNotBlank() }
-        val relationship = if (trip.hasScheduleRelationship()) {
-            trip.scheduleRelationship.name
-        } else {
-            null
-        }
+        val relationship = if (trip.hasScheduleRelationship()) trip.scheduleRelationship.name else null
         val selectorValidity = when {
             tripId != null -> GermanyRealtimeTripSelectorValidity.VALID_ID_BASED
             routeId != null &&
@@ -332,7 +321,6 @@ class GermanyGtfsRealtimeClient(
                 GermanyRealtimeTripSelectorValidity.VALID_IDLESS_SCHEDULED
             else -> GermanyRealtimeTripSelectorValidity.UNMATCHABLE_INCOMPLETE
         }
-
         return GermanyRealtimeTripUpdate(
             entityId = entity.id,
             tripId = tripId,
@@ -343,14 +331,9 @@ class GermanyGtfsRealtimeClient(
             stops = update.stopTimeUpdateList.map { stop ->
                 val stopSequence = stop.stopSequence.takeIf { stop.hasStopSequence() }
                 val stopId = stop.stopId.takeIf { it.isNotBlank() }
-                val stopRelationship = if (stop.hasScheduleRelationship()) {
-                    stop.scheduleRelationship.name
-                } else {
-                    null
-                }
-                val properties = stop.stopTimeProperties.takeIf {
-                    stop.hasStopTimeProperties()
-                }
+                val stopRelationship =
+                    if (stop.hasScheduleRelationship()) stop.scheduleRelationship.name else null
+                val properties = stop.stopTimeProperties.takeIf { stop.hasStopTimeProperties() }
                 val assignedStopId = properties?.assignedStopId?.takeIf { it.isNotBlank() }
                 val validity = when {
                     assignedStopId != null && stopSequence == null ->
@@ -377,12 +360,8 @@ class GermanyGtfsRealtimeClient(
                     },
                     scheduleRelationship = stopRelationship,
                     assignedStopId = assignedStopId,
-                    pickupType = properties?.pickupType?.name?.takeIf {
-                        properties.hasPickupType()
-                    },
-                    dropOffType = properties?.dropOffType?.name?.takeIf {
-                        properties.hasDropOffType()
-                    },
+                    pickupType = properties?.pickupType?.name?.takeIf { properties.hasPickupType() },
+                    dropOffType = properties?.dropOffType?.name?.takeIf { properties.hasDropOffType() },
                     stopHeadsign = properties?.stopHeadsign?.takeIf {
                         properties.hasStopHeadsign() && it.isNotBlank()
                     },
@@ -392,13 +371,11 @@ class GermanyGtfsRealtimeClient(
             directionId = directionId,
             startTime = startTime,
             selectorValidity = selectorValidity,
-            updateTimestampEpochSeconds = update.timestamp.takeIf {
-                update.hasTimestamp()
-            },
+            updateTimestampEpochSeconds = update.timestamp.takeIf { update.hasTimestamp() },
         )
     }
 
-    private fun parseAlert(
+    private fun projectAlert(
         entity: GtfsRealtime.FeedEntity,
     ): GermanyRealtimeAlert {
         val alert = entity.alert
@@ -412,12 +389,8 @@ class GermanyGtfsRealtimeClient(
             val validity = when {
                 trip?.validity == GermanyRealtimeTripSelectorValidity.UNMATCHABLE_INCOMPLETE ->
                     GermanyRealtimeAlertSelectorValidity.UNMATCHABLE_TRIP_SELECTOR
-                agencyId == null &&
-                    routeId == null &&
-                    routeType == null &&
-                    directionId == null &&
-                    stopId == null &&
-                    trip == null ->
+                agencyId == null && routeId == null && routeType == null &&
+                    directionId == null && stopId == null && trip == null ->
                     GermanyRealtimeAlertSelectorValidity.UNMATCHABLE_EMPTY
                 else -> GermanyRealtimeAlertSelectorValidity.VALID
             }
@@ -431,17 +404,12 @@ class GermanyGtfsRealtimeClient(
                 validity = validity,
             )
         }
-
         return GermanyRealtimeAlert(
             entityId = entity.id,
             cause = if (alert.hasCause()) alert.cause.name else null,
             effect = if (alert.hasEffect()) alert.effect.name else null,
             header = if (alert.hasHeaderText()) preferredText(alert.headerText) else null,
-            description = if (alert.hasDescriptionText()) {
-                preferredText(alert.descriptionText)
-            } else {
-                null
-            },
+            description = if (alert.hasDescriptionText()) preferredText(alert.descriptionText) else null,
             selectors = selectors,
             activePeriods = alert.activePeriodList.map { period ->
                 GermanyRealtimeActivePeriod(
@@ -449,11 +417,7 @@ class GermanyGtfsRealtimeClient(
                     endEpochSeconds = period.end.takeIf { period.hasEnd() },
                 )
             },
-            severityLevel = if (alert.hasSeverityLevel()) {
-                alert.severityLevel.name
-            } else {
-                null
-            },
+            severityLevel = if (alert.hasSeverityLevel()) alert.severityLevel.name else null,
         )
     }
 
