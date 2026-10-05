@@ -43,8 +43,17 @@ data class TransitLocationResult(
     val stop: CatalogStop? = null,
     val routeId: String? = null,
     val tripId: String? = null,
+    val autocompleteText: String? = null,
 ) {
-    val point: MapPoint get() = MapPoint(latitude, longitude, label)
+    val point: MapPoint
+        get() {
+            require(
+                kind == TransitLocationKind.STOP ||
+                    kind == TransitLocationKind.ADDRESS ||
+                    kind == TransitLocationKind.POI
+            ) { "Only location results have selectable coordinates" }
+            return MapPoint(latitude, longitude, label)
+        }
 }
 
 data class StationDeparturesSnapshot(
