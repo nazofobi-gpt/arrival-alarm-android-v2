@@ -32,7 +32,7 @@ class G176LiveRealtimeInstrumentedTest {
         val fetchedAtEpochSeconds = System.currentTimeMillis() / 1_000L
         val result = GermanyGtfsRealtimeClient(
             clock = EpochClock { fetchedAtEpochSeconds },
-            loader = { payload.readBytes() },
+            streamLoader = { payload.inputStream() },
         ).fetch()
 
         assertTrue("current Germany GTFS-RT did not parse", result is GermanyRealtimeFetchResult.Available)
