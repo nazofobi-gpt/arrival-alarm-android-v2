@@ -41,19 +41,23 @@ fun ArrivalBottomNavigation(
     data class Item(
         val screen: ArrivalAppScreen,
         val label: String,
-        val glyph: String,
+        val icon: androidx.compose.ui.graphics.vector.ImageVector,
         val tag: String,
     )
 
     val items = listOf(
-        Item(ArrivalAppScreen.HOME, stringResource(R.string.nav_home), "⌂", "nav-home"),
-        Item(ArrivalAppScreen.SEARCH, stringResource(R.string.nav_search), "⌕", "nav-search"),
-        Item(ArrivalAppScreen.JOURNEY, stringResource(R.string.nav_journey), "↔", "nav-journey"),
-        Item(ArrivalAppScreen.DEPARTURES, stringResource(R.string.nav_departures), "◷", "nav-departures"),
-        Item(ArrivalAppScreen.SETTINGS, stringResource(R.string.nav_settings), "⚙", "nav-settings"),
+        Item(ArrivalAppScreen.HOME, stringResource(R.string.nav_home), androidx.compose.material.icons.Icons.Rounded.Home, "nav-home"),
+        Item(ArrivalAppScreen.SEARCH, stringResource(R.string.nav_search), androidx.compose.material.icons.Icons.Rounded.Search, "nav-search"),
+        Item(ArrivalAppScreen.JOURNEY, stringResource(R.string.nav_journey), androidx.compose.material.icons.Icons.Rounded.AddCircle, "nav-journey"),
+        Item(ArrivalAppScreen.DEPARTURES, stringResource(R.string.nav_departures), androidx.compose.material.icons.Icons.Rounded.Schedule, "nav-departures"),
+        Item(ArrivalAppScreen.SETTINGS, stringResource(R.string.nav_settings), androidx.compose.material.icons.Icons.Rounded.Settings, "nav-settings"),
     )
 
-    NavigationBar(modifier = Modifier.testTag("bottom-navigation")) {
+    NavigationBar(
+        modifier = Modifier.testTag("bottom-navigation"),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+    ) {
         items.forEach { item ->
             val selected = if (item.screen == ArrivalAppScreen.JOURNEY) {
                 current == ArrivalAppScreen.ROUTES ||
@@ -65,7 +69,12 @@ fun ArrivalBottomNavigation(
             NavigationBarItem(
                 selected = selected,
                 onClick = { onSelect(item.screen) },
-                icon = { Text(item.glyph) },
+                icon = {
+                    androidx.compose.material3.Icon(
+                        imageVector = item.icon,
+                        contentDescription = null,
+                    )
+                },
                 label = { Text(item.label, maxLines = 1) },
                 modifier = Modifier.testTag(item.tag),
             )
