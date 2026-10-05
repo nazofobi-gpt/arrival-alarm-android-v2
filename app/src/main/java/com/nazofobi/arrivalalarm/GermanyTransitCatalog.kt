@@ -17,6 +17,7 @@ data class NearbyStop(
     val stop: CatalogStop,
     val distanceMeters: Int,
     val bearingDegrees: Int? = null,
+    val childStops: List<CatalogStop> = emptyList(),
 ) {
     val directionArrow: String
         get() = bearingDegrees?.let { bearing ->
@@ -45,24 +46,28 @@ class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
     fun tripsForRoute(routeId:String)=snapshot.trips.filter{it.routeId==routeId}
     fun routesServing(originStopId:String,destinationStopId:String):List<CatalogRoute> = snapshot.routes.filter { route -> val a=route.stopIds.indexOf(originStopId); val b=route.stopIds.indexOf(destinationStopId); a>=0 && b>a }
     fun nearestStops(latitude:Double,longitude:Double,limit:Int=5):List<NearbyStop> =
-        snapshot.stops
-            .groupBy { stationKey(it) }
-            .values
-            .map { members ->
-                val representative = members.minWith(
-                    compareBy<CatalogStop>(
-                        { haversineMeters(latitude, longitude, it.latitude, it.longitude) },
-                        { it.id },
+        NearbyStationCanonicalizer.canonicalize(
+            latitude = latitude,
+            longitude = longitude,
+            candidates = snapshot.stops.map { stop ->
+                NearbyStop(
+                    stop = stop,
+                    distanceMeters = haversineMeters(
+                        latitude,
+                        longitude,
+                        stop.latitude,
+                        stop.longitude,
+                    ).roundToInt(),
+                    bearingDegrees = initialBearingDegrees(
+                        latitude,
+                        longitude,
+                        stop.latitude,
+                        stop.longitude,
                     ),
                 )
-                NearbyStop(
-                    stop = representative,
-                    distanceMeters = haversineMeters(latitude, longitude, representative.latitude, representative.longitude).roundToInt(),
-                    bearingDegrees = initialBearingDegrees(latitude, longitude, representative.latitude, representative.longitude),
-                )
-            }
-            .sortedWith(compareBy<NearbyStop>({ it.distanceMeters }, { it.stop.name.lowercase() }, { it.stop.id }))
-            .take(limit)
+            },
+            limit = limit,
+        )
     private fun stationKey(stop: CatalogStop): String {
         stop.parentStationId?.trim()?.takeIf { it.isNotEmpty() }?.let { return "parent:$it" }
         val normalizedName = stop.name
