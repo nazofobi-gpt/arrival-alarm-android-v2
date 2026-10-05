@@ -1,12 +1,14 @@
 # Varış V2 — Master Product Completion & Release Plan
 
 **Plan ID:** H003-MASTER-COMPLETION-PLAN-001  
-**Version:** 1.0  
+**Version:** 1.1  
 **Date:** 2026-10-05  
 **Product:** Varış V2 — Almanya odaklı varış alarmı Android uygulaması  
 **Repository:** `nazofobi-gpt/arrival-alarm-android-v2`  
 **Canonical product target:** H-003  
 **Purpose:** This document is the detailed execution plan to be followed until the product reaches product-complete, field-accepted and Play-release-ready state.
+
+**v1.1 audit note:** v1.0 was broad but not fully explicit. v1.1 closes the audit gaps identified against the canonical H-003 product principle, G-235..G-254 requirement coverage nodes, G-136 field-acceptance criteria and the persistent mobile-product scope. The additions below are mandatory and supersede any weaker/implicit wording in v1.0.
 
 ---
 
@@ -76,6 +78,7 @@ P2 items may be deferred from first release, but each must have a recorded dispo
 ### Core v1 product promise
 The minimum releasable product must provide:
 
+- Transit-independent general destination proximity alarm for taxi, train, bus or any other trip, without requiring a transit provider.
 - Germany-wide stop/station/place discovery.
 - Current-location start and selectable destination.
 - Real static transit routing with alternatives/transfers/walking context.
@@ -86,6 +89,7 @@ The minimum releasable product must provide:
 - Clear offline/provider degradation.
 - Production-grade list-first UI with map as supporting surface.
 - TR/DE/EN and accessibility-critical support.
+- User-approved inference only: uncertain inferred journey/boarding/target state must never arm or change the alarm without required confirmation.
 - Privacy-safe diagnostics and Play compliance.
 
 ---
@@ -1222,6 +1226,539 @@ The product is not finished until every applicable box is checked.
 - [ ] G-138 PASS.
 
 ---
+
+
+# Appendix A — v1.1 completeness audit corrections (MANDATORY)
+
+This appendix exists because the v1.0 plan was comprehensive but still left several canonical requirements implicit. The application must not be declared complete while any item below remains implicit, unowned or unverified.
+
+## A1. Product foundation: dual-mode alarm contract (G-235 / PF-002, PF-004, PF-005, PF-006)
+
+The application has **two distinct but interoperable product modes**:
+
+### A1.1 General destination alarm mode
+This mode is independent of public-transit APIs and must work for taxi, train, bus, car passenger or other travel situations.
+
+Required flow:
+1. User selects a destination by address, POI, stop/station, map pin, favorite or current search result.
+2. User chooses alarm lead strategy supported by the general mode (distance/time/adaptive as implemented).
+3. App displays the exact destination, trigger basis and readiness state before arming.
+4. App tracks location only for the user-started armed journey.
+5. Provider/transit outage cannot disable the core GPS destination alarm.
+6. Poor GPS/tunnel behavior uses explicit confidence/degraded semantics rather than inventing position.
+7. Alarm remains one-shot and recoverable across background/process recreation.
+
+### A1.2 Transit journey alarm mode
+Transit mode adds route, line, platform, stop progress, transfer, realtime and scheduled context, but the arrival-alarm trigger must remain safe when those enrichments disappear.
+
+### A1.3 One canonical state authority
+A single normalized journey/alarm state contract feeds:
+- Home/Route/Journey/Live screens,
+- notification and lock-screen surfaces,
+- TTS/voice output,
+- alarm trigger logic,
+- diagnostics,
+- external ChatGPT connector reads,
+- approved typed connector writes.
+
+A UI screen, provider adapter or connector cannot directly invent or mutate canonical state without validation.
+
+### A1.4 Inference confirmation rule
+Any inferred boarding, selected trip, target stop or route state that materially affects arming must have an explicit confidence/provenance field. Where the field-acceptance contract requires confirmation, the app **must not arm from inference without user confirmation**.
+
+### A1.5 Critical-action recovery
+Every critical action must have a defined cancel/back/retry/recovery path:
+- download/import,
+- search,
+- route calculation,
+- route selection,
+- journey start,
+- boarding/route switch,
+- alarm arm/cancel,
+- connector write,
+- data update,
+- permission denial.
+
+**Exit gate:** PF-002/PF-004/PF-005/PF-006 are individually evidenced, not merely inferred from architecture.
+
+---
+
+## A2. Onboarding and permission lifecycle (G-236)
+
+This is a dedicated workstream and must not be hidden inside visual polish.
+
+### A2.1 Permission sequencing
+- Do not request all permissions on launch.
+- Location permission is requested in context when the user uses current location, nearby or alarm tracking.
+- Explain why precise location is required for reliable proximity alarms; handle approximate-only grant explicitly.
+- Notification permission is requested before an active journey/alarm requires notifications, not gratuitously at first launch.
+- Foreground-service behavior starts only from a user-initiated active journey/alarm.
+- Bluetooth permission is requested only when Bluetooth-aware audio behavior is used on platform versions that require it.
+- Permission denial must preserve usable non-dependent features and show a recovery action.
+- Permanent denial routes to system app settings with clear explanation.
+
+### A2.2 First-journey quick setup
+Before the first armed journey, provide a compact setup for:
+- TTS language/voice,
+- audio route preference,
+- Bluetooth/headphones behavior,
+- haptic/visual fallback,
+- accessibility quick settings,
+- transit-data download/offline behavior.
+
+### A2.3 Onboarding replay and skip
+- Onboarding is replayable from Settings.
+- It never blocks normal app use after completion.
+- Replay does not reset journey/data state without explicit confirmation.
+
+### A2.4 Permission regression matrix
+Test permission flows on representative Android behavior boundaries: API 23/26/29/31/33/36 or a documented supported-minSdk alternative.
+
+**Exit gate:** ONB-002..ONB-008 have individual PASS or user-approved scope disposition.
+
+---
+
+## A3. Search and discovery corrections
+
+In addition to Workstream 2:
+- Voice search (SRCH-010) receives an explicit `IN_V1` or `OUT_OF_SCOPE_V1` decision; if implemented it uses Android/system voice intent rather than embedding an AI assistant.
+- Search aliases include common abbreviations, diacritics and station naming variants.
+- Search result provenance distinguishes local GTFS, address/POI provider and realtime enrichment.
+- Local GTFS results must render even if a secondary network provider is unavailable.
+- Search cancellation must release work and leave the previous stable state usable.
+
+---
+
+## A4. Map corrections
+
+Explicitly account for MAP-002/003/004/005/007/008:
+- route geometry and walking legs use distinct hierarchy,
+- station entrances/exits/pathways are capability-gated,
+- live vehicle marker appears only from real VehiclePosition/authoritative source,
+- high-contrast map compatibility is tested,
+- walking turn-by-turn text + map steps receive an explicit v1 scope decision,
+- offline map is a separate cost/provider decision and is never silently assumed.
+
+Map tile/provider attribution, terms, rate limits and commercial-use conditions are part of release evidence.
+
+---
+
+## A5. Trip-planning corrections
+
+The planner workstream additionally requires explicit decisions/evidence for:
+- Deutschland-Ticket/local-transit preference,
+- bike/dog/stroller/luggage profile,
+- transfer-buffer preference,
+- wheelchair/step-free capability truthfulness,
+- route reliability score only if backed by measurable evidence,
+- fare/price only from authoritative provider data,
+- weather-aware less-outdoor-walking only if a provider and privacy/cost decision exists.
+
+No ranking label such as “reliable”, “accessible” or “cheapest” may appear without source-backed semantics.
+
+---
+
+## A6. Active-journey corrections
+
+The state machine workstream additionally includes:
+- leave-now reminder,
+- “last safe departure” / late-to-stop warning,
+- walking-to-stop guidance,
+- boarding cue with line/direction/platform,
+- missed-stop recovery,
+- missed-connection recovery,
+- intentional mid-journey departure/route switch,
+- journey summary sharing/link/QR only with explicit privacy rules,
+- live-location sharing only with separate explicit consent and separate retention rules.
+
+**Exit gate:** JNY-001..JNY-012 each has a disposition and evidence.
+
+---
+
+## A7. Arrival-alarm corrections
+
+In addition to Workstream 6:
+- volume-safe TTS behavior is defined,
+- snooze behavior is either implemented or explicitly excluded,
+- earlier-alert adjustment is either implemented or explicitly excluded,
+- test-alarm action exists if kept in v1 and is clearly non-production tracking,
+- exact-alarm API is used only if technically necessary and Play-policy compliant,
+- notification-channel-disabled state is part of readiness preflight,
+- missing TTS engine / missing selected language voice is a tested failure state,
+- headphones-only preference and Bluetooth reconnect are tested separately.
+
+**Exit gate:** ALM-001/003/005/006/007/008/009/011/013/014 are individually closed.
+
+---
+
+## A8. GTFS schema, realtime and data provenance corrections
+
+The data layer must explicitly retain or deliberately reject with rationale:
+- stops,
+- routes,
+- trips,
+- stop_times,
+- calendar,
+- calendar_dates/exceptions,
+- transfers,
+- shapes,
+- parent_station/platform hierarchy,
+- wheelchair/accessibility metadata,
+- pathways/entrances where present,
+- fare metadata where legally/source-wise usable.
+
+Realtime:
+- TripUpdates,
+- VehiclePositions,
+- ServiceAlerts,
+- freshness timestamp/age,
+- delay,
+- cancellation,
+- platform change,
+- source/provider,
+- match confidence/selector provenance.
+
+If vehicle position is interpolated rather than observed, UI/diagnostics must say so; an interpolated marker may never masquerade as an observed vehicle.
+
+Feed updates additionally define Wi-Fi/mobile-data behavior, resumability/safe restart, storage budget and update cancellation.
+
+---
+
+## A9. Personalization corrections
+
+Add explicit scope decisions for:
+- recurring commute/pendler reminders,
+- optional account/sync as a future capability that cannot become a hidden core dependency,
+- calendar-to-trip suggestions only through explicit connector/OS consent,
+- history retention duration,
+- history disable/clear,
+- export/delete behavior if sync is ever introduced.
+
+---
+
+## A10. Accessibility/design-system corrections
+
+Add explicit acceptance for:
+- reduced motion,
+- no essential information conveyed only by animation,
+- color-blind-safe line/status encoding,
+- transit line colors constrained by contrast and source branding,
+- predictive back where supported,
+- motion/transition system that never blocks navigation,
+- large-screen/foldable adaptive layout,
+- responsive bottom sheets/dialog max width,
+- documented density tiers,
+- 8pt spacing system,
+- screen-reader announcements for dynamic journey changes.
+
+---
+
+## A11. Time, timezone and service-day correctness
+
+Routing, realtime and alarm tests must include:
+- Europe/Berlin timezone,
+- DST spring-forward,
+- DST fall-back/repeated hour,
+- service after midnight,
+- device clock/timezone change during inactive app,
+- stale timestamp after long sleep,
+- future route selected across a DST boundary when practical.
+
+No route/ETA/alarm calculation may silently mix UTC, device timezone and provider-local time.
+
+---
+
+## A12. Android/device compatibility matrix expansion
+
+PLAN-NEW-001 is strengthened as follows.
+
+If `minSdk=23` remains:
+- API 23: install/launch/basic location/TTS,
+- API 26: notification channel + background execution changes,
+- API 29: location/privacy behavior,
+- API 31: Bluetooth/runtime restrictions and PendingIntent mutability-sensitive behavior,
+- API 33: notification runtime permission,
+- API 36: current target behavior and FGS policy.
+
+Physical-device matrix should include:
+- at least one current Android device,
+- at least one non-Pixel/OEM device with aggressive background/battery management when available,
+- low-storage condition,
+- offline condition,
+- compact screen,
+- large/wide window.
+
+A support promise that is not tested must be removed by raising minSdk or explicitly narrowing the compatibility claim before release.
+
+---
+
+## A13. Android application security hardening
+
+Release security is expanded beyond generic “HTTPS + no secrets”. Verify:
+- exported components minimized and reviewed,
+- OAuth/deep-link callback validation,
+- intent spoofing protections where applicable,
+- PendingIntent mutability flags correct,
+- sensitive connector credentials stored using platform-secure storage/Keystore-backed approach where applicable,
+- `allowBackup`/backup policy matches privacy design,
+- no cleartext traffic,
+- TLS certificate failures fail closed,
+- no token/location data in logcat or diagnostics,
+- dependency/SBOM/vulnerability and secret scans,
+- release build contains no debug endpoints or test credentials,
+- threat model for location, connector and command-write paths.
+
+---
+
+## A14. Provider/data license and legal provenance
+
+Release evidence must include for every external source/provider:
+- provider name,
+- endpoint/source,
+- license/terms URL or retained evidence,
+- permitted use relevant to the app,
+- attribution requirement,
+- update/fetch restrictions,
+- retention/caching limits if any,
+- rate limits,
+- commercial-use restriction if any,
+- source/version/fetched-at in diagnostics where relevant.
+
+A provider that cannot legally/operationally support the intended product must be capability-disabled rather than silently used.
+
+---
+
+## A15. Play Console/store checklist expansion
+
+G-138 must explicitly verify the exact accepted build against:
+- final application ID/package ownership,
+- target SDK/current Play requirement,
+- versionCode/versionName,
+- Play App Signing/upload-key custody,
+- release AAB,
+- R8/ProGuard/minification decision and mapping retention when used,
+- adaptive launcher icon,
+- splash/launch branding,
+- store icon,
+- feature graphic if required,
+- phone screenshots from accepted UI,
+- localized store text where shipped,
+- app category,
+- target audience declaration,
+- content rating/IARC questionnaire,
+- ads declaration,
+- app-access declaration,
+- Data Safety,
+- privacy-policy URL,
+- support email/URL,
+- foreground-service/location declarations,
+- testing-track strategy,
+- staged rollout,
+- rollback/stop rollout criteria.
+
+Store screenshots/claims must describe the accepted build, not future or provider-dependent features.
+
+---
+
+## A16. Install, upgrade and migration acceptance
+
+Before release:
+- clean install of release-signed artifact,
+- upgrade from latest distributed test build where signature lineage permits,
+- upgrade from the last compatible production/internal release if one exists,
+- DB/schema migration,
+- transit-data migration/reindex,
+- preferences/favorites/history migration,
+- connector session handling after upgrade,
+- active-journey behavior across app update must be explicitly supported or explicitly blocked with safe UX,
+- failed migration must not silently destroy user data,
+- reinstall/signature-mismatch troubleshooting documented for test builds.
+
+Downgrade support is not assumed unless explicitly designed.
+
+---
+
+## A17. Support, incident and status operations
+
+PLAN-NEW-004/005 additionally require:
+- user-facing support path,
+- issue intake template containing app/source version and redacted diagnostics,
+- severity and ownership rules,
+- provider outage status procedure,
+- GTFS source outage/update-failure procedure,
+- connector outage procedure,
+- security incident procedure,
+- rollback/hotfix decision tree,
+- Play rollout halt procedure,
+- post-incident review template,
+- known-issues/release-notes process.
+
+---
+
+## A18. Privacy/GDPR planning for Germany/EU
+
+Because the product uses precise location and optional external connector state, release planning must include an EU/Germany privacy review:
+- data inventory and data-flow diagram,
+- local-only vs transmitted fields,
+- purpose for each transmitted field,
+- minimum retention,
+- processor/subprocessor inventory for connector/hosting providers,
+- deletion/revoke behavior,
+- privacy-policy consistency,
+- consent/permission UX where legally or product-wise required,
+- no unnecessary analytics/advertising identifiers,
+- user diagnostics export is redacted by default.
+
+This is a product/compliance checklist, not a substitute for professional legal advice where legal interpretation is required.
+
+---
+
+## A19. Monetization and traction experiments (persistent H-003 scope)
+
+The canonical mobile-product scope includes monetization experiments. This must be planned separately from first-release product correctness.
+
+### A19.1 Default release posture
+- Core release may launch free.
+- Do not add ads, subscription or paywall merely to satisfy “monetization”.
+- No billing dependency may block the core arrival alarm unless the user explicitly changes product strategy.
+
+### A19.2 Evidence to collect after a stable release/pilot
+Privacy-minimal signals:
+- successful journey starts/completions,
+- alarm success/failure feedback,
+- repeat usage/retention at an aggregate or consented level,
+- feature usage relevant to premium hypotheses,
+- provider/hosting operating cost,
+- support burden,
+- explicit user feedback.
+
+### A19.3 Premium hypotheses
+Only after evidence, compare options such as:
+- one-time unlock,
+- subscription,
+- advanced saved/commute features,
+- enhanced realtime/provider capability,
+- advanced TTS/audio/personalization.
+
+If any digital paid feature is sold in-app, Play Billing/current policy is reverified before implementation.
+
+### A19.4 Analytics rule
+Do not introduce invasive third-party analytics solely for monetization. Any telemetry must have a stated purpose, minimization, disclosure and deletion/retention policy.
+
+**New planning task required:** `MONETIZATION / TRACTION EXPERIMENT PLAN` after stable release or controlled pilot; it is not a blocker for G-136 unless the user explicitly makes monetization part of v1 acceptance.
+
+---
+
+## A20. Requirement traceability register — mandatory before G-254 terminal
+
+The plan must not rely only on narrative prose. A machine/auditor-readable requirement register must exist with columns:
+
+`Requirement ID | Priority | Initial State | v1 Disposition | Canonical Task | Code/Artifact | Automated Evidence | Provider/Feed Evidence | Physical Evidence | Final State | Notes`
+
+The 158 initially non-PASS requirements are mapped as follows:
+
+| Coverage node | Requirement IDs |
+|---|---|
+| G-235 Product foundation | PF-002, PF-004, PF-005, PF-006 |
+| G-236 Onboarding & permissions | ONB-002..ONB-008 |
+| G-237 Search & discovery | SRCH-001..SRCH-010 |
+| G-238 Map | MAP-002, MAP-003, MAP-004, MAP-005, MAP-007, MAP-008 |
+| G-239 Trip planning | PLAN-001..PLAN-012 |
+| G-240 Transit detail IA | DISC-001..DISC-008 |
+| G-241 Active journey | JNY-001..JNY-012 |
+| G-242 Arrival alarm | ALM-001, ALM-003, ALM-005, ALM-006, ALM-007, ALM-008, ALM-009, ALM-011, ALM-013, ALM-014 |
+| G-243 Data & realtime | DATA-001..DATA-005; RT-001..RT-007 |
+| G-244 Offline/degraded | OFF-001, OFF-004, OFF-005, OFF-006 |
+| G-245 Personalization | PERS-001..PERS-006 |
+| G-246 Accessibility/adaptive | A11Y-001..A11Y-010 |
+| G-247 Design system | DES-001, DES-002, DES-003, DES-004, DES-006, DES-007, DES-008, DES-009, DES-010, DES-011, DES-012 |
+| G-248 System surfaces | SYS-001..SYS-006 |
+| G-249 Germany-specific | GER-001..GER-007 |
+| G-250 External connector | CON-002, CON-004, CON-005 |
+| G-251 Content/localization | LOC-001..LOC-005 |
+| G-252 Performance/privacy/observability | PERF-001..PERF-006; SEC-001..SEC-003; OBS-001..OBS-003 |
+| G-253 QA/release | QA-002..QA-010; REL-001..REL-004 |
+
+These rows total **158** initially non-PASS requirements. The exact **17 initially-PASS requirements** from the canonical Gap Analysis are:
+
+`PF-001, PF-003, ONB-001, MAP-001, MAP-006, ALM-002, ALM-004, ALM-010, ALM-012, OFF-002, OFF-003, DES-005, CON-001, CON-003, CON-006, CON-007, QA-001`.
+
+Together: **158 + 17 = 175 exact requirement IDs**. The 17 initial PASS rows are not permanently trusted: G-254 must re-audit them against the final product lineage because later implementation can regress a previously passing requirement.
+
+**New planning task required:** produce and retain `H003_175_REQUIREMENT_TRACEABILITY_MATRIX` with all 175 exact IDs before G-254 terminal acceptance.
+
+---
+
+## A21. Expanded final physical scenarios
+
+The G-136/real-device suite in Section 25 is expanded with these mandatory scenarios:
+
+31. General destination alarm without transit provider.
+32. Destination selected by address/POI/map pin.
+33. Inference requiring confirmation — verify alarm cannot arm without confirmation.
+34. Approximate-only location permission and upgrade to precise.
+35. Notification permission denied; readiness explains recovery.
+36. Notification channel manually disabled.
+37. TTS engine/language unavailable.
+38. Bluetooth connected → disconnect → reconnect.
+39. Device battery saver/Doze.
+40. App process killed during armed journey and recovered.
+41. Low storage during data download/import.
+42. Interrupted data download/update; old-good data retained where applicable.
+43. Corrupt feed/update rollback.
+44. DST/service-after-midnight route/alarm case.
+45. Search/route provider 5xx/rate-limit/timeout differentiated from no-result.
+46. Release build upgrade/migration smoke.
+47. Redacted diagnostics export contains no token or precise-history leak by default.
+48. OAuth/deep-link connector callback validation and revoke.
+49. Stale connector read and duplicate connector write fail closed.
+50. Physical route/alarm smoke on at least one aggressive-background OEM device when available.
+
+---
+
+## A22. Definition of Ready / Definition of Done for every task
+
+### Definition of Ready
+A task is READY only if:
+- exact requirement IDs/scope are known,
+- direct dependencies are terminal or explicitly non-blocking,
+- current main/active PR collision is checked,
+- source of truth/data/provider is identified,
+- acceptance criteria include failure/degraded behavior,
+- evidence type is known (unit/CI/API36/provider/physical/user),
+- no unresolved user decision is being silently guessed.
+
+### Definition of Done
+A task is DONE only if:
+- production source is integrated or a verified no-code decision is recorded,
+- exact-head automated gates pass,
+- required real-feed/provider evidence passes,
+- required physical evidence passes,
+- accessibility/localization consequences are handled,
+- diagnostics/failure states exist,
+- no stale branch is the only evidence,
+- canonical task row is read back after update,
+- downstream dependency is released intentionally.
+
+---
+
+## A23. Audit verdict for v1.1
+
+The v1.0 plan was **not fully explicit enough** to claim “everything planned”. The main omissions were:
+
+1. transit-independent general GPS destination-alarm mode,
+2. user-approved inference gate,
+3. dedicated onboarding/permission lifecycle,
+4. per-requirement traceability for all 175 requirements,
+5. several P1/P2 items that were only implied (voice search, route reliability, weather, share/QR, snooze/test alarm, reduced motion, predictive back, calendar suggestions),
+6. DST/timezone acceptance,
+7. deeper Android security/release hardening,
+8. store-console metadata/declarations,
+9. install/upgrade/migration behavior,
+10. EU/Germany privacy-operational review,
+11. persistent monetization/traction experiment scope.
+
+With this appendix, these omissions are now explicitly planned. The remaining non-document work is to **create/reconcile the corresponding canonical tasks/requirement rows and execute them**. The document itself does not convert an unimplemented requirement into PASS.
 
 ## 32. Final rule
 
