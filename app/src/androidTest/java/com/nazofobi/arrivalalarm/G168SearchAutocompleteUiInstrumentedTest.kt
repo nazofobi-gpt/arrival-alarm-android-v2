@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -74,13 +75,17 @@ class G168SearchAutocompleteUiInstrumentedTest {
             }
         }
 
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val lineKind = context.getString(R.string.location_kind_line)
+        val tripKind = context.getString(R.string.location_kind_trip)
+
         rule.onNodeWithTag("search-result-0")
             .assertIsDisplayed()
-            .assertTextContains("Hat", substring = true)
+            .assertTextContains(lineKind, substring = true)
             .assertTextContains("R1", substring = true)
         rule.onNodeWithTag("search-result-1")
             .assertIsDisplayed()
-            .assertTextContains("Sefer", substring = true)
+            .assertTextContains(tripKind, substring = true)
             .assertTextContains("Known Good Bahnhof", substring = true)
             .performClick()
         rule.runOnIdle {
