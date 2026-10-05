@@ -164,7 +164,7 @@ fun TransitSelectionMap(
         factory = { mapView },
         modifier = modifier
             .fillMaxWidth()
-            .height(300.dp)
+            .height(220.dp)
             .semantics { contentDescription = currentMapPointLabel }
             .testTag("transit-map"),
     )
