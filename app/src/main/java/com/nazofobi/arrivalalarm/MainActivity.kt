@@ -885,7 +885,17 @@ fun ArrivalAlarmApp(
                     },
                     onSearch = { runSearch(recordRecent = true) },
                     onSearchResultSelected = { result ->
-                        if (selectingOrigin) {
+                        if (
+                            result.kind == TransitLocationKind.LINE ||
+                            result.kind == TransitLocationKind.TRIP
+                        ) {
+                            val completion = result.autocompleteText?.trim().orEmpty()
+                            if (completion.length >= 2) {
+                                query = completion
+                                searchRequestId += 1
+                                runSearch(completion, recordRecent = true)
+                            }
+                        } else if (selectingOrigin) {
                             setOrigin(result.point)
                         } else if (result.stop != null) {
                             setDestination(result.stop)
