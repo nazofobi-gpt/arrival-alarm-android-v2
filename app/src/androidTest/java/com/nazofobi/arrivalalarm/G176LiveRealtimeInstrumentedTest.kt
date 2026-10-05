@@ -1,6 +1,9 @@
 package com.nazofobi.arrivalalarm
 
 import android.os.ParcelFileDescriptor
+import com.google.protobuf.CodedOutputStream
+import com.google.protobuf.WireFormat
+import com.google.transit.realtime.GtfsRealtime
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
@@ -76,6 +79,79 @@ class G176LiveRealtimeInstrumentedTest {
         val reportFile = File(context.getExternalFilesDir(null), "g176-live-realtime-report.json")
         reportFile.writeText(report.toString(2))
         persistReportForCi(reportFile)
+    }
+
+    @Test
+    fun largeVehicleOnlyPayloadDoesNotRetainWholeFeedGraph() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val payload = File(context.cacheDir, "g176-large-vehicle-only.pb")
+        writeLargeVehicleOnlyPayload(payload, entityCount = 180_000)
+        assertTrue(
+            "synthetic GTFS-RT payload was not created",
+            payload.isFile && payload.length() > 0L,
+        )
+        assertTrue(
+            "synthetic payload exceeds production bound: ${payload.length()} bytes",
+            payload.length() <= GERMANY_REALTIME_DEFAULT_MAX_BYTES.toLong(),
+        )
+
+        val result = GermanyGtfsRealtimeClient(
+            clock = EpochClock { 1_700_000_100L },
+            streamLoader = { payload.inputStream() },
+        ).fetch()
+
+        assertTrue(
+            "large vehicle-only GTFS-RT payload did not parse incrementally",
+            result is GermanyRealtimeFetchResult.Available,
+        )
+        val snapshot = (result as GermanyRealtimeFetchResult.Available).snapshot
+        assertEquals("2.0", snapshot.gtfsRealtimeVersion)
+        assertEquals("FULL_DATASET", snapshot.incrementality)
+        assertTrue(snapshot.tripUpdates.isEmpty())
+        assertTrue(snapshot.serviceAlerts.isEmpty())
+    }
+
+    private fun writeLargeVehicleOnlyPayload(
+        payload: File,
+        entityCount: Int,
+    ) {
+        payload.outputStream().use { raw ->
+            val output = CodedOutputStream.newInstance(raw)
+            val header = GtfsRealtime.FeedHeader.newBuilder()
+                .setGtfsRealtimeVersion("2.0")
+                .setTimestamp(1_700_000_000L)
+                .build()
+            output.writeTag(1, WireFormat.WIRETYPE_LENGTH_DELIMITED)
+            output.writeUInt32NoTag(header.serializedSize)
+            header.writeTo(output)
+
+            repeat(entityCount) { index ->
+                val vehicle = GtfsRealtime.VehiclePosition.newBuilder()
+                    .setTrip(
+                        GtfsRealtime.TripDescriptor.newBuilder()
+                            .setTripId("trip-$index"),
+                    )
+                    .setVehicle(
+                        GtfsRealtime.VehicleDescriptor.newBuilder()
+                            .setId("vehicle-$index"),
+                    )
+                    .setPosition(
+                        GtfsRealtime.Position.newBuilder()
+                            .setLatitude(52.0f)
+                            .setLongitude(8.0f),
+                    )
+                    .setTimestamp(1_700_000_000L + index)
+                    .build()
+                val entity = GtfsRealtime.FeedEntity.newBuilder()
+                    .setId("vehicle-entity-$index")
+                    .setVehicle(vehicle)
+                    .build()
+                output.writeTag(2, WireFormat.WIRETYPE_LENGTH_DELIMITED)
+                output.writeUInt32NoTag(entity.serializedSize)
+                entity.writeTo(output)
+            }
+            output.flush()
+        }
     }
 
     private fun persistReportForCi(reportFile: File) {
