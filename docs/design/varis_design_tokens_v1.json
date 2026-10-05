@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json.schemastore.org/design-tokens.json",
+  "meta": {
+    "product": "Varış V2",
+    "version": "1.0",
+    "referenceWidthDp": 412,
+    "fontFamily": "Roboto",
+    "principle": "transit-glanceability-controlled-density"
+  },
+  "color": {
+    "light": {
+      "bgBase": "#F7F5F1",
+      "surface": "#FFFDF9",
+      "surfaceSubtle": "#F0F2F5",
+      "textPrimary": "#14213D",
+      "textSecondary": "#596779",
+      "borderSubtle": "#D9DEE6",
+      "brandPrimary": "#285F9E",
+      "brandContainer": "#DCEBFA",
+      "brandOnContainer": "#0F355D",
+      "success": "#3C7B67",
+      "successContainer": "#DCEDE6",
+      "warning": "#B85B38",
+      "warningContainer": "#FBE4D9",
+      "danger": "#C5484B",
+      "dangerContainer": "#FCE3E3"
+    },
+    "dark": {
+      "bgBase": "#0C1724",
+      "surface": "#122235",
+      "surfaceSubtle": "#1B2D42",
+      "textPrimary": "#F2F5FA",
+      "textSecondary": "#B7C4D4",
+      "borderSubtle": "#2C4057",
+      "brandPrimary": "#6DA9FF",
+      "brandContainer": "#0F355D",
+      "brandOnContainer": "#DCEBFA",
+      "success": "#74C8AA",
+      "successContainer": "#173D31",
+      "warning": "#FF9A77",
+      "warningContainer": "#6A2C17",
+      "danger": "#FF8A8E",
+      "dangerContainer": "#4C171A"
+    }
+  },
+  "spacing": {"1":4,"2":8,"3":12,"4":16,"5":20,"6":24,"8":32,"10":40},
+  "radius": {"s":10,"m":14,"l":18,"xl":24,"full":999},
+  "size": {
+    "touchMin":48,
+    "listRowMin":64,
+    "bottomNav":76,
+    "icon":24,
+    "referenceScreenWidth":412,
+    "horizontalPadding":16,
+    "sectionGap":20
+  },
+  "typography": {
+    "display":{"size":32,"lineHeight":38,"weight":700},
+    "h1":{"size":26,"lineHeight":32,"weight":700},
+    "h2":{"size":20,"lineHeight":26,"weight":700},
+    "title":{"size":17,"lineHeight":22,"weight":500},
+    "body":{"size":16,"lineHeight":22,"weight":400},
+    "bodyStrong":{"size":16,"lineHeight":22,"weight":500},
+    "meta":{"size":13,"lineHeight":18,"weight":400},
+    "label":{"size":13,"lineHeight":18,"weight":500}
+  }
+}
