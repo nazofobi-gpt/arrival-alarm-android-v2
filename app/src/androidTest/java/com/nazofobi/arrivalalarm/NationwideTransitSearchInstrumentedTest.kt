@@ -48,6 +48,23 @@ class NationwideTransitSearchInstrumentedTest {
         assertEquals(listOf("known-good"), index.search("Known Good Bahnhof", 5).map { it.id })
         assertEquals(listOf("known-good"), index.search("known good bahn", 5).map { it.id })
 
+        val lineResults = index.searchRouteAndTripLocations("R1", 6)
+        assertTrue(
+            lineResults.any {
+                it.kind == TransitLocationKind.LINE &&
+                    it.routeId == "route-1" &&
+                    it.label.contains("R1")
+            }
+        )
+        val tripResults = index.searchRouteAndTripLocations("Known", 6)
+        assertTrue(
+            tripResults.any {
+                it.kind == TransitLocationKind.TRIP &&
+                    it.tripId == "trip-1" &&
+                    it.label.contains("Known Good Bahnhof")
+            }
+        )
+
         index.close()
         assertTrue(feed.delete())
     }
