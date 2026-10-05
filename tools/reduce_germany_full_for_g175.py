@@ -129,6 +129,7 @@ with zipfile.ZipFile(SOURCE) as source:
     selected = {name: [] for name in CASES}
     selected_stop_times = {}
     selected_endpoints = {}
+    connection_diagnostics = None
     lohne_outbound = []
     achim_inbound = []
     current_trip = None
@@ -207,8 +208,10 @@ with zipfile.ZipFile(SOURCE) as source:
                             first_trip,
                             first_rows,
                             origin_index,
+                            first_match[0],
                             second_trip,
                             second_rows,
+                            transfer_index,
                             destination_index,
                             stop_id,
                         )
@@ -222,11 +225,70 @@ with zipfile.ZipFile(SOURCE) as source:
                 first_trip,
                 first_rows,
                 origin_index,
+                first_transfer_index,
                 second_trip,
                 second_rows,
+                second_transfer_index,
                 destination_index,
-                _,
+                transfer_stop_id,
             ) = connection
+            first_origin = first_rows[origin_index]
+            first_transfer = first_rows[first_transfer_index]
+            second_transfer = second_rows[second_transfer_index]
+            second_destination = second_rows[destination_index]
+            transfer_ready_seconds = clock_seconds(
+                first_transfer.get("arrival_time") or first_transfer.get("departure_time", "")
+            ) + 120
+            transfer_candidates = []
+            for candidate_row in rows(source, names["stop_times.txt"]):
+                if candidate_row.get("stop_id") != transfer_stop_id:
+                    continue
+                candidate_trip = candidate_row.get("trip_id")
+                if candidate_trip not in active_trips:
+                    continue
+                candidate_departure = clock_seconds(
+                    candidate_row.get("departure_time") or candidate_row.get("arrival_time", "")
+                )
+                if candidate_departure >= transfer_ready_seconds:
+                    transfer_candidates.append(
+                        (
+                            candidate_departure,
+                            candidate_trip,
+                            int(candidate_row.get("stop_sequence") or 0),
+                        )
+                    )
+            transfer_candidates.sort()
+            selected_transfer_rank = next(
+                (
+                    rank
+                    for rank, (_, candidate_trip, sequence) in enumerate(transfer_candidates, start=1)
+                    if candidate_trip == second_trip
+                    and sequence == int(second_transfer.get("stop_sequence") or 0)
+                ),
+                None,
+            )
+            connection_diagnostics = {
+                "firstTrip": first_trip,
+                "secondTrip": second_trip,
+                "originStopId": first_origin.get("stop_id"),
+                "originDeparture": first_origin.get("departure_time") or first_origin.get("arrival_time"),
+                "originPickupType": first_origin.get("pickup_type"),
+                "transferStopId": transfer_stop_id,
+                "firstArrival": first_transfer.get("arrival_time") or first_transfer.get("departure_time"),
+                "firstDropOffType": first_transfer.get("drop_off_type"),
+                "secondDeparture": second_transfer.get("departure_time") or second_transfer.get("arrival_time"),
+                "secondPickupType": second_transfer.get("pickup_type"),
+                "transferGapSeconds": clock_seconds(
+                    second_transfer.get("departure_time") or second_transfer.get("arrival_time", "")
+                ) - clock_seconds(
+                    first_transfer.get("arrival_time") or first_transfer.get("departure_time", "")
+                ),
+                "secondTripCandidateRankAfterTransferReady": selected_transfer_rank,
+                "candidateCountAfterTransferReady": len(transfer_candidates),
+                "destinationStopId": second_destination.get("stop_id"),
+                "destinationArrival": second_destination.get("arrival_time") or second_destination.get("departure_time"),
+                "destinationDropOffType": second_destination.get("drop_off_type"),
+            }
             selected["lohne-achim"] = [first_trip, second_trip]
             selected_stop_times[first_trip] = first_rows
             selected_stop_times[second_trip] = second_rows
@@ -331,6 +393,7 @@ report = {
     "fixtureBytes": __import__("os").path.getsize(OUTPUT),
     "serviceDate": target_day.isoformat(),
     "selectedTrips": selected,
+    "lohneAchimConnectionDiagnostics": connection_diagnostics,
     "acceptanceCases": acceptance_cases,
     "selectedTripCount": len(selected_trip_ids),
     "selectedStopCount": len(kept_stops),
