@@ -2,6 +2,19 @@ package com.nazofobi.arrivalalarm
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AddCircle
+import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.LocationOn
+import androidx.compose.material.icons.rounded.MyLocation
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Train
+import Icon
+import androidx.compose.material3.Surface
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -46,11 +59,11 @@ fun ArrivalBottomNavigation(
     )
 
     val items = listOf(
-        Item(ArrivalAppScreen.HOME, stringResource(R.string.nav_home), androidx.compose.material.icons.Icons.Rounded.Home, "nav-home"),
-        Item(ArrivalAppScreen.SEARCH, stringResource(R.string.nav_search), androidx.compose.material.icons.Icons.Rounded.Search, "nav-search"),
-        Item(ArrivalAppScreen.JOURNEY, stringResource(R.string.nav_journey), androidx.compose.material.icons.Icons.Rounded.AddCircle, "nav-journey"),
-        Item(ArrivalAppScreen.DEPARTURES, stringResource(R.string.nav_departures), androidx.compose.material.icons.Icons.Rounded.Schedule, "nav-departures"),
-        Item(ArrivalAppScreen.SETTINGS, stringResource(R.string.nav_settings), androidx.compose.material.icons.Icons.Rounded.Settings, "nav-settings"),
+        Item(ArrivalAppScreen.HOME, stringResource(R.string.nav_home), Icons.Rounded.Home, "nav-home"),
+        Item(ArrivalAppScreen.SEARCH, stringResource(R.string.nav_search), Icons.Rounded.Search, "nav-search"),
+        Item(ArrivalAppScreen.JOURNEY, stringResource(R.string.nav_journey), Icons.Rounded.AddCircle, "nav-journey"),
+        Item(ArrivalAppScreen.DEPARTURES, stringResource(R.string.nav_departures), Icons.Rounded.Schedule, "nav-departures"),
+        Item(ArrivalAppScreen.SETTINGS, stringResource(R.string.nav_settings), Icons.Rounded.Settings, "nav-settings"),
     )
 
     NavigationBar(
@@ -70,7 +83,7 @@ fun ArrivalBottomNavigation(
                 selected = selected,
                 onClick = { onSelect(item.screen) },
                 icon = {
-                    androidx.compose.material3.Icon(
+                    Icon(
                         imageVector = item.icon,
                         contentDescription = null,
                     )
@@ -100,86 +113,137 @@ fun HomeOverviewPanel(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier.fillMaxWidth().testTag("home-overview"),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("home-overview"),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text(
-            text = stringResource(R.string.home_overview_title),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.semantics { heading() },
-        )
-        Text(
-            text = stringResource(R.string.home_overview_body),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = stringResource(R.string.home_overview_title),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.semantics { heading() },
+            )
+            Text(
+                text = stringResource(R.string.home_overview_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        Surface(
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
         ) {
             Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(
-                    text = stringResource(R.string.journey_points_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                ArrivalSelectionRow(
+                    title = stringResource(R.string.select_origin),
+                    value = origin?.label ?: stringResource(R.string.home_origin_missing),
+                    icon = if (origin == null) Icons.Rounded.MyLocation else Icons.Rounded.LocationOn,
+                    onClick = onOpenSearch,
+                    testTag = "home-origin",
                 )
-                Text(
-                    text = origin?.let { stringResource(R.string.origin_format, it.label) }
-                        ?: stringResource(R.string.home_origin_missing),
-                    modifier = Modifier.testTag("home-origin"),
-                )
-                Text(
-                    text = destination?.let { stringResource(R.string.destination_format, it.label) }
-                        ?: stringResource(R.string.home_destination_missing),
-                    modifier = Modifier.testTag("home-destination"),
+                ArrivalSelectionRow(
+                    title = stringResource(R.string.select_destination),
+                    value = destination?.label ?: stringResource(R.string.home_destination_missing),
+                    icon = Icons.Rounded.Flag,
+                    onClick = onOpenSearch,
+                    testTag = "home-destination",
                 )
 
-                FilledTonalButton(
-                    onClick = onUseCurrentLocation,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("home-current-location"),
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(stringResource(R.string.current_location_origin))
+                    FilledTonalButton(
+                        onClick = onUseCurrentLocation,
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .testTag("home-current-location"),
+                    ) {
+                        Icon(Icons.Rounded.MyLocation, contentDescription = null)
+                        Text(
+                            text = stringResource(R.string.current_location_origin),
+                            modifier = Modifier.padding(start = 6.dp),
+                            maxLines = 1,
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = onOpenSearch,
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .testTag("home-open-search"),
+                    ) {
+                        Icon(Icons.Rounded.Search, contentDescription = null)
+                        Text(
+                            text = stringResource(R.string.nav_search),
+                            modifier = Modifier.padding(start = 6.dp),
+                        )
+                    }
                 }
-                OutlinedButton(
-                    onClick = onOpenSearch,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("home-open-search"),
-                ) {
-                    Text(stringResource(R.string.home_search_action))
-                }
+
                 Button(
                     onClick = onOpenJourney,
                     enabled = origin != null && destination != null,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("home-open-journey"),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp)
+                        .testTag("home-open-journey"),
                 ) {
                     Text(stringResource(R.string.home_journey_action))
                 }
             }
         }
 
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+        if (nearby.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                ArrivalSectionHeader(title = stringResource(R.string.nearby_stops))
+                nearbySource?.let {
+                    Text(
+                        text = stringResource(R.string.source_format, it),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Surface(
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surface,
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                        nearby.take(4).forEachIndexed { index, candidate ->
+                            ArrivalListRow(
+                                title = candidate.stop.name,
+                                subtitle = stringResource(R.string.select_destination),
+                                icon = Icons.Rounded.Train,
+                                trailing = "${candidate.distanceMeters.toInt()} m",
+                                selected = candidate.stop.id in favoriteStopIds,
+                                onClick = { onNearbyStopSelected(candidate) },
+                                testTag = "home-nearby-$index",
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ArrivalSectionHeader(title = stringResource(R.string.map_title))
+            val mapCenter = origin ?: destination ?: MapPoint(
+                latitude = 51.1657,
+                longitude = 10.4515,
+                label = "Deutschland",
+            )
+            Surface(
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceVariant,
             ) {
-                Text(
-                    text = stringResource(R.string.map_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.semantics { heading() },
-                )
-                val mapCenter = origin ?: destination ?: MapPoint(
-                    latitude = 51.1657,
-                    longitude = 10.4515,
-                    label = "Deutschland",
-                )
                 TransitSelectionMap(
                     center = mapCenter,
                     nearbyStops = nearby,
@@ -190,66 +254,14 @@ fun HomeOverviewPanel(
                     onMapPointSelected = onMapPointSelected,
                     onMapError = onMapError,
                 )
-                mapMessage?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.testTag("home-map-status"),
-                    )
-                }
-                Text(
-                    text = stringResource(R.string.map_provider_note),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.testTag("home-map-provider"),
-                )
             }
-        }
-
-        if (nearby.isNotEmpty()) {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                ),
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.nearby_stops),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    )
-                    nearbySource?.let {
-                        Text(
-                            text = stringResource(R.string.source_format, it),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
-                    }
-                    nearby.take(4).forEachIndexed { index, candidate ->
-                        OutlinedButton(
-                            onClick = { onNearbyStopSelected(candidate) },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("home-nearby-$index"),
-                        ) {
-                            Text(
-                                stringResource(
-                                    R.string.nearby_stop_format,
-                                    stringResource(R.string.select_destination),
-                                    if (candidate.stop.id in favoriteStopIds) {
-                                        "★ " + candidate.stop.name
-                                    } else {
-                                        candidate.stop.name
-                                    },
-                                    candidate.distanceMeters,
-                                )
-                            )
-                        }
-                    }
-                }
+            mapMessage?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("home-map-status"),
+                )
             }
         }
     }
