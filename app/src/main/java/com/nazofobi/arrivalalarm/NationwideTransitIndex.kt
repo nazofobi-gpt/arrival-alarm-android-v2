@@ -148,8 +148,8 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
     }
 
     fun search(query: String, limit: Int): List<CatalogStop> {
-        val tokens = query.lowercase(Locale.GERMANY).split(Regex("\\s+"))
-            .map { it.replace(Regex("[^\\p{L}\\p{N}]"), "") }
+        val tokens = query.lowercase(Locale.GERMANY)
+            .split(Regex("[^\\p{L}\\p{N}]+"))
             .filter { it.isNotBlank() }
         if (tokens.isEmpty()) return emptyList()
         val match = tokens.joinToString(" ") { "$it*" }
