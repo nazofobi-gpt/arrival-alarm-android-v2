@@ -1288,6 +1288,8 @@ private fun transitLocationKindText(kind: TransitLocationKind): String = stringR
         TransitLocationKind.STOP -> R.string.location_kind_stop
         TransitLocationKind.ADDRESS -> R.string.location_kind_address
         TransitLocationKind.POI -> R.string.location_kind_poi
+        TransitLocationKind.LINE -> R.string.location_kind_line
+        TransitLocationKind.TRIP -> R.string.location_kind_trip
     }
 )
 
