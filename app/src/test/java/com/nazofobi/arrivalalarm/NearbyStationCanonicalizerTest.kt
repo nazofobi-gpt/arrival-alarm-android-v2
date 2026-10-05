@@ -16,6 +16,7 @@ class NearbyStationCanonicalizerTest {
         )
         assertEquals(1, result.size)
         assertEquals("station", result.single().stop.id)
+        assertEquals(listOf("p1", "p2"), result.single().childStops.map { it.id })
     }
 
     @Test
@@ -41,5 +42,13 @@ class NearbyStationCanonicalizerTest {
         assertEquals(forward.single().stop.id, reversed.single().stop.id)
         assertEquals(forward.single().distanceMeters, reversed.single().distanceMeters)
         assertEquals(forward.single().bearingDegrees, reversed.single().bearingDegrees)
+        assertEquals(
+            listOf("lohne-platform-1", "lohne-platform-2"),
+            forward.single().childStops.map { it.id },
+        )
+        assertEquals(
+            forward.single().childStops.map { it.id },
+            reversed.single().childStops.map { it.id },
+        )
     }
 }
