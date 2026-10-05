@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -24,6 +25,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -198,6 +201,7 @@ fun ArrivalListRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun <T> ArrivalChoiceSheet(
     visible: Boolean,
@@ -229,7 +233,8 @@ fun <T> ArrivalChoiceSheet(
                         .fillMaxWidth()
                         .heightIn(min = 56.dp)
                         .clickable { onSelect(option) }
-                        .testTag(optionTag(option)),
+                        .testTag(optionTag(option))
+                        .semantics { this.selected = selected == option },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     RadioButton(
