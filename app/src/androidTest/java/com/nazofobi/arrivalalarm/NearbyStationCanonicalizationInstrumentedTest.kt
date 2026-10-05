@@ -24,7 +24,7 @@ class NearbyStationCanonicalizationInstrumentedTest {
         db.execSQL("INSERT INTO stops(id,name,lat,lon,parent_station,location_type) VALUES('p1','Lohne Bahnhof',52.66501,8.23701,'station',0)")
         db.execSQL("INSERT INTO stops(id,name,lat,lon,parent_station,location_type) VALUES('p2','Lohne Bahnhof',52.66502,8.23702,'station',0)")
 
-        val result = index.nearest(52.6645, 8.237, 5)
+        val result = index.nearestCanonicalStations(52.6645, 8.237, 5)
 
         assertEquals(1, result.size)
         assertEquals("station", result.single().stop.id)
