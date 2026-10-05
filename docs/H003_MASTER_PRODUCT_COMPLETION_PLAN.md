@@ -6,9 +6,9 @@
 **Product:** Varış V2 — Almanya odaklı varış alarmı Android uygulaması  
 **Repository:** `nazofobi-gpt/arrival-alarm-android-v2`  
 **Canonical product target:** H-003  
-**Idea baseline:** `H003-IDEA-REV-001`  
+**Idea baseline:** `H003-IDEA-REV-002`  
 **Level:** 1 / Master Product Plan  
-**Reconciliation:** `CURRENT` — 2026-10-05; product-content baseline reconciled, with IDEA-H003-029/030 governing the new L0→L5 process lineage.  
+**Reconciliation:** `CURRENT` — 2026-10-05; reconciled through IDEA-H003-031. IDEA-H003-029/030 define L0→L5 lineage and IDEA-H003-031 activates Level-5 live execution.  
 **Purpose:** This document is the detailed execution plan to be followed until the product reaches product-complete, field-accepted and Play-release-ready state.
 
 **v1.2 audit note:** v1.0 was broad but not fully explicit; v1.1 closed the identified execution gaps. v1.2 additionally embeds the complete canonical 175-row requirement catalog, the original release-acceptance scenario matrix and the design-QA checklist so this file is self-contained for development tracking. The additions below are mandatory and supersede any weaker/implicit wording in earlier versions.
