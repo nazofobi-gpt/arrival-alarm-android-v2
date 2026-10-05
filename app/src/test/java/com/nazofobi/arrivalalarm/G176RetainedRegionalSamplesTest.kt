@@ -211,6 +211,7 @@ class G176RetainedRegionalSamplesTest {
             routes.values.filter { (agencyId == null || it.agencyId == agencyId) && (routeType == null || it.routeType == routeType) }.take(limit)
         override fun tripsServingStop(stopId: String, limit: Int) =
             trips.values.filter { trip -> stopTimes[trip.id].orEmpty().any { it.stopId == stopId } }.take(limit)
-        override fun isServiceActive(serviceId: String, serviceDate: GtfsServiceDate) =\n            serviceDate == GtfsServiceDate(2026, 10, 5)
+        override fun isServiceActive(serviceId: String, serviceDate: GtfsServiceDate) =
+            serviceDate == GtfsServiceDate(2026, 10, 5)
     }
 }
