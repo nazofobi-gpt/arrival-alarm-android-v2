@@ -14,7 +14,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -276,6 +281,9 @@ fun HomeSearchPanel(
                                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                             )
                         }
+                        var expandedNearbyStopIds by remember(nearby) {
+                            mutableStateOf(emptySet<String>())
+                        }
                         nearby.take(8).forEachIndexed { index, candidate ->
                             OutlinedButton(
                                 onClick = { onNearbyStopSelected(candidate) },
@@ -300,6 +308,48 @@ fun HomeSearchPanel(
                                         candidate.distanceMeters,
                                     )
                                 )
+                            }
+                            if (candidate.childStops.isNotEmpty()) {
+                                val expanded = candidate.stop.id in expandedNearbyStopIds
+                                TextButton(
+                                    onClick = {
+                                        expandedNearbyStopIds = if (expanded) {
+                                            expandedNearbyStopIds - candidate.stop.id
+                                        } else {
+                                            expandedNearbyStopIds + candidate.stop.id
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("nearby-stop-$index-expand"),
+                                ) {
+                                    Text(
+                                        if (expanded) {
+                                            stringResource(R.string.nearby_child_stops_hide)
+                                        } else {
+                                            stringResource(
+                                                R.string.nearby_child_stops_show,
+                                                candidate.childStops.size,
+                                            )
+                                        }
+                                    )
+                                }
+                                if (expanded) {
+                                    candidate.childStops.forEachIndexed { childIndex, child ->
+                                        Text(
+                                            text = stringResource(
+                                                R.string.nearby_child_stop_format,
+                                                childIndex + 1,
+                                                child.name,
+                                            ),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .testTag("nearby-stop-$index-child-$childIndex"),
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
