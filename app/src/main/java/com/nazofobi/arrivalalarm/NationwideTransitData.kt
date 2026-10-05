@@ -307,7 +307,7 @@ class NationwideTransitGateway(
         longitude: Double,
         limit: Int = 8,
     ): NationwideLookupResolution<NearbyStop> {
-        val local = if (store.isReady()) store.nearest(latitude, longitude, limit) else emptyList()
+        val local = if (store.isReady()) store.nearestCanonicalStations(latitude, longitude, limit) else emptyList()
         if (local.isNotEmpty()) {
             return NationwideLookupResolution.Results(
                 values = local,
