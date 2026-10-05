@@ -1,14 +1,14 @@
 # Varış V2 — Master Product Completion & Release Plan
 
 **Plan ID:** H003-MASTER-COMPLETION-PLAN-001  
-**Version:** 1.1  
+**Version:** 1.2  
 **Date:** 2026-10-05  
 **Product:** Varış V2 — Almanya odaklı varış alarmı Android uygulaması  
 **Repository:** `nazofobi-gpt/arrival-alarm-android-v2`  
 **Canonical product target:** H-003  
 **Purpose:** This document is the detailed execution plan to be followed until the product reaches product-complete, field-accepted and Play-release-ready state.
 
-**v1.1 audit note:** v1.0 was broad but not fully explicit. v1.1 closes the audit gaps identified against the canonical H-003 product principle, G-235..G-254 requirement coverage nodes, G-136 field-acceptance criteria and the persistent mobile-product scope. The additions below are mandatory and supersede any weaker/implicit wording in v1.0.
+**v1.2 audit note:** v1.0 was broad but not fully explicit; v1.1 closed the identified execution gaps. v1.2 additionally embeds the complete canonical 175-row requirement catalog, the original release-acceptance scenario matrix and the design-QA checklist so this file is self-contained for development tracking. The additions below are mandatory and supersede any weaker/implicit wording in earlier versions.
 
 ---
 
@@ -1759,6 +1759,242 @@ The v1.0 plan was **not fully explicit enough** to claim “everything planned�
 11. persistent monetization/traction experiment scope.
 
 With this appendix, these omissions are now explicitly planned. The remaining non-document work is to **create/reconcile the corresponding canonical tasks/requirement rows and execute them**. The document itself does not convert an unimplemented requirement into PASS.
+
+
+# Appendix B — Canonical 175 Requirement Catalog (self-contained baseline)
+
+The table below is embedded from `Varis_Uygulamasi_Master_Product_Plan_v1.0.docx`. It is the normative feature/acceptance checklist for H-003. v1.2 does not replace these requirements with summaries; it carries them directly so development can select an exact requirement ID before implementation and can close it only with evidence.
+
+| Req ID | Alan | Requirement | Öncelik | Acceptance | Mevcut eşleşme |
+| --- | --- | --- | --- | --- | --- |
+| PF-001 | Ürün temeli | GPS hedef-yakınlık alarmı transit API olmadan da çalışmalı. | P0 | Kullanıcı herhangi bir harita pini/POI/adres için alarm kurabilir; transit provider kapalıyken de konum temelli alarm çalışır. | G-181 |
+| PF-002 | Ürün temeli | Transit journey ve genel destination-alarm aynı uygulamada iki ayrı ama birleşebilir mod olmalı. | P0 | Transit rota yokken standalone alarm; rota seçilince journey state ile otomatik bağlanır. | G-180; G-181 |
+| PF-003 | Ürün temeli | Uygulama gerçek veri yokken mock/demo/uydurma sonuç göstermemeli. | P0 | Production build’de fixture/demo seçilemez; unavailable/stale açık görünür. | G-149; G-173 |
+| PF-004 | Ürün temeli | Tek canonical journey state tüm ekran, bildirim, TTS ve connector yüzeylerini beslemeli. | P0 | Aynı anda çelişkili current/next/target bilgisi üretilemez. | G-180; G-153 |
+| PF-005 | Ürün temeli | Provider eksikliği ürün gerçeği olarak modellenmeli. | P0 | Capability matrix: available/stale/unavailable/not-supported ayrı durumlar. | G-176; G-177 |
+| PF-006 | Ürün temeli | Tüm kritik işlemler iptal/geri dönüş ve recovery yoluna sahip olmalı. | P0 | Search, route, alarm, journey, feed update ve connector için deterministic recovery state vardır. | G-173 |
+| ONB-001 | Onboarding & permissions | İlk açılışta ürün değeri 3 ekranı geçmeden anlatılır; özellik duvarı yoktur. | P1 | <60 sn içinde arama veya destination alarm kurulabilir. | G-191; G-167 |
+| ONB-002 | Onboarding & permissions | Konum izni bağlam içinde ve minimum scope ile istenir. | P0 | İzin verilmeden önce neden gerektiği açıklanır; ret durumunda manuel origin çalışır. | G-191; G-167 |
+| ONB-003 | Onboarding & permissions | Bildirim izni aktif yolculuk/alarma geçmeden önce bağlamlı istenir. | P0 | Ret halinde in-app guidance devam eder ve kullanıcı risk konusunda bilgilendirilir. | G-191; G-167 |
+| ONB-004 | Onboarding & permissions | Background/FGS davranışı yalnız kullanıcı başlattığı journey süresince ve politika uyumlu olur. | P0 | FGS başlangıcı kullanıcı aksiyonuna bağlı; journey bitince kapanır. [R6] | G-191; G-167 |
+| ONB-005 | Onboarding & permissions | TTS/Bluetooth/headphones tercihi ilk journey öncesi hızlı setup ile yapılabilir. | P1 | Test phrase + output route görünür. | G-191; G-167 |
+| ONB-006 | Onboarding & permissions | Erişilebilirlik quick setup sunulur. | P1 | Büyük metin, yüksek kontrast, azaltılmış motion, sesli rehber kısayolları. | G-191; G-167 |
+| ONB-007 | Onboarding & permissions | Data/offline download tercihi açıklanır. | P1 | Wi-Fi only / cellular / manual update seçenekleri. | G-191; G-167 |
+| ONB-008 | Onboarding & permissions | Onboarding tekrar oynatılabilir ama uygulamayı kullanmayı engellemez. | P2 | Settings→Help üzerinden erişim. | G-191; G-167 |
+| SRCH-001 | Search & discovery | Ana ekran tek dokunuşla “Nereye?” araması, mevcut konum ve favori hedefleri sunar. | P0 | Arama alanı ilk viewportta; current location erişilebilir. | G-168; G-170; G-171; G-182 |
+| SRCH-002 | Search & discovery | Stop, station, address, POI, line ve trip/sefer araması tek omnibox içinde desteklenir. | P0 | Result type rozetleri ve doğru destination navigation. | G-168; G-170; G-171; G-182 |
+| SRCH-003 | Search & discovery | Nationwide local index autocomplete anında çalışır; provider hatası no-result ile karışmaz. | P0 | Lohne/Berlin/München fixture + real-device smoke. | G-168; G-170; G-171; G-182 |
+| SRCH-004 | Search & discovery | Typo/fuzzy/diacritic/alias arama desteklenir. | P1 | München/Muenchen; Hbf/Hauptbahnhof; yerel aliaslar. | G-168; G-170; G-171; G-182 |
+| SRCH-005 | Search & discovery | Yakın duraklar station-level canonicalize edilir; platformlar gerektiğinde expand edilir. | P0 | Duplicate station row yok; distance+bearing doğru. | G-168; G-170; G-171; G-182 |
+| SRCH-006 | Search & discovery | Recent searches/trips gizlilik dostu local history ile gösterilir. | P1 | Silme/clear all; private mode. | G-168; G-170; G-171; G-182 |
+| SRCH-007 | Search & discovery | Favorite place/stop/line arama sonuçlarında görünür ve hızlı aksiyon sağlar. | P1 | Home/Work/custom favorites. | G-168; G-170; G-171; G-182 |
+| SRCH-008 | Search & discovery | Arama offline cache üzerinde çalışır. | P0 | Ağ yokken local results; stale badge. | G-168; G-170; G-171; G-182 |
+| SRCH-009 | Search & discovery | Empty/error/provider-timeout farklı tasarım state’leri kullanır. | P0 | Her state kullanıcıya bir sonraki eylemi verir. | G-168; G-170; G-171; G-182 |
+| SRCH-010 | Search & discovery | Voice search Android system intent ile opsiyonel desteklenir. | P2 | Permissionless speech intent fallback; keyboard her zaman var. | G-168; G-170; G-171; G-182 |
+| MAP-001 | Map experience | Harita mevcut konum, yakın duraklar ve seçilebilir pinleri gösterir. | P0 | Location + stop marker + selection state. | G-187; G-189 |
+| MAP-002 | Map experience | Route geometry ve walking legs ayrı görsel hiyerarşiyle çizilir. | P0 | Transit/walk legs karışmaz. | G-187; G-189 |
+| MAP-003 | Map experience | Station entrances/exits/pathways veri varsa gösterilir. | P1 | Capability-gated; veri yoksa saklanır. | G-187; G-189 |
+| MAP-004 | Map experience | Live vehicle marker yalnız gerçek provider position varsa gösterilir. | P1 | Freshness timestamp + source; fake interpolation yok. | G-187; G-189 |
+| MAP-005 | Map experience | Map style light/dark ve high-contrast modlarla uyumludur. | P1 | Labels okunabilir; rota rengi contrast PASS. | G-187; G-189 |
+| MAP-006 | Map experience | Map bağımsız source-of-truth değildir; list/detail eşdeğer bilgi sağlar. | P0 | Map yüklenmese journey sürdürülebilir. | G-187; G-189 |
+| MAP-007 | Map experience | Walking turn-by-turn harita ve metin adımlarıyla verilir. | P1 | Off-route/re-route davranışı. | G-187; G-189 |
+| MAP-008 | Map experience | Offline map strategy ayrı provider/cost kararıyla capability-gated tasarlanır. | P2 | Offline tiles varsa lisans/size policy PASS. | G-187; G-189 |
+| PLAN-001 | Trip planning | Depart now / arrive by / future date-time desteklenir. | P0 | DST/timezone/service-day doğru. | G-169; G-175; G-178; G-179; G-184; G-188 |
+| PLAN-002 | Trip planning | Multiple route options aynı normalize itinerary modelinde üretilir. | P0 | Her seçenek total time, depart/arrive, walk, transfer, modes. | G-169; G-175; G-178; G-179; G-184; G-188 |
+| PLAN-003 | Trip planning | Tercihler: fastest, fewest transfers, less walking, simple, accessible. | P0 | Preference değişince sıralama deterministik. | G-169; G-175; G-178; G-179; G-184; G-188 |
+| PLAN-004 | Trip planning | Germany-specific: D-Ticket only / local transit preference. | P1 | D-Ticket suitability açık; garanti olmayan fare işaretlenir. | G-169; G-175; G-178; G-179; G-184; G-188 |
+| PLAN-005 | Trip planning | Bike, dog, stroller, luggage, transfer-buffer kullanıcı profilleri. | P1 | Provider/data varsa filter; yoksa unsupported açıklaması. | G-169; G-175; G-178; G-179; G-184; G-188 |
+| PLAN-006 | Trip planning | Wheelchair/step-free routing yalnız veri yeterliyse önerilir. | P0 | Eksik accessibility data güvenli şekilde belirtilir. | G-169; G-175; G-178; G-179; G-184; G-188 |
+| PLAN-007 | Trip planning | Weather-aware “less outdoor walking” opsiyonu provider varsa eklenebilir. | P2 | Core routing hava verisine bağımlı olmaz. | G-169; G-175; G-178; G-179; G-184; G-188 |
+| PLAN-008 | Trip planning | Provider timeout halinde static local router first-use fallback üretir. | P0 | Cache önkoşulu olmadan route. | G-169; G-175; G-178; G-179; G-184; G-188 |
+| PLAN-009 | Trip planning | No-path ve provider-error ayrıdır. | P0 | Retry / change options / offline path önerileri. | G-169; G-175; G-178; G-179; G-184; G-188 |
+| PLAN-010 | Trip planning | Alternatif kalkışlar ve missed-connection recovery her itinerary’de erişilebilir. | P0 | Bir sonraki gerçek viable option görünür. | G-169; G-175; G-178; G-179; G-184; G-188 |
+| PLAN-011 | Trip planning | Route reliability score gerçek kanıta dayanır. | P1 | Transfer margin, RT freshness, cancellations; uydurma puan yok. | G-169; G-175; G-178; G-179; G-184; G-188 |
+| PLAN-012 | Trip planning | Fare/price provider varsa route comparison’da gösterilir. | P1 | Currency, fare source, disclaimer. | G-169; G-175; G-178; G-179; G-184; G-188 |
+| DISC-001 | Transit detail IA | Stop/station detail: departures, arrivals, lines, platforms, alerts, accessibility. | P0 | Route plan önkoşulu olmadan açılır. | G-171; G-176; G-182; G-189 |
+| DISC-002 | Transit detail IA | Line detail: directions, all stops, active vehicles/provider status, alerts. | P0 | Direction ayrımı açık. | G-171; G-176; G-182; G-189 |
+| DISC-003 | Transit detail IA | Trip detail: full stop sequence, planned vs realtime, platform changes. | P0 | Every stop timing + freshness. | G-171; G-176; G-182; G-189 |
+| DISC-004 | Transit detail IA | Parent station / child platform hierarchy korunur. | P0 | Platform-level detay expandable. | G-171; G-176; G-182; G-189 |
+| DISC-005 | Transit detail IA | Network/route map view provider datası uygunsa sunulur. | P1 | Static PDF/deep-link veya native map. | G-171; G-176; G-182; G-189 |
+| DISC-006 | Transit detail IA | Station amenities/entrances/exits/toilets/lockers provider varsa capability-gated. | P2 | Availability/source label. | G-171; G-176; G-182; G-189 |
+| DISC-007 | Transit detail IA | Crowding/coach sequence/best carriage provider varsa capability-gated. | P2 | Unsupported gizlenir; stale görünür. | G-171; G-176; G-182; G-189 |
+| DISC-008 | Transit detail IA | Service alerts doğru entity’ye bağlanır. | P0 | Route/stop/trip scoped alerts. | G-171; G-176; G-182; G-189 |
+| JNY-001 | Active journey | Journey state phases: PREPARE→WALK→WAIT→BOARD→RIDE→TRANSFER→GET_OFF→FINAL_WALK→ARRIVED. | P0 | Her phase için explicit transition ve recovery. | G-172; G-180; G-186 |
+| JNY-002 | Active journey | Leave-now reminder ve “son güvenli çıkış” zamanı. | P1 | User-configurable; calendar-independent. | G-172; G-180; G-186 |
+| JNY-003 | Active journey | Walking-to-stop turn guidance ve late warning. | P0 | Off-route reroute. | G-172; G-180; G-186 |
+| JNY-004 | Active journey | Boarding cue: doğru line/direction/platform ve araç bekleme. | P0 | Wrong-direction ambiguity fail-closed. | G-172; G-180; G-186 |
+| JNY-005 | Active journey | Current/next/target stop ve remaining stops. | P0 | Evidence-based; no phantom current stop. | G-172; G-180; G-186 |
+| JNY-006 | Active journey | Transfer countdown, platform change, connection risk. | P0 | Miss risk → alternate route CTA. | G-172; G-180; G-186 |
+| JNY-007 | Active journey | Get-off cue with pre-alert, imminent alert and final alarm. | P0 | Screen off + background. | G-172; G-180; G-186 |
+| JNY-008 | Active journey | Missed stop/connection recovery. | P0 | State machine reroutes or selects next viable stop. | G-172; G-180; G-186 |
+| JNY-009 | Active journey | Realtime change journey state’i güvenli günceller. | P0 | Schedule vs RT distinction. | G-172; G-180; G-186 |
+| JNY-010 | Active journey | User can switch departure/route mid-journey intentionally. | P1 | Explicit confirm if alarm target changes. | G-172; G-180; G-186 |
+| JNY-011 | Active journey | Share journey summary/link/QR; live location only explicit consent. | P1 | Privacy default off. | G-172; G-180; G-186 |
+| JNY-012 | Active journey | Trip progress system surfaces: notification/lockscreen/widget/watch. | P1 | Same state, no divergent copy. | G-172; G-180; G-186 |
+| ALM-001 | Arrival alarm | Alarm lead can be distance, time, stops or adaptive hybrid. | P0 | Mode-specific validation. | G-181; G-191 |
+| ALM-002 | Arrival alarm | Adaptive threshold considers accuracy, speed, RT uncertainty and stop sequence. | P0 | Bounded; no oscillating arm/fire. | G-181; G-191 |
+| ALM-003 | Arrival alarm | Poor GPS/tunnel fallback uses schedule/stop progress with confidence. | P0 | Uncertainty visible; no false precision. | G-181; G-191 |
+| ALM-004 | Arrival alarm | One-shot/idempotent final alarm. | P0 | Process recreation/reconnect duplicate=0. | G-181; G-191 |
+| ALM-005 | Arrival alarm | Missed-stop detection and recovery. | P0 | Passed target → explicit recovery, not silent success. | G-181; G-191 |
+| ALM-006 | Arrival alarm | Audio: device TTS, selected voice/language, volume-safe behavior. | P0 | TR/DE/EN voice acceptance. | G-181; G-191 |
+| ALM-007 | Arrival alarm | Headphones-only and Bluetooth routing options. | P1 | Reconnect does not duplicate or miss cue. | G-181; G-191 |
+| ALM-008 | Arrival alarm | Haptic pattern + visual notification always available as fallback. | P0 | Hearing-impaired path. | G-181; G-191 |
+| ALM-009 | Arrival alarm | Snooze / earlier alert / cancel / test alarm. | P1 | State updates receipt + UI. | G-181; G-191 |
+| ALM-010 | Arrival alarm | Locked screen/background/process death continuity. | P0 | Physical device acceptance. | G-181; G-191 |
+| ALM-011 | Arrival alarm | Battery saver / Doze degradation is explicitly handled. | P0 | User sees readiness and remediation. | G-181; G-191 |
+| ALM-012 | Arrival alarm | Standalone alarm for taxi/car/passenger mode. | P1 | No transit data requirement. | G-181; G-191 |
+| ALM-013 | Arrival alarm | Alarm readiness preflight before arming. | P0 | Location, notifications, TTS, battery restrictions, destination validated. | G-181; G-191 |
+| ALM-014 | Arrival alarm | Exact alarm API only if functionally justified and policy-compliant. | P0 | Permission path audited; avoid unnecessary exact alarms. | G-181; G-191 |
+| DATA-001 | Data & realtime | Germany Full GTFS imported transactionally with version/provenance. | P0 | Old-known-good DB survives failed update. | G-174; G-176; G-177; G-185 |
+| DATA-002 | Data & realtime | Stops, routes, trips, stop_times, calendars, exceptions, transfers, shapes modeled. | P0 | Integrity/count checks. | G-174; G-176; G-177; G-185 |
+| DATA-003 | Data & realtime | parent_station/platform hierarchy retained. | P0 | Nearby and departure board consistency. | G-174; G-176; G-177; G-185 |
+| DATA-004 | Data & realtime | Accessibility/pathways/fare metadata retained when present. | P1 | No schema loss. | G-174; G-176; G-177; G-185 |
+| DATA-005 | Data & realtime | Feed update has Wi-Fi/data/storage budgets and resume. | P1 | Partial download never corrupts active DB. | G-174; G-176; G-177; G-185 |
+| RT-001 | Data & realtime | TripUpdates, VehiclePositions, ServiceAlerts capability-gated. | P0 | Fresh/stale/unavailable distinct. [R8][R9] | G-174; G-176; G-177; G-185 |
+| RT-002 | Data & realtime | RT age/freshness thresholds visible. | P0 | Stale RT cannot masquerade as live. | G-174; G-176; G-177; G-185 |
+| RT-003 | Data & realtime | Cancellation, platform, delay overlay static itinerary safely. | P0 | Static fallback retained. | G-174; G-176; G-177; G-185 |
+| RT-004 | Data & realtime | Multi-region provider routing/failover. | P0 | Provider health + backoff + circuit breaker. | G-174; G-176; G-177; G-185 |
+| RT-005 | Data & realtime | Provider error taxonomy stable. | P0 | timeout/auth/rate-limit/invalid-data/no-result separate. | G-174; G-176; G-177; G-185 |
+| RT-006 | Data & realtime | No provider can directly mutate canonical UI state without validation. | P0 | Adapter→normalize→domain validation. | G-174; G-176; G-177; G-185 |
+| RT-007 | Data & realtime | Live vehicle interpolation optional and explicitly distinguished from observed position. | P2 | No fabricated “live”. | G-174; G-176; G-177; G-185 |
+| OFF-001 | Offline & degraded mode | Offline stop search and static trip planning. | P0 | Airplane-mode route test. | G-185; G-169 |
+| OFF-002 | Offline & degraded mode | Last successful journey cached for active trip continuity. | P0 | No stale route silently shown as current. | G-185; G-169 |
+| OFF-003 | Offline & degraded mode | Offline TTS and alarm remain available. | P0 | No cloud dependency. | G-185; G-169 |
+| OFF-004 | Offline & degraded mode | Offline/stale banners are informative but not blocking. | P1 | Source+last update shown. | G-185; G-169 |
+| OFF-005 | Offline & degraded mode | User can manage offline data/storage. | P1 | Size, last update, clear/redownload. | G-185; G-169 |
+| OFF-006 | Offline & degraded mode | Provider outage on first use still allows static route after GTFS install. | P0 | No prior remote success required. | G-185; G-169 |
+| PERS-001 | Personalization | Favorite places/stops/lines/routes. | P1 | Home quick access + edit/reorder. | G-183; G-153 |
+| PERS-002 | Personalization | Recurring commute / pendler journeys and reminders. | P1 | Weekday/time schedule. | G-183; G-153 |
+| PERS-003 | Personalization | Travel preferences persist locally. | P1 | Walking, transfers, accessibility, modes. | G-183; G-153 |
+| PERS-004 | Personalization | Recent history can be disabled/cleared. | P1 | Private mode. | G-183; G-153 |
+| PERS-005 | Personalization | Optional account/sync is separate future capability, not core dependency. | P2 | App usable without login. | G-183; G-153 |
+| PERS-006 | Personalization | Calendar-to-trip suggestion only via explicit external connector/consent. | P2 | No blanket calendar read. | G-183; G-153 |
+| A11Y-001 | Accessibility & adaptive | TalkBack full path on every critical flow. | P0 | Search→route→journey→alarm navigable without sight. | G-184; G-166; G-167 |
+| A11Y-002 | Accessibility & adaptive | Touch targets ≥48dp; no icon-only ambiguous controls. | P0 | Accessibility scanner + manual. [R4] | G-184; G-166; G-167 |
+| A11Y-003 | Accessibility & adaptive | 200% font scale without clipping. | P0 | TR/DE/EN screenshot matrix. | G-184; G-166; G-167 |
+| A11Y-004 | Accessibility & adaptive | Contrast WCAG-equivalent Android quality targets. | P0 | Small text 4.5:1 target; large/graphics 3:1. | G-184; G-166; G-167 |
+| A11Y-005 | Accessibility & adaptive | Reduced motion / no essential information only in animation. | P1 | Motion preference respected. | G-184; G-166; G-167 |
+| A11Y-006 | Accessibility & adaptive | Color-blind-safe line/status encoding with text/icon redundancy. | P1 | No color-only status. | G-184; G-166; G-167 |
+| A11Y-007 | Accessibility & adaptive | Step-free/wheelchair routing capability-aware. | P0 | Unknown accessibility data explicitly unknown. | G-184; G-166; G-167 |
+| A11Y-008 | Accessibility & adaptive | Hearing accessibility: haptic/visual equivalents for voice. | P0 | Alarm works silent/audio-off. | G-184; G-166; G-167 |
+| A11Y-009 | Accessibility & adaptive | Cognitive load: one next action per journey phase. | P1 | Active journey screen prioritizes current step. | G-184; G-166; G-167 |
+| A11Y-010 | Accessibility & adaptive | Large screen/foldable adaptive layouts, Tier 2 minimum; Tier 1 where useful. | P1 | Phone/tablet/foldable/desktop window tests. [R2] | G-184; G-166; G-167 |
+| DES-001 | Design system | Original Material 3 Expressive-compatible design language. | P0 | Custom tokens; generic Card/Button stacking avoided. [R1] | G-167; G-160; G-166 |
+| DES-002 | Design system | Typography scale optimized for transit glanceability. | P0 | ETA/line/stop hierarchy consistent. | G-167; G-160; G-166 |
+| DES-003 | Design system | 8pt spacing grid + documented density tiers. | P0 | No dead-space or cramped information. | G-167; G-160; G-166 |
+| DES-004 | Design system | Proper vector icon system; Unicode/emoji controls forbidden. | P0 | Icon semantic consistency. | G-167; G-160; G-166 |
+| DES-005 | Design system | Light/Dark/System parity. | P0 | Same hierarchy, contrast, map readability. | G-167; G-160; G-166 |
+| DES-006 | Design system | Transit line colors constrained by contrast and source branding. | P1 | Fallback palette deterministic. | G-167; G-160; G-166 |
+| DES-007 | Design system | Motion system: meaningful transitions, predictive back, reduced-motion safe. | P1 | No ornamental motion that delays task. | G-167; G-160; G-166 |
+| DES-008 | Design system | State components for loading/empty/error/offline/stale/permission. | P0 | All screens use shared primitives. | G-167; G-160; G-166 |
+| DES-009 | Design system | Bottom sheets/cards/dialogs have responsive max-width on large screens. | P1 | No full-width tablet sheet misuse. | G-167; G-160; G-166 |
+| DES-010 | Design system | Map + list visual grammar is coherent. | P1 | Selection synchronized. | G-167; G-160; G-166 |
+| DES-011 | Design system | Real-device visual regression board for every screen family. | P0 | Side-by-side approved screenshots. | G-167; G-160; G-166 |
+| DES-012 | Design system | Brand identity subtle; navigation readability dominates. | P1 | Logo/color never obscures route info. | G-167; G-160; G-166 |
+| SYS-001 | System surfaces | Android 16 progress-centric notification for active journey. | P1 | Milestones/segments from canonical journey state. [R7] | G-186; G-191 |
+| SYS-002 | System surfaces | Lock-screen ongoing journey controls. | P1 | Open, mute voice, cancel journey/alarm. | G-186; G-191 |
+| SYS-003 | System surfaces | Home-screen commuter/favorites/departures widgets. | P1 | Stale/source state visible. | G-186; G-191 |
+| SYS-004 | System surfaces | Wear OS journey preview and get-off cue. | P2 | Phone state mirrored; independent app not required for core. | G-186; G-191 |
+| SYS-005 | System surfaces | Android Auto/Automotive passenger-safe surface evaluated separately. | P2 | No distracting unsupported UI; policy review required. | G-186; G-191 |
+| SYS-006 | System surfaces | Quick settings/shortcut/deep links for “alarm to destination” and favorites. | P2 | Idempotent deep link. | G-186; G-191 |
+| GER-001 | Germany-specific mobility | Deutschland-Ticket eligibility filter and explanation. | P1 | Route shows D-Ticket compatible/unknown. | G-188; G-189 |
+| GER-002 | Germany-specific mobility | Fare data shown when authoritative source exists. | P1 | No invented price. | G-188; G-189 |
+| GER-003 | Germany-specific mobility | Ticket purchase via official deep-link/interoperability before direct sales. | P1 | Partner handoff; return-to-app journey continuity. | G-188; G-189 |
+| GER-004 | Germany-specific mobility | Bike/dog/passenger profile compatibility. | P1 | Data/capability-gated. | G-188; G-189 |
+| GER-005 | Germany-specific mobility | Long-distance coach sequence/occupancy where provider permits. | P2 | Source/freshness. | G-188; G-189 |
+| GER-006 | Germany-specific mobility | Station facilities and platform sector information provider-gated. | P2 | No false completeness. | G-188; G-189 |
+| GER-007 | Germany-specific mobility | Cross-border route support architecture-ready but Germany-first acceptance. | P2 | No release blocker. | G-188; G-189 |
+| CON-001 | External connector | Android app içinde LLM/AI runtime/API key bulunmaz. | P0 | Static scan + code review. | G-153; G-136 |
+| CON-002 | External connector | External ChatGPT connector typed read tools ile journey state okur. | P1 | Freshness/source included. | G-153; G-136 |
+| CON-003 | External connector | Typed write tools allowlist: origin/destination/journey/alarm only. | P1 | App validation/state machine used; raw DB mutation yok. | G-153; G-136 |
+| CON-004 | External connector | Writes explicit user approval + idempotency receipt. | P0 | Duplicate side effect=0. | G-153; G-136 |
+| CON-005 | External connector | OAuth/device binding/least privilege/revoke. | P0 | Secrets repo/log dışında. | G-153; G-136 |
+| CON-006 | External connector | Offline/stale connector state fail-closed. | P0 | No hallucinated journey facts. | G-153; G-136 |
+| CON-007 | External connector | Provider-neutral contract; ChatGPT sadece bir adapter. | P2 | Future connectors possible. | G-153; G-136 |
+| LOC-001 | Content & localization | TR/DE/EN full parity and locale-correct time/date/plural. | P0 | No hard-coded UI strings. | G-192 |
+| LOC-002 | Content & localization | German transit terminology reviewed. | P0 | Gleis/Bahnsteig/Haltestelle/Fahrt/Umstieg consistent. | G-192 |
+| LOC-003 | Content & localization | Error copy tells what happened + what user can do. | P0 | No technical provider codes exposed as primary text. | G-192 |
+| LOC-004 | Content & localization | Source/freshness copy concise. | P1 | “Planlı”, “canlı”, “x dk önce güncellendi”. | G-192 |
+| LOC-005 | Content & localization | Voice/TTS pronunciation for stop names validated. | P1 | Locale/tts_stop_name when available. | G-192 |
+| PERF-001 | Performance / privacy / observability | Cold start and time-to-search measured on midrange physical Android. | P0 | Budgets set from baseline; regressions block release. | G-190; G-191; G-193; G-173 |
+| PERF-002 | Performance / privacy / observability | Search local results target sub-second after index ready. | P0 | P95 tracked. | G-190; G-191; G-193; G-173 |
+| PERF-003 | Performance / privacy / observability | Static routing is cancelable and bounded in memory/time. | P0 | Representative Germany routes benchmark. | G-190; G-191; G-193; G-173 |
+| PERF-004 | Performance / privacy / observability | Large GTFS import is streaming/transactional and never blocks UI. | P0 | ANR=0 in acceptance. | G-190; G-191; G-193; G-173 |
+| PERF-005 | Performance / privacy / observability | Location update frequency adapts to journey phase and battery. | P0 | No unnecessary high-rate GPS. | G-190; G-191; G-193; G-173 |
+| PERF-006 | Performance / privacy / observability | Network calls use timeout/backoff/circuit breaker. | P0 | No infinite spinner. | G-190; G-191; G-193; G-173 |
+| SEC-001 | Performance / privacy / observability | Location/journey data local-first; minimum retention. | P0 | No analytics use without explicit need/consent. | G-190; G-191; G-193; G-173 |
+| SEC-002 | Performance / privacy / observability | Logs redact precise location, tokens and sensitive journey history by default. | P0 | Export bundle sanitized. | G-190; G-191; G-193; G-173 |
+| SEC-003 | Performance / privacy / observability | Dependencies/SBOM/secrets scanning and secure network transport. | P0 | Release gate. | G-190; G-191; G-193; G-173 |
+| OBS-001 | Performance / privacy / observability | Health model separates local index, search provider, route provider, RT, connector. | P0 | Overall READY cannot hide broken core. | G-190; G-191; G-193; G-173 |
+| OBS-002 | Performance / privacy / observability | Field evidence records source SHA, device/API, feed version and scenario. | P0 | Reproducible defect receipt. | G-190; G-191; G-193; G-173 |
+| OBS-003 | Performance / privacy / observability | Permanent Lohne regression suite retained. | P0 | Search + route + offline injection. | G-190; G-191; G-193; G-173 |
+| QA-001 | QA & release | Unit tests for parsers, state machines, ranking, alarm hysteresis. | P0 | Deterministic fixtures. | G-166; G-173; G-136; G-138 |
+| QA-002 | QA & release | Integration tests across GTFS→router→journey→alarm. | P0 | Real feed sample. | G-166; G-173; G-136; G-138 |
+| QA-003 | QA & release | Compose UI tests for all critical flows and degraded states. | P0 | API36 + supported min API. | G-166; G-173; G-136; G-138 |
+| QA-004 | QA & release | Screenshot visual regression light/dark/TR/DE/EN/font scales. | P0 | Canonical boards. | G-166; G-173; G-136; G-138 |
+| QA-005 | QA & release | Accessibility manual + automated test. | P0 | TalkBack physical device. | G-166; G-173; G-136; G-138 |
+| QA-006 | QA & release | Physical background tests: lock screen, Doze, process kill, Bluetooth reconnect. | P0 | Multiple OEMs. | G-166; G-173; G-136; G-138 |
+| QA-007 | QA & release | Network matrix: offline, high latency, packet loss, provider 5xx, rate limit. | P0 | Correct degrade behavior. | G-166; G-173; G-136; G-138 |
+| QA-008 | QA & release | GPS matrix: good, poor, tunnel, stale last-known, location disabled. | P0 | No false arrival. | G-166; G-173; G-136; G-138 |
+| QA-009 | QA & release | Data update failure/rollback/corrupt feed tests. | P0 | Old-known-good retained. | G-166; G-173; G-136; G-138 |
+| QA-010 | QA & release | Release candidate exact SHA and reproducible artifact receipt. | P0 | Checksum/source provenance. | G-166; G-173; G-136; G-138 |
+| REL-001 | QA & release | G-136 final field test only after product-complete gate. | P0 | No planned feature work remains afterward. | G-166; G-173; G-136; G-138 |
+| REL-002 | QA & release | G-138 packaging cannot change accepted product behavior. | P0 | Any behavior change reopens acceptance. | G-166; G-173; G-136; G-138 |
+| REL-003 | QA & release | Play Data Safety/privacy/permissions reflect exact accepted code. | P0 | Evidence-backed declarations. | G-166; G-173; G-136; G-138 |
+| REL-004 | QA & release | Staged rollout + rollback plan. | P0 | Crash/ANR/critical defect thresholds defined. | G-166; G-173; G-136; G-138 |
+
+---
+
+# Appendix C — Canonical release-acceptance scenario baseline
+
+These canonical scenarios remain mandatory where their gate applies. Appendix A21 adds further scenarios; it does not weaken this baseline.
+
+| ID | Journey | Condition | Expected result | Gate |
+| --- | --- | --- | --- | --- |
+| SC-01 | Lohne → Achim | Online, provider healthy | Search/route/journey/alarm end-to-end | P0 |
+| SC-02 | Lohne → Achim | Provider timeout | Static route; error≠no-result | P0 |
+| SC-03 | Germany cross-region | Online | Multi-region transfer/service-day correctness | P0 |
+| SC-04 | Any destination | Airplane mode | Offline search/route/alarm/TTS | P0 |
+| SC-05 | Active journey | Screen locked | Notification/TTS/alarm continuity | P0 |
+| SC-06 | Active journey | Doze/battery saver | Readiness/degrade + alarm reliability | P0 |
+| SC-07 | Active journey | Process killed | State restore; duplicate final alarm=0 | P0 |
+| SC-08 | Active journey | Poor GPS/tunnel | Hybrid confidence fallback; no false arrival | P0 |
+| SC-09 | Active journey | Bluetooth disconnect/reconnect | No duplicate/missed voice cue | P0 |
+| SC-10 | Transit disruption | Delay/cancel/platform change | Live overlay + alternative | P0 |
+| SC-11 | Accessibility | TalkBack + 200% text | Full critical path | P0 |
+| SC-12 | Large screen | Tablet/foldable/multi-window | Adaptive layout parity | P1 |
+| SC-13 | Connector | Live external ChatGPT | Read + user-approved write round-trip | P1 |
+| SC-14 | Data update | Corrupt/partial feed | Old-known-good retained | P0 |
+| SC-15 | Theme/locale | TR/DE/EN × light/dark | Visual/content parity | P1 |
+
+---
+
+# Appendix D — Canonical design QA checklist
+
+| ID | Alan | Kontrol |
+| --- | --- | --- |
+| DQ-01 | Hierarchy | 5-second glance: user current step, line/direction, next stop, ETA/alarm state’i anlıyor mu? |
+| DQ-02 | Density | Boş alan estetik uğruna bilgi kaybettirmiyor; yoğun listelerde satırlar taranabilir. |
+| DQ-03 | Iconography | Emoji/Unicode control yok; semantic vector icon. |
+| DQ-04 | Typography | ETA/current step dominant; metadata secondary; 200% safe. |
+| DQ-05 | Color | Status color-only değil; dark/light contrast. |
+| DQ-06 | State design | Loading/empty/error/offline/stale/permission gerçek, actionable ve ayırt edilebilir. |
+| DQ-07 | Motion | Süreç değişimini anlatıyor; reduced motion safe. |
+| DQ-08 | Map | Route, walking leg, stop, selected state görsel olarak karışmıyor. |
+| DQ-09 | Consistency | Aynı entity/component farklı ekranlarda aynı grammar. |
+| DQ-10 | Platform fit | Edge-to-edge, predictive back, keyboard/foldable behavior doğal. |
+| DQ-11 | Originality | Benchmark mantığı kullanılmış ama başka uygulamanın görünümü kopyalanmamış. |
+| DQ-12 | Real-device proof | Canonical board ve real screenshot side-by-side gözle görülür eşleşiyor. |
+
+---
+
+## Appendix E — Requirement accounting invariant
+
+- Canonical catalog rows: **175**.
+- Initially PASS in Gap Analysis v1.0: **17**.
+- Initially non-PASS mapped one-to-one to G-235..G-253: **158**.
+- Final G-254 rule: **175/175 accounted for**, with `PARTIAL/MISSING/BLOCKED=0`; a requirement may be non-implemented only when it has an explicit user-approved `OUT_OF_SCOPE_V1`/provider-gated disposition consistent with the master plan.
+- Every catalog row must carry final evidence pointers in `H003_175_REQUIREMENT_TRACEABILITY_MATRIX` before release closure.
 
 ## 32. Final rule
 
