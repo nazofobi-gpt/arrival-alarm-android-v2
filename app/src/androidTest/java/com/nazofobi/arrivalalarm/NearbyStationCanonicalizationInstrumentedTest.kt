@@ -28,6 +28,7 @@ class NearbyStationCanonicalizationInstrumentedTest {
 
         assertEquals(1, result.size)
         assertEquals("station", result.single().stop.id)
+        assertEquals(listOf("p1", "p2"), result.single().childStops.map { it.id })
         assertNotNull(result.single().bearingDegrees)
         index.close()
     }
