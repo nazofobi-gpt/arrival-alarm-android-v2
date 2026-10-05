@@ -1,5 +1,9 @@
 package com.nazofobi.arrivalalarm
 
+import com.google.protobuf.CodedOutputStream
+import com.google.transit.realtime.GtfsRealtime
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -157,6 +161,104 @@ class G176RetainedRegionalSamplesTest {
             GermanyRealtimeUnavailableReason.NETWORK,
             (unavailable as GermanyRealtimeOverlayResult.Unavailable).reason,
         )
+    }
+
+    @Test
+    fun incrementalParserHandlesLargeIgnoredEntityStreamWithoutFeedGraphMaterialization() {
+        val header = GtfsRealtime.FeedHeader.newBuilder()
+            .setGtfsRealtimeVersion("2.0")
+            .setTimestamp(4_000L)
+            .build()
+        val ignoredEntity = GtfsRealtime.FeedEntity.newBuilder()
+            .setId("ignored-" + "x".repeat(4_096))
+            .build()
+        val headerChunk = framedMessage(
+            GtfsRealtime.FeedMessage.HEADER_FIELD_NUMBER,
+            header.toByteArray(),
+        )
+        val entityChunk = framedMessage(
+            GtfsRealtime.FeedMessage.ENTITY_FIELD_NUMBER,
+            ignoredEntity.toByteArray(),
+        )
+        val repeatCount = 8_192
+        val wireBytes = headerChunk.size.toLong() + entityChunk.size.toLong() * repeatCount
+        assertTrue("synthetic payload must exceed 32 MiB", wireBytes > 32L * 1024L * 1024L)
+        assertTrue(
+            "synthetic payload must stay inside production input bound",
+            wireBytes < GERMANY_REALTIME_DEFAULT_MAX_BYTES.toLong(),
+        )
+
+        val result = GermanyGtfsRealtimeClient(
+            clock = EpochClock { 4_005L },
+            streamLoader = {
+                RepeatingFeedInputStream(
+                    headerChunk = headerChunk,
+                    entityChunk = entityChunk,
+                    repeatCount = repeatCount,
+                )
+            },
+        ).fetch()
+
+        assertTrue(result is GermanyRealtimeFetchResult.Available)
+        val snapshot = (result as GermanyRealtimeFetchResult.Available).snapshot
+        assertEquals(4_000L, snapshot.feedTimestampEpochSeconds)
+        assertEquals("2.0", snapshot.gtfsRealtimeVersion)
+        assertTrue(snapshot.tripUpdates.isEmpty())
+        assertTrue(snapshot.serviceAlerts.isEmpty())
+    }
+
+    private fun framedMessage(fieldNumber: Int, bytes: ByteArray): ByteArray {
+        val output = ByteArrayOutputStream()
+        CodedOutputStream.newInstance(output).also { coded ->
+            coded.writeByteArray(fieldNumber, bytes)
+            coded.flush()
+        }
+        return output.toByteArray()
+    }
+
+    private class RepeatingFeedInputStream(
+        private val headerChunk: ByteArray,
+        private val entityChunk: ByteArray,
+        private val repeatCount: Int,
+    ) : InputStream() {
+        private var servingHeader = true
+        private var entitiesServed = 0
+        private var offset = 0
+
+        override fun read(): Int {
+            val chunk = currentChunk() ?: return -1
+            val value = chunk[offset].toInt() and 0xff
+            advance(1, chunk.size)
+            return value
+        }
+
+        override fun read(buffer: ByteArray, offsetInBuffer: Int, length: Int): Int {
+            require(offsetInBuffer >= 0 && length >= 0 && offsetInBuffer + length <= buffer.size)
+            if (length == 0) return 0
+            val chunk = currentChunk() ?: return -1
+            val count = minOf(length, chunk.size - offset)
+            System.arraycopy(chunk, offset, buffer, offsetInBuffer, count)
+            advance(count, chunk.size)
+            return count
+        }
+
+        private fun currentChunk(): ByteArray? = when {
+            servingHeader -> headerChunk
+            entitiesServed < repeatCount -> entityChunk
+            else -> null
+        }
+
+        private fun advance(count: Int, chunkSize: Int) {
+            offset += count
+            if (offset == chunkSize) {
+                offset = 0
+                if (servingHeader) {
+                    servingHeader = false
+                } else {
+                    entitiesServed += 1
+                }
+            }
+        }
     }
 
     private fun matcher() = GermanyRealtimeMatcher(data, freshWindowSeconds = 120)
