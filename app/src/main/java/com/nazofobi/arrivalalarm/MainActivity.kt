@@ -1106,23 +1106,10 @@ fun ArrivalAlarmApp(
                 if (activeScreen == ArrivalAppScreen.SETTINGS) {
                 Text(stringResource(R.string.guidance_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
                 Text(guidanceStatusText(guidanceState), modifier = Modifier.testTag("guidance-status"))
-                Text(stringResource(R.string.guidance_language_title), style = MaterialTheme.typography.titleSmall)
-                Text(
-                    stringResource(R.string.guidance_language_status, guidanceLanguage.displayName),
-                    modifier = Modifier.testTag("guidance-language-status"),
+                GuidanceLanguagePicker(
+                    language = guidanceLanguage,
+                    onSelect = { selectGuidanceLanguage(it) },
                 )
-                GuidanceLanguage.values().forEach { language ->
-                    Button(
-                        onClick = { selectGuidanceLanguage(language) },
-                        enabled = guidanceLanguage != language,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("guidance-language-${language.localeTag}"),
-                    ) {
-                        Text(
-                            if (guidanceLanguage == language) stringResource(R.string.guidance_language_selected, language.displayName)
-                            else language.displayName
-                        )
-                    }
-                }
                 Button(
                     onClick = { guidancePermissionLauncher.launch(AndroidGuidancePermissions.runtimePermissions()) },
                     modifier = Modifier.heightIn(min = 48.dp).testTag("guidance-permissions"),

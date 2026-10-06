@@ -169,7 +169,6 @@ class MainActivityTest {
             .performScrollTo()
             .assertIsDisplayed()
             .assertContentDescriptionEquals(mapLabel)
-        rule.onNodeWithTag("home-map-provider").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun productionUiExposesNoLegacyFixtureControls() {
@@ -211,8 +210,11 @@ class MainActivityTest {
     @Test fun manualDarkThemePersistsAcrossActivityRecreation() {
         navigateTo("nav-settings")
         val darkLabel = rule.activity.getString(R.string.theme_dark)
-        rule.onNodeWithTag("theme-dark")
+        rule.onNodeWithTag("theme-mode-selector")
             .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        rule.onNodeWithTag("theme-dark")
             .assertIsDisplayed()
             .performClick()
 
@@ -287,9 +289,7 @@ class MainActivityTest {
         )
         navigateTo("nav-settings")
         listOf(
-            "theme-system",
-            "theme-light",
-            "theme-dark",
+            "theme-mode-selector",
             "readiness-permissions",
             "readiness-guidance-permissions",
             "readiness-refresh",
@@ -310,22 +310,25 @@ class MainActivityTest {
 
     @Test fun themeControlsExposeSelectionSemantics() {
         navigateTo("nav-settings")
-        rule.onNodeWithTag("theme-system")
+        rule.onNodeWithTag("theme-mode-selector")
             .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        rule.onNodeWithTag("theme-system")
             .assertIsDisplayed()
             .assertIsSelected()
         rule.onNodeWithTag("theme-dark")
-            .performScrollTo()
             .assertIsDisplayed()
             .assertIsNotSelected()
             .performClick()
         rule.waitForIdle()
 
-        rule.onNodeWithTag("theme-dark")
+        rule.onNodeWithTag("theme-mode-selector")
             .performScrollTo()
+            .performClick()
+        rule.onNodeWithTag("theme-dark")
             .assertIsSelected()
         rule.onNodeWithTag("theme-system")
-            .performScrollTo()
             .assertIsNotSelected()
     }
 
@@ -494,8 +497,11 @@ class MainActivityTest {
 
     @Test fun guidanceLanguageChoicePersistsAcrossActivityRecreation() {
         navigateTo("nav-settings")
-        rule.onNodeWithTag("guidance-language-de-DE")
+        rule.onNodeWithTag("guidance-language-selector")
             .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        rule.onNodeWithTag("guidance-language-de-DE")
             .assertIsDisplayed()
             .performClick()
         rule.onNodeWithTag("guidance-language-status")

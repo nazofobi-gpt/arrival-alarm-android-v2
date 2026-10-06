@@ -2,17 +2,30 @@ package com.nazofobi.arrivalalarm
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccessTime
+import androidx.compose.material.icons.rounded.DirectionsTransit
+import androidx.compose.material.icons.rounded.DirectionsWalk
+import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.TripOrigin
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -46,13 +59,13 @@ fun RouteJourneyPanel(
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         if (mode == RouteJourneyMode.RESULTS) {
             Text(
                 text = stringResource(R.string.route_results_title),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
                 modifier = Modifier.semantics { heading() },
             )
 
@@ -64,42 +77,34 @@ fun RouteJourneyPanel(
                     modifier = Modifier.testTag("route-results-empty"),
                 )
             } else {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                Surface(
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surface,
                 ) {
                     Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Text(
-                            text = stringResource(
-                                R.string.route_points_format,
-                                origin.label,
-                                destination.label,
-                            ),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
+                        JourneyPointLine(
+                            origin = origin.label,
+                            destination = destination.label,
                         )
                         routeStatus?.let {
                             Text(
                                 text = it,
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.testTag("route-status"),
                             )
                         }
                         if (routeOffline) {
-                            Text(
-                                text = stringResource(R.string.route_offline_badge),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.tertiary,
+                            StatusPill(
+                                label = stringResource(R.string.route_offline_badge),
+                                critical = false,
                                 modifier = Modifier.testTag("route-offline-badge"),
                             )
                         }
-                        Button(
+                        FilledTonalButton(
                             onClick = onRefreshRoutes,
                             enabled = !routeBusy,
                             modifier = Modifier
@@ -107,6 +112,8 @@ fun RouteJourneyPanel(
                                 .heightIn(min = 48.dp)
                                 .testTag("route-refresh"),
                         ) {
+                            Icon(Icons.Rounded.Refresh, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
                             Text(
                                 if (routeBusy) {
                                     stringResource(R.string.route_calculating)
@@ -118,7 +125,7 @@ fun RouteJourneyPanel(
                     }
                 }
 
-                routeOptions.take(3).forEachIndexed { index, option ->
+                routeOptions.take(6).forEachIndexed { index, option ->
                     RouteOptionCard(
                         option = option,
                         selected = selectedRouteId == option.id,
@@ -129,12 +136,19 @@ fun RouteJourneyPanel(
                 }
 
                 if (!routeBusy && routeOptions.isEmpty()) {
-                    Text(
-                        text = routeStatus ?: stringResource(R.string.route_not_found),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.testTag("route-results-empty"),
-                    )
+                    Surface(
+                        shape = MaterialTheme.shapes.large,
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    ) {
+                        Text(
+                            text = routeStatus ?: stringResource(R.string.route_not_found),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .padding(16.dp)
+                                .testTag("route-results-empty"),
+                        )
+                    }
                 }
             }
         } else {
@@ -143,8 +157,8 @@ fun RouteJourneyPanel(
             if (selected == null) {
                 Text(
                     text = stringResource(R.string.journey_detail_title),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier.semantics { heading() },
                 )
                 Text(
@@ -163,6 +177,40 @@ fun RouteJourneyPanel(
                 onCancelAlarm = onCancelAlarm,
             )
         }
+    }
+}
+
+@Composable
+private fun JourneyPointLine(
+    origin: String,
+    destination: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.TripOrigin,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.secondary,
+            modifier = Modifier.size(20.dp),
+        )
+        Text(
+            text = origin,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = 8.dp),
+        )
+        Text(
+            text = " → ",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = destination,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }
 
@@ -189,190 +237,336 @@ private fun RouteOptionCard(
         else -> R.string.route_planned_badge
     }
 
-    Card(
+    Surface(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surface
-            },
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (selected) 2.dp else 1.dp),
+        shape = MaterialTheme.shapes.large,
+        color = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        tonalElevation = 0.dp,
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(
-                text = duration?.let {
-                    stringResource(R.string.route_duration_minutes, it)
-                } ?: (option.departure + " → " + option.arrival),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = option.departure + " → " + option.arrival,
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Text(
-                text = option.line,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium,
-            )
-            Text(
-                text = option.direction,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = stringResource(
-                    R.string.route_walk_transfer_format,
-                    option.walkingMinutes,
-                    option.transfers,
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = stringResource(realtimeLabel),
-                style = MaterialTheme.typography.labelMedium,
-                color = when {
-                    option.realtime?.cancelledTripIds?.isNotEmpty() == true ->
-                        MaterialTheme.colorScheme.error
-                    hasRealtime -> MaterialTheme.colorScheme.secondary
-                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            )
-            OutlinedButton(
-                onClick = onSelect,
-                enabled = !selected &&
-                    option.realtime?.cancelledTripIds?.isNotEmpty() != true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .testTag(selectTestTag),
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = routeClock(option.departure) ?: option.departure,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = option.origin.label,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.DirectionsTransit,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = duration?.let {
+                            stringResource(R.string.route_duration_minutes, it)
+                        } ?: "—",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.End,
+                ) {
+                    Text(
+                        text = routeClock(option.arrival) ?: option.arrival,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = option.destination.label,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                ) {
+                    Text(
+                        text = option.line,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    )
+                }
                 Text(
-                    if (selected) {
-                        stringResource(R.string.route_selected_action)
-                    } else {
-                        stringResource(R.string.route_select_action)
-                    }
+                    text = option.direction,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 10.dp).weight(1f),
+                    maxLines = 1,
                 )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.DirectionsWalk,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(
+                    text = stringResource(
+                        R.string.route_walk_transfer_format,
+                        option.walkingMinutes,
+                        option.transfers,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                StatusPill(
+                    label = stringResource(realtimeLabel),
+                    critical = option.realtime?.cancelledTripIds?.isNotEmpty() == true,
+                    success = hasRealtime,
+                )
+            }
+
+            if (selected) {
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.primary,
+                ) {
+                    Text(
+                        text = stringResource(R.string.route_selected_action),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    )
+                }
+            } else {
+                OutlinedButton(
+                    onClick = onSelect,
+                    enabled = option.realtime?.cancelledTripIds?.isNotEmpty() != true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag(selectTestTag),
+                ) {
+                    Text(stringResource(R.string.route_select_action))
+                }
             }
         }
     }
 }
 
 @Composable
+private fun StatusPill(
+    label: String,
+    critical: Boolean,
+    success: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
+    val container = when {
+        critical -> MaterialTheme.colorScheme.errorContainer
+        success -> MaterialTheme.colorScheme.secondaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val content = when {
+        critical -> MaterialTheme.colorScheme.onErrorContainer
+        success -> MaterialTheme.colorScheme.onSecondaryContainer
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Surface(
+        shape = MaterialTheme.shapes.extraSmall,
+        color = container,
+        modifier = modifier,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = content,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+        )
+    }
+}
+
+@Composable
 private fun JourneyDetailCard(option: RouteOption) {
     val duration = routeDurationMinutes(option.departure, option.arrival)
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("journey-detail"),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+        Text(
+            text = stringResource(R.string.journey_detail_title),
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.semantics { heading() },
+        )
+        Surface(
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.primaryContainer,
         ) {
-            Text(
-                text = stringResource(R.string.journey_detail_title),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.semantics { heading() },
-            )
-            duration?.let {
-                Text(
-                    text = stringResource(R.string.route_duration_minutes, it),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Rounded.DirectionsTransit,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                    Text(
+                        text = option.line + " • " + option.direction,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Rounded.AccessTime,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        text = option.departure + " → " + option.arrival,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                    duration?.let {
+                        Text(
+                            text = " • " + stringResource(R.string.route_duration_minutes, it),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                }
             }
-            Text(
-                text = option.line + " • " + option.direction,
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Text(
-                text = option.departure + " → " + option.arrival,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        }
 
-            HorizontalDivider()
-
-            if (option.stops.isEmpty()) {
-                JourneyEndpoint(
-                    time = option.departure,
-                    label = option.origin.label,
-                    testTag = "journey-stop-origin",
-                )
-                JourneyEndpoint(
-                    time = option.arrival,
-                    label = option.destination.label,
-                    testTag = "journey-stop-destination",
-                )
-            } else {
-                val visibleStops = option.stops.take(16)
-                visibleStops.forEachIndexed { index, stop ->
-                    val actual = stop.departure ?: stop.arrival
-                    val planned = stop.plannedDeparture ?: stop.plannedArrival
-                    val displayTime = routeClock(actual ?: planned)
-                        ?: stringResource(R.string.unknown_time)
-                    val realtime = hasRealtimeDelta(stop)
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("journey-stop-" + index),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text(
-                            text = displayTime,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = if (realtime) {
-                                MaterialTheme.colorScheme.secondary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        )
-                        Text(
-                            text = stop.name,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium,
-                        )
-                        (stop.platform ?: stop.plannedPlatform)?.let { platform ->
+        Surface(
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(0.dp),
+            ) {
+                if (option.stops.isEmpty()) {
+                    JourneyEndpoint(
+                        time = option.departure,
+                        label = option.origin.label,
+                        testTag = "journey-stop-origin",
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+                    JourneyEndpoint(
+                        time = option.arrival,
+                        label = option.destination.label,
+                        testTag = "journey-stop-destination",
+                    )
+                } else {
+                    val visibleStops = option.stops.take(16)
+                    visibleStops.forEachIndexed { index, stop ->
+                        val actual = stop.departure ?: stop.arrival
+                        val planned = stop.plannedDeparture ?: stop.plannedArrival
+                        val displayTime = routeClock(actual ?: planned)
+                            ?: stringResource(R.string.unknown_time)
+                        val realtime = hasRealtimeDelta(stop)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("journey-stop-" + index)
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.Top,
+                        ) {
                             Text(
-                                text = stringResource(
-                                    if (stop.platform != null) {
-                                        R.string.route_realtime_platform_format
-                                    } else {
-                                        R.string.route_planned_platform_format
-                                    },
-                                    platform,
-                                ),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (stop.platform != null) {
+                                text = displayTime,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (realtime) {
                                     MaterialTheme.colorScheme.secondary
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 },
+                                modifier = Modifier.width(56.dp),
                             )
-                        }
-                        if (realtime) {
-                            Text(
-                                text = stringResource(R.string.route_realtime_badge),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.secondary,
+                            Icon(
+                                imageVector = Icons.Rounded.TripOrigin,
+                                contentDescription = null,
+                                tint = if (realtime) {
+                                    MaterialTheme.colorScheme.secondary
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
+                                modifier = Modifier.size(18.dp),
                             )
+                            Column(
+                                modifier = Modifier.padding(start = 10.dp).weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                Text(
+                                    text = stop.name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                (stop.platform ?: stop.plannedPlatform)?.let { platform ->
+                                    Text(
+                                        text = stringResource(
+                                            if (stop.platform != null) {
+                                                R.string.route_realtime_platform_format
+                                            } else {
+                                                R.string.route_planned_platform_format
+                                            },
+                                            platform,
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                if (realtime) {
+                                    Text(
+                                        text = stringResource(R.string.route_realtime_badge),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.secondary,
+                                    )
+                                }
+                            }
                         }
-                    }
-                    if (index != visibleStops.lastIndex) {
-                        HorizontalDivider()
+                        if (index != visibleStops.lastIndex) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                        }
                     }
                 }
             }
@@ -386,21 +580,30 @@ private fun JourneyEndpoint(
     label: String,
     testTag: String,
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag(testTag),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+            .testTag(testTag)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = time,
+            text = routeClock(time) ?: time,
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(56.dp),
+        )
+        Icon(
+            imageVector = Icons.Rounded.TripOrigin,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(18.dp),
         )
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = 10.dp),
         )
     }
 }
@@ -412,26 +615,32 @@ internal fun JourneyAlarmControls(
     onCancelAlarm: () -> Unit,
 ) {
     val context = LocalContext.current
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-        ),
+    Surface(
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        shape = MaterialTheme.shapes.large,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(
-                text = stringResource(
-                    R.string.phase_format,
-                    journeyPhaseText(journey.phase),
-                ),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onTertiaryContainer,
-                modifier = Modifier.testTag("phase"),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Rounded.NotificationsActive,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+                Text(
+                    text = stringResource(
+                        R.string.phase_format,
+                        journeyPhaseText(journey.phase),
+                    ),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    modifier = Modifier.padding(start = 8.dp).testTag("phase"),
+                )
+            }
             journey.error?.let {
                 Text(
                     text = localizedDomainMessage(context, it),
@@ -445,7 +654,7 @@ internal fun JourneyAlarmControls(
                 enabled = journey.phase == JourneyPhase.DESTINATION_SELECTED,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 48.dp)
+                    .heightIn(min = 52.dp)
                     .testTag("arm"),
             ) {
                 Text(stringResource(R.string.arm_alarm))
