@@ -161,25 +161,42 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         }
     }
 
-    fun nearest(latitude: Double, longitude: Double, limit: Int): List<NearbyStop> {
+    fun nearest(latitude: Double, longitude: Double, limit: Int): List<NearbyStop> =
+        nearestInternal(latitude, longitude, limit, canonicalizeStations = false)
+
+    fun nearestCanonicalStations(latitude: Double, longitude: Double, limit: Int): List<NearbyStop> =
+        nearestInternal(latitude, longitude, limit, canonicalizeStations = true)
+
+    private fun nearestInternal(
+        latitude: Double,
+        longitude: Double,
+        limit: Int,
+        canonicalizeStations: Boolean,
+    ): List<NearbyStop> {
+        if (limit <= 0) return emptyList()
         val radii = listOf(5_000.0, 20_000.0, 80_000.0)
         for (radius in radii) {
             val latDelta = radius / 111_320.0
             val lonDelta = radius / (111_320.0 * cos(Math.toRadians(latitude)).absoluteValue.coerceAtLeast(0.2))
-            val sql = "SELECT id,name,lat,lon FROM stops WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? LIMIT 6000"
+            val sql = "SELECT id,name,lat,lon,parent_station FROM stops WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? LIMIT 6000"
             val candidates = readableDatabase.rawQuery(
                 sql,
                 arrayOf((latitude - latDelta).toString(), (latitude + latDelta).toString(), (longitude - lonDelta).toString(), (longitude + lonDelta).toString()),
             ).use { c ->
                 buildList {
                     while (c.moveToNext()) {
-                        val stop = CatalogStop(c.getString(0), PROVIDER_ID, c.getString(1), c.getDouble(2), c.getDouble(3))
+                        val stop = CatalogStop(c.getString(0), PROVIDER_ID, c.getString(1), c.getDouble(2), c.getDouble(3), if (c.isNull(4)) null else c.getString(4))
                         val distance = haversineMeters(latitude, longitude, stop.latitude, stop.longitude).roundToInt()
                         if (distance <= radius) add(NearbyStop(stop, distance))
                     }
                 }
-            }.sortedBy { it.distanceMeters }.take(limit)
-            if (candidates.size >= limit || (candidates.isNotEmpty() && radius == radii.last())) return candidates
+            }
+            val resolved = if (canonicalizeStations) {
+                NearbyStationCanonicalizer.canonicalize(latitude, longitude, candidates, limit)
+            } else {
+                candidates.sortedWith(compareBy<NearbyStop>({ it.distanceMeters }, { it.stop.id })).take(limit)
+            }
+            if (resolved.size >= limit || (resolved.isNotEmpty() && radius == radii.last())) return resolved
         }
         return emptyList()
     }

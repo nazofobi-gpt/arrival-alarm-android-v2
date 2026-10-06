@@ -78,6 +78,9 @@
     <string name="restored_destination">Gespeichertes Ziel</string>
     <string name="nearby_stops">Nächste Haltestellen</string>
     <string name="nearby_stop_format">%1$s • %2$s • %3$d m</string>
+    <string name="nearby_child_stops_show">%1$d Bahnsteige/Unterhaltestellen anzeigen</string>
+    <string name="nearby_child_stops_hide">Bahnsteige/Unterhaltestellen ausblenden</string>
+    <string name="nearby_child_stop_format">%1$d. %2$s</string>
     <string name="route_calculating">Verbindung wird berechnet…</string>
     <string name="route_results_title">Verbindungen</string>
     <string name="route_points_format">%1$s → %2$s</string>

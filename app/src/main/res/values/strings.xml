@@ -81,6 +81,9 @@
     <string name="restored_destination">Kaydedilmiş varış</string>
     <string name="nearby_stops">En yakın duraklar</string>
     <string name="nearby_stop_format">%1$s • %2$s • %3$d m</string>
+    <string name="nearby_child_stops_show">%1$d alt durak/peronu göster</string>
+    <string name="nearby_child_stops_hide">Alt durakları/peronları gizle</string>
+    <string name="nearby_child_stop_format">%1$d. %2$s</string>
 
     <string name="route_calculating">Rota hesaplanıyor…</string>
     <string name="route_results_title">Rota Sonuçları</string>
