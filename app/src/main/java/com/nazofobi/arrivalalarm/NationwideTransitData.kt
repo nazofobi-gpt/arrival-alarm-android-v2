@@ -32,7 +32,7 @@ sealed interface NationwideDataState {
     data class Error(val message: String) : NationwideDataState
 }
 
-enum class TransitLocationKind { STOP, ADDRESS, POI }
+enum class TransitLocationKind { STOP, ADDRESS, POI, LINE, TRIP }
 
 data class TransitLocationResult(
     val key: String,
@@ -41,8 +41,19 @@ data class TransitLocationResult(
     val latitude: Double,
     val longitude: Double,
     val stop: CatalogStop? = null,
+    val routeId: String? = null,
+    val tripId: String? = null,
+    val autocompleteText: String? = null,
 ) {
-    val point: MapPoint get() = MapPoint(latitude, longitude, label)
+    val point: MapPoint
+        get() {
+            require(
+                kind == TransitLocationKind.STOP ||
+                    kind == TransitLocationKind.ADDRESS ||
+                    kind == TransitLocationKind.POI
+            ) { "Only location results have selectable coordinates" }
+            return MapPoint(latitude, longitude, label)
+        }
 }
 
 data class StationDeparturesSnapshot(
@@ -251,7 +262,11 @@ class NationwideTransitGateway(
         limit: Int = 20,
     ): NationwideLookupResolution<TransitLocationResult> {
         val local = if (store.isReady()) {
-            store.search(query, limit).map(::localLocation)
+            mergeLocalLocations(
+                stops = store.search(query, limit).map(::localLocation),
+                transit = store.searchRouteAndTripLocations(query, limit),
+                limit = limit,
+            )
         } else {
             emptyList()
         }
@@ -315,6 +330,24 @@ class NationwideTransitGateway(
             )
         }
         return liveLookup(liveApi.nearbyStopsOutcome(latitude, longitude, limit))
+    }
+
+    private fun mergeLocalLocations(
+        stops: List<TransitLocationResult>,
+        transit: List<TransitLocationResult>,
+        limit: Int,
+    ): List<TransitLocationResult> {
+        if (limit <= 0) return emptyList()
+        val transitQuota = minOf(transit.size, (limit / 3).coerceAtLeast(1))
+        val stopQuota = minOf(stops.size, (limit - transitQuota).coerceAtLeast(0))
+        return (
+            stops.take(stopQuota) +
+                transit.take(transitQuota) +
+                stops.drop(stopQuota) +
+                transit.drop(transitQuota)
+            )
+            .distinctBy { it.key }
+            .take(limit)
     }
 
     private fun localLocation(stop: CatalogStop) = TransitLocationResult(
