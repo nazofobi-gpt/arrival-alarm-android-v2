@@ -639,6 +639,19 @@ def main():
             if len(associated_alerts) >= 8:
                 break
 
+    platform_evidence_counts = {
+        "platformEvidenceState": platform_evidence_state,
+        "globalProtocolValidAssignedTripCount": platform_evidence_counts[
+            "globalProtocolValidAssignedTripCount"
+        ],
+        "globalStaticMatchableAssignedTripCount": platform_evidence_counts[
+            "globalStaticMatchableAssignedTripCount"
+        ],
+    }
+    platform_evidence_state = (
+        "PROVEN" if platform_evidence is not None else "PROVIDER_SAMPLE_UNAVAILABLE"
+    )
+
     output = {
         "schema": "G176_PROVIDER_DERIVED_REGIONAL_SAMPLES_V1",
         "capturedAtUtc": datetime.now(timezone.utc).isoformat(),
@@ -660,6 +673,8 @@ def main():
         "candidateCounts": {name: len(ids) for name, ids in candidate_ids.items()},
         "samples": samples,
         "platformEvidence": platform_evidence,
+        "platformEvidenceState": platform_evidence_state,
+        "platformEvidenceCounts": platform_evidence_counts,
         "associatedAlerts": associated_alerts,
         "notes": [
             "Samples are selected from the exact provider GTFS-RT payload by matching live trip_id to the matching Germany static GTFS.",
