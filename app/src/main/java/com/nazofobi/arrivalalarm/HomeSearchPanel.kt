@@ -421,15 +421,21 @@ fun HomeSearchPanel(
                                 .heightIn(min = 48.dp)
                                 .testTag("search-result-$index"),
                         ) {
-                            val action = if (selectingOrigin) {
-                                stringResource(R.string.select_origin)
-                            } else {
-                                stringResource(R.string.select_destination)
+                            val action = when (result.kind) {
+                                TransitLocationKind.LINE,
+                                TransitLocationKind.TRIP -> stringResource(R.string.search_autocomplete_action)
+                                else -> if (selectingOrigin) {
+                                    stringResource(R.string.select_origin)
+                                } else {
+                                    stringResource(R.string.select_destination)
+                                }
                             }
                             val kind = when (result.kind) {
                                 TransitLocationKind.STOP -> stringResource(R.string.location_kind_stop)
                                 TransitLocationKind.ADDRESS -> stringResource(R.string.location_kind_address)
                                 TransitLocationKind.POI -> stringResource(R.string.location_kind_poi)
+                                TransitLocationKind.LINE -> stringResource(R.string.location_kind_line)
+                                TransitLocationKind.TRIP -> stringResource(R.string.location_kind_trip)
                             }
                             Text(
                                 stringResource(
