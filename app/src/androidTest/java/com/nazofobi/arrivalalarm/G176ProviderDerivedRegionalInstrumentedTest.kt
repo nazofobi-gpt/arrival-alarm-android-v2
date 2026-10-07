@@ -111,8 +111,66 @@ class G176ProviderDerivedRegionalInstrumentedTest {
             assertTrue("$region unavailable state was not preserved", unavailable is GermanyRealtimeOverlayResult.Unavailable)
         }
 
+        root.optJSONObject("platformEvidence")?.let { sample ->
+            val entity = GtfsRealtime.FeedEntity.parseFrom(decode(sample.getString("entityPbBase64")))
+            val builder = GtfsRealtime.FeedMessage.newBuilder().setHeader(header).addEntity(entity)
+            val parsed = GermanyGtfsRealtimeClient(
+                clock = EpochClock { feedTimestamp },
+                streamLoader = { builder.build().toByteArray().inputStream() },
+            ).fetch()
+            assertTrue(
+                "nationwide platform evidence protobuf did not parse",
+                parsed is GermanyRealtimeFetchResult.Available,
+            )
+
+            val matcher = GermanyRealtimeMatcher(JsonStaticData(sample), freshWindowSeconds = 120)
+            val fresh = matcher.match(parsed, feedTimestamp)
+            assertTrue(
+                "nationwide platform evidence did not match static IDs",
+                fresh is GermanyRealtimeOverlayResult.Matched,
+            )
+            val matched = fresh as GermanyRealtimeOverlayResult.Matched
+            val summary = sample.getJSONObject("realtimeSummary")
+            assertTrue(
+                "nationwide platform evidence was not static-matchable",
+                summary.getInt("static_matchable_assigned_count") > 0,
+            )
+
+            val staticSequenceCounts = mutableMapOf<Int, Int>()
+            val staticStopTimes = sample.getJSONArray("staticStopTimes")
+            repeat(staticStopTimes.length()) { index ->
+                val sequence = staticStopTimes.getJSONObject(index)
+                    .getString("stop_sequence").toInt()
+                staticSequenceCounts[sequence] = (staticSequenceCounts[sequence] ?: 0) + 1
+            }
+            val assigned = entity.tripUpdate.stopTimeUpdateList.filter { stop ->
+                stop.hasStopTimeProperties() &&
+                    stop.stopTimeProperties.assignedStopId.isNotBlank()
+            }
+            val matchable = assigned.filter { stop ->
+                stop.hasStopSequence() &&
+                    staticSequenceCounts[stop.stopSequence] == 1 &&
+                    (stop.stopId.isBlank() ||
+                        stop.stopId == stop.stopTimeProperties.assignedStopId)
+            }
+            assertTrue(
+                "nationwide platform evidence contained no protocol-valid static-matchable assignment",
+                matchable.isNotEmpty(),
+            )
+            matchable.forEach { stop ->
+                assertTrue(
+                    "nationwide valid assigned stop was not retained at sequence ${stop.stopSequence}",
+                    matched.tripOverlays.single().stopUpdates.any {
+                        it.stopSequence == stop.stopSequence &&
+                            it.assignedStopId == stop.stopTimeProperties.assignedStopId
+                    },
+                )
+            }
+            validAssignedStopEvidenceCount += matchable.size
+        }
+
         assertTrue(
-            "No protocol-valid, static-matchable provider assigned stop in selected samples; platform acceptance is not proven",
+            "No protocol-valid, static-matchable provider assigned stop in regional or Germany-wide evidence; platform acceptance is not proven",
             validAssignedStopEvidenceCount > 0,
         )
 

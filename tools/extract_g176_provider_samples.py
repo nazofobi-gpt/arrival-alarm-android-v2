@@ -360,6 +360,25 @@ def choose_sample(candidates, summaries):
     return ranked[0][4]
 
 
+def choose_platform_evidence(summaries):
+    ranked = []
+    for trip_id, summary in summaries.items():
+        static_matchable = summary.get("static_matchable_assigned_count", 0)
+        if static_matchable <= 0:
+            continue
+        ranked.append((
+            static_matchable,
+            summary["protocol_valid_assigned_count"],
+            min(summary["delay_count"], 1),
+            summary["stop_count"],
+            trip_id,
+        ))
+    if not ranked:
+        return None
+    ranked.sort(reverse=True)
+    return ranked[0][4]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--realtime", required=True)
@@ -454,6 +473,7 @@ def main():
             )
 
         chosen = {name: choose_sample(candidate_ids[name], summaries) for name in REGIONS}
+        platform_trip_id = choose_platform_evidence(summaries)
         missing_regions = [name for name, trip_id in chosen.items() if not trip_id]
         if missing_regions:
             raise SystemExit(
@@ -464,6 +484,8 @@ def main():
             )
 
         chosen_ids = set(chosen.values())
+        if platform_trip_id:
+            chosen_ids.add(platform_trip_id)
         trip_rows = {}
         route_ids = set()
         for row in csv_rows(zf, "trips.txt"):
@@ -553,6 +575,26 @@ def main():
         }
         samples[region_name] = sample
 
+    platform_evidence = None
+    if platform_trip_id:
+        trip_row = trip_rows[platform_trip_id]
+        route_id = trip_row.get("route_id") or ""
+        platform_evidence = {
+            "scope": "germany_wide",
+            "realtimeSummary": summaries[platform_trip_id],
+            "realtimeEntity": selected_full[platform_trip_id],
+            "entityPbBase64": base64.b64encode(selected_raw[platform_trip_id]).decode("ascii"),
+            "staticTrip": trip_row,
+            "staticRoute": route_rows.get(route_id),
+            "staticAgency": agency_rows.get((route_rows.get(route_id) or {}).get("agency_id") or ""),
+            "staticStopTimes": selected_stop_times[platform_trip_id],
+            "staticStops": {
+                stop_id: selected_stop_rows.get(stop_id)
+                for stop_id in {row.get("stop_id") for row in selected_stop_times[platform_trip_id]}
+                if stop_id
+            },
+        }
+
     chosen_routes = {sample["staticTrip"].get("route_id") for sample in samples.values()}
     chosen_stops = {
         row.get("stop_id")
@@ -617,6 +659,7 @@ def main():
         },
         "candidateCounts": {name: len(ids) for name, ids in candidate_ids.items()},
         "samples": samples,
+        "platformEvidence": platform_evidence,
         "associatedAlerts": associated_alerts,
         "notes": [
             "Samples are selected from the exact provider GTFS-RT payload by matching live trip_id to the matching Germany static GTFS.",
@@ -646,6 +689,21 @@ def main():
             }
             for name, sample in samples.items()
         },
+        "platformEvidence": None if platform_evidence is None else {
+            "tripId": platform_evidence["staticTrip"].get("trip_id"),
+            "routeId": platform_evidence["staticTrip"].get("route_id"),
+            "assignedCount": platform_evidence["realtimeSummary"]["assigned_count"],
+            "protocolValidAssignedCount": platform_evidence["realtimeSummary"]["protocol_valid_assigned_count"],
+            "staticMatchableAssignedCount": platform_evidence["realtimeSummary"]["static_matchable_assigned_count"],
+        },
+        "globalProtocolValidAssignedTripCount": sum(
+            1 for summary in summaries.values()
+            if summary["protocol_valid_assigned_count"] > 0
+        ),
+        "globalStaticMatchableAssignedTripCount": sum(
+            1 for summary in summaries.values()
+            if summary["static_matchable_assigned_count"] > 0
+        ),
         "associatedAlerts": len(associated_alerts),
     }, ensure_ascii=False))
 
