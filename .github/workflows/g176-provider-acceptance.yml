@@ -1,0 +1,55 @@
+name: G176 Provider Sample Acceptance
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.head_ref == 'g176-real-sample-acceptance-20261005'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Capture provider-derived samples
+        run: |
+          curl -fL --retry 3 https://realtime.gtfs.de/realtime-free.pb -o /tmp/g176-live.pb
+          curl -fL --retry 3 https://download.gtfs.de/germany/free/latest.zip -o /tmp/germany-full.zip
+          python3 tools/extract_g176_provider_samples.py --realtime /tmp/g176-live.pb --static /tmp/germany-full.zip --output /tmp/g176-provider-regional-samples.json
+      - name: Enable KVM access
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
+      - name: API36 retained-provider production-path acceptance
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            adb push /tmp/g176-provider-regional-samples.json /data/local/tmp/g176-provider-regional-samples.json
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.G176ProviderDerivedRegionalInstrumentedTest -Pandroid.testInstrumentationRunnerArguments.providerSamplesPath=/data/local/tmp/g176-provider-regional-samples.json
+
+      - name: Upload G176 provider instrumentation diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: g176-provider-diagnostics-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+          if-no-files-found: warn
+          retention-days: 14

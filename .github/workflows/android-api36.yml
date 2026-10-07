@@ -49,7 +49,7 @@ jobs:
         if: github.head_ref == 'interactive/g176-live-smoke-20261004' || github.ref_name == 'interactive/g176-live-smoke-20261004' || github.head_ref == 'g176-real-sample-acceptance-20261005' || github.ref_name == 'g176-real-sample-acceptance-20261005'
         run: |
           set -eu
-          curl -fL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 300 \
+          curl -fL --retry 5 --retry-all-errors --connect-timeout 60 --max-time 600 \
             https://realtime.gtfs.de/realtime-free.pb \
             -o /tmp/g176-live.pb
           bytes="$(stat -c%s /tmp/g176-live.pb)"
@@ -80,6 +80,19 @@ jobs:
           test -s /tmp/g167-visual-qa.zip
           test -s /tmp/g167-visual-reduction-report.json
 
+      - name: Extract provider-derived G-176 regional samples
+        if: github.head_ref == 'g176-real-sample-acceptance-20261005' || github.ref_name == 'g176-real-sample-acceptance-20261005'
+        run: |
+          set -eu
+          test -s /tmp/g176-live.pb
+          test -s /tmp/germany-full-visual.zip
+          mkdir -p app/build/g176-provider-samples
+          python3 tools/extract_g176_provider_samples.py \
+            --realtime /tmp/g176-live.pb \
+            --static /tmp/germany-full-visual.zip \
+            --output app/build/g176-provider-samples/g176-provider-regional-samples.json
+          test -s app/build/g176-provider-samples/g176-provider-regional-samples.json
+
       - name: Enable KVM access
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -102,6 +115,7 @@ jobs:
 
             test ! -s /tmp/g176-live.pb || (adb shell rm -f /sdcard/Download/g176-live-realtime-report.json && adb push /tmp/g176-live.pb /data/local/tmp/g176-live.pb && ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.G176LiveRealtimeInstrumentedTest -Pandroid.testInstrumentationRunnerArguments.realtimePath=/data/local/tmp/g176-live.pb && mkdir -p app/build/outputs/androidTest-results/g176-live && adb pull /sdcard/Download/g176-live-realtime-report.json app/build/outputs/androidTest-results/g176-live/ && cp /tmp/g176-live.sha256 /tmp/g176-live.bytes app/build/outputs/androidTest-results/g176-live/ && test -s app/build/outputs/androidTest-results/g176-live/g176-live-realtime-report.json)
 
+            test ! -s app/build/g176-provider-samples/g176-provider-regional-samples.json || (adb push app/build/g176-provider-samples/g176-provider-regional-samples.json /data/local/tmp/g176-provider-regional-samples.json && ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.G176ProviderDerivedRegionalInstrumentedTest -Pandroid.testInstrumentationRunnerArguments.providerSamplesPath=/data/local/tmp/g176-provider-regional-samples.json)
             adb shell wm size 412x915
             adb shell wm density 160
             adb shell settings put system font_scale 1.0
@@ -175,6 +189,7 @@ jobs:
           name: api36-diagnostics-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             app/build/reports/androidTests/
+            app/build/g176-provider-samples/
             app/build/outputs/androidTest-results/
             app/build/outputs/field-rc/apksigner-verify.txt
             app/build/outputs/field-rc/manifest-badging.txt
