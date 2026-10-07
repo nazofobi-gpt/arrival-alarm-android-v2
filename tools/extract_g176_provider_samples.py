@@ -639,18 +639,20 @@ def main():
             if len(associated_alerts) >= 8:
                 break
 
-    platform_evidence_counts = {
-        "platformEvidenceState": platform_evidence_state,
-        "globalProtocolValidAssignedTripCount": platform_evidence_counts[
-            "globalProtocolValidAssignedTripCount"
-        ],
-        "globalStaticMatchableAssignedTripCount": platform_evidence_counts[
-            "globalStaticMatchableAssignedTripCount"
-        ],
-    }
     platform_evidence_state = (
         "PROVEN" if platform_evidence is not None else "PROVIDER_SAMPLE_UNAVAILABLE"
     )
+    platform_evidence_counts = {
+        "platformEvidenceState": platform_evidence_state,
+        "globalProtocolValidAssignedTripCount": sum(
+            1 for summary in summaries.values()
+            if summary["protocol_valid_assigned_count"] > 0
+        ),
+        "globalStaticMatchableAssignedTripCount": sum(
+            1 for summary in summaries.values()
+            if summary["static_matchable_assigned_count"] > 0
+        ),
+    }
 
     output = {
         "schema": "G176_PROVIDER_DERIVED_REGIONAL_SAMPLES_V1",
