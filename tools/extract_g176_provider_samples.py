@@ -537,7 +537,7 @@ def main():
 
     selected_raw = {}
     selected_full = {}
-    selected_ids = set(chosen.values())
+    selected_ids = set(chosen_ids)
     for kind, raw in iter_feed_entities(payload):
         if kind != "entity":
             continue
