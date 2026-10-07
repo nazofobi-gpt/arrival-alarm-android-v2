@@ -54,8 +54,9 @@
     <string name="select_origin">Başlangıç seç</string>
     <string name="selecting_destination">Varış seçiliyor</string>
     <string name="select_destination">Varış seç</string>
-    <string name="search_stops_label">Durak, adres veya yer ara</string>
-    <string name="search_supporting_text">Durak adı, adres veya POI yazın.</string>
+    <string name="search_stops_label">Durak, adres, hat veya sefer ara</string>
+    <string name="search_supporting_text">Durak adı, adres, POI, hat veya sefer yazın.</string>
+    <string name="search_autocomplete_action">Tamamla</string>
     <string name="journey_points_title">Yolculuk noktaları</string>
     <string name="journey_points_empty">Önce başlangıç noktasını seçin.</string>
     <string name="search_recents_title">Son aramalar</string>
@@ -185,6 +186,8 @@
     <string name="location_kind_stop">Durak</string>
     <string name="location_kind_address">Adres</string>
     <string name="location_kind_poi">Nokta/POI</string>
+    <string name="location_kind_line">Hat</string>
+    <string name="location_kind_trip">Sefer</string>
 
     <string name="live_trip_title">Canlı yolculuk</string>
     <string name="live_trip_route_format">%1$s • %2$s</string>
