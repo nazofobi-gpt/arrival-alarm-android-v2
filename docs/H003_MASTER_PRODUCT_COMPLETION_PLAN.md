@@ -1,15 +1,17 @@
 # Varış V2 — Master Product Completion & Release Plan
 
 **Plan ID:** H003-MASTER-COMPLETION-PLAN-001  
-**Version:** 1.2  
+**Version:** 1.3  
 **Date:** 2026-10-05  
 **Product:** Varış V2 — Almanya odaklı varış alarmı Android uygulaması  
 **Repository:** `nazofobi-gpt/arrival-alarm-android-v2`  
 **Canonical product target:** H-003  
-**Idea baseline:** `H003-IDEA-REV-002`  
+**Idea baseline:** `H003-IDEA-REV-003`  
 **Level:** 1 / Master Product Plan  
-**Reconciliation:** `CURRENT` — 2026-10-05; reconciled through IDEA-H003-031. IDEA-H003-029/030 define L0→L5 lineage and IDEA-H003-031 activates Level-5 live execution.  
+**Reconciliation:** `CURRENT` — 2026-10-09; reconciled through IDEA-H003-032. IDEA-H003-029/030 define L0→L5 lineage, IDEA-H003-031 activates Level-5 live execution, and IDEA-H003-032 adds trip-first ordered-stop selection for origin/destination/alarm targeting.  
 **Purpose:** This document is the detailed execution plan to be followed until the product reaches product-complete, field-accepted and Play-release-ready state.
+
+**v1.3 audit note:** v1.3 preserves the historical 175-row catalog and adds the post-baseline IDEA-H003-032 delta as a separately traceable release-blocking requirement set. The 175-row accounting is not renumbered; final completeness is 175/175 historical closure **plus every ACTIVE post-baseline idea delta closed**.
 
 **v1.2 audit note:** v1.0 was broad but not fully explicit; v1.1 closed the identified execution gaps. v1.2 additionally embeds the complete canonical 175-row requirement catalog, the original release-acceptance scenario matrix and the design-QA checklist so this file is self-contained for development tracking. The additions below are mandatory and supersede any weaker/implicit wording in earlier versions.
 
@@ -94,6 +96,36 @@ The minimum releasable product must provide:
 - TR/DE/EN and accessibility-critical support.
 - User-approved inference only: uncertain inferred journey/boarding/target state must never arm or change the alarm without required confirmation.
 - Privacy-safe diagnostics and Play compliance.
+
+---
+
+## 3.1 REV-003 product delta — trip-first stop selection (IDEA-H003-032)
+
+This delta is **P0 / release blocking**. It extends discovery, itinerary and alarm setup without removing the existing stop/address/map-first flows.
+
+### User outcome
+The user can select a concrete transit trip/service first, inspect that trip's ordered stop sequence, and choose stops from that sequence as:
+- origin / boarding stop,
+- destination / alighting stop,
+- arrival-alarm target stop when needed.
+
+### Mandatory behavior
+1. **Trip is a first-class selectable entity.** Search, station/line detail and relevant route/journey surfaces can open a concrete trip instance.
+2. **Stable trip instance identity.** Selection binds at minimum trip_id (or provider-neutral stable equivalent), route/line identity, direction/headsign and service date/time context. A different direction or service-day instance is never silently substituted.
+3. **Ordered stops come from static truth.** The full stop sequence is rendered in canonical stop_sequence order with parent-station/platform coherence. Realtime may enrich times/platform/cancellation but must not invent or silently reorder the static sequence.
+4. **List-first stop selection.** The selected trip opens an accessible ordered stop list showing enough line/direction/time/source context to avoid choosing the wrong service.
+5. **Ordering validation.** Origin must precede destination on the selected trip. Impossible/reversed/same-stop combinations are rejected with an actionable state; changing trip/direction invalidates incompatible prior stop choices.
+6. **Alarm target validation.** Default alarm target is the selected destination. If the user chooses another stop from the same trip, it must be on the valid traveled segment; no out-of-sequence or unrelated stop can arm the alarm.
+7. **Explicit selection is sticky.** Route refresh/realtime changes must not silently switch the user's chosen trip. If that trip becomes cancelled/unavailable, the app shows the condition and asks for an explicit alternative choice.
+8. **Offline/degraded behavior.** Static trip and stop sequence remain usable without realtime/provider access. Realtime unavailable/stale is visible and never presented as fresh.
+9. **State continuity.** Selected trip + origin/destination/alarm target survive normal navigation and process recreation according to the journey persistence contract.
+10. **Acceptance.** Automated tests cover direction/service-day/order/realtime-loss/recreation cases; physical acceptance includes a real Germany trip selection → ordered-stop choice → active journey/alarm setup flow.
+
+### Canonical task ownership
+Primary: **G-182**. Supporting ownership: **G-171, G-176, G-179, G-180, G-181, G-173, G-254**. No new duplicate G task is created unless implementation reveals acceptance that cannot be owned by these tasks.
+
+### Completion accounting
+The historical Appendix B 175-row catalog remains immutable for auditability. IDEA-H003-032 is a **post-baseline delta** and must be closed in addition to the historical 175/175 gate. G-254 may not declare H-003 complete while any ACTIVE post-baseline delta remains open.
 
 ---
 
