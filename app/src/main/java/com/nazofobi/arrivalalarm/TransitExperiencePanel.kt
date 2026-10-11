@@ -43,6 +43,7 @@ fun TransitExperiencePanel(
     nowEpochSeconds: Long,
     providerCapabilities: TransitProviderCapabilities = TransitProviderCapabilities(),
     onSelectJourney: (String) -> Unit = {},
+    onSelectDeparture: ((Departure) -> Unit)? = null,
     statusMessage: String? = null,
     sourceLabel: String? = null,
     loading: Boolean = false,
