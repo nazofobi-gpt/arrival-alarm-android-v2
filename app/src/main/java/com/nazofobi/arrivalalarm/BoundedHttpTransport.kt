@@ -94,7 +94,10 @@ class BoundedHttpTransport(
                             HttpTransportResult.Failure.Kind.NETWORK
                         },
                         attempts,
-                        error.message,
+                        // IOException messages may contain full request URLs (including
+                        // query credentials), precise coordinates, or provider response details.
+                        // Expose only a stable, non-sensitive failure classifier.
+                        if (error is SocketTimeoutException) "timeout" else "network_error",
                     )
                 }
                 sleepOrStop(backoffMs(attempts), attempts)?.let { return it }
