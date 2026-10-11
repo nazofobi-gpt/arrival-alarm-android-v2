@@ -42,6 +42,14 @@ class SettingsCoreReadinessTest {
     }
 
     @Test
+    fun knownFailureTakesPrecedenceOverUncheckedSecondCapability() {
+        assertEquals(
+            ReadinessLevel.ACTION_NEEDED,
+            state(search = CoreReadinessCheck.NO_USABLE_RESULT).overallLevel,
+        )
+    }
+
+    @Test
     fun cachedRouteDoesNotPassAsFullyHealthy() {
         assertEquals(
             ReadinessLevel.ACTION_NEEDED,
