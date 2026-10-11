@@ -43,6 +43,20 @@ class RouteJourneyDurationTest {
         assertNull(routeDurationMinutes(option(departure = "Planlı", arrival = "Planlı")))
     }
 
+    @Test fun malformedClockOnlyLabelsNeverCreateFalseDurations() {
+        val invalidClocks = listOf("25:00", "11:60", "09-30", "9:00", "09:00:99", "09:00bogus")
+        for (clock in invalidClocks) {
+            assertNull("Invalid clock: $clock", routeDurationMinutes(option(departure = clock, arrival = "10:00")))
+        }
+    }
+
+    @Test fun isoClockWithSecondsPreservesLegacyOvernightFallback() {
+        assertEquals(
+            35,
+            routeDurationMinutes(option(departure = "2026-10-11T23:50:15", arrival = "2026-10-12T00:25:59")),
+        )
+    }
+
     @Test fun exactDurationTakesPrecedenceOverMisleadingClockLabels() {
         assertEquals(
             90,
