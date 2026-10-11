@@ -205,6 +205,23 @@ internal class StaticRouteOptionMapper(
     }
 }
 
+/** Calendar-day candidates for service selection; use civil days, not fixed 24-hour offsets
+ * (which would drift across Europe/Berlin daylight-saving transitions).
+ * Yesterday retains GTFS 24+ hour trips; tomorrow captures departures after midnight.
+ */
+internal fun staticRoutingServiceDates(epochMillis: Long, timeZone: TimeZone): List<GtfsServiceDate> =
+    (-1..1).map { offset ->
+        val calendar = GregorianCalendar(timeZone).apply {
+            timeInMillis = epochMillis
+            add(Calendar.DAY_OF_MONTH, offset)
+        }
+        GtfsServiceDate(
+            year = calendar.get(Calendar.YEAR),
+            month = calendar.get(Calendar.MONTH) + 1,
+            day = calendar.get(Calendar.DAY_OF_MONTH),
+        )
+    }
+
 class ProductionStaticJourneyPlanner(
     private val index: NationwideTransitIndex,
     agencyTimeZone: TimeZone = TimeZone.getTimeZone("Europe/Berlin"),
@@ -316,20 +333,5 @@ class ProductionStaticJourneyPlanner(
         ceil(distanceMeters.coerceAtLeast(0) / walkingMetersPerSecond).toInt()
 
     private fun serviceDates(epochMillis: Long): List<GtfsServiceDate> =
-        listOf(
-            serviceDate(epochMillis, dayOffset = -1),
-            serviceDate(epochMillis),
-        )
-
-    private fun serviceDate(epochMillis: Long, dayOffset: Int = 0): GtfsServiceDate {
-        val calendar = GregorianCalendar(timeZone).apply {
-            timeInMillis = epochMillis
-            add(Calendar.DAY_OF_MONTH, dayOffset)
-        }
-        return GtfsServiceDate(
-            year = calendar.get(Calendar.YEAR),
-            month = calendar.get(Calendar.MONTH) + 1,
-            day = calendar.get(Calendar.DAY_OF_MONTH),
-        )
-    }
+        staticRoutingServiceDates(epochMillis, timeZone)
 }
