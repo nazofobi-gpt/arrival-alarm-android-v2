@@ -219,7 +219,8 @@ fun TransitExperiencePanel(
                         onClick = {
                             selectedTrip = departure.tripId
                             store.recordTrip(departure.tripId)
-                            departure.routeId?.let(onSelectJourney)
+                            if (onSelectDeparture != null) onSelectDeparture(departure)
+                            else departure.routeId?.let(onSelectJourney)
                         },
                         modifier = Modifier
                             .fillMaxWidth()
