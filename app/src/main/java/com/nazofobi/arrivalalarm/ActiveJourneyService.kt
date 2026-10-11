@@ -205,7 +205,7 @@ class ActiveJourneyService : Service(), LocationListener {
     }
 
     private fun startLocationForeground(): Boolean {
-        // Do not present a persisted distance as a fresh GPS measurement after service restart.
+        // A persisted distance cannot stand in for a fresh GPS callback after FGS recreation.
         val notification = trackingNotification(null, accuracyDegraded = true)
         return try {
             if (Build.VERSION.SDK_INT >= 29) {
@@ -232,12 +232,12 @@ class ActiveJourneyService : Service(), LocationListener {
 
     private fun trackingNotification(distanceMeters: Double?, accuracyDegraded: Boolean = false): Notification {
         val text = when {
-            accuracyDegraded -> getString(R.string.active_journey_notification_degraded)
-            distanceMeters == null -> getString(R.string.active_journey_notification_waiting_location)
-            else -> getString(R.string.active_journey_notification_distance, distanceMeters.roundToInt())
+            accuracyDegraded -> "Konum doğruluğu yetersiz; alarm etkin, yeni GPS bekleniyor"
+            distanceMeters == null -> "Konum takip ediliyor"
+            else -> "Hedefe yaklaşık " + distanceMeters.roundToInt() + " m kaldı"
         }
         return notificationBuilder(TRACKING_CHANNEL_ID)
-            .setContentTitle(getString(R.string.active_journey_notification_title))
+            .setContentTitle("Varış alarmı etkin")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_dialog_map)
             .setOngoing(true)
@@ -251,8 +251,8 @@ class ActiveJourneyService : Service(), LocationListener {
         manager.notify(
             ARRIVAL_NOTIFICATION_ID,
             notificationBuilder(ARRIVAL_CHANNEL_ID)
-                .setContentTitle(getString(R.string.active_journey_arrived_title))
-                .setContentText(getString(R.string.active_journey_arrived_body))
+                .setContentTitle("Varış noktasına ulaşıldı")
+                .setContentText("Varış alarmı tamamlandı.")
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setAutoCancel(true)
                 .setCategory(Notification.CATEGORY_ALARM)
