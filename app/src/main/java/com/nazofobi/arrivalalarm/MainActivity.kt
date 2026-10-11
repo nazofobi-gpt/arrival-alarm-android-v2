@@ -220,6 +220,9 @@ fun ArrivalAlarmApp(
     val routeCache = remember(context) {
         OfflineTransitCache(backingStore = SharedPreferencesTransitCacheStore(context))
     }
+    val nearbyRequestGate = remember { LatestRequestGate() }
+    val routeRequestGate = remember { LatestRequestGate() }
+    val stationRequestGate = remember { LatestRequestGate() }
     var guidanceState by remember { mutableStateOf(guidanceController.state) }
     var guidanceLanguage by remember {
         mutableStateOf(
@@ -298,8 +301,12 @@ fun ArrivalAlarmApp(
     }
 
     fun loadNearby(point: MapPoint) {
+        val requestGeneration = nearbyRequestGate.begin()
+        nearby = emptyList()
+        nearbySource = null
         nearbyMessage = null
         transit.nearbyStopsResolved(point.latitude, point.longitude) { resolution ->
+            if (!nearbyRequestGate.accepts(requestGeneration)) return@nearbyStopsResolved
             when (resolution) {
                 is NationwideLookupResolution.Results -> {
                     nearby = resolution.values
@@ -326,6 +333,9 @@ fun ArrivalAlarmApp(
     }
 
     fun setOrigin(point: MapPoint) {
+        routeRequestGate.invalidate()
+        stationRequestGate.invalidate()
+        routeBusy = false
         origin = point
         destination = null
         destinationStopId = null
@@ -351,10 +361,12 @@ fun ArrivalAlarmApp(
         "${a.latitude},${a.longitude}->${b.latitude},${b.longitude}"
 
     fun loadRoutes(a: MapPoint, b: MapPoint) {
+        val requestGeneration = routeRequestGate.begin()
         routeBusy = true
         routeStatus = context.getString(R.string.route_calculating)
         val key = routeKey(a, b)
         transit.journeyOptions(a, b) { options, status ->
+            if (!routeRequestGate.accepts(requestGeneration)) return@journeyOptions
             routeBusy = false
             if (options.isNotEmpty()) {
                 routeOffline = false
@@ -379,6 +391,7 @@ fun ArrivalAlarmApp(
     }
 
     fun loadStationDepartures(stop: CatalogStop) {
+        val requestGeneration = stationRequestGate.begin()
         stationLoading = true
         stationResolved = false
         stationDepartures = emptyList()
@@ -387,6 +400,7 @@ fun ArrivalAlarmApp(
         stationRealtimeState = null
         stationStatus = null
         transit.stationDepartures(stop) { snapshot ->
+            if (!stationRequestGate.accepts(requestGeneration)) return@stationDepartures
             stationLoading = false
             if (snapshot.error == null) {
                 stationResolved = true
@@ -415,6 +429,7 @@ fun ArrivalAlarmApp(
             routeStatus = localizedDomainMessage(context, outcome.message)
             return false
         }
+        stationRequestGate.invalidate()
         destination = point
         destinationStopId = stopId
         routeOffline = false
