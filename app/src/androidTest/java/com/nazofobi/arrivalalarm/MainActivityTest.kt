@@ -210,6 +210,10 @@ class MainActivityTest {
     @Test fun manualDarkThemePersistsAcrossActivityRecreation() {
         navigateTo("nav-settings")
         val darkLabel = rule.activity.getString(R.string.theme_dark)
+        rule.onNodeWithTag("theme-mode-picker")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
         rule.onNodeWithTag("theme-dark")
             .performScrollTo()
             .assertIsDisplayed()
