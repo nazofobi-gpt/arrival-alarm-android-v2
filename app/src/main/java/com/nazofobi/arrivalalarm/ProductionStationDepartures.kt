@@ -215,8 +215,11 @@ internal class ProductionStationDeparturesPlanner(
 
     private fun serviceDates(epochMillis: Long): List<GtfsServiceDate> =
         listOf(
+            // GTFS times may exceed 24:00 on yesterday's service day. Tomorrow's
+            // 00:xx departures can also be the next actual departures tonight.
             serviceDate(epochMillis, dayOffset = -1),
             serviceDate(epochMillis),
+            serviceDate(epochMillis, dayOffset = 1),
         )
 
     private fun serviceDate(epochMillis: Long, dayOffset: Int = 0): GtfsServiceDate {
@@ -239,7 +242,9 @@ internal class ProductionStationDeparturesPlanner(
             .resolve(serviceDate, agencyTimeZone)
             .epochMillis
         val delta = epochMillis - anchor
-        if (delta < 0L) return null
+        // A future service day has not begun yet: query from its first second,
+        // rather than suppressing all next-day departures from the station board.
+        if (delta < 0L) return 0
         val seconds = delta / 1_000L + if (delta % 1_000L == 0L) 0L else 1L
         return seconds.takeIf { it <= Int.MAX_VALUE }?.toInt()
     }
