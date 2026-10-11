@@ -208,6 +208,10 @@ fun ArrivalAlarmApp(
     var routeStatus by remember { mutableStateOf<String?>(null) }
     var routeOffline by remember { mutableStateOf(false) }
     var routeBusy by remember { mutableStateOf(false) }
+    // In-flight responses must not overwrite a newer journey or station selection.
+    val routeRequestGate = remember { LatestRequestGate() }
+    val nearbyRequestGate = remember { LatestRequestGate() }
+    val stationRequestGate = remember { LatestRequestGate() }
     var stationDepartures by remember { mutableStateOf(emptyList<Departure>()) }
     var stationAlerts by remember { mutableStateOf(emptyList<ServiceAlert>()) }
     var stationSource by remember { mutableStateOf<String?>(null) }
@@ -298,8 +302,10 @@ fun ArrivalAlarmApp(
     }
 
     fun loadNearby(point: MapPoint) {
+        val token = nearbyRequestGate.begin()
         nearbyMessage = null
-        transit.nearbyStopsResolved(point.latitude, point.longitude) { resolution ->
+        transit.nearbyStopsResolved(point.latitude, point.longitude) callback@{ resolution ->
+            if (!nearbyRequestGate.isCurrent(token)) return@callback
             when (resolution) {
                 is NationwideLookupResolution.Results -> {
                     nearby = resolution.values
@@ -326,6 +332,12 @@ fun ArrivalAlarmApp(
     }
 
     fun setOrigin(point: MapPoint) {
+        // Changing origin cancels any pending route and station responses.
+        routeRequestGate.invalidate()
+        stationRequestGate.invalidate()
+        routeBusy = false
+        nearby = emptyList()
+        nearbySource = null
         origin = point
         destination = null
         destinationStopId = null
@@ -351,10 +363,12 @@ fun ArrivalAlarmApp(
         "${a.latitude},${a.longitude}->${b.latitude},${b.longitude}"
 
     fun loadRoutes(a: MapPoint, b: MapPoint) {
+        val token = routeRequestGate.begin()
         routeBusy = true
         routeStatus = context.getString(R.string.route_calculating)
         val key = routeKey(a, b)
-        transit.journeyOptions(a, b) { options, status ->
+        transit.journeyOptions(a, b) callback@{ options, status ->
+            if (!routeRequestGate.isCurrent(token)) return@callback
             routeBusy = false
             if (options.isNotEmpty()) {
                 routeOffline = false
@@ -379,6 +393,7 @@ fun ArrivalAlarmApp(
     }
 
     fun loadStationDepartures(stop: CatalogStop) {
+        val token = stationRequestGate.begin()
         stationLoading = true
         stationResolved = false
         stationDepartures = emptyList()
@@ -386,7 +401,8 @@ fun ArrivalAlarmApp(
         stationSource = null
         stationRealtimeState = null
         stationStatus = null
-        transit.stationDepartures(stop) { snapshot ->
+        transit.stationDepartures(stop) callback@{ snapshot ->
+            if (!stationRequestGate.isCurrent(token)) return@callback
             stationLoading = false
             if (snapshot.error == null) {
                 stationResolved = true
@@ -415,6 +431,8 @@ fun ArrivalAlarmApp(
             routeStatus = localizedDomainMessage(context, outcome.message)
             return false
         }
+        // A previous stop's departures cannot populate the new destination.
+        stationRequestGate.invalidate()
         destination = point
         destinationStopId = stopId
         routeOffline = false
