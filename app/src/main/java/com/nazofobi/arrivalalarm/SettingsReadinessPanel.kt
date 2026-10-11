@@ -61,10 +61,12 @@ data class SettingsReadinessState(
                 dataState.stopCount <= 0 ||
                 guidancePermissionState != GuidancePermissionState.GRANTED ||
                 !bluetoothPermission -> ReadinessLevel.ACTION_NEEDED
+            searchCheck == CoreReadinessCheck.DEGRADED ||
+                searchCheck == CoreReadinessCheck.NO_USABLE_RESULT ||
+                routingCheck == CoreReadinessCheck.DEGRADED ||
+                routingCheck == CoreReadinessCheck.NO_USABLE_RESULT -> ReadinessLevel.ACTION_NEEDED
             searchCheck == CoreReadinessCheck.UNCHECKED ||
                 routingCheck == CoreReadinessCheck.UNCHECKED -> ReadinessLevel.INFO
-            searchCheck != CoreReadinessCheck.WORKING ||
-                routingCheck != CoreReadinessCheck.WORKING -> ReadinessLevel.ACTION_NEEDED
             else -> ReadinessLevel.READY
         }
 
