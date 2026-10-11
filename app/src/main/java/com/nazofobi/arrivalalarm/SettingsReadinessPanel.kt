@@ -10,23 +10,36 @@ import android.os.Build
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
+import androidx.compose.material3.RadioButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -111,6 +124,8 @@ fun SettingsReadinessPanel(
     onConnectorAction: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var themeOptionsExpanded by rememberSaveable { mutableStateOf(false) }
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -137,41 +152,63 @@ fun SettingsReadinessPanel(
 
             HorizontalDivider()
 
-            Text(
-                text = stringResource(R.string.theme_mode_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = stringResource(
-                    R.string.theme_mode_status,
-                    themeModeLabel(state.themeMode),
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.testTag("theme-mode-status"),
-            )
-            ThemeModeChoice(
-                mode = ArrivalThemeMode.SYSTEM,
-                selected = state.themeMode == ArrivalThemeMode.SYSTEM,
-                label = stringResource(R.string.theme_system),
-                testTag = "theme-system",
-                onSelect = onThemeModeChange,
-            )
-            ThemeModeChoice(
-                mode = ArrivalThemeMode.LIGHT,
-                selected = state.themeMode == ArrivalThemeMode.LIGHT,
-                label = stringResource(R.string.theme_light),
-                testTag = "theme-light",
-                onSelect = onThemeModeChange,
-            )
-            ThemeModeChoice(
-                mode = ArrivalThemeMode.DARK,
-                selected = state.themeMode == ArrivalThemeMode.DARK,
-                label = stringResource(R.string.theme_dark),
-                testTag = "theme-dark",
-                onSelect = onThemeModeChange,
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .clickable { themeOptionsExpanded = !themeOptionsExpanded }
+                    .testTag("theme-mode-picker"),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.theme_mode_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.theme_mode_status,
+                            themeModeLabel(state.themeMode),
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("theme-mode-status"),
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Default.ArrowDropDown,
+                    contentDescription = null,
+                )
+            }
+            if (themeOptionsExpanded) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().selectableGroup(),
+                ) {
+                    ThemeModeChoice(
+                        mode = ArrivalThemeMode.SYSTEM,
+                        selected = state.themeMode == ArrivalThemeMode.SYSTEM,
+                        label = stringResource(R.string.theme_system),
+                        testTag = "theme-system",
+                        onSelect = { onThemeModeChange(it); themeOptionsExpanded = false },
+                    )
+                    ThemeModeChoice(
+                        mode = ArrivalThemeMode.LIGHT,
+                        selected = state.themeMode == ArrivalThemeMode.LIGHT,
+                        label = stringResource(R.string.theme_light),
+                        testTag = "theme-light",
+                        onSelect = { onThemeModeChange(it); themeOptionsExpanded = false },
+                    )
+                    ThemeModeChoice(
+                        mode = ArrivalThemeMode.DARK,
+                        selected = state.themeMode == ArrivalThemeMode.DARK,
+                        label = stringResource(R.string.theme_dark),
+                        testTag = "theme-dark",
+                        onSelect = { onThemeModeChange(it); themeOptionsExpanded = false },
+                    )
+                }
+            }
 
             HorizontalDivider()
 
@@ -359,28 +396,20 @@ private fun ThemeModeChoice(
     testTag: String,
     onSelect: (ArrivalThemeMode) -> Unit,
 ) {
-    if (selected) {
-        Button(
-            onClick = { onSelect(mode) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .semantics { this.selected = selected }
-                .testTag(testTag),
-        ) {
-            Text(stringResource(R.string.theme_selected_format, label))
-        }
-    } else {
-        OutlinedButton(
-            onClick = { onSelect(mode) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .semantics { this.selected = selected }
-                .testTag(testTag),
-        ) {
-            Text(label)
-        }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .selectable(
+                selected = selected,
+                role = Role.RadioButton,
+                onClick = { onSelect(mode) },
+            )
+            .testTag(testTag),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Text(text = label, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
