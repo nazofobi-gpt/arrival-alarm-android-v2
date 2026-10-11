@@ -59,19 +59,24 @@ class ActiveJourneyService : Service(), LocationListener {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val stateMonitor = object : Runnable {
         override fun run() {
-            if (!arrivalHandled && graph.controller.state.phase != JourneyPhase.ARMED) {
-                stopSelf()
-                return
-            }
-            // A disabled provider must not silently end an armed journey.
-            // Retry location registration while foreground tracking remains active.
-            if (!arrivalHandled && !locationRegistered) {
-                if (!ActiveJourneyPermissions.hasRuntimeGrants(this@ActiveJourneyService)) {
-                    stopSelf()
-                    return
-                }
-                if (!registerLocationUpdates()) {
-                    updateTrackingNotification(null, accuracyDegraded = true)
+            // Keep an armed journey alive when a provider disappears; stop only
+            // when the journey ends or the user no longer grants runtime access.
+            if (!arrivalHandled) {
+                when (LocationProviderRecovery.decide(
+                    graph.controller.state.phase,
+                    locationRegistered,
+                    ActiveJourneyPermissions.hasRuntimeGrants(this@ActiveJourneyService),
+                )) {
+                    LocationProviderRecovery.Decision.STOP -> {
+                        stopSelf()
+                        return
+                    }
+                    LocationProviderRecovery.Decision.RETRY -> {
+                        if (!registerLocationUpdates()) {
+                            updateTrackingNotification(null, accuracyDegraded = true)
+                        }
+                    }
+                    LocationProviderRecovery.Decision.KEEP -> Unit
                 }
             }
             mainHandler.postDelayed(this, STATE_MONITOR_MILLIS)
