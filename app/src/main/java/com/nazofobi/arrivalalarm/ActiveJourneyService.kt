@@ -77,9 +77,10 @@ class ActiveJourneyService : Service(), LocationListener {
                     }
                     LocationProviderRecovery.Decision.RETRY -> {
                         removeLocationUpdates()
-                        if (!registerLocationUpdates()) {
-                            updateTrackingNotification(null, accuracyDegraded = true)
-                        }
+                        // Even when re-registration succeeds, the last distance is stale
+                        // until a new location fix passes quality checks.
+                        registerLocationUpdates()
+                        updateTrackingNotification(null, accuracyDegraded = true)
                     }
                     LocationProviderRecovery.Decision.KEEP -> Unit
                 }
