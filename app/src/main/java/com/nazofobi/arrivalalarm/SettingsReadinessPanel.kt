@@ -32,6 +32,12 @@ import androidx.compose.ui.unit.dp
 
 enum class ReadinessLevel { READY, ACTION_NEEDED, BLOCKED, INFO }
 
+/**
+ * Observed core feature behavior, not an inferred health claim from an imported feed.
+ * UNCHECKED and NO_USABLE_RESULT never imply that search or routing is ready.
+ */
+enum class CoreReadinessCheck { UNCHECKED, WORKING, DEGRADED, NO_USABLE_RESULT }
+
 data class SettingsReadinessState(
     val themeMode: ArrivalThemeMode,
     val locationPermission: Boolean,
@@ -44,14 +50,21 @@ data class SettingsReadinessState(
     val backgroundJourneyActive: Boolean,
     val connectorConfigured: Boolean,
     val connectorConnected: Boolean,
+    val searchCheck: CoreReadinessCheck = CoreReadinessCheck.UNCHECKED,
+    val routingCheck: CoreReadinessCheck = CoreReadinessCheck.UNCHECKED,
 ) {
     val overallLevel: ReadinessLevel
         get() = when {
             !locationPermission || !notificationPermission || !locationServicesAvailable ->
                 ReadinessLevel.BLOCKED
             dataState !is NationwideDataState.Ready ||
+                dataState.stopCount <= 0 ||
                 guidancePermissionState != GuidancePermissionState.GRANTED ||
                 !bluetoothPermission -> ReadinessLevel.ACTION_NEEDED
+            searchCheck == CoreReadinessCheck.UNCHECKED ||
+                routingCheck == CoreReadinessCheck.UNCHECKED -> ReadinessLevel.INFO
+            searchCheck != CoreReadinessCheck.WORKING ||
+                routingCheck != CoreReadinessCheck.WORKING -> ReadinessLevel.ACTION_NEEDED
             else -> ReadinessLevel.READY
         }
 
@@ -64,6 +77,8 @@ data class SettingsReadinessState(
             backgroundJourneyActive: Boolean,
             connectorConfigured: Boolean,
             connectorConnected: Boolean,
+            searchCheck: CoreReadinessCheck = CoreReadinessCheck.UNCHECKED,
+            routingCheck: CoreReadinessCheck = CoreReadinessCheck.UNCHECKED,
         ): SettingsReadinessState {
             fun granted(permission: String): Boolean =
                 context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
@@ -92,6 +107,8 @@ data class SettingsReadinessState(
                 backgroundJourneyActive = backgroundJourneyActive,
                 connectorConfigured = connectorConfigured,
                 connectorConnected = connectorConnected,
+                searchCheck = searchCheck,
+                routingCheck = routingCheck,
             )
         }
     }
@@ -216,6 +233,18 @@ fun SettingsReadinessPanel(
                     else -> ReadinessLevel.ACTION_NEEDED
                 },
                 testTag = "nationwide-data-state",
+            )
+            ReadinessRow(
+                label = stringResource(R.string.readiness_search_check),
+                value = coreCheckText(state.searchCheck),
+                level = coreCheckLevel(state.searchCheck),
+                testTag = "readiness-search-check",
+            )
+            ReadinessRow(
+                label = stringResource(R.string.readiness_routing_check),
+                value = coreCheckText(state.routingCheck),
+                level = coreCheckLevel(state.routingCheck),
+                testTag = "readiness-routing-check",
             )
             ReadinessRow(
                 label = stringResource(R.string.readiness_audio),
@@ -426,9 +455,26 @@ private fun readinessSummaryText(level: ReadinessLevel): String =
             ReadinessLevel.READY -> R.string.readiness_summary_ready
             ReadinessLevel.ACTION_NEEDED -> R.string.readiness_summary_degraded
             ReadinessLevel.BLOCKED -> R.string.readiness_summary_blocked
-            ReadinessLevel.INFO -> R.string.readiness_summary_degraded
+            ReadinessLevel.INFO -> R.string.readiness_summary_unverified
         }
     )
+
+@Composable
+private fun coreCheckText(check: CoreReadinessCheck): String = stringResource(
+    when (check) {
+        CoreReadinessCheck.UNCHECKED -> R.string.readiness_check_unchecked
+        CoreReadinessCheck.WORKING -> R.string.readiness_check_working
+        CoreReadinessCheck.DEGRADED -> R.string.readiness_check_degraded
+        CoreReadinessCheck.NO_USABLE_RESULT -> R.string.readiness_check_no_usable_result
+    }
+)
+
+private fun coreCheckLevel(check: CoreReadinessCheck): ReadinessLevel = when (check) {
+    CoreReadinessCheck.UNCHECKED -> ReadinessLevel.INFO
+    CoreReadinessCheck.WORKING -> ReadinessLevel.READY
+    CoreReadinessCheck.DEGRADED, CoreReadinessCheck.NO_USABLE_RESULT ->
+        ReadinessLevel.ACTION_NEEDED
+}
 
 @Composable
 private fun readinessColor(level: ReadinessLevel) = when (level) {
