@@ -237,4 +237,11 @@
     <string name="departures_gtfsrt_unavailable">GTFS Deutschland lokale Abfahrten • GTFS-RT nicht verfügbar, Fahrplanzeiten</string>
     <string name="lookup_stale_results">Zwischengespeicherte Anbieter-Ergebnisse sind veraltet • Aktualität nicht bestätigt</string>
     <string name="lookup_provider_unavailable">Live-Suchanbieter nicht verfügbar • lokale Daten lieferten kein Ergebnis</string>
+    <string name="readiness_summary_unverified">Suche und Routen sind noch nicht geprüft</string>
+    <string name="readiness_search_check">Letzter Suchtest</string>
+    <string name="readiness_routing_check">Letzter Routentest</string>
+    <string name="readiness_check_unchecked">Noch nicht geprüft</string>
+    <string name="readiness_check_working">Nutzbares Ergebnis bestätigt</string>
+    <string name="readiness_check_degraded">Eingeschränkt / Ergebnis aus Cache</string>
+    <string name="readiness_check_no_usable_result">Kein nutzbares Ergebnis bestätigt</string>
 </resources>
