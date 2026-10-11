@@ -60,6 +60,11 @@ data class GtfsScheduleTripCandidate(
     val departureTime: String?,
 )
 
+data class GtfsScheduleBoardingTripCandidate(
+    val boardingStopId: String,
+    val candidate: GtfsScheduleTripCandidate,
+)
+
 data class GtfsScheduleTransfer(
     val fromStopId: String?,
     val toStopId: String?,
@@ -355,7 +360,19 @@ class GtfsScheduleRepository(
         earliestBoardSeconds: Int,
         limit: Int = 128,
     ): List<GtfsScheduleTripCandidate> {
-        if (stopId.isBlank() || earliestBoardSeconds < 0) return emptyList()
+        if (stopId.isBlank()) return emptyList()
+        return candidateTripsAtStops(listOf(stopId), serviceDate, earliestBoardSeconds, limit)
+            .map { it.candidate }
+    }
+
+    fun candidateTripsAtStops(
+        stopIds: List<String>,
+        serviceDate: GtfsServiceDate,
+        earliestBoardSeconds: Int,
+        limit: Int = 128,
+    ): List<GtfsScheduleBoardingTripCandidate> {
+        val boundedStopIds = stopIds.filter { it.isNotBlank() }.distinct().take(MAX_BOARDING_STOP_IDS)
+        if (boundedStopIds.isEmpty() || earliestBoardSeconds < 0) return emptyList()
         val boundedLimit = limit.coerceIn(1, MAX_TRIP_CANDIDATES)
         val serviceDateRaw = serviceDate.toString()
         val weekdayColumn = when (serviceDate.weekday) {
@@ -381,10 +398,10 @@ class GtfsScheduleRepository(
             SELECT
                 t.trip_id,t.route_id,t.service_id,t.headsign,t.direction_id,t.shape_id,
                 t.wheelchair_accessible,t.bikes_allowed,t.block_id,
-                st.stop_sequence,st.arrival_time,st.departure_time
+                st.stop_sequence,st.arrival_time,st.departure_time,st.stop_id
             FROM stop_times st
             JOIN trips t ON t.trip_id=st.trip_id
-            WHERE st.stop_id=?
+            WHERE st.stop_id IN (${boundedStopIds.joinToString(",") { "?" }})
               AND $boardTime IS NOT NULL
               AND (
                     $boardSeconds >= CAST(? AS INTEGER)
@@ -423,23 +440,24 @@ class GtfsScheduleRepository(
                     SELECT 1 FROM frequencies frequency
                     WHERE frequency.trip_id=t.trip_id
                 ) THEN 0 ELSE 1 END,
-                $boardSeconds,t.trip_id,st.stop_sequence
+                $boardSeconds,t.trip_id,st.stop_sequence,st.stop_id
             LIMIT ?
             """.trimIndent(),
-            arrayOf(
-                stopId,
+            (boundedStopIds + listOf(
                 earliestBoardSeconds.toString(),
                 serviceDateRaw,
                 serviceDateRaw,
                 serviceDateRaw,
                 serviceDateRaw,
                 boundedLimit.toString(),
-            ),
+            )).toTypedArray(),
         ).use { cursor ->
             buildList {
                 while (cursor.moveToNext()) {
                     add(
-                        GtfsScheduleTripCandidate(
+                        GtfsScheduleBoardingTripCandidate(
+                            boardingStopId = cursor.getString(12),
+                            candidate = GtfsScheduleTripCandidate(
                             trip = GtfsScheduleTrip(
                                 id = cursor.getString(0),
                                 routeId = cursor.getString(1),
@@ -451,9 +469,10 @@ class GtfsScheduleRepository(
                                 bikesAllowed = cursor.nullInt(7),
                                 blockId = cursor.nullString(8),
                             ),
-                            stopSequence = cursor.getInt(9),
-                            arrivalTime = cursor.nullString(10),
-                            departureTime = cursor.nullString(11),
+                                stopSequence = cursor.getInt(9),
+                                arrivalTime = cursor.nullString(10),
+                                departureTime = cursor.nullString(11),
+                            ),
                         )
                     )
                 }
@@ -728,6 +747,7 @@ class GtfsScheduleRepository(
     private fun Cursor.nullDouble(index: Int): Double? = if (isNull(index)) null else getDouble(index)
 
     companion object {
+        private const val MAX_BOARDING_STOP_IDS = 65
         private const val MAX_CHILD_STOPS = 256
         private const val MAX_NEARBY_RADIUS_METERS = 2_000
         private const val MAX_NEARBY_STOPS = 64
