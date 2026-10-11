@@ -17,6 +17,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 
@@ -102,7 +103,20 @@ class ActiveJourneyService : Service(), LocationListener {
             GeoPoint(location.latitude, location.longitude),
             destination,
         )
-        graph.connectorPort.updateDistanceToDestination(distanceMeters)
+        val nowNanos = SystemClock.elapsedRealtimeNanos()
+        val evidence = ArrivalLocationEvidence(
+            distanceMeters = distanceMeters,
+            horizontalAccuracyMeters = if (location.hasAccuracy()) location.accuracy.toDouble() else null,
+            ageMillis = (nowNanos - location.elapsedRealtimeNanos) / 1_000_000L,
+        )
+        if (!ArrivalLocationQuality.isUsableForTracking(evidence)) {
+            updateTrackingNotification(null, accuracyDegraded = true)
+            return
+        }
+        graph.connectorPort.updateDistanceToDestination(
+            distanceMeters,
+            allowArrival = ArrivalLocationQuality.confirmsArrival(evidence),
+        )
         updateTrackingNotification(distanceMeters)
 
         if (graph.controller.state.phase == JourneyPhase.ARRIVED && !arrivalHandled) {
@@ -187,16 +201,16 @@ class ActiveJourneyService : Service(), LocationListener {
         }
     }
 
-    private fun updateTrackingNotification(distanceMeters: Double) {
+    private fun updateTrackingNotification(distanceMeters: Double?, accuracyDegraded: Boolean = false) {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(TRACKING_NOTIFICATION_ID, trackingNotification(distanceMeters))
+        manager.notify(TRACKING_NOTIFICATION_ID, trackingNotification(distanceMeters, accuracyDegraded))
     }
 
-    private fun trackingNotification(distanceMeters: Double?): Notification {
-        val text = if (distanceMeters == null) {
-            "Konum takip ediliyor"
-        } else {
-            "Hedefe yaklaşık " + distanceMeters.roundToInt() + " m kaldı"
+    private fun trackingNotification(distanceMeters: Double?, accuracyDegraded: Boolean = false): Notification {
+        val text = when {
+            accuracyDegraded -> "Konum doğruluğu yetersiz; alarm etkin, yeni GPS bekleniyor"
+            distanceMeters == null -> "Konum takip ediliyor"
+            else -> "Hedefe yaklaşık " + distanceMeters.roundToInt() + " m kaldı"
         }
         return notificationBuilder(TRACKING_CHANNEL_ID)
             .setContentTitle("Varış alarmı etkin")
