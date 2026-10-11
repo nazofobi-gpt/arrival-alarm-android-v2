@@ -6,8 +6,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.Location
@@ -57,6 +59,14 @@ class ActiveJourneyService : Service(), LocationListener {
     private lateinit var locationManager: LocationManager
     private val completionExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var providerReceiverRegistered = false
+    private val providerChangeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == LocationManager.PROVIDERS_CHANGED_ACTION) {
+                retryProviderRegistration()
+            }
+        }
+    }
     private val stateMonitor = object : Runnable {
         override fun run() {
             // Keep an armed journey alive when a provider disappears; stop only
@@ -111,6 +121,7 @@ class ActiveJourneyService : Service(), LocationListener {
             stopSelf()
             return START_NOT_STICKY
         }
+        observeProviderChanges()
         mainHandler.removeCallbacks(stateMonitor)
         mainHandler.postDelayed(stateMonitor, STATE_MONITOR_MILLIS)
         return START_NOT_STICKY
@@ -151,20 +162,7 @@ class ActiveJourneyService : Service(), LocationListener {
     }
 
     override fun onProviderEnabled(provider: String) {
-        // If Android still delivers this provider callback while the listener is
-        // unregistered, resume immediately instead of awaiting the periodic retry.
-        // Never revive a finished trip or a journey with revoked runtime grants.
-        if (arrivalHandled || LocationProviderRecovery.decide(
-                journeyPhase = graph.controller.state.phase,
-                locationRegistered = locationRegistered,
-                hasRuntimeGrants = ActiveJourneyPermissions.hasRuntimeGrants(this),
-            ) != LocationProviderRecovery.Decision.RETRY
-        ) return
-
-        if (registerLocationUpdates()) {
-            // Provider restoration alone is not evidence of an accurate GPS fix.
-            updateTrackingNotification(null, accuracyDegraded = true)
-        }
+        retryProviderRegistration()
     }
 
     override fun onProviderDisabled(provider: String) {
@@ -179,10 +177,44 @@ class ActiveJourneyService : Service(), LocationListener {
 
     override fun onDestroy() {
         mainHandler.removeCallbacks(stateMonitor)
+        if (providerReceiverRegistered) {
+            runCatching { unregisterReceiver(providerChangeReceiver) }
+            providerReceiverRegistered = false
+        }
         removeLocationUpdates()
         graph.connectorRuntimeCoordinator.release(SERVICE_RUNTIME_OWNER)
         completionExecutor.shutdownNow()
         super.onDestroy()
+    }
+
+    private fun retryProviderRegistration() {
+        // The broadcast is delivered after the old location listener has
+        // been removed, unlike onProviderEnabled() callbacks.
+        if (arrivalHandled || LocationProviderRecovery.decide(
+                journeyPhase = graph.controller.state.phase,
+                locationRegistered = locationRegistered,
+                hasRuntimeGrants = ActiveJourneyPermissions.hasRuntimeGrants(this),
+            ) != LocationProviderRecovery.Decision.RETRY
+        ) return
+        if (registerLocationUpdates()) {
+            // Provider presence is not proof of a fresh, accurate location fix.
+            updateTrackingNotification(null, accuracyDegraded = true)
+        }
+    }
+
+    private fun observeProviderChanges() {
+        if (providerReceiverRegistered) return
+        val filter = IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION)
+        providerReceiverRegistered = runCatching {
+            if (Build.VERSION.SDK_INT >= 33) {
+                registerReceiver(providerChangeReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("DEPRECATION")
+                registerReceiver(providerChangeReceiver, filter)
+            }
+            true
+        }.getOrDefault(false)
+        // The existing state monitor retries if registration fails.
     }
 
     private fun registerLocationUpdates(): Boolean {
