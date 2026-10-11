@@ -42,6 +42,9 @@ data class RouteOption(
     val refreshToken: String? = null,
     val sourceUpdatedAtEpochSeconds: Long? = null,
     val realtime: RouteRealtimeInfo? = null,
+    // Exact scheduled instants for date-aware duration; legacy providers may omit them.
+    val departureEpochMillis: Long? = null,
+    val arrivalEpochMillis: Long? = null,
 )
 
 interface GeocodeProvider { fun search(query: String): List<MapPoint> }
