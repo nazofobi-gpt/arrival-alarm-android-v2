@@ -88,6 +88,7 @@ fun HomeOverviewPanel(
     onMapPointSelected: (MapPoint) -> Unit,
     onMapError: (String) -> Unit,
     onNearbyStopSelected: (NearbyStop) -> Unit,
+    onNearbyDeparturesSelected: (CatalogStop) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -238,6 +239,13 @@ fun HomeOverviewPanel(
                                     candidate.distanceMeters,
                                 )
                             )
+                        }
+                        OutlinedButton(
+                            onClick = { onNearbyDeparturesSelected(candidate.stop) },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                .testTag("home-departures-$index"),
+                        ) {
+                            Text(stringResource(R.string.nearby_departures_action))
                         }
                     }
                 }
