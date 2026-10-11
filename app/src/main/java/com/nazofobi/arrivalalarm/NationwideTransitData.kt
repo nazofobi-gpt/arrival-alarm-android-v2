@@ -401,6 +401,24 @@ class NationwideTransitGateway(
         )
     }
 
+    /** Read the concrete, scheduled local GTFS trip without calling a live provider. */
+    fun concreteTripInstance(
+        departure: Departure,
+        boardingStopId: String,
+        callback: (ConcreteTripInstance?) -> Unit,
+    ) {
+        io.execute {
+            val instance = if (store.isReady()) {
+                runCatching {
+                    ConcreteTripInstancePlanner(
+                        RepositoryStaticGtfsScheduleData(GtfsScheduleRepository(store)),
+                    ).plan(departure, boardingStopId)
+                }.getOrNull()
+            } else null
+            main.post { callback(instance) }
+        }
+    }
+
     fun stationDepartures(
         stop: CatalogStop,
         limit: Int = 8,
