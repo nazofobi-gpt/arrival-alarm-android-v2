@@ -149,12 +149,12 @@ class JourneyConnectorActionPort(
     }
 
     @Synchronized
-    fun updateDistanceToDestination(distanceMeters: Double): ConnectorActionOutcome {
+    fun updateDistanceToDestination(distanceMeters: Double, allowArrival: Boolean = true): ConnectorActionOutcome {
         if (!distanceMeters.isFinite() || distanceMeters < 0.0) {
             return ConnectorActionOutcome(false, "Geçersiz hedef mesafesi")
         }
         val before = controller.state
-        controller.onDistanceChanged(distanceMeters)
+        controller.onDistanceChanged(distanceMeters, allowArrival = allowArrival)
         val after = controller.state
         if (after == before) {
             return ConnectorActionOutcome(false, "Aktif varış alarmı yok")
