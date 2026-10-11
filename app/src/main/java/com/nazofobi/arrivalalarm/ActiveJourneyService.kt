@@ -205,7 +205,8 @@ class ActiveJourneyService : Service(), LocationListener {
     }
 
     private fun startLocationForeground(): Boolean {
-        val notification = trackingNotification(graph.controller.state.distanceMeters)
+        // Do not present a persisted distance as a fresh GPS measurement after service restart.
+        val notification = trackingNotification(null, accuracyDegraded = true)
         return try {
             if (Build.VERSION.SDK_INT >= 29) {
                 startForeground(
@@ -231,12 +232,12 @@ class ActiveJourneyService : Service(), LocationListener {
 
     private fun trackingNotification(distanceMeters: Double?, accuracyDegraded: Boolean = false): Notification {
         val text = when {
-            accuracyDegraded -> "Konum doğruluğu yetersiz; alarm etkin, yeni GPS bekleniyor"
-            distanceMeters == null -> "Konum takip ediliyor"
-            else -> "Hedefe yaklaşık " + distanceMeters.roundToInt() + " m kaldı"
+            accuracyDegraded -> getString(R.string.active_journey_notification_degraded)
+            distanceMeters == null -> getString(R.string.active_journey_notification_waiting_location)
+            else -> getString(R.string.active_journey_notification_distance, distanceMeters.roundToInt())
         }
         return notificationBuilder(TRACKING_CHANNEL_ID)
-            .setContentTitle("Varış alarmı etkin")
+            .setContentTitle(getString(R.string.active_journey_notification_title))
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_dialog_map)
             .setOngoing(true)
@@ -250,8 +251,8 @@ class ActiveJourneyService : Service(), LocationListener {
         manager.notify(
             ARRIVAL_NOTIFICATION_ID,
             notificationBuilder(ARRIVAL_CHANNEL_ID)
-                .setContentTitle("Varış noktasına ulaşıldı")
-                .setContentText("Varış alarmı tamamlandı.")
+                .setContentTitle(getString(R.string.active_journey_arrived_title))
+                .setContentText(getString(R.string.active_journey_arrived_body))
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setAutoCancel(true)
                 .setCategory(Notification.CATEGORY_ALARM)
@@ -280,14 +281,14 @@ class ActiveJourneyService : Service(), LocationListener {
         manager.createNotificationChannel(
             NotificationChannel(
                 TRACKING_CHANNEL_ID,
-                "Aktif varış takibi",
+                getString(R.string.active_journey_tracking_channel),
                 NotificationManager.IMPORTANCE_LOW,
             )
         )
         manager.createNotificationChannel(
             NotificationChannel(
                 ARRIVAL_CHANNEL_ID,
-                "Varış uyarıları",
+                getString(R.string.active_journey_arrival_channel),
                 NotificationManager.IMPORTANCE_HIGH,
             )
         )
