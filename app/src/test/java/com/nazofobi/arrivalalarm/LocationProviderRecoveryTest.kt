@@ -26,7 +26,7 @@ class LocationProviderRecoveryTest {
         )
         assertEquals(
             LocationProviderRecovery.Decision.STOP,
-            LocationProviderRecovery.decide(JourneyPhase.IDLE, locationRegistered = false, hasRuntimeGrants = true),
+            LocationProviderRecovery.decide(JourneyPhase.EMPTY, locationRegistered = false, hasRuntimeGrants = true),
         )
     }
 }
