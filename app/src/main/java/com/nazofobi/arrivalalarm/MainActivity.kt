@@ -407,7 +407,7 @@ fun ArrivalAlarmApp(
                 stationResolved = false
                 stationRealtimeState = null
                 stationStatus = if (boardSelectedStop?.id == stop.id) {
-                    context.getString(R.string.departures_stop_unavailable)
+                    context.getString(R.string.departures_empty_title)
                 } else {
                     context.getString(R.string.departures_live_unavailable)
                 }
