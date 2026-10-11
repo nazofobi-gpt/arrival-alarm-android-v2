@@ -22,6 +22,9 @@ data class Departure(
 ) {
     val effectiveEpochSeconds: Long get() = realtimeEpochSeconds ?: scheduledEpochSeconds
     val isRealtime: Boolean get() = realtimeEpochSeconds != null
+    // A station-board selection identifies the scheduled departure, not just the GTFS
+    // trip template. The scheduled anchor is deliberately stable across realtime delays.
+    val departureInstanceKey: String get() = "${tripId.length}:$tripId:$scheduledEpochSeconds"
 }
 
 data class ServiceAlert(val id: String, val title: String, val detail: String)
@@ -49,8 +52,17 @@ class TransitExperienceEngine(private val capabilities: TransitProviderCapabilit
     fun alerts(values: List<ServiceAlert>): List<ServiceAlert> = if (capabilities.serviceAlerts) values else emptyList()
     fun vehicles(values: List<LiveVehicle>): List<LiveVehicle> = if (capabilities.liveVehiclePositions) values else emptyList()
 
-    fun alternateDepartures(values: List<Departure>, selectedTripId: String, nowEpochSeconds: Long): List<Departure> =
-        departureBoard(values, nowEpochSeconds).filterNot { it.tripId == selectedTripId }
+    fun alternateDepartures(values: List<Departure>, selected: Departure, nowEpochSeconds: Long): List<Departure> =
+        departureBoard(values, nowEpochSeconds)
+            .filterNot { it.departureInstanceKey == selected.departureInstanceKey }
+            .filter { it.direction == selected.direction }
+            .filter { candidate ->
+                if (selected.routeId != null && candidate.routeId != null) {
+                    candidate.routeId == selected.routeId
+                } else {
+                    candidate.line == selected.line
+                }
+            }
 
     fun walkingTransferMinutes(baseMinutes: Int, preference: AccessibilityPreference): Int =
         (baseMinutes + if (preference.stepFreeOnly && capabilities.accessibility) preference.extraTransferMinutes else 0).coerceAtLeast(0)
