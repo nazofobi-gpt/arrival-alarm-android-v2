@@ -237,4 +237,11 @@
     <string name="departures_gtfsrt_unavailable">GTFS Deutschland local departures • GTFS-RT unavailable, scheduled times</string>
     <string name="lookup_stale_results">Cached provider results are stale • freshness could not be verified</string>
     <string name="lookup_provider_unavailable">Live search provider is unavailable • local data returned no result</string>
+    <string name="readiness_summary_unverified">Search and routing have not been verified</string>
+    <string name="readiness_search_check">Last search check</string>
+    <string name="readiness_routing_check">Last routing check</string>
+    <string name="readiness_check_unchecked">Not checked yet</string>
+    <string name="readiness_check_working">Usable result verified</string>
+    <string name="readiness_check_degraded">Limited / cached result</string>
+    <string name="readiness_check_no_usable_result">No usable result verified</string>
 </resources>
