@@ -304,6 +304,50 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
     }
 
     @Test
+    fun stationDeparturesIncludeNextServiceDayBeforeMidnight() {
+        seedReadyGraph(includeTrip = true)
+        val index = NationwideTransitIndex(context)
+        try {
+            val saturdayNight = GtfsServiceTime.parse("23:55:00")
+                .resolve(GtfsServiceDate(2026, 10, 3), zone).epochMillis
+            val planner = ProductionStationDeparturesPlanner(
+                index = index,
+                nowMillis = { saturdayNight },
+            )
+            val departures = planner.plan("A", limit = 3)
+
+            assertEquals(listOf("T1"), departures.map { it.tripId })
+            assertEquals(
+                listOf(at("08:00:00") / 1_000L),
+                departures.map { it.scheduledEpochSeconds },
+            )
+        } finally {
+            index.close()
+        }
+    }
+
+    @Test
+    fun stationDeparturesRetainPreviousServiceDayCarryover() {
+        seedCrossMidnightGraph()
+        val index = NationwideTransitIndex(context)
+        try {
+            val planner = ProductionStationDeparturesPlanner(
+                index = index,
+                nowMillis = { at("00:05:00") },
+            )
+            val departures = planner.plan("A", limit = 3)
+
+            assertEquals(listOf("PREV", "NEXT"), departures.map { it.tripId })
+            assertEquals(
+                listOf(at("00:10:00") / 1_000L, at("24:20:00") / 1_000L),
+                departures.map { it.scheduledEpochSeconds },
+            )
+        } finally {
+            index.close()
+        }
+    }
+
+    @Test
     fun stationDeparturesUseLocalScheduleAndFreshGtfsRealtimeOverlay() {
         seedReadyGraph(includeTrip = true)
         val gateway = NationwideTransitGateway(
