@@ -10,6 +10,14 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
@@ -41,16 +49,16 @@ fun ArrivalBottomNavigation(
     data class Item(
         val screen: ArrivalAppScreen,
         val label: String,
-        val glyph: String,
+        val icon: ImageVector,
         val tag: String,
     )
 
     val items = listOf(
-        Item(ArrivalAppScreen.HOME, stringResource(R.string.nav_home), "⌂", "nav-home"),
-        Item(ArrivalAppScreen.SEARCH, stringResource(R.string.nav_search), "⌕", "nav-search"),
-        Item(ArrivalAppScreen.JOURNEY, stringResource(R.string.nav_journey), "↔", "nav-journey"),
-        Item(ArrivalAppScreen.DEPARTURES, stringResource(R.string.nav_departures), "◷", "nav-departures"),
-        Item(ArrivalAppScreen.SETTINGS, stringResource(R.string.nav_settings), "⚙", "nav-settings"),
+        Item(ArrivalAppScreen.HOME, stringResource(R.string.nav_home), Icons.Default.Home, "nav-home"),
+        Item(ArrivalAppScreen.SEARCH, stringResource(R.string.nav_search), Icons.Default.Search, "nav-search"),
+        Item(ArrivalAppScreen.JOURNEY, stringResource(R.string.nav_journey), Icons.Default.List, "nav-journey"),
+        Item(ArrivalAppScreen.DEPARTURES, stringResource(R.string.nav_departures), Icons.Default.Place, "nav-departures"),
+        Item(ArrivalAppScreen.SETTINGS, stringResource(R.string.nav_settings), Icons.Default.Settings, "nav-settings"),
     )
 
     NavigationBar(modifier = Modifier.testTag("bottom-navigation")) {
@@ -65,7 +73,7 @@ fun ArrivalBottomNavigation(
             NavigationBarItem(
                 selected = selected,
                 onClick = { onSelect(item.screen) },
-                icon = { Text(item.glyph) },
+                icon = { Icon(imageVector = item.icon, contentDescription = null) },
                 label = { Text(item.label, maxLines = 1) },
                 modifier = Modifier.testTag(item.tag),
             )
