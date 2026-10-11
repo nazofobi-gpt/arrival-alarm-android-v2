@@ -43,6 +43,7 @@ fun TransitExperiencePanel(
     nowEpochSeconds: Long,
     providerCapabilities: TransitProviderCapabilities = TransitProviderCapabilities(),
     onSelectJourney: (String) -> Unit = {},
+    onSelectDeparture: ((Departure) -> Unit)? = null,
     statusMessage: String? = null,
     sourceLabel: String? = null,
     loading: Boolean = false,
@@ -68,7 +69,7 @@ fun TransitExperiencePanel(
         }
     }
     var favorite by remember(stopId) { mutableStateOf(store.isFavorite(stopId)) }
-    var selectedTrip by remember { mutableStateOf<String?>(null) }
+    var selectedDeparture by remember(stopId) { mutableStateOf<Departure?>(null) }
     val board = engine.departureBoard(departures, nowEpochSeconds)
     val cancelled = departures.filter { it.cancelled }
 
@@ -216,9 +217,13 @@ fun TransitExperiencePanel(
                     }
                     Button(
                         onClick = {
-                            selectedTrip = departure.tripId
+                            selectedDeparture = departure
                             store.recordTrip(departure.tripId)
-                            departure.routeId?.let(onSelectJourney)
+                            if (onSelectDeparture != null) {
+                                onSelectDeparture(departure)
+                            } else {
+                                departure.routeId?.let(onSelectJourney)
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -257,12 +262,40 @@ fun TransitExperiencePanel(
             }
         }
 
-        selectedTrip?.let { tripId ->
-            val alternatives = engine.alternateDepartures(departures, tripId, nowEpochSeconds)
-            Text(
-                stringResource(R.string.alternate_departures, alternatives.size),
-                modifier = Modifier.testTag("alternate-departures"),
-            )
+        selectedDeparture?.let { selected ->
+            if (board.any {
+                    it.tripId == selected.tripId &&
+                        it.scheduledEpochSeconds == selected.scheduledEpochSeconds
+                }
+            ) {
+                val alternatives = engine.alternateDepartures(departures, selected, nowEpochSeconds)
+                Text(
+                    stringResource(R.string.alternate_departures, alternatives.size),
+                    modifier = Modifier.testTag("alternate-departures"),
+                )
+                alternatives.take(3).forEachIndexed { index, alternative ->
+                    OutlinedButton(
+                        onClick = {
+                            selectedDeparture = alternative
+                            store.recordTrip(alternative.tripId)
+                            if (onSelectDeparture != null) {
+                                onSelectDeparture(alternative)
+                            } else {
+                                alternative.routeId?.let(onSelectJourney)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("alternate-departure-$index"),
+                    ) {
+                        Text(
+                            "${alternative.line} → ${alternative.direction} • " +
+                                formatDepartureEpoch(alternative.effectiveEpochSeconds),
+                        )
+                    }
+                }
+            }
         }
 
         engine.alerts(alerts).forEachIndexed { index, alert ->
