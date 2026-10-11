@@ -58,11 +58,11 @@ fun ConcreteTripInstancePanel(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                stringResource(R.string.g182_trip_title, trip.direction),
+                stringResource(R.string.route_selected, trip.direction),
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                stringResource(R.string.g182_service_day, instance.serviceDate.toString()),
+                stringResource(R.string.source_format, instance.serviceDate.toString()),
                 style = MaterialTheme.typography.bodySmall,
             )
             LazyColumn(
@@ -115,7 +115,7 @@ fun ConcreteTripInstancePanel(
                     }
                 }
             }
-            Text(stringResource(R.string.g182_no_alarm_armed),
+            Text(stringResource(R.string.inference_disabled),
                 style = MaterialTheme.typography.bodySmall)
             Button(
                 enabled = origin != null && destination != null,
@@ -127,7 +127,7 @@ fun ConcreteTripInstancePanel(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                     .testTag("trip-confirm-stops"),
             ) {
-                Text(stringResource(R.string.g182_confirm_route))
+                Text(stringResource(R.string.route_select_action))
             }
         }
     }
