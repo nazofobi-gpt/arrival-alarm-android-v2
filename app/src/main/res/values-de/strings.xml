@@ -239,10 +239,4 @@
     <string name="lookup_provider_unavailable">Live-Suchanbieter nicht verfügbar • lokale Daten lieferten kein Ergebnis</string>
     <string name="active_journey_tracking_channel">Aktive Ankunftsverfolgung</string>
     <string name="active_journey_arrival_channel">Ankunftshinweise</string>
-    <string name="active_journey_notification_title">Ankunftsalarm aktiviert</string>
-    <string name="active_journey_notification_waiting_location">Warte auf aktuellen Standort</string>
-    <string name="active_journey_notification_degraded">Standort nicht verfügbar; warte auf GPS</string>
-    <string name="active_journey_notification_distance">Noch ungefähr %1$d m bis zum Ziel</string>
-    <string name="active_journey_arrived_title">Ziel erreicht</string>
-    <string name="active_journey_arrived_body">Ankunftsalarm abgeschlossen.</string>
 </resources>
