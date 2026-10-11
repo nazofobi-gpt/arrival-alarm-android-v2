@@ -12,6 +12,12 @@
     <string name="readiness_summary_blocked">Eine erforderliche Einstellung für den Ankunftsalarm fehlt</string>
     <string name="readiness_location">Standort</string>
     <string name="readiness_notifications">Benachrichtigungen</string>
+    <string name="readiness_search_function">Suchfunktion</string>
+    <string name="readiness_routing_function">Routenplanung</string>
+    <string name="readiness_function_unverified">Noch nicht durch eine Aktion geprüft</string>
+    <string name="readiness_function_working">Bei letzter Aktion nutzbar</string>
+    <string name="readiness_function_degraded">Eingeschränkt / Cache-Ergebnis</string>
+    <string name="readiness_function_failed">Bei letzter Aktion nicht verfügbar</string>
     <string name="readiness_data">ÖPNV-Daten</string>
     <string name="readiness_audio">Audio und Bluetooth</string>
     <string name="readiness_background">Hintergrundfahrt</string>
