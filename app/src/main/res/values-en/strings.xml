@@ -239,10 +239,4 @@
     <string name="lookup_provider_unavailable">Live search provider is unavailable • local data returned no result</string>
     <string name="active_journey_tracking_channel">Active journey tracking</string>
     <string name="active_journey_arrival_channel">Arrival alerts</string>
-    <string name="active_journey_notification_title">Arrival alarm armed</string>
-    <string name="active_journey_notification_waiting_location">Waiting for a current location fix</string>
-    <string name="active_journey_notification_degraded">Location unavailable; waiting for GPS</string>
-    <string name="active_journey_notification_distance">Approximately %1$d m to destination</string>
-    <string name="active_journey_arrived_title">Destination reached</string>
-    <string name="active_journey_arrived_body">Arrival alarm completed.</string>
 </resources>
