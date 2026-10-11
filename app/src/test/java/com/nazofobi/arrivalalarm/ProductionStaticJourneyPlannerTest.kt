@@ -120,6 +120,27 @@ class ProductionStaticJourneyPlannerTest {
         assertEquals("2026-10-04T09:10:00+02:00", option.stops.last().plannedArrival)
     }
 
+    @Test
+    fun routingDateCandidatesIncludeTomorrowAcrossDaylightSavingChange() {
+        val saturday = GtfsServiceDate(2026, 10, 24)
+        val beforeDst = GtfsServiceTime.parse("23:50:00").resolve(saturday, zone).epochMillis
+        assertEquals(
+            listOf(
+                GtfsServiceDate(2026, 10, 23),
+                saturday,
+                GtfsServiceDate(2026, 10, 25),
+            ),
+            staticRoutingServiceDates(beforeDst, zone),
+        )
+
+        val sunday = GtfsServiceDate(2026, 10, 25)
+        val afterDst = GtfsServiceTime.parse("23:50:00").resolve(sunday, zone).epochMillis
+        assertEquals(
+            listOf(saturday, sunday, GtfsServiceDate(2026, 10, 26)),
+            staticRoutingServiceDates(afterDst, zone),
+        )
+    }
+
     private fun at(raw: String): Long =
         GtfsServiceTime.parse(raw).resolve(date, zone).epochMillis
 
