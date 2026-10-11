@@ -254,7 +254,7 @@ class ActiveJourneyService : Service(), LocationListener {
             .addAction(
                 Notification.Action.Builder(
                     android.R.drawable.ic_menu_close_clear_cancel,
-                    "Alarmı iptal et",
+                    getString(R.string.tracking_notification_cancel),
                     cancelAlarmPendingIntent(),
                 ).build()
             )
