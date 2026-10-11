@@ -1060,8 +1060,8 @@ fun ArrivalAlarmApp(
 
                 if (activeScreen == ArrivalAppScreen.DEPARTURES) {
                 val destinationPoint = destination
-                if (shouldDisplayDepartureBoard(
-                    hasDestination = destinationPoint != null,
+                if (destinationPoint != null && shouldDisplayDepartureBoard(
+                    hasDestination = true,
                     hasSelectedStop = !destinationStopId.isNullOrBlank(),
                     hasRouteOptions = routeOptions.isNotEmpty(),
                 )) {
