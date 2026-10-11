@@ -1,5 +1,6 @@
 package com.nazofobi.arrivalalarm
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,6 +10,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
@@ -24,6 +27,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
@@ -184,23 +188,34 @@ fun HomeOverviewPanel(
                         )
                     }
                     nearby.take(4).forEachIndexed { index, candidate ->
-                        OutlinedButton(
-                            onClick = { onNearbyStopSelected(candidate) },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("home-nearby-$index"),
-                        ) {
-                            Text(
-                                stringResource(
-                                    R.string.nearby_stop_format,
-                                    stringResource(R.string.select_destination),
-                                    if (candidate.stop.id in favoriteStopIds) {
-                                        "★ " + candidate.stop.name
-                                    } else {
-                                        candidate.stop.name
-                                    },
-                                    candidate.distanceMeters,
+                        ListItem(
+                            headlineContent = {
+                                Text(
+                                    stringResource(
+                                        R.string.nearby_stop_format,
+                                        stringResource(R.string.select_destination),
+                                        if (candidate.stop.id in favoriteStopIds) {
+                                            "★ " + candidate.stop.name
+                                        } else {
+                                            candidate.stop.name
+                                        },
+                                        candidate.distanceMeters,
+                                    ),
+                                    style = MaterialTheme.typography.bodyMedium,
                                 )
-                            )
-                        }
+                            },
+                            leadingContent = {
+                                Icon(Icons.Default.Place, contentDescription = null)
+                            },
+                            colors = ListItemDefaults.colors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .clickable(role = Role.Button) { onNearbyStopSelected(candidate) }
+                                .testTag("home-nearby-$index"),
+                        )
                     }
                 }
             }
