@@ -245,4 +245,11 @@
     <string name="departures_empty_action">Rota planla</string>
     <string name="lookup_stale_results">Önbellekteki eski sağlayıcı sonuçları gösteriliyor • güncellik doğrulanamadı</string>
     <string name="lookup_provider_unavailable">Canlı arama sağlayıcısına ulaşılamıyor • yerel veri sonuç vermedi</string>
+    <string name="readiness_summary_unverified">Arama ve rota sonuçları henüz doğrulanmadı</string>
+    <string name="readiness_search_check">Son arama kontrolü</string>
+    <string name="readiness_routing_check">Son rota kontrolü</string>
+    <string name="readiness_check_unchecked">Henüz denenmedi</string>
+    <string name="readiness_check_working">Kullanılabilir sonuç doğrulandı</string>
+    <string name="readiness_check_degraded">Kısıtlı / önbellekten kullanılabilir</string>
+    <string name="readiness_check_no_usable_result">Kullanılabilir sonuç doğrulanamadı</string>
 </resources>
