@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tracking_notification_degraded">Konum kullanılamıyor veya doğrulanamıyor; alarm kurulu, güncel konum bekleniyor</string>
+    <string name="tracking_notification_acquiring">Konum güncelleniyor</string>
+    <string name="tracking_notification_distance">Hedefe yaklaşık %1$d m kaldı</string>
+    <string name="tracking_notification_title">Varış alarmı etkin</string>
+    <string name="tracking_notification_arrived_title">Varış noktasına ulaşıldı</string>
+    <string name="tracking_notification_arrived_text">Varış alarmı tamamlandı.</string>
+</resources>
