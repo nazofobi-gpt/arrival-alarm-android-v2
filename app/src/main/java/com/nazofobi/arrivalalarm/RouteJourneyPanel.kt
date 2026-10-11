@@ -174,7 +174,7 @@ private fun RouteOptionCard(
     selectTestTag: String,
     modifier: Modifier = Modifier,
 ) {
-    val duration = routeDurationMinutes(option.departure, option.arrival)
+    val duration = routeDurationMinutes(option)
     val hasRealtime = option.stops.any(::hasRealtimeDelta)
     val realtimeLabel = when {
         option.realtime?.cancelledTripIds?.isNotEmpty() == true ->
@@ -267,7 +267,7 @@ private fun RouteOptionCard(
 
 @Composable
 private fun JourneyDetailCard(option: RouteOption) {
-    val duration = routeDurationMinutes(option.departure, option.arrival)
+    val duration = routeDurationMinutes(option)
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface,
@@ -463,6 +463,18 @@ internal fun JourneyAlarmControls(
             }
         }
     }
+}
+
+/** Use provider-backed instants when available; clock-only results are an explicit fallback. */
+internal fun routeDurationMinutes(option: RouteOption): Int? {
+    val departure = option.departureEpochMillis
+    val arrival = option.arrivalEpochMillis
+    if (departure != null || arrival != null) {
+        if (departure == null || arrival == null || arrival < departure) return null
+        val minutes = (arrival - departure) / 60_000L
+        return minutes.takeIf { it <= Int.MAX_VALUE.toLong() }?.toInt()
+    }
+    return routeDurationMinutes(option.departure, option.arrival)
 }
 
 private fun routeDurationMinutes(departure: String, arrival: String): Int? {
