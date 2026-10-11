@@ -150,7 +150,22 @@ class ActiveJourneyService : Service(), LocationListener {
         }
     }
 
-    override fun onProviderEnabled(provider: String) = Unit
+    override fun onProviderEnabled(provider: String) {
+        // If Android still delivers this provider callback while the listener is
+        // unregistered, resume immediately instead of awaiting the periodic retry.
+        // Never revive a finished trip or a journey with revoked runtime grants.
+        if (arrivalHandled || LocationProviderRecovery.decide(
+                journeyPhase = graph.controller.state.phase,
+                locationRegistered = locationRegistered,
+                hasRuntimeGrants = ActiveJourneyPermissions.hasRuntimeGrants(this),
+            ) != LocationProviderRecovery.Decision.RETRY
+        ) return
+
+        if (registerLocationUpdates()) {
+            // Provider restoration alone is not evidence of an accurate GPS fix.
+            updateTrackingNotification(null, accuracyDegraded = true)
+        }
+    }
 
     override fun onProviderDisabled(provider: String) {
         removeLocationUpdates()
