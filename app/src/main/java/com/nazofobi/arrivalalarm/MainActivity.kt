@@ -178,6 +178,7 @@ fun ArrivalAlarmApp(
         )
     }
     var searchBusy by remember { mutableStateOf(false) }
+    var searchCheck by remember { mutableStateOf(CoreReadinessCheck.UNCHECKED) }
     var searchResults by remember { mutableStateOf(emptyList<TransitLocationResult>()) }
     var searchSource by remember { mutableStateOf<String?>(null) }
     var searchMessage by remember { mutableStateOf<String?>(null) }
@@ -208,6 +209,7 @@ fun ArrivalAlarmApp(
     var routeStatus by remember { mutableStateOf<String?>(null) }
     var routeOffline by remember { mutableStateOf(false) }
     var routeBusy by remember { mutableStateOf(false) }
+    var routingCheck by remember { mutableStateOf(CoreReadinessCheck.UNCHECKED) }
     var stationDepartures by remember { mutableStateOf(emptyList<Departure>()) }
     var stationAlerts by remember { mutableStateOf(emptyList<ServiceAlert>()) }
     var stationSource by remember { mutableStateOf<String?>(null) }
@@ -326,6 +328,7 @@ fun ArrivalAlarmApp(
     }
 
     fun setOrigin(point: MapPoint) {
+        routingCheck = CoreReadinessCheck.UNCHECKED
         origin = point
         destination = null
         destinationStopId = null
@@ -351,12 +354,14 @@ fun ArrivalAlarmApp(
         "${a.latitude},${a.longitude}->${b.latitude},${b.longitude}"
 
     fun loadRoutes(a: MapPoint, b: MapPoint) {
+        routingCheck = CoreReadinessCheck.UNCHECKED
         routeBusy = true
         routeStatus = context.getString(R.string.route_calculating)
         val key = routeKey(a, b)
         transit.journeyOptions(a, b) { options, status ->
             routeBusy = false
             if (options.isNotEmpty()) {
+                routingCheck = CoreReadinessCheck.WORKING
                 routeOffline = false
                 routeOptions = options
                 if (selectedRouteId !in options.map { it.id }) {
@@ -367,6 +372,11 @@ fun ArrivalAlarmApp(
                 routeCache.put(CachedTransitPlan(key, options, emptyList(), System.currentTimeMillis() / 1000))
             } else {
                 val cached = routeCache.routeOptions(key)
+                routingCheck = if (cached.isNotEmpty()) {
+                    CoreReadinessCheck.DEGRADED
+                } else {
+                    CoreReadinessCheck.NO_USABLE_RESULT
+                }
                 routeOffline = cached.isNotEmpty()
                 routeOptions = cached
                 if (selectedRouteId !in cached.map { it.id }) {
@@ -417,6 +427,7 @@ fun ArrivalAlarmApp(
         }
         destination = point
         destinationStopId = stopId
+        routingCheck = CoreReadinessCheck.UNCHECKED
         routeOffline = false
         routeOptions = emptyList()
         selectedRouteId = null
@@ -463,27 +474,32 @@ fun ArrivalAlarmApp(
         val requestId = searchRequestId + 1
         searchRequestId = requestId
         searchBusy = true
+        searchCheck = CoreReadinessCheck.UNCHECKED
         searchMessage = null
         transit.searchLocationsResolved(q) callback@{ resolution ->
             if (requestId != searchRequestId) return@callback
             searchBusy = false
             when (resolution) {
                 is NationwideLookupResolution.Results -> {
+                    searchCheck = CoreReadinessCheck.WORKING
                     searchResults = resolution.values
                     searchSource = resolution.sourceLabel
                     searchMessage = null
                 }
                 is NationwideLookupResolution.Stale -> {
+                    searchCheck = CoreReadinessCheck.DEGRADED
                     searchResults = resolution.values
                     searchSource = resolution.sourceLabel
                     searchMessage = context.getString(R.string.lookup_stale_results)
                 }
                 is NationwideLookupResolution.NoResult -> {
+                    searchCheck = CoreReadinessCheck.NO_USABLE_RESULT
                     searchResults = emptyList()
                     searchSource = resolution.sourceLabel
                     searchMessage = context.getString(R.string.no_stop_found)
                 }
                 is NationwideLookupResolution.ProviderUnavailable -> {
+                    searchCheck = CoreReadinessCheck.NO_USABLE_RESULT
                     searchResults = emptyList()
                     searchSource = resolution.sourceLabel
                     searchMessage = context.getString(R.string.lookup_provider_unavailable)
@@ -637,6 +653,7 @@ fun ArrivalAlarmApp(
             val cached = routeCache.routeOptions(key)
             if (cached.isNotEmpty()) {
                 routeOffline = true
+                routingCheck = CoreReadinessCheck.DEGRADED
                 routeOptions = cached
                 graph.routeRegistry.replace(cached)
                 routeStatus = context.getString(R.string.route_offline_fallback)
@@ -757,6 +774,8 @@ fun ArrivalAlarmApp(
                     journey.phase,
                     connectorConnected,
                     connectorBaseUrl,
+                    searchCheck,
+                    routingCheck,
                 ) {
                     SettingsReadinessState.from(
                         context = context,
@@ -766,6 +785,8 @@ fun ArrivalAlarmApp(
                         backgroundJourneyActive = journey.phase == JourneyPhase.ARMED,
                         connectorConfigured = connectorBaseUrl.isNotBlank(),
                         connectorConnected = connectorConnected,
+                        searchCheck = searchCheck,
+                        routingCheck = routingCheck,
                     )
                 }
                 if (activeScreen == ArrivalAppScreen.SETTINGS) {
@@ -787,7 +808,11 @@ fun ArrivalAlarmApp(
                     onRefreshReadiness = { refreshReadiness() },
                     onOpenAppSettings = { openArrivalAlarmAppSettings(context) },
                     onRetryData = {
-                        transit.ensureNationwideIndex { dataState = it }
+                        transit.ensureNationwideIndex {
+                            dataState = it
+                            searchCheck = CoreReadinessCheck.UNCHECKED
+                            routingCheck = CoreReadinessCheck.UNCHECKED
+                        }
                     },
                     onConnectorAction = {
                         if (connectorConnected) disconnectConnector()
