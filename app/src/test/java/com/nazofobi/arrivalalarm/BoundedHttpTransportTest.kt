@@ -138,6 +138,53 @@ class BoundedHttpTransportTest {
     }
 
     @Test
+    fun networkFailureDoesNotExposeTokenOrPreciseLocationInDiagnostics() {
+        val secret = "api_token_please_do_not_log"
+        val coordinates = "52.666123,8.238456"
+        val transport = BoundedHttpTransport(
+            exchange = HttpExchange { _, _, _ ->
+                throw IOException("GET https://provider.invalid?token=$secret&location=$coordinates failed")
+            },
+            clock = HttpTransportClock { 0 },
+            sleeper = HttpTransportSleeper { error("no retry expected") },
+            maxRetries = 0,
+        )
+
+        val result = transport.execute(
+            HttpTransportRequest("https://provider.invalid?token=$secret")
+        ) as HttpTransportResult.Failure
+
+        assertEquals(HttpTransportResult.Failure.Kind.NETWORK, result.kind)
+        assertEquals(1, result.attempts)
+        assertEquals("network_error", result.message)
+        assertTrue(!result.toString().contains(secret))
+        assertTrue(!result.toString().contains(coordinates))
+    }
+
+    @Test
+    fun timeoutFailureDoesNotExposeRequestUrlOrCredential() {
+        val secret = "private_bearer_token"
+        val transport = BoundedHttpTransport(
+            exchange = HttpExchange { _, _, _ ->
+                throw SocketTimeoutException("Read timed out at https://provider.invalid?key=$secret")
+            },
+            clock = HttpTransportClock { 0 },
+            sleeper = HttpTransportSleeper { error("no retry expected") },
+            maxRetries = 0,
+        )
+
+        val result = transport.execute(
+            HttpTransportRequest("https://provider.invalid?key=$secret")
+        ) as HttpTransportResult.Failure
+
+        assertEquals(HttpTransportResult.Failure.Kind.TIMEOUT, result.kind)
+        assertEquals(1, result.attempts)
+        assertEquals("timeout", result.message)
+        assertTrue(!result.toString().contains(secret))
+        assertTrue(!result.toString().contains("https://provider.invalid"))
+    }
+
+    @Test
     fun interruptedBackoffStopsRetryAndPreservesThreadInterrupt() {
         var calls = 0
         val transport = BoundedHttpTransport(
