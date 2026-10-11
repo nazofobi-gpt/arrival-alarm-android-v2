@@ -50,24 +50,23 @@ internal class ProductionStationDeparturesPlanner(
             listOf(selectedStop)
         }
 
+        val platformByStopId = boardingStops.associateBy { it.id }
         return serviceDates(now)
             .flatMap { serviceDate ->
                 val earliest = serviceSeconds(now, serviceDate) ?: return@flatMap emptyList()
-                boardingStops.flatMap { boardingStop ->
-                    repository.candidateTripsAtStop(
-                        stopId = boardingStop.id,
+                repository.candidateTripsAtStops(
+                    stopIds = boardingStops.map { it.id },
+                    serviceDate = serviceDate,
+                    earliestBoardSeconds = earliest,
+                    limit = maxCandidatesPerServiceDay,
+                ).flatMap { boardingCandidate ->
+                    departuresForCandidate(
+                        candidate = boardingCandidate.candidate,
                         serviceDate = serviceDate,
                         earliestBoardSeconds = earliest,
-                        limit = maxCandidatesPerServiceDay,
-                    ).flatMap { candidate ->
-                        departuresForCandidate(
-                            candidate = candidate,
-                            serviceDate = serviceDate,
-                            earliestBoardSeconds = earliest,
-                            nowEpochSeconds = now / 1_000L,
-                            plannedPlatform = boardingStop.platformCode,
-                        )
-                    }
+                        nowEpochSeconds = now / 1_000L,
+                        plannedPlatform = platformByStopId[boardingCandidate.boardingStopId]?.platformCode,
+                    )
                 }
             }
             .distinctBy { it.tripId to it.scheduledEpochSeconds }
