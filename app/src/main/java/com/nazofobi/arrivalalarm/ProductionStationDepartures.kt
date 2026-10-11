@@ -217,6 +217,7 @@ internal class ProductionStationDeparturesPlanner(
         listOf(
             serviceDate(epochMillis, dayOffset = -1),
             serviceDate(epochMillis),
+            serviceDate(epochMillis, dayOffset = 1),
         )
 
     private fun serviceDate(epochMillis: Long, dayOffset: Int = 0): GtfsServiceDate {
@@ -239,7 +240,8 @@ internal class ProductionStationDeparturesPlanner(
             .resolve(serviceDate, agencyTimeZone)
             .epochMillis
         val delta = epochMillis - anchor
-        if (delta < 0L) return null
+        // Tomorrow's GTFS service day has not started yet: search it from 00:00.
+        if (delta < 0L) return 0
         val seconds = delta / 1_000L + if (delta % 1_000L == 0L) 0L else 1L
         return seconds.takeIf { it <= Int.MAX_VALUE }?.toInt()
     }
