@@ -68,7 +68,7 @@ fun TransitExperiencePanel(
         }
     }
     var favorite by remember(stopId) { mutableStateOf(store.isFavorite(stopId)) }
-    var selectedTrip by remember { mutableStateOf<String?>(null) }
+    var selectedDepartureKey by remember(stopId) { mutableStateOf<String?>(null) }
     val board = engine.departureBoard(departures, nowEpochSeconds)
     val cancelled = departures.filter { it.cancelled }
 
@@ -216,8 +216,8 @@ fun TransitExperiencePanel(
                     }
                     Button(
                         onClick = {
-                            selectedTrip = departure.tripId
-                            store.recordTrip(departure.tripId)
+                            selectedDepartureKey = departure.departureInstanceKey
+                            store.recordTrip(departure.departureInstanceKey)
                             departure.routeId?.let(onSelectJourney)
                         },
                         modifier = Modifier
@@ -257,8 +257,10 @@ fun TransitExperiencePanel(
             }
         }
 
-        selectedTrip?.let { tripId ->
-            val alternatives = engine.alternateDepartures(departures, tripId, nowEpochSeconds)
+        selectedDepartureKey
+            ?.let { key -> departures.firstOrNull { it.departureInstanceKey == key } }
+            ?.let { selected ->
+            val alternatives = engine.alternateDepartures(departures, selected, nowEpochSeconds)
             Text(
                 stringResource(R.string.alternate_departures, alternatives.size),
                 modifier = Modifier.testTag("alternate-departures"),
