@@ -160,6 +160,51 @@ fun HomeOverviewPanel(
             }
         }
 
+        if (nearby.isNotEmpty()) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                ),
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.nearby_stops),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                    nearbySource?.let {
+                        Text(
+                            text = stringResource(R.string.source_format, it),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
+                    nearby.take(4).forEachIndexed { index, candidate ->
+                        OutlinedButton(
+                            onClick = { onNearbyStopSelected(candidate) },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("home-nearby-$index"),
+                        ) {
+                            Text(
+                                stringResource(
+                                    R.string.nearby_stop_format,
+                                    stringResource(R.string.select_destination),
+                                    if (candidate.stop.id in favoriteStopIds) {
+                                        "★ " + candidate.stop.name
+                                    } else {
+                                        candidate.stop.name
+                                    },
+                                    candidate.distanceMeters,
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
@@ -206,51 +251,6 @@ fun HomeOverviewPanel(
             }
         }
 
-        if (nearby.isNotEmpty()) {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                ),
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.nearby_stops),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    )
-                    nearbySource?.let {
-                        Text(
-                            text = stringResource(R.string.source_format, it),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
-                    }
-                    nearby.take(4).forEachIndexed { index, candidate ->
-                        OutlinedButton(
-                            onClick = { onNearbyStopSelected(candidate) },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("home-nearby-$index"),
-                        ) {
-                            Text(
-                                stringResource(
-                                    R.string.nearby_stop_format,
-                                    stringResource(R.string.select_destination),
-                                    if (candidate.stop.id in favoriteStopIds) {
-                                        "★ " + candidate.stop.name
-                                    } else {
-                                        candidate.stop.name
-                                    },
-                                    candidate.distanceMeters,
-                                )
-                            )
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
