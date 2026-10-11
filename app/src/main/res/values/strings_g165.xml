@@ -12,6 +12,12 @@
     <string name="readiness_summary_blocked">Yolculuk alarmı için gerekli bir ayar eksik</string>
     <string name="readiness_location">Konum</string>
     <string name="readiness_notifications">Bildirimler</string>
+    <string name="readiness_search_function">Arama işlevi</string>
+    <string name="readiness_routing_function">Rota oluşturma</string>
+    <string name="readiness_function_unverified">Henüz bir işlemle doğrulanmadı</string>
+    <string name="readiness_function_working">Son işlemde kullanılabilir</string>
+    <string name="readiness_function_degraded">Sınırlı / önbellekten sonuç</string>
+    <string name="readiness_function_failed">Son işlemde kullanılamadı</string>
     <string name="readiness_data">Toplu taşıma verisi</string>
     <string name="readiness_audio">Ses ve Bluetooth</string>
     <string name="readiness_background">Arka plan yolculuğu</string>
