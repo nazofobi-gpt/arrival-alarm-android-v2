@@ -144,6 +144,7 @@ class NationwideTransitGateway(
         index = store,
         nowMillis = nowMillis,
     )
+    private val tripInstanceDetailReader = GtfsTripInstanceDetailReader(store)
     private val realtimeStationOverlay = ProductionRealtimeStationOverlay(
         fetch = { realtimeFetch?.invoke() ?: realtimeClient.fetch() },
         match = { result, now -> realtimeMatcher.match(result, now) },
@@ -399,6 +400,20 @@ class NationwideTransitGateway(
             sourceLabel = outcome.provenance?.sourceLabel
                 ?: appContext.getString(R.string.source_live_germany),
         )
+    }
+
+    /**
+     * Reads the exact selected GTFS trip off the UI thread. A failure never returns
+     * a substitute route, different direction, or synthesized stop sequence.
+     */
+    internal fun tripInstanceDetails(
+        identity: TripInstanceIdentity,
+        callback: (TripInstanceDetailResult) -> Unit,
+    ) {
+        io.execute {
+            val result = tripInstanceDetailReader.resolve(identity)
+            main.post { callback(result) }
+        }
     }
 
     fun stationDepartures(
