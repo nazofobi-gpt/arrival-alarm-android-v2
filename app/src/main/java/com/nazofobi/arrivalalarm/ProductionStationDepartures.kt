@@ -2,6 +2,7 @@ package com.nazofobi.arrivalalarm
 
 import java.util.Calendar
 import java.util.GregorianCalendar
+import java.util.Locale
 import java.util.TimeZone
 
 enum class StationRealtimeState {
@@ -191,25 +192,17 @@ internal class ProductionStationDeparturesPlanner(
         runCatching { GtfsServiceTime.parse(raw).secondsFromServiceDayStart }.getOrNull()
 
     private fun formatServiceDate(date: GtfsServiceDate): String =
-        "%04d%02d%02d".format(date.year, date.month, date.day)
+        GtfsRealtimeServiceKeyFormat.date(date)
 
     private fun formatServiceTime(seconds: Int): String =
-        "%02d:%02d:%02d".format(
-            seconds / 3_600,
-            (seconds % 3_600) / 60,
-            seconds % 60,
-        )
+        GtfsRealtimeServiceKeyFormat.time(seconds)
 
     private fun serviceEpochSeconds(
         serviceDate: GtfsServiceDate,
         serviceSeconds: Int,
     ): Long? = runCatching {
         GtfsServiceTime.parse(
-            "%02d:%02d:%02d".format(
-                serviceSeconds / 3_600,
-                (serviceSeconds % 3_600) / 60,
-                serviceSeconds % 60,
-            ),
+            GtfsRealtimeServiceKeyFormat.time(serviceSeconds),
         ).resolve(serviceDate, agencyTimeZone).epochMillis / 1_000L
     }.getOrNull()
 
@@ -250,6 +243,24 @@ internal class ProductionStationDeparturesPlanner(
         const val MAX_FREQUENCY_ROWS_PER_TRIP = 64
         const val MAX_FREQUENCY_DEPARTURES_PER_CANDIDATE = 64
     }
+}
+
+/**
+ * GTFS / GTFS-RT service-day keys are protocol fields, not localized UI text.
+ * Locale.ROOT keeps their decimal digits ASCII on phones using other numeral systems.
+ */
+internal object GtfsRealtimeServiceKeyFormat {
+    fun date(date: GtfsServiceDate): String =
+        String.format(Locale.ROOT, "%04d%02d%02d", date.year, date.month, date.day)
+
+    fun time(seconds: Int): String =
+        String.format(
+            Locale.ROOT,
+            "%02d:%02d:%02d",
+            seconds / 3_600,
+            (seconds % 3_600) / 60,
+            seconds % 60,
+        )
 }
 
 internal class ProductionRealtimeStationOverlay(
