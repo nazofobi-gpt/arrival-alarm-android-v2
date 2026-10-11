@@ -30,9 +30,36 @@ class TransitExperienceTest {
         assertTrue(engine.vehicles(listOf(LiveVehicle("a",GeoPoint(1.0,2.0)))).isEmpty())
     }
 
-    @Test fun alternateDepartureExcludesSelectedTrip() {
-        val engine=TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures=true))
-        assertEquals(listOf("a"),engine.alternateDepartures(departures,"b",now).map{it.tripId})
+    @Test fun alternativesExcludeDifferentRoutesAndDirections() {
+        val engine = TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures = true))
+        val selected = Departure("trip-a", "RE 9", "Bremen", 1_100, routeId = "re9")
+        val later = Departure("trip-b", "RE 9", "Bremen", 1_300, routeId = "re9")
+        val opposite = Departure("trip-c", "RE 9", "Osnabrück", 1_400, routeId = "re9")
+        val otherRoute = Departure("trip-d", "S 1", "Bremen", 1_500, routeId = "s1")
+        assertEquals(
+            listOf("trip-b"),
+            engine.alternateDepartures(
+                listOf(selected, later, opposite, otherRoute), selected, now
+            ).map { it.tripId }
+        )
+    }
+
+    @Test fun repeatedTripTemplateKeepsEachDepartureAndItsRecentSelectionDistinct() {
+        val engine = TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures = true))
+        val first = Departure("frequency-template", "S 1", "Bremen", 1_200, routeId = "s1")
+        val second = first.copy(scheduledEpochSeconds = 1_800)
+        val delayedFirst = first.copy(realtimeEpochSeconds = 1_280)
+        assertEquals(first.departureInstanceKey, delayedFirst.departureInstanceKey)
+        assertFalse(first.departureInstanceKey == second.departureInstanceKey)
+        assertEquals(
+            listOf(second.departureInstanceKey),
+            engine.alternateDepartures(listOf(delayedFirst, second), delayedFirst, now)
+                .map { it.departureInstanceKey }
+        )
+        val recents = TransitRecentsStore()
+        recents.recordTrip(first.departureInstanceKey)
+        recents.recordTrip(second.departureInstanceKey)
+        assertEquals(listOf(second.departureInstanceKey, first.departureInstanceKey), recents.recents())
     }
 
     @Test fun accessibilityPenaltyOnlyAppliesWhenProviderSupportsIt() {
