@@ -40,6 +40,10 @@ data class GtfsTripDetailStop(
     val wheelchairBoarding: Int?,
     val scheduledArrival: String?,
     val scheduledDeparture: String?,
+    val latitude: Double,
+    val longitude: Double,
+    val pickupType: Int?,
+    val dropOffType: Int?,
 )
 
 data class GtfsTripDetail(
@@ -173,6 +177,10 @@ class GtfsTripDetailResolver(private val source: GtfsTripDetailSource) {
                 wheelchairBoarding = stop.wheelchairBoarding,
                 scheduledArrival = time.arrivalTime,
                 scheduledDeparture = time.departureTime,
+                latitude = stop.latitude,
+                longitude = stop.longitude,
+                pickupType = time.pickupType,
+                dropOffType = time.dropOffType,
             )
         }
         return GtfsTripDetailResult.Available(GtfsTripDetail(identity, trip.headsign, stops))
