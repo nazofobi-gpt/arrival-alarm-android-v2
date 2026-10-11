@@ -19,7 +19,7 @@ interface JourneyStateStore {
 }
 
 class JourneyController(
-    private val arrivalRadiusMeters: Double = 250.0,
+    private val arrivalRadiusMeters: Double = ArrivalLocationQuality.DEFAULT_ARRIVAL_RADIUS_METERS,
     private val stateStore: JourneyStateStore? = null,
 ) {
     @Volatile
@@ -65,11 +65,11 @@ class JourneyController(
         )
     }
 
-    fun onDistanceChanged(distanceMeters: Double) {
-        if (state.phase != JourneyPhase.ARMED) return
+    fun onDistanceChanged(distanceMeters: Double, allowArrival: Boolean = true) {
+        if (state.phase != JourneyPhase.ARMED || !distanceMeters.isFinite() || distanceMeters < 0.0) return
         update(
             state.copy(
-                phase = if (distanceMeters <= arrivalRadiusMeters) JourneyPhase.ARRIVED else JourneyPhase.ARMED,
+                phase = if (allowArrival && distanceMeters <= arrivalRadiusMeters) JourneyPhase.ARRIVED else JourneyPhase.ARMED,
                 distanceMeters = distanceMeters,
                 error = null,
             )
