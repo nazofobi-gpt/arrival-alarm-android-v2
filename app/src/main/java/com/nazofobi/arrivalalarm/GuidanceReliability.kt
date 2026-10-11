@@ -1,5 +1,7 @@
 package com.nazofobi.arrivalalarm
 
+import java.util.Locale
+
 enum class GuidancePermissionState { DENIED, PARTIAL, GRANTED }
 enum class GuidanceAudioRoute { DEVICE, BLUETOOTH_CONNECTED, BLUETOOTH_DISCONNECTED }
 enum class VoiceChoice { DESIRED_LOCALE, DEVICE_FALLBACK, UNAVAILABLE }
@@ -16,8 +18,13 @@ enum class GuidanceLanguage(
     fun destinationText(label: String): String = "$destinationPrefix $label"
 
     companion object {
-        fun fromLocaleTag(localeTag: String?): GuidanceLanguage =
-            values().firstOrNull { it.localeTag == localeTag } ?: TURKISH
+        fun fromLocaleTag(localeTag: String?): GuidanceLanguage {
+            val normalized = localeTag?.trim()?.replace('_', '-').orEmpty()
+            val language = Locale.forLanguageTag(normalized).language
+            return values().firstOrNull {
+                it.localeTag.substringBefore('-').equals(language, ignoreCase = true)
+            } ?: TURKISH
+        }
     }
 }
 
