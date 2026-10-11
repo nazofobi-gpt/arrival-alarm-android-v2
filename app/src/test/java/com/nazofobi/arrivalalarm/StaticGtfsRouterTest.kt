@@ -739,6 +739,32 @@ class StaticGtfsRouterTest {
         assertTrue(data.candidateQueryCount <= 4)
     }
 
+    @Test fun overlappingNearbyWindowsStillRouteBetweenDistinctStops() {
+        val data = FakeData(
+            candidates = mapOf(
+                "A" to listOf(candidate("T1", "R1", "S", 1, "10:00:00")),
+            ),
+            times = mapOf(
+                "T1" to listOf(
+                    st("T1", 1, "A", "10:00:00"),
+                    st("T1", 2, "B", "10:12:00"),
+                ),
+            ),
+        )
+        // B is within both nearby-stop windows, but A -> B is a real route.
+        val result = StaticGtfsRouter(data, zone).route(
+            origins = listOf(StaticRouterAccess("A"), StaticRouterAccess("B")),
+            destinations = listOf(StaticRouterAccess("B"), StaticRouterAccess("C")),
+            serviceDate = date,
+            departureEpochMillis = at("09:55:00"),
+        )
+
+        val journeys = (result as StaticRouterResult.Journeys).journeys
+        assertTrue(journeys.any { journey ->
+            journey.legs.any { it.fromStopId == "A" && it.toStopId == "B" }
+        })
+    }
+
     @Test fun inactiveServiceNoPathAndSameOriginExplicit() {
         val data=FakeData(active=false,candidates=mapOf("A" to listOf(candidate("T1","R1","S",1,"10:00:00"))))
         val router=StaticGtfsRouter(data,zone)

@@ -250,21 +250,16 @@ class ProductionStaticJourneyPlanner(
             return LocalStaticJourneyOutcome.SameOrigin
         }
 
-        // Nearest-stop windows can overlap for short regional requests. StaticGtfsRouter
-        // intentionally treats any shared access/egress stop as SameOrigin, so make the
-        // candidate sets disjoint while preserving each side's closest stop.
-        val destinationPrimaryId = destinationNearby.first().stop.id
-        val originSelected = originNearby.filter { it.stop.id != destinationPrimaryId }
-        val originIds = originSelected.mapTo(linkedSetOf()) { it.stop.id }
-        val destinationSelected = destinationNearby.filter { it.stop.id !in originIds }
-
-        val origins = originSelected.map { nearby ->
+        // Preserve all nearby stops, including shared candidates. Distinct origin and
+        // destination primary stops have already passed the same-origin guard above;
+        // dropping overlapping candidates here can discard the only viable boarding stop.
+        val origins = originNearby.map { nearby ->
             StaticRouterAccess(
                 stopId = nearby.stop.id,
                 walkSeconds = walkSeconds(nearby.distanceMeters),
             )
         }
-        val destinations = destinationSelected.map { nearby ->
+        val destinations = destinationNearby.map { nearby ->
             StaticRouterAccess(
                 stopId = nearby.stop.id,
                 walkSeconds = walkSeconds(nearby.distanceMeters),
