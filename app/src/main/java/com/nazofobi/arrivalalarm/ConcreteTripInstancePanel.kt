@@ -58,11 +58,11 @@ fun ConcreteTripInstancePanel(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                stringResource(R.string.route_selected, trip.direction),
+                stringResource(R.string.journey_detail_title) + " • " + trip.direction,
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                stringResource(R.string.source_format, instance.serviceDate.toString()),
+                stringResource(R.string.route_planned_badge) + " • " + instance.serviceDate.toString(),
                 style = MaterialTheme.typography.bodySmall,
             )
             LazyColumn(
@@ -115,7 +115,7 @@ fun ConcreteTripInstancePanel(
                     }
                 }
             }
-            Text(stringResource(R.string.inference_disabled),
+            Text(stringResource(R.string.onboarding_background_note),
                 style = MaterialTheme.typography.bodySmall)
             Button(
                 enabled = origin != null && destination != null,
