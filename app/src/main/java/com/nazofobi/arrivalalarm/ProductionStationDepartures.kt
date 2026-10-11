@@ -36,24 +36,38 @@ internal class ProductionStationDeparturesPlanner(
         if (!index.isReady() || stopId.isBlank() || limit <= 0) return emptyList()
         val boundedLimit = limit.coerceIn(1, 64)
         val now = nowMillis()
-        val plannedPlatform = repository.stop(stopId)?.platformCode
+        val selectedStop = repository.stop(stopId) ?: return emptyList()
+        // Station stop_times are commonly stored on child boarding platforms, not the
+        // parent station. Include the parent too for feeds with directly linked trips.
+        // Bound child expansion so the departure panel cannot issue unbounded queries.
+        val boardingStops = if (selectedStop.locationType == 1) {
+            (
+                repository.childStops(stopId, limit = MAX_STATION_PLATFORMS)
+                    .filter { it.locationType == null || it.locationType == 0 } +
+                    selectedStop
+            ).distinctBy { it.id }
+        } else {
+            listOf(selectedStop)
+        }
 
         return serviceDates(now)
             .flatMap { serviceDate ->
                 val earliest = serviceSeconds(now, serviceDate) ?: return@flatMap emptyList()
-                repository.candidateTripsAtStop(
-                    stopId = stopId,
-                    serviceDate = serviceDate,
-                    earliestBoardSeconds = earliest,
-                    limit = maxCandidatesPerServiceDay,
-                ).flatMap { candidate ->
-                    departuresForCandidate(
-                        candidate = candidate,
+                boardingStops.flatMap { boardingStop ->
+                    repository.candidateTripsAtStop(
+                        stopId = boardingStop.id,
                         serviceDate = serviceDate,
                         earliestBoardSeconds = earliest,
-                        nowEpochSeconds = now / 1_000L,
-                        plannedPlatform = plannedPlatform,
-                    )
+                        limit = maxCandidatesPerServiceDay,
+                    ).flatMap { candidate ->
+                        departuresForCandidate(
+                            candidate = candidate,
+                            serviceDate = serviceDate,
+                            earliestBoardSeconds = earliest,
+                            nowEpochSeconds = now / 1_000L,
+                            plannedPlatform = boardingStop.platformCode,
+                        )
+                    }
                 }
             }
             .distinctBy { it.tripId to it.scheduledEpochSeconds }
@@ -240,6 +254,7 @@ internal class ProductionStationDeparturesPlanner(
     }
 
     private companion object {
+        const val MAX_STATION_PLATFORMS = 64
         const val MAX_FREQUENCY_ROWS_PER_TRIP = 64
         const val MAX_FREQUENCY_DEPARTURES_PER_CANDIDATE = 64
     }
