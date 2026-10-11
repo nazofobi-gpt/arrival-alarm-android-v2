@@ -22,16 +22,20 @@ import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 
 object ActiveJourneyPermissions {
-    fun hasRequired(context: Context): Boolean {
+    fun hasRuntimeGrants(context: Context): Boolean {
         val hasLocation =
             context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
                 context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
         val hasNotifications =
             Build.VERSION.SDK_INT < 33 ||
                 context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        return hasLocation && hasNotifications
+    }
+
+    fun hasRequired(context: Context): Boolean {
         val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         val hasProvider = runCatching { manager.getProviders(true).isNotEmpty() }.getOrDefault(false)
-        return hasLocation && hasNotifications && hasProvider
+        return hasRuntimeGrants(context) && hasProvider
     }
 
     fun runtimePermissions(): Array<String> = buildList {
@@ -58,6 +62,17 @@ class ActiveJourneyService : Service(), LocationListener {
             if (!arrivalHandled && graph.controller.state.phase != JourneyPhase.ARMED) {
                 stopSelf()
                 return
+            }
+            // A disabled provider must not silently end an armed journey.
+            // Retry location registration while foreground tracking remains active.
+            if (!arrivalHandled && !locationRegistered) {
+                if (!ActiveJourneyPermissions.hasRuntimeGrants(this@ActiveJourneyService)) {
+                    stopSelf()
+                    return
+                }
+                if (!registerLocationUpdates()) {
+                    updateTrackingNotification(null, accuracyDegraded = true)
+                }
             }
             mainHandler.postDelayed(this, STATE_MONITOR_MILLIS)
         }
@@ -134,7 +149,10 @@ class ActiveJourneyService : Service(), LocationListener {
 
     override fun onProviderDisabled(provider: String) {
         removeLocationUpdates()
-        if (!registerLocationUpdates()) stopSelf()
+        if (graph.controller.state.phase != JourneyPhase.ARMED) return
+        // Switch to another enabled provider if possible, otherwise retry later.
+        registerLocationUpdates()
+        updateTrackingNotification(null, accuracyDegraded = true)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
