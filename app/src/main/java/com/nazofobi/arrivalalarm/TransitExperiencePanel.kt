@@ -46,6 +46,7 @@ fun TransitExperiencePanel(
     statusMessage: String? = null,
     sourceLabel: String? = null,
     loading: Boolean = false,
+    allowJourneySelection: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val engine = remember(providerCapabilities) { TransitExperienceEngine(providerCapabilities) }
@@ -214,18 +215,20 @@ fun TransitExperiencePanel(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Button(
-                        onClick = {
-                            selectedTrip = departure.tripId
-                            store.recordTrip(departure.tripId)
-                            departure.routeId?.let(onSelectJourney)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .testTag("departure-$index"),
-                    ) {
-                        Text(stringResource(R.string.departure_select))
+                    if (allowJourneySelection) {
+                        Button(
+                            onClick = {
+                                selectedTrip = departure.tripId
+                                store.recordTrip(departure.tripId)
+                                departure.routeId?.let(onSelectJourney)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("departure-$index"),
+                        ) {
+                            Text(stringResource(R.string.departure_select))
+                        }
                     }
                 }
             }
