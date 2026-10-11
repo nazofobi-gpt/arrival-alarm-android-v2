@@ -215,6 +215,7 @@ fun ArrivalAlarmApp(
     var stationStatus by remember { mutableStateOf<String?>(null) }
     var stationLoading by remember { mutableStateOf(false) }
     var stationResolved by remember { mutableStateOf(false) }
+    var stationRequestId by remember { mutableStateOf(0) }
     var liveNowEpochSeconds by remember { mutableStateOf(System.currentTimeMillis() / 1_000) }
     var readinessRefreshTick by remember { mutableStateOf(0) }
     val routeCache = remember(context) {
@@ -326,6 +327,8 @@ fun ArrivalAlarmApp(
     }
 
     fun setOrigin(point: MapPoint) {
+        // Cancel any in-flight departure response for the previous journey selection.
+        stationRequestId += 1
         origin = point
         destination = null
         destinationStopId = null
@@ -379,6 +382,7 @@ fun ArrivalAlarmApp(
     }
 
     fun loadStationDepartures(stop: CatalogStop) {
+        val requestId = ++stationRequestId
         stationLoading = true
         stationResolved = false
         stationDepartures = emptyList()
@@ -387,6 +391,8 @@ fun ArrivalAlarmApp(
         stationRealtimeState = null
         stationStatus = null
         transit.stationDepartures(stop) { snapshot ->
+            // An older network callback must never replace a newer stop's board.
+            if (requestId != stationRequestId) return@stationDepartures
             stationLoading = false
             if (snapshot.error == null) {
                 stationResolved = true
@@ -404,6 +410,7 @@ fun ArrivalAlarmApp(
     }
 
     fun setDestinationPoint(point: MapPoint, stopId: String? = null): Boolean {
+        stationRequestId += 1
         val currentOrigin = origin
         if (currentOrigin == null) {
             setOrigin(point)
