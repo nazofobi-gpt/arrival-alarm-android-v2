@@ -245,7 +245,7 @@ fun HomeOverviewPanel(
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                                 .testTag("home-departures-$index"),
                         ) {
-                            Text(stringResource(R.string.nearby_departures_action))
+                            Text(stringResource(R.string.departures_title))
                         }
                     }
                 }
