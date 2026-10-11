@@ -98,6 +98,15 @@ class ActiveJourneyService : Service(), LocationListener {
             stopSelf()
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_CANCEL) {
+            // A notification action must disarm the authoritative persisted state,
+            // not merely stop this service and leave a silently armed journey.
+            if (graph.controller.state.phase == JourneyPhase.ARMED) {
+                graph.connectorPort.cancelArrivalAlarm()
+            }
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (graph.controller.state.phase != JourneyPhase.ARMED) {
             stopSelf()
             return START_NOT_STICKY
@@ -242,6 +251,13 @@ class ActiveJourneyService : Service(), LocationListener {
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setContentIntent(openAppPendingIntent())
+            .addAction(
+                Notification.Action.Builder(
+                    android.R.drawable.ic_menu_close_clear_cancel,
+                    "Alarmı iptal et",
+                    cancelAlarmPendingIntent(),
+                ).build()
+            )
             .build()
     }
 
@@ -274,6 +290,14 @@ class ActiveJourneyService : Service(), LocationListener {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
+    private fun cancelAlarmPendingIntent(): PendingIntent =
+        PendingIntent.getService(
+            this,
+            1,
+            cancellationIntent(this),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT < 26) return
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -296,6 +320,10 @@ class ActiveJourneyService : Service(), LocationListener {
     companion object {
         const val ACTION_START = "com.nazofobi.arrivalalarm.action.START_ACTIVE_JOURNEY"
         const val ACTION_STOP = "com.nazofobi.arrivalalarm.action.STOP_ACTIVE_JOURNEY"
+        const val ACTION_CANCEL = "com.nazofobi.arrivalalarm.action.CANCEL_ACTIVE_JOURNEY"
+        internal fun cancellationIntent(context: Context): Intent =
+            Intent(context, ActiveJourneyService::class.java).setAction(ACTION_CANCEL)
+
         const val SERVICE_RUNTIME_OWNER = "active-journey-service"
         private const val TRACKING_CHANNEL_ID = "arrival_tracking"
         private const val ARRIVAL_CHANNEL_ID = "arrival_alerts"
