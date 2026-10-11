@@ -34,6 +34,14 @@ class ActiveJourneyServiceInstrumentedTest {
         )
     }
 
+    @Test fun cancellationActionTargetsTheNonExportedTrackingService() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val intent = ActiveJourneyService.cancellationIntent(context)
+
+        assertEquals(ActiveJourneyService.ACTION_CANCEL, intent.action)
+        assertEquals(ComponentName(context, ActiveJourneyService::class.java), intent.component)
+    }
+
     @Test fun manifestUsesForegroundLocationWithoutBackgroundLocationGrant() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val info = if (Build.VERSION.SDK_INT >= 33) {
