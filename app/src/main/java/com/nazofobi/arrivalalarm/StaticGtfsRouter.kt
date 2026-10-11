@@ -168,7 +168,12 @@ class StaticGtfsRouter(
         val from = origins.distinctBy { it.stopId }.take(16)
         val to = destinations.distinctBy { it.stopId }.take(16)
         if (from.isEmpty() || to.isEmpty()) return StaticRouterResult.NoPath
-        if (from.any { a -> to.any { b -> a.stopId == b.stopId } }) return StaticRouterResult.SameOrigin
+        // Nearby access/egress windows commonly overlap at adjacent stations. A shared
+        // candidate must not hide a valid journey between two different stops.
+        // SameOrigin is unambiguous only for an identical single-stop request.
+        if (from.size == 1 && to.size == 1 && from[0].stopId == to[0].stopId) {
+            return StaticRouterResult.SameOrigin
+        }
 
         val destinationByStop = to.associateBy { it.stopId }
         val found = mutableListOf<StaticTransitJourney>()
