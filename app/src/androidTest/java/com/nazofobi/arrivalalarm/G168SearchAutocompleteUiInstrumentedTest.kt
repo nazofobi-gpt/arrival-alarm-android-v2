@@ -70,6 +70,7 @@ class G168SearchAutocompleteUiInstrumentedTest {
                     onMapPointSelected = {},
                     onMapError = {},
                     onNearbyStopSelected = {},
+                    onToggleFavoriteStop = {},
                     mode = HomeSearchMode.SEARCH,
                 )
             }
