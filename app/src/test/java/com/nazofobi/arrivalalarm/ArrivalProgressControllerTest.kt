@@ -111,10 +111,12 @@ class ArrivalProgressControllerTest {
         assertEquals(ArrivalAlertPhase.IMMINENT, c.state.phase)
         assertEquals(1, c.state.consecutiveInsideThreshold)
 
-        // An invalid intervening callback must not act as a second confirmation.
+        // An invalid intervening callback breaks the confirmation streak.
         c.onLocation(fix(target, accuracy = 5_000.0))
-        assertEquals(1, c.state.consecutiveInsideThreshold)
+        assertEquals(0, c.state.consecutiveInsideThreshold)
         assertEquals(0, c.state.arrivalEventCount)
+        c.onLocation(fix(target))
+        assertEquals(ArrivalAlertPhase.IMMINENT, c.state.phase)
         c.onLocation(fix(target))
         assertEquals(ArrivalAlertPhase.ARRIVED, c.state.phase)
         assertEquals(1, c.state.arrivalEventCount)
