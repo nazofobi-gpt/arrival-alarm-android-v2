@@ -94,6 +94,9 @@ internal class StaticRouteOptionMapper(
             stops = routeStops,
             refreshToken = null,
             sourceUpdatedAtEpochSeconds = sourceUpdatedAtEpochSeconds,
+            bicycleAllowance = GermanyFareEvidence.bicycleAllowance(
+                journey.legs.map { leg -> data.trip(leg.tripId)?.bikesAllowed },
+            ),
         )
     }
 
