@@ -83,6 +83,8 @@
     <string name="nearby_child_stops_hide">Hide platforms/sub-stops</string>
     <string name="nearby_child_stop_format">%1$d. %2$s</string>
     <string name="route_calculating">Calculating route…</string>
+    <string name="route_direct_only_filter">Direct routes only</string>
+    <string name="route_direct_only_empty">No direct route is available. Turn off the filter to see connections.</string>
     <string name="route_results_title">Route results</string>
     <string name="route_points_format">%1$s → %2$s</string>
     <string name="route_offline_badge">Offline cache</string>
