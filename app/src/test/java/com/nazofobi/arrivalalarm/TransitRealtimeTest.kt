@@ -46,6 +46,29 @@ class TransitRealtimeTest {
         assertEquals(listOf("Bremen Hbf", "Am Brill", "Flughafen Bremen"), result.journey.legs.single().stops.map { it.name })
     }
 
+    @Test fun futureDatedRealtimeBeyondClockSkewFailsClosedToStatic() {
+        val result = repo(RealtimeSnapshot(
+            now + 31,
+            listOf(RealtimeUpdate("trip-42", delaySeconds = 300, cancelled = true, platform = "2")),
+        )).plan("fixture-bremen-hbf", "fixture-airport")!!
+
+        assertEquals(RealtimeFreshness.STALE, result.realtime.freshness)
+        assertEquals(now + 31, result.realtime.lastUpdatedEpochSeconds)
+        assertNull(result.realtime.delaySeconds)
+        assertFalse(result.realtime.cancelled)
+        assertNull(result.realtime.platform)
+        assertTrue(result.realtime.status.contains("zamanı doğrulanamadı"))
+        assertEquals("Fixture 6", result.journey.legs.single().line)
+    }
+
+    @Test fun smallProviderClockSkewRemainsFresh() {
+        val result = repo(RealtimeSnapshot(now + 30, emptyList()))
+            .plan("fixture-bremen-hbf", "fixture-airport")!!
+
+        assertEquals(RealtimeFreshness.FRESH, result.realtime.freshness)
+        assertTrue(result.realtime.status.contains("eşleşen sefer yok"))
+    }
+
     @Test fun unavailableAndTimeoutBothPreserveStaticJourney() {
         val unavailable = repo(null).plan("fixture-bremen-hbf", "fixture-airport")!!
         val timeout = repo(null, throws = true).plan("fixture-bremen-hbf", "fixture-airport")!!
