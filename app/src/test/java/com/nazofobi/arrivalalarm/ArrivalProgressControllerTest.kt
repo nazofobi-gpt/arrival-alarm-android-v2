@@ -98,4 +98,55 @@ class ArrivalProgressControllerTest {
         assertEquals(ArrivalAlertPhase.ARRIVED, afterArrival.state.phase)
         assertEquals(1, afterArrival.state.arrivalEventCount)
     }
+
+    @Test fun lowQualityFixesNeverCountTowardArrivalDebounce() {
+        val c = ArrivalProgressController()
+        c.arm(route)
+        val target = route.stops[route.targetIndex]
+        val initial = c.state
+
+        c.onLocation(fix(target, accuracy = 5_000.0))
+        assertEquals(initial, c.state)
+        c.onLocation(fix(target))
+        assertEquals(ArrivalAlertPhase.IMMINENT, c.state.phase)
+        assertEquals(1, c.state.consecutiveInsideThreshold)
+
+        // An invalid intervening callback must not act as a second confirmation.
+        c.onLocation(fix(target, accuracy = 5_000.0))
+        assertEquals(1, c.state.consecutiveInsideThreshold)
+        assertEquals(0, c.state.arrivalEventCount)
+        c.onLocation(fix(target))
+        assertEquals(ArrivalAlertPhase.ARRIVED, c.state.phase)
+        assertEquals(1, c.state.arrivalEventCount)
+    }
+
+    @Test fun impossibleGpsSamplesLeaveArmedProgressUntouched() {
+        val c = ArrivalProgressController()
+        c.arm(route)
+        val before = c.state
+        val target = route.stops[route.targetIndex]
+        val invalid = listOf(
+            LocationFix(GeoPoint(Double.NaN, target.longitude), 5.0, 4.0),
+            LocationFix(GeoPoint(91.0, target.longitude), 5.0, 4.0),
+            LocationFix(GeoPoint(target.latitude, Double.POSITIVE_INFINITY), 5.0, 4.0),
+            LocationFix(GeoPoint(target.latitude, -181.0), 5.0, 4.0),
+            LocationFix(target, Double.NaN, 4.0),
+            LocationFix(target, -1.0, 4.0),
+            LocationFix(target, 5.0, Double.NaN),
+            LocationFix(target, 5.0, -1.0),
+        )
+        invalid.forEach { badFix ->
+            c.onLocation(badFix)
+            assertEquals(before, c.state)
+        }
+    }
+
+    @Test fun minimumIntegerRealtimeDeviationStillIncreasesThreshold() {
+        val c = ArrivalProgressController()
+        val base = fix(route.stops[0], accuracy = 3.0, speed = 0.0)
+        val farEarly = c.adaptiveThresholdMeters(base.copy(realtimeDeviationSeconds = Int.MIN_VALUE))
+        val farLate = c.adaptiveThresholdMeters(base.copy(realtimeDeviationSeconds = Int.MAX_VALUE))
+        assertEquals(farLate, farEarly, 0.001)
+        assertTrue(farEarly > c.adaptiveThresholdMeters(base))
+    }
 }
