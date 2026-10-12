@@ -142,7 +142,7 @@ class ConnectorSyncClientTest {
     }
 
     @Test fun consentMustBeANativeJsonBooleanNotAStringOrNumber() {
-        for (value in listOf("\\"true\\"", "\\"TRUE\\"", "1", "\\"1\\"", "null")) {
+        for (value in listOf(JSONObject.quote("true"), JSONObject.quote("TRUE"), "1", JSONObject.quote("1"), "null")) {
             val port = FakePort()
             val pending = pendingCommand().replace(
                 "\"user_confirmed\": true",
