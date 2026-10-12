@@ -43,9 +43,16 @@ data class ArrivalAlarmConnectorSnapshot(
     val distanceToDestinationMeters: Double? = null,
     val alarmArmed: Boolean = false,
 ) {
-    fun isStale(nowEpochSeconds: Long = capturedAtEpochSeconds): Boolean =
-        sourceUpdatedAtEpochSeconds <= 0L ||
-            nowEpochSeconds - sourceUpdatedAtEpochSeconds > staleAfterSeconds
+    fun isStale(nowEpochSeconds: Long = capturedAtEpochSeconds): Boolean {
+        // Trust neither a future-dated source nor an invalid freshness budget.
+        // Checking ordering before subtraction also prevents signed Long overflow.
+        if (nowEpochSeconds < 0L ||
+            sourceUpdatedAtEpochSeconds <= 0L ||
+            staleAfterSeconds < 0L ||
+            sourceUpdatedAtEpochSeconds > nowEpochSeconds
+        ) return true
+        return nowEpochSeconds - sourceUpdatedAtEpochSeconds > staleAfterSeconds
+    }
 }
 
 sealed interface ArrivalAlarmConnectorCommand {
