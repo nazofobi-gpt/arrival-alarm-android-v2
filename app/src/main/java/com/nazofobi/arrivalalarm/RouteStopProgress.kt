@@ -48,11 +48,9 @@ class RouteStopProgressTracker {
             return RouteStopProgress()
         }
 
-        // Provider times may arrive out of order. Never turn contradictory stop chronology
-        // into a plausible-looking current/previous/next stop (or a false get-off cue).
-        if (windows.any { it.arrival != null && it.departure != null && it.arrival > it.departure }) {
-            return RouteStopProgress()
-        }
+        // Cross-stop provider chronology must remain ordered. A later stop cannot have
+        // already arrived before the preceding stop departed; fail closed if it does.
+        // Same-stop inverted arrival/departure handling belongs to the separate PR #177.
         var previousEnd: Long? = null
         for (window in windows) {
             val firstKnown = window.arrival ?: window.departure
