@@ -37,6 +37,12 @@ class HttpConnectorGatewayTransport(
         }
     }
 
+    init {
+        // A zero timeout means an unlimited network wait in HttpURLConnection.
+        require(connectTimeoutMillis in 1..60_000) { "Connector connect timeout must be bounded" }
+        require(readTimeoutMillis in 1..60_000) { "Connector read timeout must be bounded" }
+    }
+
     override fun publishSnapshot(payload: String) {
         request("POST", "/device/state", payload)
     }
@@ -60,6 +66,9 @@ class HttpConnectorGatewayTransport(
             throw IOException("connector_network_error")
         }
         return try {
+            // A gateway redirect must never forward the device bearer credential to
+            // another endpoint (or silently switch to a different transport).
+            connection.instanceFollowRedirects = false
             connection.requestMethod = method
             connection.connectTimeout = connectTimeoutMillis
             connection.readTimeout = readTimeoutMillis
