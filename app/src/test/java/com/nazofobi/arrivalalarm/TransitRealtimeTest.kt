@@ -52,8 +52,8 @@ class TransitRealtimeTest {
             listOf(RealtimeUpdate("trip-42", delaySeconds = 300, cancelled = true, platform = "2")),
         )).plan("fixture-bremen-hbf", "fixture-airport")!!
 
-        assertEquals(RealtimeFreshness.STALE, result.realtime.freshness)
-        assertEquals(now + 31, result.realtime.lastUpdatedEpochSeconds)
+        assertEquals(RealtimeFreshness.UNAVAILABLE, result.realtime.freshness)
+        assertNull(result.realtime.lastUpdatedEpochSeconds)
         assertNull(result.realtime.delaySeconds)
         assertFalse(result.realtime.cancelled)
         assertNull(result.realtime.platform)
@@ -67,6 +67,19 @@ class TransitRealtimeTest {
 
         assertEquals(RealtimeFreshness.FRESH, result.realtime.freshness)
         assertTrue(result.realtime.status.contains("eşleşen sefer yok"))
+    }
+
+    @Test fun nonPositiveProviderTimestampsCannotBecomeFresh() {
+        listOf(0L, -1L).forEach { invalidTime ->
+            val result = repo(RealtimeSnapshot(invalidTime, listOf(
+                RealtimeUpdate("trip-42", delaySeconds = 600, cancelled = true),
+            ))).plan("fixture-bremen-hbf", "fixture-airport")!!
+            assertEquals(RealtimeFreshness.UNAVAILABLE, result.realtime.freshness)
+            assertNull(result.realtime.lastUpdatedEpochSeconds)
+            assertNull(result.realtime.delaySeconds)
+            assertFalse(result.realtime.cancelled)
+            assertTrue(result.realtime.status.contains("statik rota"))
+        }
     }
 
     @Test fun unavailableAndTimeoutBothPreserveStaticJourney() {
