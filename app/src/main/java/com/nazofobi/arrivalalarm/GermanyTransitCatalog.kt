@@ -40,16 +40,54 @@ data class CatalogSnapshot(val providers:List<TransitProvider>,val stops:List<Ca
  * There is deliberately no fixture default: production must opt into a real data source.
  */
 class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
-    fun searchStops(query:String,limit:Int=20):List<CatalogStop>{ val q=query.trim(); if(q.isEmpty())return emptyList(); return snapshot.stops.filter{it.name.contains(q,true)}.take(limit) }
-    fun searchRoutes(query:String,limit:Int=20):List<CatalogRoute>{ val q=query.trim(); if(q.isEmpty())return emptyList(); return snapshot.routes.filter{it.shortName.contains(q,true)||it.direction.contains(q,true)}.take(limit) }
-    fun searchTrips(query:String,limit:Int=20):List<Pair<CatalogTrip,CatalogRoute>> { val q=query.trim(); if(q.isEmpty()) return emptyList(); return snapshot.trips.mapNotNull { trip -> snapshot.routes.firstOrNull { it.id==trip.routeId }?.let { trip to it } }.filter { (trip,route) -> trip.id.contains(q,true)||trip.departure.contains(q,true)||route.shortName.contains(q,true)||route.direction.contains(q,true) }.take(limit) }
+    // Preserve the first route when a malformed feed has duplicate route IDs.
+    // Lookup once rather than scanning every route for every trip search result.
+    private val routesById = snapshot.routes.asReversed().associateBy { it.id }
+
+    fun searchStops(query:String,limit:Int=20):List<CatalogStop> {
+        val q = query.trim()
+        if (q.isEmpty() || limit <= 0) return emptyList()
+        return snapshot.stops.asSequence().filter { it.name.contains(q, true) }.take(limit).toList()
+    }
+
+    fun searchRoutes(query:String,limit:Int=20):List<CatalogRoute> {
+        val q = query.trim()
+        if (q.isEmpty() || limit <= 0) return emptyList()
+        return snapshot.routes.asSequence().filter {
+            it.shortName.contains(q, true) || it.direction.contains(q, true)
+        }.take(limit).toList()
+    }
+
+    fun searchTrips(query:String,limit:Int=20):List<Pair<CatalogTrip,CatalogRoute>> {
+        val q = query.trim()
+        if (q.isEmpty() || limit <= 0) return emptyList()
+        return snapshot.trips.asSequence()
+            .mapNotNull { trip -> routesById[trip.routeId]?.let { trip to it } }
+            .filter { (trip, route) ->
+                trip.id.contains(q, true) || trip.departure.contains(q, true) ||
+                    route.shortName.contains(q, true) || route.direction.contains(q, true)
+            }
+            .take(limit)
+            .toList()
+    }
+
     fun tripsForRoute(routeId:String)=snapshot.trips.filter{it.routeId==routeId}
     fun routesServing(originStopId:String,destinationStopId:String):List<CatalogRoute> = snapshot.routes.filter { route -> val a=route.stopIds.indexOf(originStopId); val b=route.stopIds.indexOf(destinationStopId); a>=0 && b>a }
-    fun nearestStops(latitude:Double,longitude:Double,limit:Int=5):List<NearbyStop> =
-        NearbyStationCanonicalizer.canonicalize(
+
+    fun nearestStops(latitude:Double,longitude:Double,limit:Int=5):List<NearbyStop> {
+        // Bad GPS/provider coordinates must not crash distance rounding or reach map UI.
+        if (limit <= 0 || !latitude.isFinite() || latitude !in -90.0..90.0 ||
+            !longitude.isFinite() || longitude !in -180.0..180.0
+        ) return emptyList()
+        return NearbyStationCanonicalizer.canonicalize(
             latitude = latitude,
             longitude = longitude,
-            candidates = snapshot.stops.map { stop ->
+            candidates = snapshot.stops.asSequence()
+                .filter { stop ->
+                    stop.latitude.isFinite() && stop.latitude in -90.0..90.0 &&
+                        stop.longitude.isFinite() && stop.longitude in -180.0..180.0
+                }
+                .map { stop ->
                 NearbyStop(
                     stop = stop,
                     distanceMeters = haversineMeters(
@@ -65,9 +103,12 @@ class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
                         stop.longitude,
                     ),
                 )
-            },
+            }
+                .toList(),
             limit = limit,
         )
+    }
+
     private fun stationKey(stop: CatalogStop): String {
         stop.parentStationId?.trim()?.takeIf { it.isNotEmpty() }?.let { return "parent:$it" }
         val normalizedName = stop.name
