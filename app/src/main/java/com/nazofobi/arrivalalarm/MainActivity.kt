@@ -210,6 +210,7 @@ fun ArrivalAlarmApp(
     var routeStatus by remember { mutableStateOf<String?>(null) }
     var routeOffline by remember { mutableStateOf(false) }
     var routeBusy by remember { mutableStateOf(false) }
+    val routeRequestGuard = remember { RouteRequestGuard() }
     var routingHealth by remember(dataState) { mutableStateOf(TransitFunctionHealth.UNVERIFIED) }
     var stationDepartures by remember { mutableStateOf(emptyList<Departure>()) }
     var stationAlerts by remember { mutableStateOf(emptyList<ServiceAlert>()) }
@@ -329,6 +330,9 @@ fun ArrivalAlarmApp(
     }
 
     fun setOrigin(point: MapPoint) {
+        routeRequestGuard.invalidate()
+        routingHealth = TransitFunctionHealth.UNVERIFIED
+        routeBusy = false
         origin = point
         destination = null
         destinationStopId = null
@@ -354,11 +358,13 @@ fun ArrivalAlarmApp(
         "${a.latitude},${a.longitude}->${b.latitude},${b.longitude}"
 
     fun loadRoutes(a: MapPoint, b: MapPoint) {
+        val requestGeneration = routeRequestGuard.begin()
         routingHealth = TransitFunctionHealth.UNVERIFIED
         routeBusy = true
         routeStatus = context.getString(R.string.route_calculating)
         val key = routeKey(a, b)
-        transit.journeyOptions(a, b) { options, status ->
+        transit.journeyOptions(a, b) routeCallback@{ options, status ->
+            if (!routeRequestGuard.accepts(requestGeneration)) return@routeCallback
             routeBusy = false
             if (options.isNotEmpty()) {
                 routingHealth = TransitFunctionHealth.WORKING
