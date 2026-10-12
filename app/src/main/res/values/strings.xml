@@ -245,4 +245,7 @@
     <string name="departures_empty_action">Rota planla</string>
     <string name="lookup_stale_results">Önbellekteki eski sağlayıcı sonuçları gösteriliyor • güncellik doğrulanamadı</string>
     <string name="lookup_provider_unavailable">Canlı arama sağlayıcısına ulaşılamıyor • yerel veri sonuç vermedi</string>
+    <string name="journey_ticket_information_title">Bilet ve bisiklet bilgileri</string>
+    <string name="journey_ticket_information_unverified">Bu yolculuk için Deutschland-Ticket geçerliliği, bilet ücreti ve bisiklet taşıma koşulları doğrulanmadı. Binişten önce ilgili işletmecinin kurallarını kontrol edin.</string>
+    <string name="journey_ticket_information_link">DB resmî bilet bilgilerini aç</string>
 </resources>
