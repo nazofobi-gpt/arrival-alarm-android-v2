@@ -2,6 +2,7 @@ package com.nazofobi.arrivalalarm
 
 import java.util.Calendar
 import java.util.GregorianCalendar
+import java.util.Locale
 import java.util.TimeZone
 
 enum class GtfsCalendarExceptionType(val value: Int) {
@@ -58,7 +59,7 @@ data class GtfsServiceDate(
     override fun compareTo(other: GtfsServiceDate): Int =
         compareValuesBy(this, other, GtfsServiceDate::year, GtfsServiceDate::month, GtfsServiceDate::day)
 
-    override fun toString(): String = "%04d%02d%02d".format(year, month, day)
+    override fun toString(): String = "%04d%02d%02d".format(Locale.ROOT, year, month, day)
 
     companion object {
         private val UTC = TimeZone.getTimeZone("UTC")
@@ -211,7 +212,7 @@ value class GtfsServiceTime private constructor(val secondsFromServiceDayStart: 
         )
     }
 
-    override fun toString(): String = "%02d:%02d:%02d".format(hour, minute, second)
+    override fun toString(): String = "%02d:%02d:%02d".format(Locale.ROOT, hour, minute, second)
 
     companion object {
         private const val TWELVE_HOURS_MILLIS = 12L * 60L * 60L * 1_000L
