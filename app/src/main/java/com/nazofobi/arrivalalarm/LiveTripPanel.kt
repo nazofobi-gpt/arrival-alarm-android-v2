@@ -236,8 +236,11 @@ private fun routeStopClock(value: String?): String? {
     val time = raw.substringAfter('T', raw)
     val candidate = time.take(5)
     return candidate.takeIf {
-        candidate.length == 5 && candidate[2] == ':' &&
-            candidate.take(2).toIntOrNull() != null &&
-            candidate.drop(3).toIntOrNull() != null
+        if (candidate.length != 5 || candidate[2] != ':') return@takeIf false
+        val hour = candidate.take(2).toIntOrNull() ?: return@takeIf false
+        val minute = candidate.drop(3).toIntOrNull() ?: return@takeIf false
+        // GTFS clock-only service times may extend past midnight. Invalid minutes
+        // or implausible 48+ hour values must not appear as a destination ETA.
+        hour in 0..47 && minute in 0..59
     }
 }
