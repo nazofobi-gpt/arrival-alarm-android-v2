@@ -107,8 +107,16 @@ internal class StaticRouteOptionMapper(
             endpoint(leg.toStopId, arrivalMillis = leg.arrivalEpochMillis),
         )
         val (fromIndex, toIndex, shiftMillis) = pair
+        // A circular journey may revisit one stop hundreds of times. Reuse
+        // stop metadata within this leg instead of repeating repository reads.
+        // containsKey also caches absent stops (null), unlike getOrPut.
+        val stopsById = HashMap<String, GtfsScheduleStop?>()
         return stopTimes.subList(fromIndex, toIndex + 1).map { stopTime ->
-            val stop = data.stop(stopTime.stopId)
+            val stop = if (stopsById.containsKey(stopTime.stopId)) {
+                stopsById[stopTime.stopId]
+            } else {
+                data.stop(stopTime.stopId).also { stopsById[stopTime.stopId] = it }
+            }
             RouteStop(
                 id = stopTime.stopId,
                 name = stop?.name ?: stopTime.stopId,
