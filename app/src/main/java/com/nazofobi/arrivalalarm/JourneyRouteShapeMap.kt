@@ -101,7 +101,7 @@ internal fun JourneyRouteShapeMap(
             )
         }
         val boundsBuilder = LatLngBounds.Builder()
-        segments.flatten().forEach(boundsBuilder::include)
+        segments.flatten().forEach { point -> boundsBuilder.include(point) }
         val bounds = boundsBuilder.build()
         val padding = (28f * mapView.resources.displayMetrics.density).roundToInt()
         mapView.post {
