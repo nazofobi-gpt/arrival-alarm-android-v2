@@ -785,6 +785,22 @@ fun ArrivalAlarmApp(
                         )
                     },
                     onRefreshReadiness = { refreshReadiness() },
+                    onShareDiagnostics = {
+                        val report = SupportDiagnostics.render(
+                            state = readinessState,
+                            nowEpochSeconds = System.currentTimeMillis() / 1_000L,
+                        )
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, report)
+                        }
+                        context.startActivity(
+                            Intent.createChooser(
+                                send,
+                                context.getString(R.string.readiness_share_diagnostics),
+                            )
+                        )
+                    },
                     onOpenAppSettings = { openArrivalAlarmAppSettings(context) },
                     onRetryData = {
                         transit.ensureNationwideIndex { dataState = it }
