@@ -304,6 +304,27 @@ private fun JourneyDetailCard(option: RouteOption) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            // Map failure never blocks the fully functional text-only journey.
+            // Show only GTFS shape segments, never synthetic walking geometry.
+            if (option.shapePolylines.isNotEmpty()) {
+                Text(
+                    text = stringResource(R.string.map_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                JourneyRouteShapeMap(option.shapePolylines)
+                Text(
+                    text = stringResource(R.string.source_gtfs_local),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = stringResource(R.string.map_provider_note),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             HorizontalDivider()
 
             if (option.stops.isEmpty()) {
