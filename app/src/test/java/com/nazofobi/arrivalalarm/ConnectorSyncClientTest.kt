@@ -1,7 +1,11 @@
 package com.nazofobi.arrivalalarm
 
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -150,5 +154,85 @@ class ConnectorSyncClientTest {
         }.exceptionOrNull()
 
         assertTrue(error is IllegalArgumentException)
+    }
+
+    @Test fun httpGatewayRejectsEmbeddedSecretsAndInvalidUrisWithoutEchoingThem() {
+        val riskyUrls = listOf(
+            "https://user:private-secret@gateway.invalid/base",
+            "https://gateway.invalid/base?token=private-secret",
+            "https://gateway.invalid/base#private-secret",
+            "https://gateway.invalid/%private-secret",
+        )
+        for (baseUrl in riskyUrls) {
+            val failure = runCatching {
+                HttpConnectorGatewayTransport(baseUrl, bearerTokenProvider = { "device-secret" })
+            }.exceptionOrNull()
+            assertTrue("Expected invalid URL to be rejected: ${baseUrl.substringBefore('?')}", failure is IllegalArgumentException)
+            assertFalse(failure.toString().contains("private-secret"))
+            assertFalse(failure.toString().contains("device-secret"))
+        }
+    }
+
+    @Test fun gatewayNeverFollowsHttpRedirectsWithDeviceBearerCredentials() {
+        var disconnected = false
+        lateinit var opened: HttpURLConnection
+        val transport = HttpConnectorGatewayTransport(
+            baseUrl = "https://gateway.invalid",
+            bearerTokenProvider = { "private-device-token" },
+            connectionFactory = { url ->
+                object : HttpURLConnection(url) {
+                    override fun connect() = Unit
+                    override fun usingProxy(): Boolean = false
+                    override fun disconnect() { disconnected = true }
+                    override fun getResponseCode(): Int = 302
+                }.also { opened = it }
+            },
+        )
+        val failure = runCatching { transport.fetchPendingCommands() }.exceptionOrNull()
+
+        assertTrue(failure is IllegalStateException)
+        assertEquals("connector_http_302", failure?.message)
+        assertFalse(opened.instanceFollowRedirects)
+        assertTrue(disconnected)
+    }
+
+    @Test fun gatewayRejectsUnlimitedOrUnreasonableNetworkTimeouts() {
+        for (timeout in listOf(-1, 0, 60_001)) {
+            assertTrue(runCatching {
+                HttpConnectorGatewayTransport(
+                    baseUrl = "https://gateway.invalid",
+                    bearerTokenProvider = { "test-device-token" },
+                    connectTimeoutMillis = timeout,
+                )
+            }.exceptionOrNull() is IllegalArgumentException)
+            assertTrue(runCatching {
+                HttpConnectorGatewayTransport(
+                    baseUrl = "https://gateway.invalid",
+                    bearerTokenProvider = { "test-device-token" },
+                    readTimeoutMillis = timeout,
+                )
+            }.exceptionOrNull() is IllegalArgumentException)
+        }
+    }
+
+    @Test fun gatewayNetworkAndTimeoutFailuresCannotLeakUrlsOrCoordinates() {
+        val sensitive = "token=private-device-token&latitude=52.666123"
+        val failures = listOf(
+            IOException("https://gateway.invalid?$sensitive failed") to "connector_network_error",
+            SocketTimeoutException("https://gateway.invalid?$sensitive timed out") to "connector_timeout",
+        )
+        for ((cause, expectedMessage) in failures) {
+            val transport = HttpConnectorGatewayTransport(
+                baseUrl = "https://gateway.invalid",
+                bearerTokenProvider = { "private-device-token" },
+                connectionFactory = { throw cause },
+            )
+            val failure = runCatching { transport.fetchPendingCommands() }.exceptionOrNull()
+            assertEquals(expectedMessage, failure?.message)
+            assertTrue(failure is IOException)
+            assertEquals(null, failure?.cause)
+            assertFalse(failure.toString().contains("private-device-token"))
+            assertFalse(failure.toString().contains("52.666123"))
+        }
     }
 }
