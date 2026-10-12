@@ -9,10 +9,16 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -44,6 +50,10 @@ fun RouteJourneyPanel(
     mode: RouteJourneyMode = RouteJourneyMode.RESULTS,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val preferences = remember(context) { ArrivalUiPreferences(context) }
+    var directOnly by rememberSaveable { mutableStateOf(preferences.loadDirectOnlyRoutes()) }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -118,7 +128,20 @@ fun RouteJourneyPanel(
                     }
                 }
 
-                routeOptions.take(3).forEachIndexed { index, option ->
+                val visibleOptions = RouteResultsFilter(directOnly).apply(routeOptions)
+                FilterChip(
+                    selected = directOnly,
+                    onClick = {
+                        directOnly = !directOnly
+                        preferences.saveDirectOnlyRoutes(directOnly)
+                    },
+                    label = { Text(stringResource(R.string.route_direct_only_filter)) },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("route-direct-only-filter"),
+                )
+
+                visibleOptions.take(3).forEachIndexed { index, option ->
                     RouteOptionCard(
                         option = option,
                         selected = selectedRouteId == option.id,
@@ -128,9 +151,13 @@ fun RouteJourneyPanel(
                     )
                 }
 
-                if (!routeBusy && routeOptions.isEmpty()) {
+                if (!routeBusy && visibleOptions.isEmpty()) {
                     Text(
-                        text = routeStatus ?: stringResource(R.string.route_not_found),
+                        text = if (directOnly && routeOptions.isNotEmpty()) {
+                            stringResource(R.string.route_direct_only_empty)
+                        } else {
+                            routeStatus ?: stringResource(R.string.route_not_found)
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.testTag("route-results-empty"),
