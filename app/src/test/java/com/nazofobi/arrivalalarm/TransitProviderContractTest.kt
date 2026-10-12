@@ -89,6 +89,47 @@ class TransitProviderContractTest {
     }
 
     @Test
+    fun futureProviderTimestampWithinAllowedSkewRemainsFresh() {
+        val result = TransitProviderFreshness.evaluate(
+            updatedAtEpochSeconds = 1_030,
+            nowEpochSeconds = 1_000,
+            staleAfterSeconds = 0,
+        )
+
+        assertEquals(TransitProviderFreshnessState.FRESH, result.state)
+        assertEquals(0L, result.ageSeconds)
+        assertEquals(1_030L, result.updatedAtEpochSeconds)
+    }
+
+    @Test
+    fun futureProviderTimestampBeyondSkewIsUntrusted() {
+        for (futureOffset in listOf(31L, 3_600L, 86_400L)) {
+            val result = TransitProviderFreshness.evaluate(
+                updatedAtEpochSeconds = 1_000L + futureOffset,
+                nowEpochSeconds = 1_000L,
+                staleAfterSeconds = 3_600L,
+            )
+
+            assertEquals(TransitProviderFreshnessState.UNKNOWN, result.state)
+            assertNull(result.ageSeconds)
+            assertNull(result.updatedAtEpochSeconds)
+        }
+    }
+
+    @Test
+    fun nonApplicableProviderDoesNotBecomeUnknownBecauseOfFutureTimestamp() {
+        val result = TransitProviderFreshness.evaluate(
+            updatedAtEpochSeconds = 9_999,
+            nowEpochSeconds = 1_000,
+            staleAfterSeconds = 60,
+            applicable = false,
+        )
+
+        assertEquals(TransitProviderFreshnessState.NOT_APPLICABLE, result.state)
+        assertNull(result.ageSeconds)
+    }
+
+    @Test
     fun providerHealthAndCapabilitiesRemainQueryable() {
         val health = TransitProviderHealth(
             providerId = ArrivalAlarmTransitProviders.GermanyRealtime.id,
