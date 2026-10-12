@@ -71,6 +71,22 @@ class ArrivalProgressController(
         val activeRoute = route
         if (activeRoute == null || !state.armed || state.routeId != activeRoute.routeId) return state
         if (state.phase == ArrivalAlertPhase.ARRIVED) return state
+        // Ignore missing/implausible sensor evidence rather than counting it toward
+        // the two-fix arrival debounce. A multi-kilometre accuracy circle is not
+        // proof that the rider reached the target, even when its centre is nearby.
+        if (!fix.point.latitude.isFinite() || fix.point.latitude !in -90.0..90.0 ||
+            !fix.point.longitude.isFinite() || fix.point.longitude !in -180.0..180.0 ||
+            !fix.accuracyMeters.isFinite() ||
+            fix.accuracyMeters !in 0.0..ArrivalLocationQuality.MAX_TRACKING_ACCURACY_METERS ||
+            !fix.speedMps.isFinite() || fix.speedMps < 0.0
+        ) {
+            // Broken evidence interrupts a confirmation streak. Keep the last
+            // known progress but require two new trustworthy fixes to arrive.
+            if (state.consecutiveInsideThreshold != 0 || state.consecutivePastTarget != 0) {
+                setState(state.copy(consecutiveInsideThreshold = 0, consecutivePastTarget = 0))
+            }
+            return state
+        }
 
         val nearestIndex = activeRoute.stops.indices.minBy { index ->
             distanceMeters(fix.point, activeRoute.stops[index])
@@ -123,8 +139,9 @@ class ArrivalProgressController(
     fun adaptiveThresholdMeters(fix: LocationFix): Double {
         val accuracyContribution = fix.accuracyMeters.coerceIn(0.0, 100.0) * 0.80
         val speedContribution = fix.speedMps.coerceIn(0.0, 35.0) * 4.0
-        val realtimeContribution = abs(fix.realtimeDeviationSeconds)
-            .coerceAtMost(300) * 0.08
+        // Promote before abs: abs(Int.MIN_VALUE) would otherwise overflow.
+        val realtimeContribution = abs(fix.realtimeDeviationSeconds.toLong())
+            .coerceAtMost(300L).toDouble() * 0.08
         return (120.0 + accuracyContribution + speedContribution + realtimeContribution)
             .coerceIn(120.0, 320.0)
     }
