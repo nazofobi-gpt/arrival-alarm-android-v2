@@ -235,4 +235,62 @@ class ConnectorOAuthTest {
         assertNull(sessions.session)
     }
 
+
+    @Test fun connectorBaseUrlRejectsCredentialsQueryAndFragmentBeforeDiscovery() {
+        val forbidden = listOf(
+            "https://private:secret@connector.example",
+            "https://connector.example?access_token=secret",
+            "https://connector.example/path?debug=true",
+            "https://connector.example/#fragment",
+            "https://connector.example/%broken",
+        )
+        for (url in forbidden) {
+            val transactions = MemoryTransactionStore()
+            val error = runCatching {
+                coordinator(MemorySessionStore(), transactions, FakeTransport())
+                    .beginAuthorization(url)
+            }.exceptionOrNull()
+            assertTrue("Unsafe base URL was accepted", error is IllegalArgumentException)
+            assertNull("Unsafe URL must not create an OAuth transaction", transactions.transaction)
+            assertFalse("Error message must not expose the supplied URL", error!!.message.orEmpty().contains("secret"))
+        }
+    }
+
+    @Test fun oauthMetadataRejectsCredentialBearingAndFragmentUrls() {
+        val valid = FakeTransport().metadata
+        val invalid = listOf(
+            valid.copy(authorizationEndpoint = "https://user:password@auth.example/authorize"),
+            valid.copy(authorizationEndpoint = "https://auth.example/authorize#fragment"),
+            valid.copy(tokenEndpoint = "https://auth.example/token#fragment"),
+            valid.copy(revocationEndpoint = "https://auth.example/revoke#fragment"),
+            valid.copy(resource = "https://auth.example/device#fragment"),
+        )
+        for (metadata in invalid) {
+            val transactions = MemoryTransactionStore()
+            val transport = FakeTransport().apply { this.metadata = metadata }
+            val error = runCatching {
+                coordinator(MemorySessionStore(), transactions, transport)
+                    .beginAuthorization("https://connector.example")
+            }.exceptionOrNull()
+            assertTrue("Unsafe OAuth metadata URL was accepted", error is IllegalArgumentException)
+            assertNull(transactions.transaction)
+        }
+    }
+
+    @Test fun authorizationEndpointMayRetainLegitimateProviderQuery() {
+        val transport = FakeTransport().apply {
+            metadata = metadata.copy(
+                authorizationEndpoint = "https://auth.example/authorize?prompt=consent"
+            )
+        }
+        val oauth = coordinator(MemorySessionStore(), MemoryTransactionStore(), transport)
+        val query = ConnectorOAuthCoordinator.parseQuery(
+            URI(oauth.beginAuthorization("https://connector.example")).rawQuery
+        )
+
+        assertEquals("consent", query["prompt"])
+        assertEquals("code", query["response_type"])
+        assertNotNull(query["state"])
+    }
+
 }
