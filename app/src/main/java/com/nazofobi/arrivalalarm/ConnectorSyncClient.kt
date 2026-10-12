@@ -36,8 +36,7 @@ class ConnectorSyncClient(
 
     /** Compare nonnegative epoch seconds without a signed-Long subtraction overflow. */
     private fun isOutsideCommandTimeWindow(queuedAt: Long?, now: Long): Boolean {
-        if (queuedAt == null) return false // Compatibility with older gateway envelopes.
-        if (queuedAt < 0 || now < 0) return true
+        if (queuedAt == null || queuedAt < 0 || now < 0) return true
         return if (queuedAt > now) {
             queuedAt - now > maxFutureClockSkewSeconds
         } else {
