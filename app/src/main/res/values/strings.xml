@@ -245,4 +245,6 @@
     <string name="departures_empty_action">Rota planla</string>
     <string name="lookup_stale_results">Önbellekteki eski sağlayıcı sonuçları gösteriliyor • güncellik doğrulanamadı</string>
     <string name="lookup_provider_unavailable">Canlı arama sağlayıcısına ulaşılamıyor • yerel veri sonuç vermedi</string>
+    <string name="readiness_share_diagnostics">Tanı özetini paylaş</string>
+    <string name="readiness_share_diagnostics_note">Yalnız durum bilgileri paylaşılır. Konum, yolculuk geçmişi ve erişim anahtarları eklenmez.</string>
 </resources>
