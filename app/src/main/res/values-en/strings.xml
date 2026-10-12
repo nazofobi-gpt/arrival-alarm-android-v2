@@ -238,6 +238,6 @@
     <string name="lookup_stale_results">Cached provider results are stale • freshness could not be verified</string>
     <string name="lookup_provider_unavailable">Live search provider is unavailable • local data returned no result</string>
     <string name="journey_ticket_information_title">Ticket and bicycle information</string>
-    <string name="journey_ticket_information_unverified">Deutschland-Ticket validity, fare and bicycle carriage are not verified for this journey. Check the operator&#39;s conditions before boarding.</string>
+    <string name="journey_ticket_information_unverified">Deutschland-Ticket validity, fare and bicycle carriage are not verified for this journey. Check the transport operator rules before boarding.</string>
     <string name="journey_ticket_information_link">Open official DB ticket information</string>
 </resources>
