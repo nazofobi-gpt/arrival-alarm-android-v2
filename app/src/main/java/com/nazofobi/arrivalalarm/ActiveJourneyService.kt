@@ -62,9 +62,13 @@ class ActiveJourneyService : Service(), LocationListener {
             // Keep an armed journey alive when a provider disappears; stop only
             // when the journey ends or the user no longer grants runtime access.
             if (!arrivalHandled) {
+                val registeredProviderEnabled = registeredProvider?.let { provider ->
+                    runCatching { locationManager.isProviderEnabled(provider) }.getOrDefault(false)
+                } == true
                 when (LocationProviderRecovery.decide(
                     graph.controller.state.phase,
                     locationRegistered,
+                    registeredProviderEnabled,
                     ActiveJourneyPermissions.hasRuntimeGrants(this@ActiveJourneyService),
                 )) {
                     LocationProviderRecovery.Decision.STOP -> {
@@ -72,9 +76,11 @@ class ActiveJourneyService : Service(), LocationListener {
                         return
                     }
                     LocationProviderRecovery.Decision.RETRY -> {
-                        if (!registerLocationUpdates()) {
-                            updateTrackingNotification(null, accuracyDegraded = true)
-                        }
+                        // An existing registration can point to a disabled provider.
+                        removeLocationUpdates()
+                        registerLocationUpdates()
+                        // Never present the saved distance as a fresh fix while recovering.
+                        updateTrackingNotification(null, accuracyDegraded = true)
                     }
                     LocationProviderRecovery.Decision.KEEP -> Unit
                 }
@@ -84,6 +90,7 @@ class ActiveJourneyService : Service(), LocationListener {
     }
     @Volatile private var arrivalHandled = false
     private var locationRegistered = false
+    private var registeredProvider: String? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -153,6 +160,8 @@ class ActiveJourneyService : Service(), LocationListener {
     override fun onProviderEnabled(provider: String) = Unit
 
     override fun onProviderDisabled(provider: String) {
+        // Late callbacks for a previously replaced provider must not cancel fresh tracking.
+        if (provider != registeredProvider) return
         removeLocationUpdates()
         if (graph.controller.state.phase != JourneyPhase.ARMED) return
         // Switch to another enabled provider if possible, otherwise retry later.
@@ -181,6 +190,7 @@ class ActiveJourneyService : Service(), LocationListener {
                 Looper.getMainLooper(),
             )
             locationRegistered = true
+            registeredProvider = provider
             true
         } catch (_: SecurityException) {
             false
@@ -190,9 +200,9 @@ class ActiveJourneyService : Service(), LocationListener {
     }
 
     private fun removeLocationUpdates() {
-        if (!locationRegistered) return
-        runCatching { locationManager.removeUpdates(this) }
+        if (locationRegistered) runCatching { locationManager.removeUpdates(this) }
         locationRegistered = false
+        registeredProvider = null
     }
 
     private fun enabledLocationProvider(): String? {
