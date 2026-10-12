@@ -48,6 +48,22 @@ class RouteStopProgressTracker {
             return RouteStopProgress()
         }
 
+        // Provider times may arrive out of order. Never turn contradictory stop chronology
+        // into a plausible-looking current/previous/next stop (or a false get-off cue).
+        if (windows.any { it.arrival != null && it.departure != null && it.arrival > it.departure }) {
+            return RouteStopProgress()
+        }
+        var previousEnd: Long? = null
+        for (window in windows) {
+            val firstKnown = window.arrival ?: window.departure
+            val lastKnown = window.departure ?: window.arrival
+            val endBeforeThisStop = previousEnd
+            if (firstKnown != null && endBeforeThisStop != null && firstKnown < endBeforeThisStop) {
+                return RouteStopProgress()
+            }
+            if (lastKnown != null) previousEnd = lastKnown
+        }
+
         val basis = if (windows.any { it.hasRealtimeDelta }) {
             TransitTimingBasis.REALTIME
         } else {
