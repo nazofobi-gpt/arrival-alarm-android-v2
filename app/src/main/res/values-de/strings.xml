@@ -237,4 +237,9 @@
     <string name="departures_gtfsrt_unavailable">GTFS Deutschland lokale Abfahrten • GTFS-RT nicht verfügbar, Fahrplanzeiten</string>
     <string name="lookup_stale_results">Zwischengespeicherte Anbieter-Ergebnisse sind veraltet • Aktualität nicht bestätigt</string>
     <string name="lookup_provider_unavailable">Live-Suchanbieter nicht verfügbar • lokale Daten lieferten kein Ergebnis</string>
+    <string name="map_accessible_coordinates_hint">Sie können einen Punkt ohne Kartenberührung auswählen: Breitengrad und Längengrad eingeben. Komma oder Punkt als Dezimaltrennzeichen.</string>
+    <string name="map_coordinate_latitude">Breitengrad (−90 bis 90)</string>
+    <string name="map_coordinate_longitude">Längengrad (−180 bis 180)</string>
+    <string name="map_coordinate_invalid">Ungültige Koordinaten. Breitengrad: −90 bis 90; Längengrad: −180 bis 180.</string>
+    <string name="map_coordinate_select">Diesen Punkt auswählen</string>
 </resources>
