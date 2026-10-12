@@ -40,7 +40,14 @@ class GuidanceReliabilityTest {
         assertEquals("Ziel Bremen Hbf", GuidanceLanguage.GERMAN.destinationText("Bremen Hbf"))
         assertEquals("Destination Bremen Hbf", GuidanceLanguage.ENGLISH.destinationText("Bremen Hbf"))
         assertEquals("de-DE", GuidanceLanguage.fromLocaleTag("de-DE").localeTag)
+        assertEquals(GuidanceLanguage.GERMAN, GuidanceLanguage.fromLocaleTag("de"))
+        assertEquals(GuidanceLanguage.GERMAN, GuidanceLanguage.fromLocaleTag("de-AT"))
+        assertEquals(GuidanceLanguage.GERMAN, GuidanceLanguage.fromLocaleTag("de_CH"))
+        assertEquals(GuidanceLanguage.ENGLISH, GuidanceLanguage.fromLocaleTag("en-GB"))
+        assertEquals(GuidanceLanguage.ENGLISH, GuidanceLanguage.fromLocaleTag("EN_us"))
+        assertEquals(GuidanceLanguage.TURKISH, GuidanceLanguage.fromLocaleTag("tr-CY"))
         assertEquals(GuidanceLanguage.TURKISH, GuidanceLanguage.fromLocaleTag("fr-FR"))
+        assertEquals(GuidanceLanguage.TURKISH, GuidanceLanguage.fromLocaleTag("not_a_locale"))
         assertEquals(GuidanceLanguage.TURKISH, GuidanceLanguage.fromLocaleTag(null))
     }
 
