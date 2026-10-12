@@ -64,6 +64,10 @@ class RouteStopProgressTracker {
             return RouteStopProgress()
         }
 
+        // Preserve route-order semantics when schedule/realtime timestamps disagree.
+        // Two distinct stops must not occupy overlapping provider time windows.
+        if (!hasCoherentTimeline(windows)) return RouteStopProgress()
+
         val basis = if (windows.any { it.hasRealtimeDelta }) {
             TransitTimingBasis.REALTIME
         } else {
@@ -106,6 +110,19 @@ class RouteStopProgressTracker {
             resolvedByProviderTime = true,
             timingBasis = basis,
         )
+    }
+
+    private fun hasCoherentTimeline(windows: List<StopWindow>): Boolean {
+        var priorEnd: Long? = null
+        for (window in windows) {
+            val start = window.arrival ?: window.departure
+            val end = window.departure ?: window.arrival
+            if (start != null && end != null && end < start) return false
+            val previous = priorEnd
+            if (start != null && previous != null && start < previous) return false
+            if (end != null) priorEnd = end
+        }
+        return true
     }
 
     private data class StopWindow(
