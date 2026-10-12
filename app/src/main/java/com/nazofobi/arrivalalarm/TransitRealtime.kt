@@ -12,6 +12,8 @@ object VbnRealtimeProvenance {
     const val PROVIDER = "Verkehrsverbund Bremen/Niedersachsen (VBN)"
 }
 
+private const val MAX_VBN_REALTIME_FUTURE_SKEW_SECONDS = 30L
+
 enum class RealtimeFreshness { FRESH, STALE, UNAVAILABLE }
 
 data class RealtimeUpdate(
@@ -108,7 +110,16 @@ class OverlayTransitRepository(
         val snapshot = runCatching { realtimeSource.fetch() }.getOrNull()
             ?: return TransitPlanWithRealtime(staticJourney, TransitRealtimeOverlay(
                 RealtimeFreshness.UNAVAILABLE, status = "Canlı veri kullanılamıyor • statik rota"))
-        val age = (clock.nowEpochSeconds() - snapshot.fetchedAtEpochSeconds).coerceAtLeast(0)
+        val now = clock.nowEpochSeconds()
+        val timestamp = snapshot.fetchedAtEpochSeconds
+        // Provider clock skew is tolerated only inside a small, explicit window.
+        // Otherwise do not project an untrusted future snapshot as live journey truth.
+        if (timestamp <= 0L || (timestamp > now &&
+                timestamp - now > MAX_VBN_REALTIME_FUTURE_SKEW_SECONDS)) {
+            return TransitPlanWithRealtime(staticJourney, TransitRealtimeOverlay(
+                RealtimeFreshness.UNAVAILABLE, status = "Canlı veri zamanı doğrulanamadı • statik rota"))
+        }
+        val age = (now - timestamp).coerceAtLeast(0L)
         if (age > staleAfterSeconds) return TransitPlanWithRealtime(staticJourney, TransitRealtimeOverlay(
             RealtimeFreshness.STALE, snapshot.fetchedAtEpochSeconds, status = "Canlı veri eski • statik rota"))
         val exactTripId = staticJourney.legs.singleOrNull()?.line?.takeIf { it.startsWith("gtfs-trip:") }?.removePrefix("gtfs-trip:")
