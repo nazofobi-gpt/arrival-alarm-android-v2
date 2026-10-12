@@ -94,6 +94,7 @@ internal class StaticRouteOptionMapper(
             stops = routeStops,
             refreshToken = null,
             sourceUpdatedAtEpochSeconds = sourceUpdatedAtEpochSeconds,
+            bicycleCarriage = bicycleCarriageForTripIds(journey.legs.map { it.tripId }, data::trip),
         )
     }
 
