@@ -244,6 +244,7 @@ private fun RouteOptionCard(
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 },
             )
+            BicycleCarriageDisclosure(option.bicycleCarriage)
             OutlinedButton(
                 onClick = onSelect,
                 enabled = !selected &&
@@ -304,6 +305,7 @@ private fun JourneyDetailCard(option: RouteOption) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            BicycleCarriageDisclosure(option.bicycleCarriage)
             HorizontalDivider()
 
             if (option.stops.isEmpty()) {
@@ -485,3 +487,22 @@ private fun routeClock(value: String?): String? {
 private fun hasRealtimeDelta(stop: RouteStop): Boolean =
     (stop.arrival != null && stop.plannedArrival != null && stop.arrival != stop.plannedArrival) ||
         (stop.departure != null && stop.plannedDeparture != null && stop.departure != stop.plannedDeparture)
+
+/** Trip-level GTFS evidence only; ticket validity and operator-specific bike fees are not inferred. */
+@Composable
+private fun BicycleCarriageDisclosure(status: BicycleCarriage) {
+    Text(
+        text = stringResource(when (status) {
+            BicycleCarriage.ALLOWED -> R.string.bicycle_gtfs_allowed
+            BicycleCarriage.NOT_ALLOWED -> R.string.bicycle_gtfs_not_allowed
+            BicycleCarriage.UNKNOWN -> R.string.bicycle_gtfs_unknown
+        }),
+        style = MaterialTheme.typography.bodySmall,
+        color = if (status == BicycleCarriage.NOT_ALLOWED) {
+            MaterialTheme.colorScheme.error
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        modifier = Modifier.testTag("bicycle-gtfs-disclosure"),
+    )
+}
