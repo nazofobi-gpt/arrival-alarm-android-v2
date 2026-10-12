@@ -28,6 +28,23 @@ class TransitRealtimeTest {
         assertNull(snapshot.updates.single().platform)
     }
 
+    @Test fun vbnJsonConflictingStopUpdatesNeverBecomeWholeTripFacts() {
+        val json = """{"Header":{"Timestamp":2000000},"Entity":[{"TripUpdate":{"Trip":{"TripId":"trip-42","ScheduleRelationship":"Canceled"},"StopTimeUpdate":[{"Departure":{"Delay":60},"Platform":"1"},{"Departure":{"Delay":300},"Platform":"4"}]}}]}"""
+        val update = VbnJsonRealtimeSource(loader = { json }).fetch()!!.updates.single()
+        assertEquals("trip-42", update.tripId)
+        assertTrue(update.cancelled)
+        assertNull(update.delaySeconds)
+        assertNull(update.platform)
+    }
+
+    @Test fun vbnJsonConsistentStopUpdatesRetainProvenDelayAndPlatform() {
+        val json = """{"Header":{"Timestamp":2000000},"Entity":[{"TripUpdate":{"Trip":{"TripId":"trip-42"},"StopTimeUpdate":[{"Departure":{"Delay":120},"Platform":"2"},{"Arrival":{"Delay":120},"StopPlatform":"2"}]}}]}"""
+        val update = VbnJsonRealtimeSource(loader = { json }).fetch()!!.updates.single()
+        assertEquals(120, update.delaySeconds)
+        assertEquals("2", update.platform)
+        assertFalse(update.cancelled)
+    }
+
     @Test fun malformedVbnPayloadFailsClosed() {
         assertNull(VbnJsonRealtimeSource(loader = { "not-json" }).fetch())
         assertNull(VbnJsonRealtimeSource(loader = { "{}" }).fetch())
