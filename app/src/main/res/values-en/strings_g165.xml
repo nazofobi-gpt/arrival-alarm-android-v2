@@ -12,6 +12,12 @@
     <string name="readiness_summary_blocked">A required setting for the arrival alarm is missing</string>
     <string name="readiness_location">Location</string>
     <string name="readiness_notifications">Notifications</string>
+    <string name="readiness_search_function">Search function</string>
+    <string name="readiness_routing_function">Route planning</string>
+    <string name="readiness_function_unverified">Not yet verified by an action</string>
+    <string name="readiness_function_working">Usable in last action</string>
+    <string name="readiness_function_degraded">Degraded / cached result</string>
+    <string name="readiness_function_failed">Unavailable in last action</string>
     <string name="readiness_data">Transit data</string>
     <string name="readiness_audio">Audio and Bluetooth</string>
     <string name="readiness_background">Background journey</string>

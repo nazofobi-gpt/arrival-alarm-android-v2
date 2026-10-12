@@ -32,6 +32,9 @@ import androidx.compose.ui.unit.dp
 
 enum class ReadinessLevel { READY, ACTION_NEEDED, BLOCKED, INFO }
 
+/** Positive evidence from an actual search or route request, not a feed-download proxy. */
+enum class TransitFunctionHealth { UNVERIFIED, WORKING, DEGRADED, FAILED }
+
 data class SettingsReadinessState(
     val themeMode: ArrivalThemeMode,
     val locationPermission: Boolean,
@@ -44,6 +47,8 @@ data class SettingsReadinessState(
     val backgroundJourneyActive: Boolean,
     val connectorConfigured: Boolean,
     val connectorConnected: Boolean,
+    val searchHealth: TransitFunctionHealth = TransitFunctionHealth.UNVERIFIED,
+    val routingHealth: TransitFunctionHealth = TransitFunctionHealth.UNVERIFIED,
 ) {
     val overallLevel: ReadinessLevel
         get() = when {
@@ -51,7 +56,9 @@ data class SettingsReadinessState(
                 ReadinessLevel.BLOCKED
             dataState !is NationwideDataState.Ready ||
                 guidancePermissionState != GuidancePermissionState.GRANTED ||
-                !bluetoothPermission -> ReadinessLevel.ACTION_NEEDED
+                !bluetoothPermission ||
+                searchHealth != TransitFunctionHealth.WORKING ||
+                routingHealth != TransitFunctionHealth.WORKING -> ReadinessLevel.ACTION_NEEDED
             else -> ReadinessLevel.READY
         }
 
@@ -64,6 +71,8 @@ data class SettingsReadinessState(
             backgroundJourneyActive: Boolean,
             connectorConfigured: Boolean,
             connectorConnected: Boolean,
+            searchHealth: TransitFunctionHealth = TransitFunctionHealth.UNVERIFIED,
+            routingHealth: TransitFunctionHealth = TransitFunctionHealth.UNVERIFIED,
         ): SettingsReadinessState {
             fun granted(permission: String): Boolean =
                 context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
@@ -92,6 +101,8 @@ data class SettingsReadinessState(
                 backgroundJourneyActive = backgroundJourneyActive,
                 connectorConfigured = connectorConfigured,
                 connectorConnected = connectorConnected,
+                searchHealth = searchHealth,
+                routingHealth = routingHealth,
             )
         }
     }
@@ -216,6 +227,18 @@ fun SettingsReadinessPanel(
                     else -> ReadinessLevel.ACTION_NEEDED
                 },
                 testTag = "nationwide-data-state",
+            )
+            ReadinessRow(
+                label = stringResource(R.string.readiness_search_function),
+                value = transitFunctionHealthLabel(state.searchHealth),
+                level = transitFunctionReadinessLevel(state.searchHealth),
+                testTag = "readiness-search-health",
+            )
+            ReadinessRow(
+                label = stringResource(R.string.readiness_routing_function),
+                value = transitFunctionHealthLabel(state.routingHealth),
+                level = transitFunctionReadinessLevel(state.routingHealth),
+                testTag = "readiness-routing-health",
             )
             ReadinessRow(
                 label = stringResource(R.string.readiness_audio),
@@ -467,3 +490,21 @@ fun openArrivalAlarmAppSettings(context: Context) {
     ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     context.startActivity(intent)
 }
+
+@Composable
+private fun transitFunctionHealthLabel(health: TransitFunctionHealth): String =
+    stringResource(
+        when (health) {
+            TransitFunctionHealth.UNVERIFIED -> R.string.readiness_function_unverified
+            TransitFunctionHealth.WORKING -> R.string.readiness_function_working
+            TransitFunctionHealth.DEGRADED -> R.string.readiness_function_degraded
+            TransitFunctionHealth.FAILED -> R.string.readiness_function_failed
+        },
+    )
+
+private fun transitFunctionReadinessLevel(health: TransitFunctionHealth): ReadinessLevel =
+    when (health) {
+        TransitFunctionHealth.WORKING -> ReadinessLevel.READY
+        TransitFunctionHealth.UNVERIFIED -> ReadinessLevel.INFO
+        TransitFunctionHealth.DEGRADED, TransitFunctionHealth.FAILED -> ReadinessLevel.ACTION_NEEDED
+    }

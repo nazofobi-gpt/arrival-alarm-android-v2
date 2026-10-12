@@ -182,6 +182,8 @@ fun ArrivalAlarmApp(
     var searchSource by remember { mutableStateOf<String?>(null) }
     var searchMessage by remember { mutableStateOf<String?>(null) }
     var searchRequestId by remember { mutableStateOf(0L) }
+    // Health is reset whenever the local catalog changes; loading the feed alone is not proof.
+    var searchHealth by remember(dataState) { mutableStateOf(TransitFunctionHealth.UNVERIFIED) }
     var selectingOrigin by remember { mutableStateOf(controller.state.start == null) }
     var origin by remember(controller) {
         mutableStateOf(
@@ -208,6 +210,8 @@ fun ArrivalAlarmApp(
     var routeStatus by remember { mutableStateOf<String?>(null) }
     var routeOffline by remember { mutableStateOf(false) }
     var routeBusy by remember { mutableStateOf(false) }
+    val routeRequestGuard = remember { RouteRequestGuard() }
+    var routingHealth by remember(dataState) { mutableStateOf(TransitFunctionHealth.UNVERIFIED) }
     var stationDepartures by remember { mutableStateOf(emptyList<Departure>()) }
     var stationAlerts by remember { mutableStateOf(emptyList<ServiceAlert>()) }
     var stationSource by remember { mutableStateOf<String?>(null) }
@@ -326,6 +330,9 @@ fun ArrivalAlarmApp(
     }
 
     fun setOrigin(point: MapPoint) {
+        routeRequestGuard.invalidate()
+        routingHealth = TransitFunctionHealth.UNVERIFIED
+        routeBusy = false
         origin = point
         destination = null
         destinationStopId = null
@@ -351,12 +358,16 @@ fun ArrivalAlarmApp(
         "${a.latitude},${a.longitude}->${b.latitude},${b.longitude}"
 
     fun loadRoutes(a: MapPoint, b: MapPoint) {
+        val requestGeneration = routeRequestGuard.begin()
+        routingHealth = TransitFunctionHealth.UNVERIFIED
         routeBusy = true
         routeStatus = context.getString(R.string.route_calculating)
         val key = routeKey(a, b)
-        transit.journeyOptions(a, b) { options, status ->
+        transit.journeyOptions(a, b) routeCallback@{ options, status ->
+            if (!routeRequestGuard.accepts(requestGeneration)) return@routeCallback
             routeBusy = false
             if (options.isNotEmpty()) {
+                routingHealth = TransitFunctionHealth.WORKING
                 routeOffline = false
                 routeOptions = options
                 if (selectedRouteId !in options.map { it.id }) {
@@ -367,6 +378,11 @@ fun ArrivalAlarmApp(
                 routeCache.put(CachedTransitPlan(key, options, emptyList(), System.currentTimeMillis() / 1000))
             } else {
                 val cached = routeCache.routeOptions(key)
+                routingHealth = if (cached.isNotEmpty()) {
+                    TransitFunctionHealth.DEGRADED
+                } else {
+                    TransitFunctionHealth.FAILED
+                }
                 routeOffline = cached.isNotEmpty()
                 routeOptions = cached
                 if (selectedRouteId !in cached.map { it.id }) {
@@ -469,21 +485,30 @@ fun ArrivalAlarmApp(
             searchBusy = false
             when (resolution) {
                 is NationwideLookupResolution.Results -> {
+                    searchHealth = if (resolution.values.isNotEmpty()) {
+                        TransitFunctionHealth.WORKING
+                    } else {
+                        TransitFunctionHealth.UNVERIFIED
+                    }
                     searchResults = resolution.values
                     searchSource = resolution.sourceLabel
                     searchMessage = null
                 }
                 is NationwideLookupResolution.Stale -> {
+                    searchHealth = TransitFunctionHealth.DEGRADED
                     searchResults = resolution.values
                     searchSource = resolution.sourceLabel
                     searchMessage = context.getString(R.string.lookup_stale_results)
                 }
                 is NationwideLookupResolution.NoResult -> {
+                    // A valid empty query result does not prove nationwide search is usable.
+                    searchHealth = TransitFunctionHealth.UNVERIFIED
                     searchResults = emptyList()
                     searchSource = resolution.sourceLabel
                     searchMessage = context.getString(R.string.no_stop_found)
                 }
                 is NationwideLookupResolution.ProviderUnavailable -> {
+                    searchHealth = TransitFunctionHealth.FAILED
                     searchResults = emptyList()
                     searchSource = resolution.sourceLabel
                     searchMessage = context.getString(R.string.lookup_provider_unavailable)
@@ -637,6 +662,7 @@ fun ArrivalAlarmApp(
             val cached = routeCache.routeOptions(key)
             if (cached.isNotEmpty()) {
                 routeOffline = true
+                routingHealth = TransitFunctionHealth.DEGRADED
                 routeOptions = cached
                 graph.routeRegistry.replace(cached)
                 routeStatus = context.getString(R.string.route_offline_fallback)
@@ -757,6 +783,8 @@ fun ArrivalAlarmApp(
                     journey.phase,
                     connectorConnected,
                     connectorBaseUrl,
+                    searchHealth,
+                    routingHealth,
                 ) {
                     SettingsReadinessState.from(
                         context = context,
@@ -766,6 +794,8 @@ fun ArrivalAlarmApp(
                         backgroundJourneyActive = journey.phase == JourneyPhase.ARMED,
                         connectorConfigured = connectorBaseUrl.isNotBlank(),
                         connectorConnected = connectorConnected,
+                        searchHealth = searchHealth,
+                        routingHealth = routingHealth,
                     )
                 }
                 if (activeScreen == ArrivalAppScreen.SETTINGS) {
