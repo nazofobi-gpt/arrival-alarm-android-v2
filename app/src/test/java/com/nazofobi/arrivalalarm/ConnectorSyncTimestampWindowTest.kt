@@ -31,20 +31,23 @@ class ConnectorSyncTimestampWindowTest {
         override fun cancelArrivalAlarm() = apply()
     }
 
-    private class Gateway(private val queuedAt: Long) : ConnectorGatewayTransport {
+    private class Gateway(private val queuedAt: Long?) : ConnectorGatewayTransport {
         val receipts = mutableListOf<JSONObject>()
         override fun publishSnapshot(payload: String) = Unit
-        override fun fetchPendingCommands(): String = """
-            {"commands":[{"command_id":"test-id","expected_state_version":7,
-            "user_confirmed":true,"queued_at_epoch_seconds":$queuedAt,
-            "command":{"type":"arm_arrival_alarm","idempotency_key":"test-key"}}]}
-        """.trimIndent()
+        override fun fetchPendingCommands(): String {
+            val timestampField = queuedAt?.let { "\"queued_at_epoch_seconds\":$it," } ?: ""
+            return """
+                {"commands":[{"command_id":"test-id","expected_state_version":7,
+                "user_confirmed":true,$timestampField
+                "command":{"type":"arm_arrival_alarm","idempotency_key":"test-key"}}]}
+            """.trimIndent()
+        }
         override fun publishReceipt(payload: String) {
             receipts += JSONObject(payload)
         }
     }
 
-    private fun executeAt(queuedAt: Long, now: Long = 1_000L): Triple<Int, Int, String> {
+    private fun executeAt(queuedAt: Long?, now: Long = 1_000L): Triple<Int, Int, String> {
         val port = ActionPort()
         val gateway = Gateway(queuedAt)
         val result = ConnectorSyncClient(
@@ -73,6 +76,13 @@ class ConnectorSyncTimestampWindowTest {
                 executeAt(queuedAt),
             )
         }
+    }
+
+    @Test fun missingTimestampFailsClosedWithReceipt() {
+        assertEquals(
+            Triple(0, 0, "REJECTED_EXPIRED_COMMAND"),
+            executeAt(queuedAt = null),
+        )
     }
 
     @Test fun impossibleNegativeDeviceClockRejectsCommand() {
