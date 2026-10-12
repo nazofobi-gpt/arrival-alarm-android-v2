@@ -12,7 +12,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 LOCALES = ("de", "en")
-PLACEHOLDER = re.compile(r"%(?:([1-9][0-9]*)\$)?[-#+0,(]*[0-9]*(?:\.[0-9]+)?([A-Za-z%])")
+PLACEHOLDER = re.compile(r"%(?:([1-9][0-9]*)\$)?[-#+0,(]*[0-9]*(?:\.[0-9]+)?([tT][A-Za-z]|[A-Za-z%])")
 
 
 @dataclass(frozen=True)
@@ -33,7 +33,11 @@ def placeholders(value: str) -> Counter[tuple[int, str]]:
         position = int(match.group(1)) if match.group(1) else next_implicit
         if not match.group(1):
             next_implicit += 1
-        found[position, conversion.lower()] += 1
+        # Java Formatter date/time conversions use two characters (%tH, %tM, etc.).
+        # Preserve both, including the case of the conversion prefix/suffix.
+        # Treating every %tX as only "%t" masks translated hour/month drift.
+        signature = conversion if len(conversion) == 2 else conversion.lower()
+        found[position, signature] += 1
     return found
 
 

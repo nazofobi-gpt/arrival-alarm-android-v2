@@ -39,6 +39,31 @@ class LocaleResourceContractTest(unittest.TestCase):
         self.write("values-de", '<string name="arrival">In %2$s Min. zu %1$s</string>')
         self.assertTrue(any("format arguments differ" in e for e in validate(self.root)))
 
+
+    def test_datetime_conversion_suffix_mismatch_is_rejected(self):
+        # Both strings have a date/time argument, but H (hour) and M (minute)
+        # cannot be substituted for one another by a translator.
+        self.write("values", '<string name="arrival">At %1$tH:%1$tM</string>')
+        self.write("values-de", '<string name="arrival">Um %1$tH:%1$tS</string>')
+        self.write("values-en", '<string name="arrival">At %1$tH:%1$tM</string>')
+        self.assertTrue(
+            any("format arguments differ" in e for e in validate(self.root))
+        )
+
+    def test_datetime_arguments_can_be_reordered_between_locales(self):
+        self.write("values", '<string name="arrival">At %1$tH:%1$tM on %2$td</string>')
+        self.write("values-de", '<string name="arrival">Am %2$td um %1$tH:%1$tM</string>')
+        self.write("values-en", '<string name="arrival">At %1$tH:%1$tM on %2$td</string>')
+        self.assertEqual([], validate(self.root))
+
+    def test_datetime_conversion_case_must_not_change_silently(self):
+        self.write("values", '<string name="arrival">At %1$tB</string>')
+        self.write("values-de", '<string name="arrival">Am %1$TB</string>')
+        self.write("values-en", '<string name="arrival">At %1$tB</string>')
+        self.assertTrue(
+            any("format arguments differ" in e for e in validate(self.root))
+        )
+
     def test_nontranslatable_source_may_be_omitted(self):
         self.write(
             "values",
