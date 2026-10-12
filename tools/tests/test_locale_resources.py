@@ -105,5 +105,18 @@ class LocaleResourceContractTest(unittest.TestCase):
         self.assertTrue(any("empty translation" in e for e in validate(self.root)))
 
 
+    def test_java_date_time_suffix_mismatch_is_rejected(self):
+        self.write("values", '<string name="arrival">Varış %1$tH:%1$tM</string>')
+        self.write("values-de", '<string name="arrival">Ankunft %1$tH:%1$tY</string>')
+        self.write("values-en", '<string name="arrival">Arrival %1$tH:%1$tM</string>')
+        self.assertTrue(any("format arguments differ" in e for e in validate(self.root)))
+
+    def test_reordered_java_date_time_suffixes_pass(self):
+        self.write("values", '<string name="arrival">%1$tY-%1$tm-%1$td</string>')
+        self.write("values-de", '<string name="arrival">%1$td.%1$tm.%1$tY</string>')
+        self.write("values-en", '<string name="arrival">%1$tY/%1$tm/%1$td</string>')
+        self.assertEqual([], validate(self.root))
+
+
 if __name__ == "__main__":
     unittest.main()
