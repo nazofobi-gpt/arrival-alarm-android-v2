@@ -40,6 +40,32 @@ class TransitRealtimeTest {
         assertTrue(result.realtime.status.contains("eşleşen sefer yok"))
     }
 
+    @Test fun futureDatedSnapshotCannotClaimFreshRealtime() {
+        val result = repo(RealtimeSnapshot(now + 31, listOf(
+            RealtimeUpdate("trip-42", delaySeconds = 600, cancelled = true),
+        ))).plan("fixture-bremen-hbf", "fixture-airport")!!
+        assertEquals(RealtimeFreshness.UNAVAILABLE, result.realtime.freshness)
+        assertNull(result.realtime.delaySeconds)
+        assertFalse(result.realtime.cancelled)
+        assertNull(result.realtime.lastUpdatedEpochSeconds)
+        assertTrue(result.realtime.status.contains("statik rota"))
+    }
+
+    @Test fun smallProviderClockSkewIsToleratedAtBoundary() {
+        val result = repo(RealtimeSnapshot(now + 30, emptyList()))
+            .plan("fixture-bremen-hbf", "fixture-airport")!!
+        assertEquals(RealtimeFreshness.FRESH, result.realtime.freshness)
+    }
+
+    @Test fun missingOrInvalidVbnTimestampNeverBecomesFresh() {
+        listOf(0L, -1L).forEach { invalidTime ->
+            val result = repo(RealtimeSnapshot(invalidTime, emptyList()))
+                .plan("fixture-bremen-hbf", "fixture-airport")!!
+            assertEquals(RealtimeFreshness.UNAVAILABLE, result.realtime.freshness)
+            assertTrue(result.realtime.status.contains("statik rota"))
+        }
+    }
+
     @Test fun staleSnapshotFallsBackToStaticJourney() {
         val result = repo(RealtimeSnapshot(now - 181, listOf(RealtimeUpdate("anything", delaySeconds = 600)))).plan("fixture-bremen-hbf", "fixture-airport")!!
         assertEquals(RealtimeFreshness.STALE, result.realtime.freshness); assertNull(result.realtime.delaySeconds)
