@@ -274,12 +274,17 @@ internal class ProductionRealtimeStationOverlay(
         planned: List<Departure>,
     ): ProductionStationDeparturesResult {
         if (planned.isEmpty()) return ProductionStationDeparturesResult(emptyList())
-        val overlay = runCatching {
+        val overlay = try {
             match(fetch(), nowEpochSeconds())
-        }.getOrElse { error ->
+        } catch (interrupted: InterruptedException) {
+            // Cancellation is not an upstream outage; preserve the interrupt signal.
+            Thread.currentThread().interrupt()
+            throw interrupted
+        } catch (_: Exception) {
+            // Do not swallow fatal JVM Errors or expose provider exception text.
             GermanyRealtimeOverlayResult.Unavailable(
                 GermanyRealtimeUnavailableReason.NETWORK,
-                error.message,
+                "realtime_station_overlay_error",
             )
         }
         return when (overlay) {
