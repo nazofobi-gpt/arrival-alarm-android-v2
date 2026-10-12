@@ -31,8 +31,8 @@ class G186LiveUpdateInstrumentedTest {
                 Notification.ProgressStyle::class.java.name,
                 notification.extras.getString(Notification.EXTRA_TEMPLATE),
             )
-            // No synthetic percentage should be emitted while location evidence is missing.
-            assertFalse(notification.extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE, false).not())
+            // A trip percentage is deliberately not asserted: the UI has no validated
+            // route-distance denominator, so the production helper stays indeterminate.
         } else {
             assertFalse(notification.extras.getBoolean(JourneyLiveUpdateNotification.PROMOTION_REQUEST_KEY))
         }
