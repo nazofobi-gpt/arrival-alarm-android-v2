@@ -108,7 +108,16 @@ class OverlayTransitRepository(
         val snapshot = runCatching { realtimeSource.fetch() }.getOrNull()
             ?: return TransitPlanWithRealtime(staticJourney, TransitRealtimeOverlay(
                 RealtimeFreshness.UNAVAILABLE, status = "Canlı veri kullanılamıyor • statik rota"))
-        val age = (clock.nowEpochSeconds() - snapshot.fetchedAtEpochSeconds).coerceAtLeast(0)
+        val age = clock.nowEpochSeconds() - snapshot.fetchedAtEpochSeconds
+        // Provider clock skew beyond this bound cannot be treated as a fresh update.
+        // Never allow an implausible future timestamp to override scheduled truth.
+        if (age < -MAX_FUTURE_CLOCK_SKEW_SECONDS) return TransitPlanWithRealtime(
+            staticJourney,
+            TransitRealtimeOverlay(
+                RealtimeFreshness.STALE, snapshot.fetchedAtEpochSeconds,
+                status = "Canlı veri zamanı doğrulanamadı • statik rota",
+            ),
+        )
         if (age > staleAfterSeconds) return TransitPlanWithRealtime(staticJourney, TransitRealtimeOverlay(
             RealtimeFreshness.STALE, snapshot.fetchedAtEpochSeconds, status = "Canlı veri eski • statik rota"))
         val exactTripId = staticJourney.legs.singleOrNull()?.line?.takeIf { it.startsWith("gtfs-trip:") }?.removePrefix("gtfs-trip:")
@@ -127,5 +136,9 @@ class OverlayTransitRepository(
                 else -> "Canlı veri güncel"
             },
         ))
+    }
+
+    private companion object {
+        const val MAX_FUTURE_CLOCK_SKEW_SECONDS = 30L
     }
 }
