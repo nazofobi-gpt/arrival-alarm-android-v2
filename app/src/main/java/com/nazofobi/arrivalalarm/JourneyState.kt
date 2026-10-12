@@ -2,6 +2,10 @@ package com.nazofobi.arrivalalarm
 
 data class GeoPoint(val latitude: Double, val longitude: Double)
 
+private fun GeoPoint.isValidCoordinate(): Boolean =
+    latitude.isFinite() && latitude in -90.0..90.0 &&
+        longitude.isFinite() && longitude in -180.0..180.0
+
 enum class JourneyPhase { EMPTY, START_SELECTED, DESTINATION_SELECTED, ARMED, ARRIVED }
 
 data class JourneyUiState(
@@ -22,8 +26,21 @@ class JourneyController(
     private val arrivalRadiusMeters: Double = ArrivalLocationQuality.DEFAULT_ARRIVAL_RADIUS_METERS,
     private val stateStore: JourneyStateStore? = null,
 ) {
+    init {
+        require(arrivalRadiusMeters.isFinite() && arrivalRadiusMeters > 0.0) {
+            "Arrival radius must be a finite positive distance"
+        }
+    }
+
     @Volatile
-    var state: JourneyUiState = stateStore?.load() ?: JourneyUiState()
+    var state: JourneyUiState = stateStore?.load()?.takeIf { saved ->
+        when (saved.phase) {
+            JourneyPhase.EMPTY -> saved.start == null && saved.destination == null
+            JourneyPhase.START_SELECTED -> saved.start?.isValidCoordinate() == true && saved.destination == null
+            JourneyPhase.DESTINATION_SELECTED, JourneyPhase.ARMED, JourneyPhase.ARRIVED ->
+                saved.start?.isValidCoordinate() == true && saved.destination?.isValidCoordinate() == true
+        }
+    } ?: JourneyUiState()
         private set
 
     private fun update(newState: JourneyUiState) {
@@ -32,6 +49,10 @@ class JourneyController(
     }
 
     fun selectStart(point: GeoPoint) {
+        if (!point.isValidCoordinate()) {
+            update(state.copy(error = "Geçersiz başlangıç konumu"))
+            return
+        }
         update(JourneyUiState(phase = JourneyPhase.START_SELECTED, start = point))
     }
 
@@ -40,12 +61,20 @@ class JourneyController(
             update(state.copy(error = "Önce başlangıç seçilmeli"))
             return
         }
+        if (!point.isValidCoordinate()) {
+            update(state.copy(error = "Geçersiz hedef konumu"))
+            return
+        }
         update(state.copy(phase = JourneyPhase.DESTINATION_SELECTED, start = start, destination = point, error = null))
     }
 
     fun arm() {
         if (state.start == null || state.destination == null) {
             update(state.copy(error = "Başlangıç ve hedef gerekli"))
+            return
+        }
+        if (state.start?.isValidCoordinate() != true || state.destination?.isValidCoordinate() != true) {
+            update(state.copy(error = "Geçerli başlangıç ve hedef gerekli"))
             return
         }
         update(state.copy(phase = JourneyPhase.ARMED, error = null))

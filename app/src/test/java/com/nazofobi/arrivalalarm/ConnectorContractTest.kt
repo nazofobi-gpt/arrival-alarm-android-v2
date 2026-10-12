@@ -95,6 +95,29 @@ class ConnectorContractTest {
         assertEquals(0, port.writes)
     }
 
+    @Test fun snapshotFreshnessRejectsFutureInvalidAndOverflowingClocks() {
+        val current = snapshot(now = 1_000, sourceUpdatedAt = 880)
+        assertFalse(current.isStale()) // The 120-second boundary is inclusive.
+        assertTrue(current.copy(sourceUpdatedAtEpochSeconds = 879).isStale())
+        assertTrue(current.copy(sourceUpdatedAtEpochSeconds = 1_001).isStale())
+        assertTrue(current.copy(sourceUpdatedAtEpochSeconds = Long.MAX_VALUE).isStale())
+        assertTrue(current.copy(sourceUpdatedAtEpochSeconds = 1).isStale(Long.MAX_VALUE))
+        assertTrue(current.copy(sourceUpdatedAtEpochSeconds = -1).isStale())
+        assertTrue(current.copy(staleAfterSeconds = -1).isStale())
+        assertTrue(current.isStale(nowEpochSeconds = -1))
+    }
+
+    @Test fun confirmedCommandCannotUseFutureDatedSnapshot() {
+        val port = FakePort(snapshot(now = 1_000, sourceUpdatedAt = 1_001))
+        val receipt = ConnectorCommandProcessor(port).execute(
+            ArrivalAlarmConnectorCommand.ArmArrivalAlarm("cmd-future-source"),
+            userConfirmed = true,
+            nowEpochSeconds = 1_000,
+        )
+        assertEquals(ConnectorCommandStatus.REJECTED_STALE_STATE, receipt.status)
+        assertEquals(0, port.writes)
+    }
+
     @Test fun optimisticStateVersionMismatchFailsClosed() {
         val port = FakePort(snapshot(stateVersion = 9))
         val processor = ConnectorCommandProcessor(port)

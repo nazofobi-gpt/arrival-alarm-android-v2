@@ -148,13 +148,17 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
     }
 
     fun search(query: String, limit: Int): List<CatalogStop> {
+        // SQLite interprets a negative LIMIT as unlimited. Never allow a caller to
+        // materialize the full nationwide stop index through an unbounded search.
+        if (limit <= 0) return emptyList()
+        val boundedLimit = limit.coerceAtMost(100)
         val tokens = query.lowercase(Locale.GERMANY)
             .split(Regex("[^\\p{L}\\p{N}]+"))
             .filter { it.isNotBlank() }
         if (tokens.isEmpty()) return emptyList()
         val match = tokens.joinToString(" ") { "$it*" }
         val sql = "SELECT s.id,s.name,s.lat,s.lon FROM stop_search f JOIN stops s ON s.id=f.stop_id WHERE stop_search MATCH ? LIMIT ?"
-        return readableDatabase.rawQuery(sql, arrayOf(match, limit.toString())).use { c ->
+        return readableDatabase.rawQuery(sql, arrayOf(match, boundedLimit.toString())).use { c ->
             buildList {
                 while (c.moveToNext()) add(CatalogStop(c.getString(0), PROVIDER_ID, c.getString(1), c.getDouble(2), c.getDouble(3)))
             }

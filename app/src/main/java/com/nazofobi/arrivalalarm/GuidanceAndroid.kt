@@ -99,13 +99,34 @@ object AndroidGuidancePermissions {
 }
 
 object AndroidGuidanceAudio {
+    /**
+     * Bluetooth output discovery requires BLUETOOTH_CONNECT on Android 12+.
+     * Missing or concurrently revoked permission must not crash guidance setup.
+     */
     fun currentRoute(context: Context): GuidanceAudioRoute {
+        if (Build.VERSION.SDK_INT >= 31 &&
+            context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) !=
+            PackageManager.PERMISSION_GRANTED
+        ) return GuidanceAudioRoute.DEVICE
+
         val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val bluetooth = audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any {
-            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                (Build.VERSION.SDK_INT >= 31 && it.type == AudioDeviceInfo.TYPE_BLE_HEADSET)
+        val bluetooth = try {
+            audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any {
+                isBluetoothOutputType(it.type, Build.VERSION.SDK_INT)
+            }
+        } catch (_: SecurityException) {
+            // Permission can be revoked between checking it and querying devices.
+            false
         }
         return if (bluetooth) GuidanceAudioRoute.BLUETOOTH_CONNECTED else GuidanceAudioRoute.DEVICE
     }
+
+    internal fun isBluetoothOutputType(type: Int, sdkInt: Int): Boolean =
+        type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+            type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+            (sdkInt >= 28 && type == AudioDeviceInfo.TYPE_HEARING_AID) ||
+            (sdkInt >= 31 && (
+                type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
+                    type == AudioDeviceInfo.TYPE_BLE_SPEAKER
+                ))
 }
