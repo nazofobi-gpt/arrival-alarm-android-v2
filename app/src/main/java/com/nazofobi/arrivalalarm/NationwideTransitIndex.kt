@@ -24,6 +24,8 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         private const val VERSION_KEY = "source_version"
         private const val SCHEMA_KEY = "schema_version"
         private const val REQUIRED_STOP_COUNT = 10_000
+        // UI consumers must never materialize unbounded nationwide GTFS query results.
+        private const val MAX_SEARCH_RESULTS = 100
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -148,13 +150,15 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
     }
 
     fun search(query: String, limit: Int): List<CatalogStop> {
+        if (limit <= 0) return emptyList()
+        val boundedLimit = limit.coerceAtMost(MAX_SEARCH_RESULTS)
         val tokens = query.lowercase(Locale.GERMANY)
             .split(Regex("[^\\p{L}\\p{N}]+"))
             .filter { it.isNotBlank() }
         if (tokens.isEmpty()) return emptyList()
         val match = tokens.joinToString(" ") { "$it*" }
         val sql = "SELECT s.id,s.name,s.lat,s.lon FROM stop_search f JOIN stops s ON s.id=f.stop_id WHERE stop_search MATCH ? LIMIT ?"
-        return readableDatabase.rawQuery(sql, arrayOf(match, limit.toString())).use { c ->
+        return readableDatabase.rawQuery(sql, arrayOf(match, boundedLimit.toString())).use { c ->
             buildList {
                 while (c.moveToNext()) add(CatalogStop(c.getString(0), PROVIDER_ID, c.getString(1), c.getDouble(2), c.getDouble(3)))
             }
@@ -167,9 +171,10 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
     ): List<TransitLocationResult> {
         val q = query.trim()
         if (q.length < 2 || limit <= 0) return emptyList()
+        val boundedLimit = limit.coerceAtMost(MAX_SEARCH_RESULTS)
         val prefix = "$q%"
-        val lineLimit = (limit + 1) / 2
-        val tripLimit = limit - lineLimit
+        val lineLimit = (boundedLimit + 1) / 2
+        val tripLimit = boundedLimit - lineLimit
 
         val lines = readableDatabase.rawQuery(
             """
@@ -216,7 +221,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             }
         }
 
-        if (tripLimit <= 0) return lines.take(limit)
+        if (tripLimit <= 0) return lines.take(boundedLimit)
 
         val trips = readableDatabase.rawQuery(
             """
@@ -260,7 +265,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             }
         }
 
-        return (lines + trips).take(limit)
+        return (lines + trips).take(boundedLimit)
     }
 
     fun nearest(latitude: Double, longitude: Double, limit: Int): List<NearbyStop> =
