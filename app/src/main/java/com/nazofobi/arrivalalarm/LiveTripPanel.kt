@@ -131,7 +131,7 @@ fun LiveTripPanel(
                     value = progress.current.name,
                     tag = "live-trip-current",
                 )
-                progress.resolvedByProviderTime && (progress.previous != null || progress.next != null) ->
+                progress.resolvedByProviderTime && progress.previous != null && progress.next != null ->
                     Text(
                         text = stringResource(R.string.live_trip_between_stops),
                         style = MaterialTheme.typography.bodyMedium,
