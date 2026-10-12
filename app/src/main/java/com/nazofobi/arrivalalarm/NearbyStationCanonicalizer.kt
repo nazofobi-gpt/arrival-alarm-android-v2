@@ -15,6 +15,8 @@ internal object NearbyStationCanonicalizer {
         candidates: List<NearbyStop>,
         limit: Int,
     ): List<NearbyStop> {
+        if (limit <= 0 || candidates.isEmpty()) return emptyList()
+
         val parentIds = candidates.mapNotNull {
             it.stop.parentStationId?.trim()?.takeIf(String::isNotEmpty)
         }.toSet()
@@ -22,8 +24,11 @@ internal object NearbyStationCanonicalizer {
         return candidates
             .groupBy { candidate ->
                 val stop = candidate.stop
+                // GTFS parent_station is an identifier, so stray surrounding whitespace
+                // must not split a parent and its platforms into separate nearby rows.
+                val parentId = stop.parentStationId?.trim()?.takeIf(String::isNotEmpty)
                 when {
-                    stop.parentStationId?.isNotBlank() == true -> "parent:" + stop.parentStationId
+                    parentId != null -> "parent:$parentId"
                     stop.id in parentIds -> "parent:" + stop.id
                     else -> fallbackKey(stop)
                 }
