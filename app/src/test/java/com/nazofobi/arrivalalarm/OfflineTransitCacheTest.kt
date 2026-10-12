@@ -78,6 +78,75 @@ class OfflineTransitCacheTest {
         assertEquals("2", restored.stops.last().plannedPlatform)
     }
 
+    @Test fun restoredLegacyCacheCannotExposeRealtimeCancellationOrPlatform() {
+        val origin = MapPoint(52.665, 8.237, "Lohne")
+        val destination = MapPoint(53.083, 8.813, "Bremen")
+        val route = RouteOption(
+            id = "legacy-route",
+            origin = origin,
+            destination = destination,
+            line = "RE 9",
+            direction = "Bremen",
+            departure = "10:00",
+            arrival = "10:45",
+            walkingMinutes = 0,
+            transfers = 0,
+            stops = listOf(
+                RouteStop(
+                    id = "S1",
+                    name = "Lohne",
+                    departure = "2026-10-11T10:09:00+02:00",
+                    plannedDeparture = "2026-10-11T10:00:00+02:00",
+                    platform = "7",
+                    plannedPlatform = "2",
+                ),
+            ),
+            realtime = RouteRealtimeInfo(
+                state = RouteRealtimeState.FRESH_MATCHED,
+                sourceLabel = "GTFS-RT",
+                updatedAtEpochSeconds = 500L,
+                ageSeconds = 2L,
+                matchedTripIds = listOf("T1"),
+            ),
+        )
+        val departure = Departure(
+            tripId = "T1",
+            line = "RE 9",
+            direction = "Bremen",
+            scheduledEpochSeconds = 1000L,
+            realtimeEpochSeconds = 1500L,
+            cancelled = true,
+            platform = "7",
+            realtimeTripStartDate = "20261011",
+            realtimeTripStartTime = "10:00:00",
+        )
+        val legacyPlan = CachedTransitPlan("legacy", listOf(route), listOf(departure), 800L)
+        val backing = object : TransitCacheBackingStore {
+            override fun load() = listOf(legacyPlan)
+            override fun save(plans: List<CachedTransitPlan>) = Unit
+        }
+
+        val cache = OfflineTransitCache(backingStore = backing)
+        val stored = cache.get("legacy")!!
+        val restoredRoute = stored.routeOptions.single()
+        val restoredStop = restoredRoute.stops.single()
+        val restoredDeparture = stored.departures.single()
+
+        assertNull(restoredRoute.realtime)
+        assertNull(restoredStop.departure)
+        assertNull(restoredStop.platform)
+        assertEquals("2026-10-11T10:00:00+02:00", restoredStop.plannedDeparture)
+        assertEquals("2", restoredStop.plannedPlatform)
+        assertNull(restoredDeparture.realtimeEpochSeconds)
+        assertFalse(restoredDeparture.cancelled)
+        assertNull(restoredDeparture.platform)
+        assertNull(restoredDeparture.realtimeTripStartDate)
+        assertNull(restoredDeparture.realtimeTripStartTime)
+        assertEquals(1000L, restoredDeparture.effectiveEpochSeconds)
+        assertTrue(cache.snapshot("legacy")!!.isOfflineCache)
+        assertFalse(cache.snapshot("legacy")!!.departures.single().cancelled)
+    }
+
     @Test fun backingStoreIsLoadedAndPublishedOnMutation() {
         val origin = MapPoint(52.665, 8.237, "Lohne")
         val destination = MapPoint(53.083, 8.813, "Bremen")
