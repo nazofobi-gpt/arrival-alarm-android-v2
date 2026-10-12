@@ -71,6 +71,61 @@ class ArrivalProgressControllerTest {
         assertEquals(0, c.state.arrivalEventCount)
     }
 
+    @Test fun poorAccuracyInterruptsArrivalDebounceWithoutFalseAlarm() {
+        val c = ArrivalProgressController()
+        c.arm(route)
+        val target = route.stops[route.targetIndex]
+
+        c.onLocation(fix(target))
+        assertEquals(1, c.state.consecutiveInsideThreshold)
+        c.onLocation(fix(target, accuracy = 500.0))
+        assertEquals(0, c.state.consecutiveInsideThreshold)
+        assertEquals(0, c.state.arrivalEventCount)
+
+        c.onLocation(fix(target))
+        assertEquals(1, c.state.consecutiveInsideThreshold)
+        assertEquals(ArrivalAlertPhase.IMMINENT, c.state.phase)
+        c.onLocation(fix(target))
+        assertEquals(ArrivalAlertPhase.ARRIVED, c.state.phase)
+        assertEquals(1, c.state.arrivalEventCount)
+    }
+
+    @Test fun horizontalUncertaintyMustFitInsideAdaptiveThreshold() {
+        val c = ArrivalProgressController()
+        c.arm(route)
+        val target = route.stops[route.targetIndex]
+        val closeButUncertain = GeoPoint(target.latitude + 0.0012, target.longitude)
+
+        // Roughly 133m distance plus 100m GPS uncertainty exceeds the 200m
+        // adaptive threshold: two callbacks must not fire the arrival event.
+        repeat(2) { c.onLocation(fix(closeButUncertain, accuracy = 100.0, speed = 0.0)) }
+        assertEquals(0, c.state.consecutiveInsideThreshold)
+        assertEquals(0, c.state.arrivalEventCount)
+
+        repeat(2) { c.onLocation(fix(target, accuracy = 10.0, speed = 0.0)) }
+        assertEquals(ArrivalAlertPhase.ARRIVED, c.state.phase)
+        assertEquals(1, c.state.arrivalEventCount)
+    }
+
+    @Test fun invalidCoordinatesAndMovementEvidenceCannotAdvanceProgress() {
+        val c = ArrivalProgressController()
+        c.arm(route)
+        val initial = c.state
+        c.onLocation(fix(GeoPoint(Double.NaN, 8.79)))
+        c.onLocation(fix(GeoPoint(100.0, 8.79)))
+        c.onLocation(fix(route.stops[2], accuracy = Double.NaN))
+        c.onLocation(fix(route.stops[2], speed = -1.0))
+        c.onLocation(fix(route.stops[2], speed = Double.POSITIVE_INFINITY))
+        assertEquals(initial, c.state)
+
+        // Int.MIN_VALUE used to overflow abs(Int) and erase deviation impact.
+        assertEquals(
+            184.0,
+            c.adaptiveThresholdMeters(fix(route.stops[0], rt = Int.MIN_VALUE)),
+            0.0001,
+        )
+    }
+
     @Test fun persistedStateResumesWithoutDuplicateArrival() {
         var saved: ArrivalProgressState? = null
         val store = object : ArrivalProgressStateStore {
