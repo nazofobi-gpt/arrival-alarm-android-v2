@@ -28,22 +28,16 @@ class OfflineTransitCache(
     private val entries = LinkedHashMap<String, CachedTransitPlan>()
 
     init {
+        // Persisted records may predate the realtime-stripping write contract.
+        // Never reintroduce live cancellation, platform or ETA data after process restore.
         backingStore.load().takeLast(maxEntries.coerceAtLeast(1)).forEach { plan ->
-            entries[plan.key] = plan
+            val safe = plan.forOfflineCache()
+            entries[safe.key] = safe
         }
     }
 
     fun put(plan: CachedTransitPlan) {
-        val cacheSafe = plan.copy(
-            routeOptions = plan.routeOptions.map { it.forOfflineCache() },
-            departures = plan.departures.map {
-                it.copy(
-                    realtimeEpochSeconds = null,
-                    cancelled = false,
-                    platform = null,
-                )
-            },
-        )
+        val cacheSafe = plan.forOfflineCache()
         entries.remove(cacheSafe.key)
         entries[cacheSafe.key] = cacheSafe
         while (entries.size > maxEntries.coerceAtLeast(1)) entries.remove(entries.keys.first())
@@ -66,8 +60,28 @@ class OfflineTransitCache(
     fun routeOptions(key: String): List<RouteOption> = entries[key]?.routeOptions.orEmpty()
 }
 
+/** Normalize both freshly saved and legacy restored entries to scheduled-only evidence. */
+private fun CachedTransitPlan.forOfflineCache(): CachedTransitPlan =
+    copy(
+        routeOptions = routeOptions.map { it.forOfflineCache() },
+        departures = departures.map { departure ->
+            departure.copy(
+                realtimeEpochSeconds = null,
+                cancelled = false,
+                platform = null,
+                realtimeTripStartDate = null,
+                realtimeTripStartTime = null,
+            )
+        },
+    )
+
 private fun RouteOption.forOfflineCache(): RouteOption =
-    if (realtime == null) {
+    // Legacy JSON stores actual stop times/platforms but omits RouteRealtimeInfo.
+    // The planned fields remain as the authoritative scheduled-only fallback.
+    if (realtime == null && stops.none {
+            it.plannedArrival != null || it.plannedDeparture != null || it.plannedPlatform != null
+        }
+    ) {
         this
     } else {
         copy(
