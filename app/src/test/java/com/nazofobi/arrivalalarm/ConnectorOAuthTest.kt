@@ -235,4 +235,84 @@ class ConnectorOAuthTest {
         assertNull(sessions.session)
     }
 
+
+    @Test fun oauthProviderErrorIsRedactedAfterValidState() {
+        val sessions = MemorySessionStore()
+        val transactions = MemoryTransactionStore()
+        val transport = FakeTransport()
+        val oauth = coordinator(sessions, transactions, transport)
+        val authorizationUrl = oauth.beginAuthorization("https://connector.example")
+        val state = ConnectorOAuthCoordinator.parseQuery(URI(authorizationUrl).rawQuery).getValue("state")
+        val secret = "refresh_secret_and_precise_location_52.66"
+
+        val failure = runCatching {
+            oauth.completeAuthorization(
+                CONNECTOR_OAUTH_REDIRECT_URI + "?state=" + state + "&error=" + secret
+            )
+        }.exceptionOrNull()
+
+        assertEquals("connector_oauth_provider_error", failure?.message)
+        assertFalse(failure.toString().contains(secret))
+        assertNull(transactions.transaction)
+        assertNull(sessions.session)
+        assertNull(transport.exchangedVerifier)
+    }
+
+    @Test fun invalidCallbacksDoNotLeakOAuthCodeOrConsumePendingAuthorization() {
+        val sessions = MemorySessionStore()
+        val transactions = MemoryTransactionStore()
+        val transport = FakeTransport()
+        val oauth = coordinator(sessions, transactions, transport)
+        val authorizationUrl = oauth.beginAuthorization("https://connector.example")
+        val state = ConnectorOAuthCoordinator.parseQuery(URI(authorizationUrl).rawQuery).getValue("state")
+        val secret = "private_authorization_code"
+        val callbacks = listOf(
+            CONNECTOR_OAUTH_REDIRECT_URI + "?state=" + state + "&code=" + secret + "&invalid=%secret",
+            CONNECTOR_OAUTH_REDIRECT_URI + "?state=" + state + "&code=" + secret + "#" + secret,
+        )
+        for (callback in callbacks) {
+            val failure = runCatching { oauth.completeAuthorization(callback) }.exceptionOrNull()
+            assertNotNull(failure)
+            assertFalse(failure.toString().contains(secret))
+            assertNotNull(transactions.transaction)
+            assertNull(sessions.session)
+            assertNull(transport.exchangedVerifier)
+        }
+    }
+
+    @Test fun connectorOAuthRejectsSecretBearingBaseUrlsBeforeSavingTransaction() {
+        val unsafe = listOf(
+            "https://user:credential@connector.example",
+            "https://connector.example?token=credential",
+            "https://connector.example/#credential",
+        )
+        for (baseUrl in unsafe) {
+            val transactions = MemoryTransactionStore()
+            val oauth = coordinator(MemorySessionStore(), transactions, FakeTransport())
+            val failure = runCatching { oauth.beginAuthorization(baseUrl) }.exceptionOrNull()
+            assertTrue(failure is IllegalArgumentException)
+            assertFalse(failure.toString().contains("credential"))
+            assertNull(transactions.transaction)
+        }
+    }
+
+    @Test fun connectorOAuthRejectsCredentialBearingOrFragmentedMetadataEndpoints() {
+        val unsafe = listOf(
+            "https://user:credential@auth.example/authorize",
+            "https://auth.example/authorize#credential",
+        )
+        for (endpoint in unsafe) {
+            val transactions = MemoryTransactionStore()
+            val transport = FakeTransport().apply {
+                metadata = metadata.copy(authorizationEndpoint = endpoint)
+            }
+            val oauth = coordinator(MemorySessionStore(), transactions, transport)
+            val failure = runCatching {
+                oauth.beginAuthorization("https://connector.example")
+            }.exceptionOrNull()
+            assertTrue(failure is IllegalArgumentException)
+            assertFalse(failure.toString().contains("credential"))
+            assertNull(transactions.transaction)
+        }
+    }
 }
