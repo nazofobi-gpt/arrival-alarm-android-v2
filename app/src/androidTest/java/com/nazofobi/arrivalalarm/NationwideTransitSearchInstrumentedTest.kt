@@ -47,6 +47,11 @@ class NationwideTransitSearchInstrumentedTest {
         )
         assertEquals(listOf("known-good"), index.search("Known Good Bahnhof", 5).map { it.id })
         assertEquals(listOf("known-good"), index.search("known good bahn", 5).map { it.id })
+        // SQLite LIMIT -1 means unlimited; never expose the full national stop index.
+        assertTrue(index.search("Fixture", -1).isEmpty())
+        assertTrue(index.search("Fixture", 0).isEmpty())
+        assertEquals(100, index.search("Fixture", Int.MAX_VALUE).size)
+        assertTrue(index.searchRouteAndTripLocations("R1", -1).isEmpty())
 
         val lineResults = index.searchRouteAndTripLocations("R1", 6)
         assertTrue(
