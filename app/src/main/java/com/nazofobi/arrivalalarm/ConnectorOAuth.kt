@@ -126,17 +126,27 @@ class ConnectorOAuthCoordinator(
             throw IllegalStateException("connector_oauth_transaction_expired")
         }
 
-        val callback = URI(callbackUri)
+        // URI/percent-decoding failures can include the full callback (and OAuth code).
+        val callback = try {
+            URI(callbackUri)
+        } catch (_: Exception) {
+            throw IllegalStateException("connector_oauth_callback_invalid")
+        }
         requireSameRedirect(callback, URI(CONNECTOR_OAUTH_REDIRECT_URI))
-        val query = parseQuery(callback.rawQuery)
+        val query = try {
+            parseQuery(callback.rawQuery)
+        } catch (_: IllegalArgumentException) {
+            throw IllegalStateException("connector_oauth_callback_invalid")
+        }
         val returnedState = query["state"].orEmpty()
         if (!constantTimeEquals(transaction.state, returnedState)) {
             // Do not consume the real pending authorization for an untrusted forged callback.
             throw IllegalStateException("connector_oauth_state_mismatch")
         }
-        query["error"]?.let { error ->
+        if (query.containsKey("error")) {
             transactionStore.clear()
-            throw IllegalStateException("connector_oauth_" + error)
+            // Provider-controlled error strings may contain codes, tokens or exact locations.
+            throw IllegalStateException("connector_oauth_provider_error")
         }
         val code = query["code"].orEmpty()
         if (code.isBlank()) {
@@ -303,6 +313,11 @@ class ConnectorOAuthCoordinator(
             )
 
         private fun requireSameRedirect(actual: URI, expected: URI) {
+            // A fragment is not part of the OAuth callback contract and must not be
+            // silently ignored; reject userinfo and noncanonical ports as well.
+            require(actual.rawFragment == null && actual.rawUserInfo == null && actual.port == -1) {
+                "connector_oauth_redirect_mismatch"
+            }
             require(actual.scheme.equals(expected.scheme, ignoreCase = true)) {
                 "connector_oauth_redirect_mismatch"
             }
@@ -314,6 +329,7 @@ class ConnectorOAuthCoordinator(
         private fun requireHttpsBaseUrl(value: String): String {
             val trimmed = value.trim().trimEnd('/')
             requireHttpsUrl(trimmed, "base_url")
+            require(URI(trimmed).rawQuery == null) { "connector_oauth_base_url_query_forbidden" }
             return trimmed
         }
 
@@ -322,7 +338,9 @@ class ConnectorOAuthCoordinator(
             require(
                 uri != null &&
                     uri.scheme.equals("https", ignoreCase = true) &&
-                    !uri.host.isNullOrBlank()
+                    !uri.host.isNullOrBlank() &&
+                    uri.rawUserInfo == null &&
+                    uri.rawFragment == null
             ) {
                 "connector_oauth_" + name + "_https_required"
             }
