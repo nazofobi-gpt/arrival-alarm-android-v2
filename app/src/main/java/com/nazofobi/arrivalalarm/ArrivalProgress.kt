@@ -99,16 +99,21 @@ class ArrivalProgressController(
 
         // The entire horizontal uncertainty circle must be inside the arrival radius.
         val upperDistance = targetDistance + fix.accuracyMeters
+        // The debounce needs at most one preceding credible fix. A legacy or
+        // corrupted persisted counter must not overflow or trigger an arrival
+        // from a single new GPS callback.
+        val previousInside = state.consecutiveInsideThreshold.takeIf { it in 0..1 } ?: 0
         val insideCount = when {
-            upperDistance <= threshold -> state.consecutiveInsideThreshold + 1
+            upperDistance <= threshold -> previousInside + 1
             upperDistance >= threshold * 1.20 -> 0
-            else -> state.consecutiveInsideThreshold
+            else -> previousInside
         }
 
         // Missed-stop evidence must likewise be outside the radius with confidence.
         val clearlyPast = monotonicIndex > activeRoute.targetIndex &&
             targetDistance - fix.accuracyMeters > threshold * 1.20
-        val pastCount = if (clearlyPast) state.consecutivePastTarget + 1 else 0
+        val previousPast = state.consecutivePastTarget.takeIf { it in 0..1 } ?: 0
+        val pastCount = if (clearlyPast) previousPast + 1 else 0
 
         val nextPhase = when {
             insideCount >= 2 -> ArrivalAlertPhase.ARRIVED
@@ -119,7 +124,8 @@ class ArrivalProgressController(
         }
 
         val eventCount = if (nextPhase == ArrivalAlertPhase.ARRIVED && state.phase != ArrivalAlertPhase.ARRIVED) {
-            state.arrivalEventCount + 1
+            // Event count is persisted as Int; do not wrap to a negative value.
+            if (state.arrivalEventCount == Int.MAX_VALUE) Int.MAX_VALUE else state.arrivalEventCount + 1
         } else {
             state.arrivalEventCount
         }
