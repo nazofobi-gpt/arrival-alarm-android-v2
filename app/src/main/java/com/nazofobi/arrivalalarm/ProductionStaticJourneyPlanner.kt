@@ -142,7 +142,7 @@ internal class StaticRouteOptionMapper(
         // Only the actual boarded/alighted GTFS shape segment is eligible for
         // a map line. Unknown shape_id or distance evidence stays empty.
         val polyline = data.trip(leg.tripId)?.shapeId
-            ?.takeIf(String::isNotBlank)
+            ?.takeIf { it.isNotBlank() }
             ?.let { shapeId ->
                 clipGtfsShapePolyline(
                     shape = data.shapePoints(shapeId, 2_048),
