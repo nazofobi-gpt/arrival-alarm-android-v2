@@ -98,6 +98,86 @@ class RouteStopProgressTest {
         assertNull(progress.next)
     }
 
+    @Test fun reversedArrivalDepartureWindowIsUnknown() {
+        val malformed = listOf(
+            RouteStop(
+                id = "a", name = "Invalid stop",
+                arrival = "2026-09-26T08:25:00+02:00",
+                departure = "2026-09-26T08:10:00+02:00",
+            ),
+            RouteStop(id = "b", name = "Later", arrival = "2026-09-26T08:40:00+02:00"),
+        )
+        val now = "2026-09-26T08:15:00+02:00".toTransitEpochSecondsOrNull()!!
+        val progress = RouteStopProgressTracker().resolve(malformed, now)
+
+        assertFalse(progress.resolvedByProviderTime)
+        assertNull(progress.previous)
+        assertNull(progress.current)
+        assertNull(progress.next)
+    }
+
+    @Test fun outOfOrderAdjacentStopsDoNotFabricatePreviousAndNext() {
+        val malformed = listOf(
+            RouteStop(id = "a", name = "First", departure = "2026-09-26T08:30:00+02:00"),
+            RouteStop(
+                id = "b", name = "Second",
+                arrival = "2026-09-26T08:20:00+02:00",
+                departure = "2026-09-26T08:21:00+02:00",
+            ),
+        )
+        val now = "2026-09-26T08:25:00+02:00".toTransitEpochSecondsOrNull()!!
+        val progress = RouteStopProgressTracker().resolve(malformed, now)
+
+        assertFalse(progress.resolvedByProviderTime)
+        assertNull(progress.previous)
+        assertNull(progress.current)
+        assertNull(progress.next)
+    }
+
+    @Test fun invalidRealtimeSequenceCanRecoverUsingCoherentScheduledTimes() {
+        val stops = listOf(
+            RouteStop(
+                id = "a", name = "First",
+                departure = "2026-09-26T08:30:00+02:00",
+                plannedDeparture = "2026-09-26T08:00:00+02:00",
+            ),
+            RouteStop(
+                id = "b", name = "Second",
+                arrival = "2026-09-26T08:20:00+02:00",
+                plannedArrival = "2026-09-26T08:15:00+02:00",
+            ),
+        )
+        val now = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
+        val tracker = RouteStopProgressTracker()
+
+        assertFalse(tracker.resolve(stops, now).resolvedByProviderTime)
+        val scheduled = tracker.resolve(stops, now, trustRealtime = false)
+        assertTrue(scheduled.resolvedByProviderTime)
+        assertEquals(TransitTimingBasis.SCHEDULED, scheduled.timingBasis)
+        assertEquals("First", scheduled.previous?.name)
+        assertEquals("Second", scheduled.next?.name)
+    }
+
+    @Test fun orderedStopsAcrossDstFallbackRemainValid() {
+        val stops = listOf(
+            RouteStop(
+                id = "a", name = "Before rollback",
+                departure = "2026-10-25T01:55:00+02:00",
+            ),
+            RouteStop(
+                id = "b", name = "After rollback",
+                arrival = "2026-10-25T02:10:00+01:00",
+            ),
+        )
+        val now = "2026-10-25T02:05:00+01:00".toTransitEpochSecondsOrNull()!!
+        val progress = RouteStopProgressTracker().resolve(stops, now)
+
+        assertTrue(progress.resolvedByProviderTime)
+        assertEquals("Before rollback", progress.previous?.name)
+        assertNull(progress.current)
+        assertEquals("After rollback", progress.next?.name)
+    }
+
     @Test fun onlyFreshMatchedOnlineUncancelledRealtimeIsTrusted() {
         assertTrue(isTrustedRealtimeForJourney(RouteRealtimeState.FRESH_MATCHED, false))
         assertFalse(isTrustedRealtimeForJourney(RouteRealtimeState.STALE, false))
