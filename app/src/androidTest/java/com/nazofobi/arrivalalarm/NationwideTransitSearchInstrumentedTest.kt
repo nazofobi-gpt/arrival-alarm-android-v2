@@ -48,6 +48,12 @@ class NationwideTransitSearchInstrumentedTest {
         assertEquals(listOf("known-good"), index.search("Known Good Bahnhof", 5).map { it.id })
         assertEquals(listOf("known-good"), index.search("known good bahn", 5).map { it.id })
 
+        // Negative SQLite LIMIT means "unbounded": public search must reject it.
+        assertTrue(index.search("Fixture Stop", -1).isEmpty())
+        assertTrue(index.search("Fixture Stop", 0).isEmpty())
+        assertEquals(3, index.search("Fixture Stop", 3).size)
+        assertEquals(100, index.search("Fixture Stop", Int.MAX_VALUE).size)
+
         val lineResults = index.searchRouteAndTripLocations("R1", 6)
         assertTrue(
             lineResults.any {
