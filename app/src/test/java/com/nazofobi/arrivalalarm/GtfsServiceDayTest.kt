@@ -138,6 +138,44 @@ class GtfsServiceDayTest {
     }
 
     @Test
+    fun bulkActiveServicesAgreesWithIndividualLookupsForLargeMixedCalendars() {
+        val start = GtfsServiceDate.parse("20261001")
+        val end = GtfsServiceDate.parse("20261031")
+        val services = (1..768).map { index ->
+            GtfsCalendarService(
+                serviceId = "service-$index",
+                startDate = start,
+                endDate = end,
+                activeDays = when (index % 3) {
+                    0 -> setOf(GtfsWeekday.MONDAY, GtfsWeekday.TUESDAY)
+                    1 -> setOf(GtfsWeekday.SATURDAY, GtfsWeekday.SUNDAY)
+                    else -> GtfsWeekday.entries.toSet()
+                },
+            )
+        }
+        val monday = GtfsServiceDate.parse("20261012")
+        val saturday = GtfsServiceDate.parse("20261017")
+        val calendar = GtfsServiceCalendar(
+            calendars = services,
+            exceptions = listOf(
+                GtfsCalendarException("service-3", monday, GtfsCalendarExceptionType.REMOVED),
+                GtfsCalendarException("service-4", monday, GtfsCalendarExceptionType.ADDED),
+                GtfsCalendarException("special", saturday, GtfsCalendarExceptionType.ADDED),
+            ),
+        )
+        val serviceIds = services.map { it.serviceId } + "special"
+        for (date in listOf(monday, saturday, GtfsServiceDate.parse("20261102"))) {
+            val individuallyActive = serviceIds.filterTo(sortedSetOf()) {
+                calendar.isActive(it, date)
+            }
+            assertEquals(individuallyActive, calendar.activeServices(date))
+        }
+        assertFalse("service-3" in calendar.activeServices(monday))
+        assertTrue("service-4" in calendar.activeServices(monday))
+        assertTrue("special" in calendar.activeServices(saturday))
+    }
+
+    @Test
     fun duplicateCalendarDateRowsRemainRejected() {
         val date = GtfsServiceDate.parse("20261012")
         try {
