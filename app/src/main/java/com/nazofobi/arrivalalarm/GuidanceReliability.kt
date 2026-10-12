@@ -125,7 +125,14 @@ class GuidanceReliabilityController(
     }
 
     private fun deliver(utterance: GuidanceUtterance): Boolean {
-        val spoken = speaker.speak(utterance)
+        // Android TTS/audio adapters may throw during engine initialization or
+        // route changes. Keep the announcement pending rather than crashing the
+        // active journey service or incorrectly marking it delivered.
+        val spoken = try {
+            speaker.speak(utterance)
+        } catch (_: RuntimeException) {
+            false
+        }
         update(
             if (spoken) state.copy(
                 lastSpokenKey = utterance.key,
