@@ -23,13 +23,17 @@ data class RouteStopProgress(
  * at a stop. The last passed stop is previous and the first future stop is next.
  */
 class RouteStopProgressTracker {
-    fun resolve(stops: List<RouteStop>, nowEpochSeconds: Long): RouteStopProgress {
+    fun resolve(
+        stops: List<RouteStop>,
+        nowEpochSeconds: Long,
+        trustRealtime: Boolean = true,
+    ): RouteStopProgress {
         if (stops.isEmpty()) return RouteStopProgress()
 
         val windows = stops.map { stop ->
-            val actualArrival = stop.arrival.toTransitEpochSecondsOrNull()
+            val actualArrival = if (trustRealtime) stop.arrival.toTransitEpochSecondsOrNull() else null
             val plannedArrival = stop.plannedArrival.toTransitEpochSecondsOrNull()
-            val actualDeparture = stop.departure.toTransitEpochSecondsOrNull()
+            val actualDeparture = if (trustRealtime) stop.departure.toTransitEpochSecondsOrNull() else null
             val plannedDeparture = stop.plannedDeparture.toTransitEpochSecondsOrNull()
             StopWindow(
                 stop = stop,
@@ -130,3 +134,11 @@ internal fun String?.toTransitEpochSecondsOrNull(): Long? {
 private val ISO_TRANSIT_TIMESTAMP = Regex(
     "^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(\\.\\d+)?(Z|([+-])(\\d{2}):?(\\d{2}))$"
 )
+
+/** Only fresh matched route evidence can advance progress using realtime stop times. */
+internal fun isTrustedRealtimeForJourney(
+    state: RouteRealtimeState?,
+    routeOffline: Boolean,
+    cancelledTripIds: List<String> = emptyList(),
+): Boolean = !routeOffline && state == RouteRealtimeState.FRESH_MATCHED &&
+    cancelledTripIds.isEmpty()
