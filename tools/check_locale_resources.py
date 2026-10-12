@@ -67,7 +67,6 @@ def validate(root: Path) -> list[str]:
     """Compare all matching strings*.xml files in values, values-de and values-en."""
     errors: list[str] = []
     defaults: dict[str, StringValue] = {}
-    by_filename: dict[str, set[str]] = {}
     default_files = sorted((root / "values").glob("strings*.xml"))
     if not default_files:
         return [f"{root / 'values'}: no strings*.xml resources found"]
@@ -75,7 +74,6 @@ def validate(root: Path) -> list[str]:
     for file in default_files:
         entries, parse_errors = read_strings(file)
         errors.extend(parse_errors)
-        by_filename[file.name] = set(entries)
         for name, entry in entries.items():
             if name in defaults:
                 errors.append(f"{file}: duplicate default key across resource files: {name}")
