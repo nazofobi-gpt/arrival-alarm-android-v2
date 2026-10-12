@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bicycle_gtfs_allowed">Fahrrad: laut GTFS mitnahmefähig (Ticket und Gebühren separat prüfen).</string>
+    <string name="bicycle_gtfs_not_allowed">Fahrrad: laut GTFS nicht erlaubt.</string>
+    <string name="bicycle_gtfs_unknown">Fahrrad: Mitnahme laut GTFS nicht bestätigt.</string>
+</resources>
