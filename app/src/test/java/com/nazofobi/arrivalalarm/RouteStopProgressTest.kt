@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -59,5 +60,55 @@ class RouteStopProgressTest {
         assertNull(progress.previous)
         assertNull(progress.current)
         assertNull(progress.next)
+    }
+
+    @Test fun staleRealtimeTimesFallBackToScheduledStopSequence() {
+        val observations = listOf(
+            RouteStop(
+                id = "a", name = "Lohne",
+                departure = "2026-09-26T08:40:00+02:00",
+                plannedDeparture = "2026-09-26T08:00:00+02:00",
+            ),
+            RouteStop(
+                id = "b", name = "Diepholz",
+                arrival = "2026-09-26T08:55:00+02:00",
+                plannedArrival = "2026-09-26T08:15:00+02:00",
+            ),
+        )
+        val now = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
+        val trusted = RouteStopProgressTracker().resolve(observations, now)
+        val fallback = RouteStopProgressTracker().resolve(observations, now, trustRealtime = false)
+
+        assertEquals("Lohne", trusted.next?.name)
+        assertNull(trusted.previous)
+        assertEquals(TransitTimingBasis.REALTIME, trusted.timingBasis)
+        assertEquals("Lohne", fallback.previous?.name)
+        assertEquals("Diepholz", fallback.next?.name)
+        assertEquals(TransitTimingBasis.SCHEDULED, fallback.timingBasis)
+    }
+
+    @Test fun realtimeWithoutScheduledFallbackFailsUnknownWhenNotTrusted() {
+        val actualOnly = listOf(
+            RouteStop(id = "trip", name = "Unknown schedule", arrival = "2026-09-26T08:10:00+02:00"),
+        )
+        val now = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
+        val progress = RouteStopProgressTracker().resolve(actualOnly, now, trustRealtime = false)
+        assertFalse(progress.resolvedByProviderTime)
+        assertNull(progress.current)
+        assertNull(progress.next)
+    }
+
+    @Test fun onlyFreshMatchedOnlineUncancelledRealtimeIsTrusted() {
+        assertTrue(isTrustedRealtimeForJourney(RouteRealtimeState.FRESH_MATCHED, false))
+        assertFalse(isTrustedRealtimeForJourney(RouteRealtimeState.STALE, false))
+        assertFalse(isTrustedRealtimeForJourney(RouteRealtimeState.UNAVAILABLE, false))
+        assertFalse(isTrustedRealtimeForJourney(RouteRealtimeState.FRESH_NO_MATCH, false))
+        assertFalse(isTrustedRealtimeForJourney(null, false))
+        assertFalse(isTrustedRealtimeForJourney(RouteRealtimeState.FRESH_MATCHED, true))
+        assertFalse(
+            isTrustedRealtimeForJourney(
+                RouteRealtimeState.FRESH_MATCHED, false, cancelledTripIds = listOf("trip-1"),
+            )
+        )
     }
 }
