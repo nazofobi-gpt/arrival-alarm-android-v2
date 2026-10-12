@@ -314,6 +314,11 @@ class ConnectorOAuthCoordinator(
         private fun requireHttpsBaseUrl(value: String): String {
             val trimmed = value.trim().trimEnd('/')
             requireHttpsUrl(trimmed, "base_url")
+            // The discovery path is appended to this origin; a query would swallow
+            // that path, and could carry credentials into an unrelated request.
+            require(URI(trimmed).rawQuery == null) {
+                "connector_oauth_base_url_query_forbidden"
+            }
             return trimmed
         }
 
@@ -322,7 +327,9 @@ class ConnectorOAuthCoordinator(
             require(
                 uri != null &&
                     uri.scheme.equals("https", ignoreCase = true) &&
-                    !uri.host.isNullOrBlank()
+                    !uri.host.isNullOrBlank() &&
+                    uri.rawUserInfo == null &&
+                    uri.rawFragment == null
             ) {
                 "connector_oauth_" + name + "_https_required"
             }
