@@ -187,6 +187,38 @@ class ProductionStaticJourneyPlannerTest {
         assertEquals(listOf("A", "X", "B"), option.stops.map { it.id })
     }
 
+    @Test
+    fun repeatedLoopStopsReuseMetadataLookupsIncludingMissingStops() {
+        val times = (0 until 128).map { minute ->
+            val time = "%02d:%02d:00".format(Locale.ROOT, minute / 60, minute % 60)
+            st("LOOP", minute + 1, if (minute % 2 == 0) "A" else "B", time, time)
+        }
+        val data = FakeRouteOptionData(
+            routes = mapOf("R" to GtfsScheduleRoute("R", null, "Ring", null, 3)),
+            trips = mapOf("LOOP" to trip("LOOP", "R", "Ring")),
+            // B is deliberately absent: missing metadata must be memoized too.
+            stops = mapOf("A" to stop("A", "Board")),
+            stopTimes = mapOf("LOOP" to times),
+        )
+        val journey = StaticTransitJourney(
+            id = "metadata-cache",
+            access = StaticRouterAccess("A"),
+            egress = StaticRouterAccess("B"),
+            legs = listOf(
+                StaticTransitLeg("LOOP", "R", "A", "B", at("00:00:00"), at("02:07:00")),
+            ),
+            arrivalEpochMillis = at("02:07:00"),
+        )
+
+        val option = StaticRouteOptionMapper(data, zone).map(
+            journey, MapPoint(0.0, 0.0, "A"), MapPoint(0.0, 0.0, "B"), date, 1L,
+        )
+
+        assertEquals(times.map { it.stopId }, option.stops.map { it.id })
+        assertEquals("B", option.stops.last().name)
+        assertEquals(mapOf("A" to 1, "B" to 1), data.stopLookupCounts)
+    }
+
     private fun at(raw: String): Long =
         GtfsServiceTime.parse(raw).resolve(date, zone).epochMillis
 
@@ -222,7 +254,12 @@ class ProductionStaticJourneyPlannerTest {
     ) : StaticRouteOptionData {
         override fun route(routeId: String) = routes[routeId]
         override fun trip(tripId: String) = trips[tripId]
-        override fun stop(stopId: String) = stops[stopId]
+        val stopLookupCounts = mutableMapOf<String, Int>()
+
+        override fun stop(stopId: String): GtfsScheduleStop? {
+            stopLookupCounts[stopId] = (stopLookupCounts[stopId] ?: 0) + 1
+            return stops[stopId]
+        }
         override fun stopTimesForTrip(tripId: String, limit: Int) =
             stopTimes[tripId].orEmpty().take(limit)
     }
