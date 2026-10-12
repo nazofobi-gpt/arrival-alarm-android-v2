@@ -4,6 +4,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
@@ -11,6 +12,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -135,6 +137,63 @@ class LiveTripPanelTest {
 
         rule.onNodeWithTag("live-trip-previous").assertTextContains("Diepholz", substring = true)
         rule.onNodeWithTag("live-trip-next").assertTextContains("Bremen Hbf", substring = true)
+    }
+
+
+    @Test
+    fun scheduleBoundariesNeverClaimTheVehicleIsBetweenStops() {
+        val route = RouteOption(
+            id = "boundary-route",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
+            line = "RE 9",
+            direction = "Bremen Hbf",
+            departure = "08:00",
+            arrival = "08:45",
+            walkingMinutes = 0,
+            transfers = 0,
+            stops = listOf(
+                RouteStop(
+                    id = "origin", name = "Lohne",
+                    plannedDeparture = "2026-09-26T08:00:00+02:00",
+                ),
+                RouteStop(
+                    id = "destination", name = "Bremen Hbf",
+                    plannedArrival = "2026-09-26T08:45:00+02:00",
+                ),
+            ),
+        )
+        val now = mutableLongStateOf(
+            "2026-09-26T07:50:00+02:00".toTransitEpochSecondsOrNull()!!
+        )
+        val unknownProgressText = InstrumentationRegistry.getInstrumentation()
+            .targetContext.getString(R.string.live_trip_progress_unavailable)
+
+        rule.setContent {
+            MaterialTheme {
+                LiveTripPanel(
+                    selectedRoute = route,
+                    journey = JourneyUiState(phase = JourneyPhase.ARMED),
+                    guidanceState = GuidanceReliabilityState(),
+                    routeOffline = false,
+                    nowEpochSeconds = now.longValue,
+                )
+            }
+        }
+
+        // The first departure has not occurred: no previous stop, hence no "between" claim.
+        rule.onNodeWithTag("live-trip-current")
+            .assertTextContains(unknownProgressText, substring = true)
+
+        // Once the last scheduled arrival is in the past there is no next stop either.
+        // Timetable evidence must not be misrepresented as the vehicle's GPS position.
+        rule.runOnUiThread {
+            now.longValue = "2026-09-26T09:00:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-current")
+            .assertTextContains(unknownProgressText, substring = true)
+
     }
 
 }
