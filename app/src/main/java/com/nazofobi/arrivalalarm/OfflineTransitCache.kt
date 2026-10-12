@@ -76,7 +76,12 @@ private fun CachedTransitPlan.forOfflineCache(): CachedTransitPlan =
     )
 
 private fun RouteOption.forOfflineCache(): RouteOption =
-    if (realtime == null) {
+    // Legacy JSON stores actual stop times/platforms but omits RouteRealtimeInfo.
+    // The planned fields remain as the authoritative scheduled-only fallback.
+    if (realtime == null && stops.none {
+            it.plannedArrival != null || it.plannedDeparture != null || it.plannedPlatform != null
+        }
+    ) {
         this
     } else {
         copy(
