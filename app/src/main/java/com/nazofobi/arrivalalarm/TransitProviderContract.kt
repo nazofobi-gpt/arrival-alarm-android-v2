@@ -103,7 +103,12 @@ data class TransitProviderFreshness(
                 return TransitProviderFreshness(TransitProviderFreshnessState.UNKNOWN)
             }
             require(updatedAtEpochSeconds >= 0L)
-            val age = (nowEpochSeconds - updatedAtEpochSeconds).coerceAtLeast(0L)
+            // A timestamp after the caller's observation clock is not evidence
+            // of fresh data. Fail closed instead of treating negative age as zero.
+            if (updatedAtEpochSeconds > nowEpochSeconds) {
+                return TransitProviderFreshness(TransitProviderFreshnessState.UNKNOWN)
+            }
+            val age = nowEpochSeconds - updatedAtEpochSeconds
             return TransitProviderFreshness(
                 state = if (age > staleAfterSeconds) {
                     TransitProviderFreshnessState.STALE
