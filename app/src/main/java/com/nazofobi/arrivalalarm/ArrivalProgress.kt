@@ -72,6 +72,21 @@ class ArrivalProgressController(
         if (activeRoute == null || !state.armed || state.routeId != activeRoute.routeId) return state
         if (state.phase == ArrivalAlertPhase.ARRIVED) return state
 
+        // Never infer stop progression or arrival from malformed or low-confidence GPS.
+        // An unreliable callback also breaks a pending two-fix arrival/missed debounce.
+        val point = fix.point
+        if (!point.latitude.isFinite() || point.latitude !in -90.0..90.0 ||
+            !point.longitude.isFinite() || point.longitude !in -180.0..180.0 ||
+            !fix.accuracyMeters.isFinite() || fix.accuracyMeters < 0.0 ||
+            fix.accuracyMeters > ArrivalLocationQuality.MAX_TRACKING_ACCURACY_METERS ||
+            !fix.speedMps.isFinite() || fix.speedMps < 0.0
+        ) {
+            if (state.consecutiveInsideThreshold != 0 || state.consecutivePastTarget != 0) {
+                setState(state.copy(consecutiveInsideThreshold = 0, consecutivePastTarget = 0))
+            }
+            return state
+        }
+
         val nearestIndex = activeRoute.stops.indices.minBy { index ->
             distanceMeters(fix.point, activeRoute.stops[index])
         }
@@ -82,13 +97,17 @@ class ArrivalProgressController(
         val targetDistance = distanceMeters(fix.point, target)
         val threshold = adaptiveThresholdMeters(fix)
 
+        // The entire horizontal uncertainty circle must be inside the arrival radius.
+        val upperDistance = targetDistance + fix.accuracyMeters
         val insideCount = when {
-            targetDistance <= threshold -> state.consecutiveInsideThreshold + 1
-            targetDistance >= threshold * 1.20 -> 0
+            upperDistance <= threshold -> state.consecutiveInsideThreshold + 1
+            upperDistance >= threshold * 1.20 -> 0
             else -> state.consecutiveInsideThreshold
         }
 
-        val clearlyPast = monotonicIndex > activeRoute.targetIndex && targetDistance > threshold * 1.20
+        // Missed-stop evidence must likewise be outside the radius with confidence.
+        val clearlyPast = monotonicIndex > activeRoute.targetIndex &&
+            targetDistance - fix.accuracyMeters > threshold * 1.20
         val pastCount = if (clearlyPast) state.consecutivePastTarget + 1 else 0
 
         val nextPhase = when {
@@ -123,8 +142,8 @@ class ArrivalProgressController(
     fun adaptiveThresholdMeters(fix: LocationFix): Double {
         val accuracyContribution = fix.accuracyMeters.coerceIn(0.0, 100.0) * 0.80
         val speedContribution = fix.speedMps.coerceIn(0.0, 35.0) * 4.0
-        val realtimeContribution = abs(fix.realtimeDeviationSeconds)
-            .coerceAtMost(300) * 0.08
+        val realtimeContribution = abs(fix.realtimeDeviationSeconds.toLong())
+            .coerceAtMost(300L) * 0.08
         return (120.0 + accuracyContribution + speedContribution + realtimeContribution)
             .coerceIn(120.0, 320.0)
     }
