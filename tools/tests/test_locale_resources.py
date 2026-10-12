@@ -122,6 +122,26 @@ class LocaleResourceContractTest(unittest.TestCase):
             any("missing translation for arrival" in e for e in validate(self.root))
         )
 
+    def test_relative_argument_reuse_is_valid_when_arguments_match(self):
+        self.write("values", '<string name="arrival">Stop %1$s / %&lt;s</string>')
+        self.write("values-de", '<string name="arrival">Halt %1$s / %&lt;s</string>')
+        self.write("values-en", '<string name="arrival">Stop %1$s / %&lt;s</string>')
+        self.assertEqual([], validate(self.root))
+
+    def test_extra_relative_argument_cannot_evade_parity_check(self):
+        self.write("values-de", '<string name="arrival">Halt %1$s / %2$d / %&lt;d</string>')
+        self.assertTrue(any("format arguments differ" in e for e in validate(self.root)))
+
+    def test_relative_datetime_conversion_mismatch_is_rejected(self):
+        self.write("values", '<string name="arrival">At %1$tH:%&lt;tM</string>')
+        self.write("values-de", '<string name="arrival">Um %1$tH:%&lt;tH</string>')
+        self.write("values-en", '<string name="arrival">At %1$tH:%&lt;tM</string>')
+        self.assertTrue(any("format arguments differ" in e for e in validate(self.root)))
+
+    def test_relative_without_preceding_argument_is_invalid(self):
+        self.write("values-de", '<string name="arrival">Halt %&lt;s / %2$d</string>')
+        self.assertTrue(any("invalid format" in e for e in validate(self.root)))
+
     def test_escaped_percent_has_no_format_argument(self):
         self.assertEqual({}, placeholders("100%% complete"))
 

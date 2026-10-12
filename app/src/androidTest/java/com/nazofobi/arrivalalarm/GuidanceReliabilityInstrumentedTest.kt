@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import android.content.Context
+import android.media.AudioDeviceInfo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
@@ -37,4 +38,17 @@ class GuidanceReliabilityInstrumentedTest {
         assertEquals(1, speaker.spoken.size)
         prefs.edit().clear().commit()
     }
+
+    @Test fun bluetoothOutputClassificationCoversBleSpeakersAndAccessibilityDevices() {
+        assertTrue(AndroidGuidanceAudio.isBluetoothOutputType(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, 26))
+        assertTrue(AndroidGuidanceAudio.isBluetoothOutputType(AudioDeviceInfo.TYPE_BLUETOOTH_SCO, 26))
+        assertFalse(AndroidGuidanceAudio.isBluetoothOutputType(AudioDeviceInfo.TYPE_HEARING_AID, 27))
+        assertTrue(AndroidGuidanceAudio.isBluetoothOutputType(AudioDeviceInfo.TYPE_HEARING_AID, 28))
+        assertFalse(AndroidGuidanceAudio.isBluetoothOutputType(AudioDeviceInfo.TYPE_BLE_HEADSET, 30))
+        assertFalse(AndroidGuidanceAudio.isBluetoothOutputType(AudioDeviceInfo.TYPE_BLE_SPEAKER, 30))
+        assertTrue(AndroidGuidanceAudio.isBluetoothOutputType(AudioDeviceInfo.TYPE_BLE_HEADSET, 31))
+        assertTrue(AndroidGuidanceAudio.isBluetoothOutputType(AudioDeviceInfo.TYPE_BLE_SPEAKER, 31))
+        assertFalse(AndroidGuidanceAudio.isBluetoothOutputType(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, 36))
+    }
+
 }
