@@ -1,7 +1,11 @@
 package com.nazofobi.arrivalalarm
 
+import android.Manifest
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.PackageManager
 import android.media.AudioDeviceInfo
+import android.os.Build
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
@@ -49,6 +53,26 @@ class GuidanceReliabilityInstrumentedTest {
         assertTrue(AndroidGuidanceAudio.isBluetoothOutputType(AudioDeviceInfo.TYPE_BLE_HEADSET, 31))
         assertTrue(AndroidGuidanceAudio.isBluetoothOutputType(AudioDeviceInfo.TYPE_BLE_SPEAKER, 31))
         assertFalse(AndroidGuidanceAudio.isBluetoothOutputType(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, 36))
+    }
+
+    @Test fun deniedBluetoothConnectNeverQueriesAudioOutputOnApi31Plus() {
+        if (Build.VERSION.SDK_INT < 31) return
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val deniedContext = object : ContextWrapper(context) {
+            override fun checkSelfPermission(permission: String): Int =
+                if (permission == Manifest.permission.BLUETOOTH_CONNECT)
+                    PackageManager.PERMISSION_DENIED
+                else
+                    super.checkSelfPermission(permission)
+
+            override fun getSystemService(name: String): Any? {
+                if (name == Context.AUDIO_SERVICE) {
+                    error("Audio output must not be queried without BLUETOOTH_CONNECT")
+                }
+                return super.getSystemService(name)
+            }
+        }
+        assertEquals(GuidanceAudioRoute.DEVICE, AndroidGuidanceAudio.currentRoute(deniedContext))
     }
 
 }
