@@ -89,6 +89,32 @@ class TransitProviderContractTest {
     }
 
     @Test
+    fun futureDatedProviderEvidenceNeverCountsAsFresh() {
+        val oneSecondInFuture = TransitProviderFreshness.evaluate(
+            updatedAtEpochSeconds = 1_001,
+            nowEpochSeconds = 1_000,
+            staleAfterSeconds = 60,
+        )
+        val distantFuture = TransitProviderFreshness.evaluate(
+            updatedAtEpochSeconds = 5_000,
+            nowEpochSeconds = 1_000,
+            staleAfterSeconds = Long.MAX_VALUE,
+        )
+        val exactlyNow = TransitProviderFreshness.evaluate(
+            updatedAtEpochSeconds = 1_000,
+            nowEpochSeconds = 1_000,
+            staleAfterSeconds = 0,
+        )
+
+        assertEquals(TransitProviderFreshnessState.UNKNOWN, oneSecondInFuture.state)
+        assertNull(oneSecondInFuture.ageSeconds)
+        assertEquals(TransitProviderFreshnessState.UNKNOWN, distantFuture.state)
+        assertNull(distantFuture.ageSeconds)
+        assertEquals(TransitProviderFreshnessState.FRESH, exactlyNow.state)
+        assertEquals(0L, exactlyNow.ageSeconds)
+    }
+
+    @Test
     fun providerHealthAndCapabilitiesRemainQueryable() {
         val health = TransitProviderHealth(
             providerId = ArrivalAlarmTransitProviders.GermanyRealtime.id,
