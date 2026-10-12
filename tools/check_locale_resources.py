@@ -12,7 +12,8 @@ import sys
 import xml.etree.ElementTree as ET
 
 LOCALES = ("de", "en")
-PLACEHOLDER = re.compile(r"%(?:([1-9][0-9]*)\$)?[-#+0,(]*[0-9]*(?:\.[0-9]+)?([A-Za-z%])")
+# Java/Android date-time placeholders have a two-character conversion (for example, %1$tH).
+PLACEHOLDER = re.compile(r"%(?:([1-9][0-9]*)\$)?[-#+0,(]*[0-9]*(?:\.[0-9]+)?([tT][A-Za-z]|[A-Za-z%])")
 
 
 @dataclass(frozen=True)
