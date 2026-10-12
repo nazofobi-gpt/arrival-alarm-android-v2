@@ -23,6 +23,9 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         private const val COUNT_KEY = "stop_count"
         private const val VERSION_KEY = "source_version"
         private const val SCHEMA_KEY = "schema_version"
+        private const val SOURCE_URL_KEY = "source_url"
+        private const val HTTP_ETAG_KEY = "http_etag"
+        private const val HTTP_LAST_MODIFIED_KEY = "http_last_modified"
         private const val REQUIRED_STOP_COUNT = 10_000
     }
 
@@ -67,19 +70,39 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             readTimeout = 60_000
         }
         val http = connection as? HttpURLConnection
+        // Conditional GET is safe only for a verified, ready snapshot of the same feed URL.
+        // A different provider URL must never reuse a previous feed's validators.
+        val validators = gtfsConditionalHeaders(
+            ready = isReady(),
+            sameSource = metadata(SOURCE_URL_KEY) == url,
+            etag = metadata(HTTP_ETAG_KEY),
+            lastModified = metadata(HTTP_LAST_MODIFIED_KEY),
+        )
         http?.apply {
             requestMethod = "GET"
             instanceFollowRedirects = true
             setRequestProperty("User-Agent", "ArrivalAlarmAndroid/0.1")
+            validators.forEach { (name, value) -> setRequestProperty(name, value) }
         }
-        if (http != null && http.responseCode !in 200..299) {
-            val code = http.responseCode
-            http.disconnect()
-            error("GTFS indirme HTTP $code")
+        if (http != null) {
+            val status = http.responseCode
+            if (status == HttpURLConnection.HTTP_NOT_MODIFIED) {
+                http.disconnect()
+                // Preserve the entire known-good graph and its original fetch timestamp.
+                // A 304 without sent validators must not make an unready DB look healthy.
+                if (validators.isNotEmpty() && isReady()) return
+                error("GTFS beklenmeyen HTTP 304")
+            }
+            if (status !in 200..299) {
+                http.disconnect()
+                error("GTFS indirme HTTP $status")
+            }
         }
 
-        val sourceVersion = http?.getHeaderField("ETag")
-            ?: http?.getHeaderField("Last-Modified")
+        val responseEtag = http?.getHeaderField("ETag")?.takeIf { it.isNotBlank() }
+        val responseLastModified = http?.getHeaderField("Last-Modified")?.takeIf { it.isNotBlank() }
+        val sourceVersion = responseEtag
+            ?: responseLastModified
             ?: connection.lastModified.takeIf { it > 0L }?.toString()
             ?: connection.url.toString()
         val counts = linkedMapOf<String, Int>()
@@ -137,6 +160,9 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             putMetadata(db, FETCHED_KEY, (System.currentTimeMillis() / 1000).toString())
             putMetadata(db, COUNT_KEY, stops.toString())
             putMetadata(db, VERSION_KEY, sourceVersion)
+            putMetadata(db, SOURCE_URL_KEY, url)
+            putMetadata(db, HTTP_ETAG_KEY, responseEtag.orEmpty())
+            putMetadata(db, HTTP_LAST_MODIFIED_KEY, responseLastModified.orEmpty())
             putMetadata(db, SCHEMA_KEY, "4")
             counts.forEach { (file, count) -> putMetadata(db, "count_$file", count.toString()) }
             db.setTransactionSuccessful()
@@ -686,5 +712,22 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
 
     private fun putMetadata(db: SQLiteDatabase, key: String, value: String) {
         db.execSQL("INSERT OR REPLACE INTO metadata(key,value) VALUES(?,?)", arrayOf(key, value))
+    }
+}
+
+/**
+ * HTTP validators may be reused only for a ready snapshot of the same feed URL.
+ * Missing/empty values are deliberately ignored, forcing an unconditional GET.
+ */
+internal fun gtfsConditionalHeaders(
+    ready: Boolean,
+    sameSource: Boolean,
+    etag: String?,
+    lastModified: String?,
+): Map<String, String> {
+    if (!ready || !sameSource) return emptyMap()
+    return buildMap {
+        etag?.takeIf(String::isNotBlank)?.let { put("If-None-Match", it) }
+        lastModified?.takeIf(String::isNotBlank)?.let { put("If-Modified-Since", it) }
     }
 }
