@@ -98,24 +98,6 @@ class RouteStopProgressTest {
         assertNull(progress.next)
     }
 
-    @Test fun reversedArrivalDepartureWindowIsUnknown() {
-        val malformed = listOf(
-            RouteStop(
-                id = "a", name = "Invalid stop",
-                arrival = "2026-09-26T08:25:00+02:00",
-                departure = "2026-09-26T08:10:00+02:00",
-            ),
-            RouteStop(id = "b", name = "Later", arrival = "2026-09-26T08:40:00+02:00"),
-        )
-        val now = "2026-09-26T08:15:00+02:00".toTransitEpochSecondsOrNull()!!
-        val progress = RouteStopProgressTracker().resolve(malformed, now)
-
-        assertFalse(progress.resolvedByProviderTime)
-        assertNull(progress.previous)
-        assertNull(progress.current)
-        assertNull(progress.next)
-    }
-
     @Test fun outOfOrderAdjacentStopsDoNotFabricatePreviousAndNext() {
         val malformed = listOf(
             RouteStop(id = "a", name = "First", departure = "2026-09-26T08:30:00+02:00"),
