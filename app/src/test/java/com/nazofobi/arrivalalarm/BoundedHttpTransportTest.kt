@@ -33,6 +33,70 @@ class BoundedHttpTransportTest {
     }
 
     @Test
+    fun postServerFailureDoesNotRetryPotentiallyAppliedCommand() {
+        var calls = 0
+        val transport = BoundedHttpTransport(
+            exchange = HttpExchange { request, _, _ ->
+                assertEquals("POST", request.method)
+                calls += 1
+                HttpTransportResponse(503)
+            },
+            clock = HttpTransportClock { 0 },
+            sleeper = HttpTransportSleeper { error("POST must not be retried") },
+            maxRetries = 3,
+        )
+
+        val response = transport.execute(
+            HttpTransportRequest("https://example.invalid/command", method = "POST")
+        ) as HttpTransportResult.Response
+        assertEquals(503, response.response.status)
+        assertEquals(1, response.attempts)
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun postTimeoutDoesNotRepeatPotentiallyAppliedCommand() {
+        var calls = 0
+        val transport = BoundedHttpTransport(
+            exchange = HttpExchange { _, _, _ ->
+                calls += 1
+                throw SocketTimeoutException("request outcome unknown")
+            },
+            clock = HttpTransportClock { 0 },
+            sleeper = HttpTransportSleeper { error("POST must not be retried") },
+            maxRetries = 3,
+        )
+
+        val failure = transport.execute(
+            HttpTransportRequest("https://example.invalid/command", method = "POST")
+        ) as HttpTransportResult.Failure
+        assertEquals(HttpTransportResult.Failure.Kind.TIMEOUT, failure.kind)
+        assertEquals(1, failure.attempts)
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun headRetainsRetryForReadOnlyRequests() {
+        var calls = 0
+        val transport = BoundedHttpTransport(
+            exchange = HttpExchange { _, _, _ ->
+                calls += 1
+                HttpTransportResponse(if (calls == 1) 503 else 204)
+            },
+            clock = HttpTransportClock { 0 },
+            sleeper = HttpTransportSleeper { },
+            maxRetries = 2,
+        )
+
+        val result = transport.execute(
+            HttpTransportRequest("https://example.invalid/status", method = "head")
+        ) as HttpTransportResult.Response
+        assertEquals(204, result.response.status)
+        assertEquals(2, result.attempts)
+        assertEquals(2, calls)
+    }
+
+    @Test
     fun retryable5xxUsesBoundedBackoffAndHardAttemptBudget() {
         var calls = 0
         val delays = mutableListOf<Long>()

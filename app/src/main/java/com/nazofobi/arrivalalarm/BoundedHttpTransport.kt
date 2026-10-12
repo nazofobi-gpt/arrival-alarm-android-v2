@@ -70,6 +70,13 @@ class BoundedHttpTransport(
             consecutiveFailures = 0
         }
 
+        // Only read-only methods can be retried without risking duplicate side effects.
+        // A timed-out POST, PUT, PATCH or DELETE may already have reached the server.
+        val allowedRetries = if (
+            request.method.equals("GET", ignoreCase = true) ||
+            request.method.equals("HEAD", ignoreCase = true)
+        ) maxRetries else 0
+
         var attempts = 0
         while (true) {
             attempts += 1
@@ -79,13 +86,13 @@ class BoundedHttpTransport(
                     recordSuccess()
                     return HttpTransportResult.Response(response, attempts)
                 }
-                if (attempts > maxRetries) {
+                if (attempts > allowedRetries) {
                     recordFailure()
                     return HttpTransportResult.Response(response, attempts)
                 }
                 sleepOrStop(retryDelayMs(response, attempts), attempts)?.let { return it }
             } catch (error: IOException) {
-                if (attempts > maxRetries) {
+                if (attempts > allowedRetries) {
                     recordFailure()
                     return HttpTransportResult.Failure(
                         if (error is SocketTimeoutException) {
