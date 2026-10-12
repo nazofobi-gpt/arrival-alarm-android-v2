@@ -1,6 +1,14 @@
 package com.nazofobi.arrivalalarm
 
 import android.content.Context
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
@@ -13,6 +21,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -160,12 +170,70 @@ fun TransitSelectionMap(
             .build()
     }
 
-    AndroidView(
-        factory = { mapView },
-        modifier = modifier
-            .fillMaxWidth()
-            .height(300.dp)
-            .semantics { contentDescription = currentMapPointLabel }
-            .testTag("transit-map"),
+    var coordinateLatitude by remember { mutableStateOf("") }
+    var coordinateLongitude by remember { mutableStateOf("") }
+    val coordinatePoint = MapCoordinateInput.parse(
+        coordinateLatitude,
+        coordinateLongitude,
+        mapPointLabel,
     )
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        AndroidView(
+            factory = { mapView },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(300.dp)
+                .semantics { contentDescription = currentMapPointLabel }
+                .testTag("transit-map"),
+        )
+        Text(
+            text = stringResource(R.string.map_accessible_coordinates_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedTextField(
+            value = coordinateLatitude,
+            onValueChange = { coordinateLatitude = it },
+            label = { Text(stringResource(R.string.map_coordinate_latitude)) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("map-coordinate-latitude"),
+        )
+        OutlinedTextField(
+            value = coordinateLongitude,
+            onValueChange = { coordinateLongitude = it },
+            label = { Text(stringResource(R.string.map_coordinate_longitude)) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("map-coordinate-longitude"),
+        )
+        if (coordinateLatitude.isNotBlank() &&
+            coordinateLongitude.isNotBlank() &&
+            coordinatePoint == null
+        ) {
+            Text(
+                text = stringResource(R.string.map_coordinate_invalid),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.testTag("map-coordinate-error"),
+            )
+        }
+        Button(
+            onClick = { coordinatePoint?.let(currentMapPointSelected) },
+            enabled = coordinatePoint != null,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("map-coordinate-select"),
+        ) {
+            Text(stringResource(R.string.map_coordinate_select))
+        }
+    }
 }
