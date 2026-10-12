@@ -194,15 +194,17 @@ class GermanyGtfsRealtimeClient(
                 GermanyRealtimeUnavailableReason.TOO_LARGE,
                 "GTFS-RT payload exceeded $maxBytes bytes",
             )
-        } catch (failure: IOException) {
+        } catch (_: IOException) {
+            // Exception text may embed credentials, feed URLs or provider payloads.
             GermanyRealtimeFetchResult.Unavailable(
                 GermanyRealtimeUnavailableReason.NETWORK,
-                failure.message,
+                "realtime_network_error",
             )
-        } catch (failure: RuntimeException) {
+        } catch (_: RuntimeException) {
+            // Unexpected loader/parser failures must not leak untrusted details.
             GermanyRealtimeFetchResult.Unavailable(
                 GermanyRealtimeUnavailableReason.NETWORK,
-                failure.message,
+                "realtime_unexpected_error",
             )
         }
     }
