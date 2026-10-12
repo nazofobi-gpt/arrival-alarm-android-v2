@@ -73,7 +73,7 @@ class JourneyController(
             update(state.copy(error = "Başlangıç ve hedef gerekli"))
             return
         }
-        if (!state.start.isValidCoordinate() || !state.destination.isValidCoordinate()) {
+        if (state.start?.isValidCoordinate() != true || state.destination?.isValidCoordinate() != true) {
             update(state.copy(error = "Geçerli başlangıç ve hedef gerekli"))
             return
         }
