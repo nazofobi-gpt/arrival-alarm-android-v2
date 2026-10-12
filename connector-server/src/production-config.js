@@ -16,6 +16,11 @@ function httpsUrl(value, name) {
   if (parsed.protocol !== "https:" || !parsed.hostname) {
     throw new Error("production_config_https_required_" + name.toLowerCase());
   }
+  // OAuth metadata is distributed to clients. Never allow URL userinfo or
+  // fragments: they can leak credentials or change the effective endpoint.
+  if (parsed.username || parsed.password || value.includes("#")) {
+    throw new Error("production_config_unsafe_url_" + name.toLowerCase());
+  }
   return parsed.toString().replace(/\/$/, "");
 }
 
