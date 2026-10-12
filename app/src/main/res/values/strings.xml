@@ -87,6 +87,8 @@
     <string name="nearby_child_stop_format">%1$d. %2$s</string>
 
     <string name="route_calculating">Rota hesaplanıyor…</string>
+    <string name="route_direct_only_filter">Yalnız aktarmasız rotalar</string>
+    <string name="route_direct_only_empty">Aktarmasız rota bulunamadı. Diğer seçenekleri görmek için filtreyi kapatın.</string>
     <string name="route_results_title">Rota Sonuçları</string>
     <string name="route_points_format">%1$s → %2$s</string>
     <string name="route_offline_badge">Çevrimdışı önbellek</string>
