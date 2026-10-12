@@ -91,7 +91,6 @@ internal fun JourneyRouteShapeMap(
         ready.clear()
         val segments = polylines.map { segment ->
             segment.filter(::isRenderableMapPoint)
-                .distinctBy { it.latitude to it.longitude }
                 .map { LatLng(it.latitude, it.longitude) }
         }.filter { it.size >= 2 }
         if (segments.isEmpty()) return@LaunchedEffect
