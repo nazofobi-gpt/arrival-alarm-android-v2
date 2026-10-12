@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bicycle_gtfs_allowed">Bisiklet: GTFS verisine göre taşınabilir (bilet/ek ücret ayrıca kontrol edilmeli).</string>
+    <string name="bicycle_gtfs_not_allowed">Bisiklet: GTFS verisine göre taşınamaz.</string>
+    <string name="bicycle_gtfs_unknown">Bisiklet: GTFS verisinde uygunluk doğrulanmadı.</string>
+</resources>
