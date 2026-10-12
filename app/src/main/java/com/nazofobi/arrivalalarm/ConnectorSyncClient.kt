@@ -27,7 +27,24 @@ class ConnectorSyncClient(
     private val transport: ConnectorGatewayTransport,
     private val nowEpochSeconds: () -> Long = { System.currentTimeMillis() / 1_000 },
     private val maxCommandAgeSeconds: Long = 120,
+    private val maxFutureClockSkewSeconds: Long = 30,
 ) {
+    init {
+        require(maxCommandAgeSeconds >= 0) { "Command age budget must be nonnegative" }
+        require(maxFutureClockSkewSeconds >= 0) { "Future clock-skew budget must be nonnegative" }
+    }
+
+    /** Compare nonnegative epoch seconds without a signed-Long subtraction overflow. */
+    private fun isOutsideCommandTimeWindow(queuedAt: Long?, now: Long): Boolean {
+        if (queuedAt == null) return false // Compatibility with older gateway envelopes.
+        if (queuedAt < 0 || now < 0) return true
+        return if (queuedAt > now) {
+            queuedAt - now > maxFutureClockSkewSeconds
+        } else {
+            now - queuedAt > maxCommandAgeSeconds
+        }
+    }
+
     @Synchronized
     fun syncOnce(): ConnectorSyncResult {
         val before = processor.snapshot()
@@ -39,13 +56,13 @@ class ConnectorSyncClient(
         val receipts = envelopes.map { envelope ->
             val now = nowEpochSeconds()
             val queuedAt = envelope.queuedAtEpochSeconds
-            val receipt = if (queuedAt != null && now - queuedAt > maxCommandAgeSeconds) {
+            val receipt = if (isOutsideCommandTimeWindow(queuedAt, now)) {
                 val current = processor.snapshot()
                 ConnectorCommandReceipt(
                     idempotencyKey = envelope.command.idempotencyKey,
                     commandType = envelope.command::class.simpleName ?: "UnknownCommand",
                     status = ConnectorCommandStatus.REJECTED_EXPIRED_COMMAND,
-                    message = "Connector command expired before device execution",
+                    message = "Connector command timestamp is outside the allowed device time window",
                     stateVersionBefore = current.stateVersion,
                     stateVersionAfter = current.stateVersion,
                 )
