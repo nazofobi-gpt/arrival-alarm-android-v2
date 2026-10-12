@@ -34,12 +34,25 @@ fun LiveTripPanel(
     nowEpochSeconds: Long,
     modifier: Modifier = Modifier,
 ) {
-    val progress = RouteStopProgressTracker().resolve(selectedRoute.stops, nowEpochSeconds)
+    val trustedRealtime = isTrustedRealtimeForJourney(
+        state = selectedRoute.realtime?.state,
+        routeOffline = routeOffline,
+        cancelledTripIds = selectedRoute.realtime?.cancelledTripIds.orEmpty(),
+    )
+    val progress = RouteStopProgressTracker().resolve(
+        stops = selectedRoute.stops,
+        nowEpochSeconds = nowEpochSeconds,
+        trustRealtime = trustedRealtime,
+    )
     val target = selectedRoute.stops.lastOrNull()
     val targetLabel = target?.name ?: selectedRoute.destination.label
-    val targetTime = routeStopClock(
+    val targetTimeSource = if (trustedRealtime) {
         target?.arrival ?: target?.plannedArrival ?: selectedRoute.arrival
-    )
+    } else {
+        target?.plannedArrival ?: target?.plannedDeparture
+            ?: selectedRoute.arrival.takeIf { target == null }
+    }
+    val targetTime = routeStopClock(targetTimeSource)
 
     Card(
         modifier = modifier
