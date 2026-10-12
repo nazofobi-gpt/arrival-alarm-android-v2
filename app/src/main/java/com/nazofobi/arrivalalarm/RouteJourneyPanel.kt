@@ -141,7 +141,7 @@ fun RouteJourneyPanel(
                         .testTag("route-direct-only-filter"),
                 )
 
-                visibleOptions.take(3).forEachIndexed { index, option ->
+                visibleOptions.take(6).forEachIndexed { index, option ->
                     RouteOptionCard(
                         option = option,
                         selected = selectedRouteId == option.id,
