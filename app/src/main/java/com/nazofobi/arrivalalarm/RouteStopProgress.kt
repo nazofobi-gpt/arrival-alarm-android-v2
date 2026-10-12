@@ -35,13 +35,29 @@ class RouteStopProgressTracker {
             val plannedArrival = stop.plannedArrival.toTransitEpochSecondsOrNull()
             val actualDeparture = if (trustRealtime) stop.departure.toTransitEpochSecondsOrNull() else null
             val plannedDeparture = stop.plannedDeparture.toTransitEpochSecondsOrNull()
+            val candidateArrival = actualArrival ?: plannedArrival
+            val candidateDeparture = actualDeparture ?: plannedDeparture
+            // A delayed arrival combined with a scheduled departure can invert the dwell
+            // window. Never infer progress from an impossible or contradictory interval.
+            val reversedWindow = candidateArrival != null && candidateDeparture != null &&
+                candidateArrival > candidateDeparture
+            val coherentSchedule = plannedArrival != null && plannedDeparture != null &&
+                plannedArrival <= plannedDeparture
             StopWindow(
                 stop = stop,
-                arrival = actualArrival ?: plannedArrival,
-                departure = actualDeparture ?: plannedDeparture,
-                hasRealtimeDelta =
-                    (actualArrival != null && plannedArrival != null && actualArrival != plannedArrival) ||
-                        (actualDeparture != null && plannedDeparture != null && actualDeparture != plannedDeparture),
+                arrival = when {
+                    reversedWindow && coherentSchedule -> plannedArrival
+                    reversedWindow -> null
+                    else -> candidateArrival
+                },
+                departure = when {
+                    reversedWindow && coherentSchedule -> plannedDeparture
+                    reversedWindow -> null
+                    else -> candidateDeparture
+                },
+                hasRealtimeDelta = !reversedWindow &&
+                    ((actualArrival != null && plannedArrival != null && actualArrival != plannedArrival) ||
+                        (actualDeparture != null && plannedDeparture != null && actualDeparture != plannedDeparture)),
             )
         }
         if (windows.none { it.arrival != null || it.departure != null }) {
