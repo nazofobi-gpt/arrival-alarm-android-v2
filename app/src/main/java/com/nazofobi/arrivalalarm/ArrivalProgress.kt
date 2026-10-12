@@ -79,7 +79,14 @@ class ArrivalProgressController(
             !fix.accuracyMeters.isFinite() ||
             fix.accuracyMeters !in 0.0..ArrivalLocationQuality.MAX_TRACKING_ACCURACY_METERS ||
             !fix.speedMps.isFinite() || fix.speedMps < 0.0
-        ) return state
+        ) {
+            // Broken evidence interrupts a confirmation streak. Keep the last
+            // known progress but require two new trustworthy fixes to arrive.
+            if (state.consecutiveInsideThreshold != 0 || state.consecutivePastTarget != 0) {
+                setState(state.copy(consecutiveInsideThreshold = 0, consecutivePastTarget = 0))
+            }
+            return state
+        }
 
         val nearestIndex = activeRoute.stops.indices.minBy { index ->
             distanceMeters(fix.point, activeRoute.stops[index])
