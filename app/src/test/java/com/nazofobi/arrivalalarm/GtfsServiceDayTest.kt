@@ -1,5 +1,6 @@
 package com.nazofobi.arrivalalarm
 
+import java.util.Locale
 import java.util.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -9,6 +10,24 @@ import org.junit.Test
 
 class GtfsServiceDayTest {
     private val berlin = TimeZone.getTimeZone("Europe/Berlin")
+
+    @Test
+    fun serviceDatesAndTimesRemainAsciiInNonLatinLocales() {
+        val original = Locale.getDefault()
+        try {
+            val date = GtfsServiceDate(2026, 10, 11)
+            val overnight = GtfsServiceTime.parse("25:05:09")
+            for (localeTag in listOf("ar-EG", "fa-IR")) {
+                Locale.setDefault(Locale.forLanguageTag(localeTag))
+                assertEquals("20261011", date.toString())
+                assertEquals(date, GtfsServiceDate.parse(date.toString()))
+                assertEquals("25:05:09", overnight.toString())
+                assertEquals(overnight, GtfsServiceTime.parse(overnight.toString()))
+            }
+        } finally {
+            Locale.setDefault(original)
+        }
+    }
 
     @Test
     fun baseCalendarWeekdayAndRangeAreApplied() {
