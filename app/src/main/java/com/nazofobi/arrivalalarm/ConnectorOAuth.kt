@@ -208,6 +208,16 @@ class ConnectorOAuthCoordinator(
         requireHttpsUrl(metadata.authorizationEndpoint, "authorization_endpoint")
         requireHttpsUrl(metadata.tokenEndpoint, "token_endpoint")
         requireHttpsUrl(metadata.revocationEndpoint, "revocation_endpoint")
+        // A provider must not override app-generated state, PKCE, or device binding.
+        // Reject ambiguous/malformed discovery queries before persisting a transaction.
+        val authorizationParameters = try {
+            parseQuery(URI(metadata.authorizationEndpoint).rawQuery)
+        } catch (_: IllegalArgumentException) {
+            throw IllegalArgumentException("connector_oauth_authorization_query_invalid")
+        }
+        require(authorizationParameters.keys.none {
+            it in RESERVED_AUTHORIZATION_PARAMETERS || it == metadata.deviceIdParameter
+        }) { "connector_oauth_authorization_parameter_collision" }
         require(metadata.clientId.isNotBlank()) { "connector_oauth_client_id_missing" }
         require(metadata.redirectUri == CONNECTOR_OAUTH_REDIRECT_URI) {
             "connector_oauth_redirect_mismatch"
@@ -290,15 +300,19 @@ class ConnectorOAuthCoordinator(
 
         internal fun parseQuery(rawQuery: String?): Map<String, String> {
             if (rawQuery.isNullOrBlank()) return emptyMap()
-            return rawQuery.split("&").mapNotNull { pair ->
+            val parsed = linkedMapOf<String, String>()
+            for (pair in rawQuery.split("&")) {
                 val index = pair.indexOf('=')
                 val rawKey = if (index >= 0) pair.substring(0, index) else pair
                 val rawValue = if (index >= 0) pair.substring(index + 1) else ""
                 val key = URLDecoder.decode(rawKey, StandardCharsets.UTF_8.name())
-                if (key.isBlank()) null else {
-                    key to URLDecoder.decode(rawValue, StandardCharsets.UTF_8.name())
+                if (key.isNotBlank()) {
+                    // Reject ambiguous OAuth parameters, including percent-encoded duplicate keys.
+                    require(!parsed.containsKey(key)) { "connector_oauth_query_duplicate_parameter" }
+                    parsed[key] = URLDecoder.decode(rawValue, StandardCharsets.UTF_8.name())
                 }
-            }.toMap()
+            }
+            return parsed
         }
 
         private fun percentEncode(value: String): String =

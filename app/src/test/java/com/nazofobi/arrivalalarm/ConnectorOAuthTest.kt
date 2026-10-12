@@ -315,4 +315,68 @@ class ConnectorOAuthTest {
             assertNull(transactions.transaction)
         }
     }
+    @Test fun duplicateOAuthCallbackParametersFailClosedWithoutLosingPendingTransaction() {
+        val sessions = MemorySessionStore()
+        val transactions = MemoryTransactionStore()
+        val transport = FakeTransport()
+        val oauth = coordinator(sessions, transactions, transport)
+        val authorizationUrl = oauth.beginAuthorization("https://connector.example")
+        val state = ConnectorOAuthCoordinator.parseQuery(URI(authorizationUrl).rawQuery).getValue("state")
+
+        val callbackQueries = listOf(
+            "state=" + state + "&state=forged&code=auth-code",
+            "state=forged&%73tate=" + state + "&code=auth-code",
+            "state=" + state + "&code=auth-code&code=alternate",
+            "state=" + state + "&error=access_denied&%65rror=another_error",
+        )
+        for (query in callbackQueries) {
+            val failure = runCatching {
+                oauth.completeAuthorization(CONNECTOR_OAUTH_REDIRECT_URI + "?" + query)
+            }.exceptionOrNull()
+            assertEquals("connector_oauth_callback_invalid", failure?.message)
+            assertNotNull(transactions.transaction)
+            assertNull(sessions.session)
+            assertNull(transport.exchangedVerifier)
+        }
+    }
+
+    @Test fun discoveredAuthorizationEndpointCannotOverrideOAuthParameters() {
+        val unsafeAuthorizationUrls = listOf(
+            "https://auth.example/authorize?state=server-supplied",
+            "https://auth.example/authorize?%73tate=server-supplied",
+            "https://auth.example/authorize?device_id=server-supplied",
+            "https://auth.example/authorize?ui_locales=de&ui_locales=tr",
+        )
+        for (endpoint in unsafeAuthorizationUrls) {
+            val transactions = MemoryTransactionStore()
+            val transport = FakeTransport().apply {
+                metadata = metadata.copy(authorizationEndpoint = endpoint)
+            }
+            val oauth = coordinator(MemorySessionStore(), transactions, transport)
+            val failure = runCatching {
+                oauth.beginAuthorization("https://connector.example")
+            }.exceptionOrNull()
+            assertTrue(failure is IllegalArgumentException)
+            assertFalse(failure.toString().contains("server-supplied"))
+            assertNull(transactions.transaction)
+        }
+    }
+
+    @Test fun discoveredAuthorizationEndpointAllowsHarmlessFixedQueryParameters() {
+        val sessions = MemorySessionStore()
+        val transactions = MemoryTransactionStore()
+        val transport = FakeTransport().apply {
+            metadata = metadata.copy(
+                authorizationEndpoint = "https://auth.example/authorize?ui_locales=de"
+            )
+        }
+        val oauth = coordinator(sessions, transactions, transport)
+        val query = ConnectorOAuthCoordinator.parseQuery(
+            URI(oauth.beginAuthorization("https://connector.example")).rawQuery
+        )
+        assertEquals("de", query["ui_locales"])
+        assertEquals(transactions.transaction?.state, query["state"])
+        assertNotNull(query["code_challenge"])
+    }
+
 }
