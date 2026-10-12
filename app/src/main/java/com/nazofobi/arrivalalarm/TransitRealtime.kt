@@ -108,16 +108,19 @@ class OverlayTransitRepository(
         val snapshot = runCatching { realtimeSource.fetch() }.getOrNull()
             ?: return TransitPlanWithRealtime(staticJourney, TransitRealtimeOverlay(
                 RealtimeFreshness.UNAVAILABLE, status = "Canlı veri kullanılamıyor • statik rota"))
-        val age = clock.nowEpochSeconds() - snapshot.fetchedAtEpochSeconds
-        // Provider clock skew beyond this bound cannot be treated as a fresh update.
-        // Never allow an implausible future timestamp to override scheduled truth.
-        if (age < -MAX_FUTURE_CLOCK_SKEW_SECONDS) return TransitPlanWithRealtime(
+        val now = clock.nowEpochSeconds()
+        val timestamp = snapshot.fetchedAtEpochSeconds
+        // Future or invalid provider time is unknown, not stale or fresh evidence.
+        // Allow only bounded clock skew; never apply a future snapshot as live truth.
+        if (timestamp <= 0L || (timestamp > now &&
+                timestamp - now > MAX_FUTURE_CLOCK_SKEW_SECONDS)) return TransitPlanWithRealtime(
             staticJourney,
             TransitRealtimeOverlay(
-                RealtimeFreshness.STALE, snapshot.fetchedAtEpochSeconds,
+                RealtimeFreshness.UNAVAILABLE,
                 status = "Canlı veri zamanı doğrulanamadı • statik rota",
             ),
         )
+        val age = (now - timestamp).coerceAtLeast(0L)
         if (age > staleAfterSeconds) return TransitPlanWithRealtime(staticJourney, TransitRealtimeOverlay(
             RealtimeFreshness.STALE, snapshot.fetchedAtEpochSeconds, status = "Canlı veri eski • statik rota"))
         val exactTripId = staticJourney.legs.singleOrNull()?.line?.takeIf { it.startsWith("gtfs-trip:") }?.removePrefix("gtfs-trip:")
