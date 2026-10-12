@@ -237,4 +237,6 @@
     <string name="departures_gtfsrt_unavailable">GTFS Deutschland local departures • GTFS-RT unavailable, scheduled times</string>
     <string name="lookup_stale_results">Cached provider results are stale • freshness could not be verified</string>
     <string name="lookup_provider_unavailable">Live search provider is unavailable • local data returned no result</string>
+    <string name="readiness_share_diagnostics">Share diagnostics summary</string>
+    <string name="readiness_share_diagnostics_note">Only capability status is shared. Exact location, journey history, and access credentials are excluded.</string>
 </resources>
