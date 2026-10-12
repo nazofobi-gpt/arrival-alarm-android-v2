@@ -1,7 +1,10 @@
 package com.nazofobi.arrivalalarm
 
+import java.io.IOException
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URI
+import java.net.URL
 
 /**
  * Minimal HTTPS transport for the device channel.
@@ -14,13 +17,24 @@ class HttpConnectorGatewayTransport(
     private val bearerTokenProvider: () -> String,
     private val connectTimeoutMillis: Int = 10_000,
     private val readTimeoutMillis: Int = 15_000,
+    private val connectionFactory: (URL) -> HttpURLConnection = { url ->
+        url.openConnection() as HttpURLConnection
+    },
 ) : ConnectorGatewayTransport {
     private val normalizedBaseUrl = baseUrl.trim().trimEnd('/').also { value ->
-        val uri = URI(value)
+        // URI parse errors can echo the supplied URL, including embedded credentials.
+        val uri = try {
+            URI(value)
+        } catch (_: Exception) {
+            throw IllegalArgumentException("Connector gateway URL is invalid")
+        }
         require(uri.scheme.equals("https", ignoreCase = true)) {
             "Connector gateway must use HTTPS"
         }
         require(!uri.host.isNullOrBlank()) { "Connector gateway host is required" }
+        require(uri.rawUserInfo == null && uri.rawQuery == null && uri.rawFragment == null) {
+            "Connector gateway URL must not contain credentials, query or fragment"
+        }
     }
 
     override fun publishSnapshot(payload: String) {
@@ -38,7 +52,13 @@ class HttpConnectorGatewayTransport(
         val token = bearerTokenProvider().trim()
         require(token.isNotEmpty()) { "Connector device credential is unavailable" }
 
-        val connection = URI(normalizedBaseUrl + path).toURL().openConnection() as HttpURLConnection
+        val connection = try {
+            connectionFactory(URI(normalizedBaseUrl + path).toURL())
+        } catch (_: SocketTimeoutException) {
+            throw SocketTimeoutException("connector_timeout")
+        } catch (_: IOException) {
+            throw IOException("connector_network_error")
+        }
         return try {
             connection.requestMethod = method
             connection.connectTimeout = connectTimeoutMillis
@@ -62,6 +82,12 @@ class HttpConnectorGatewayTransport(
                 error("connector_http_$status")
             }
             response
+        } catch (_: SocketTimeoutException) {
+            // Do not propagate original IOException messages or causes: they can
+            // contain private URLs, credentials and precise trip coordinates.
+            throw SocketTimeoutException("connector_timeout")
+        } catch (_: IOException) {
+            throw IOException("connector_network_error")
         } finally {
             connection.disconnect()
         }
