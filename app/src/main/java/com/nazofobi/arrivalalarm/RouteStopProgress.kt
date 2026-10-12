@@ -21,15 +21,20 @@ data class RouteStopProgress(
  *
  * Between stops, current remains null rather than pretending that the vehicle is physically
  * at a stop. The last passed stop is previous and the first future stop is next.
+ * Unverified realtime stop fields are ignored when allowRealtime is false.
  */
 class RouteStopProgressTracker {
-    fun resolve(stops: List<RouteStop>, nowEpochSeconds: Long): RouteStopProgress {
+    fun resolve(
+        stops: List<RouteStop>,
+        nowEpochSeconds: Long,
+        allowRealtime: Boolean = true,
+    ): RouteStopProgress {
         if (stops.isEmpty()) return RouteStopProgress()
 
         val windows = stops.map { stop ->
-            val actualArrival = stop.arrival.toTransitEpochSecondsOrNull()
+            val actualArrival = if (allowRealtime) stop.arrival.toTransitEpochSecondsOrNull() else null
             val plannedArrival = stop.plannedArrival.toTransitEpochSecondsOrNull()
-            val actualDeparture = stop.departure.toTransitEpochSecondsOrNull()
+            val actualDeparture = if (allowRealtime) stop.departure.toTransitEpochSecondsOrNull() else null
             val plannedDeparture = stop.plannedDeparture.toTransitEpochSecondsOrNull()
             StopWindow(
                 stop = stop,

@@ -60,4 +60,39 @@ class RouteStopProgressTest {
         assertNull(progress.current)
         assertNull(progress.next)
     }
+    @Test fun staleRealtimeFallsBackToPlannedStopWindows() {
+        // The late actual dwell (08:15-08:16) is no longer verified.
+        // Its scheduled dwell ended at 08:14, so do not show a phantom current stop.
+        val now = "2026-09-26T08:15:30+02:00".toTransitEpochSecondsOrNull()!!
+        val progress = RouteStopProgressTracker().resolve(
+            stops, nowEpochSeconds = now, allowRealtime = false,
+        )
+
+        assertTrue(progress.resolvedByProviderTime)
+        assertEquals(TransitTimingBasis.SCHEDULED, progress.timingBasis)
+        assertEquals("Diepholz", progress.previous?.name)
+        assertNull(progress.current)
+        assertEquals("Bremen Hbf", progress.next?.name)
+    }
+
+    @Test fun unverifiedActualOnlyTimesMustNotBecomeScheduledEvidence() {
+        val progress = RouteStopProgressTracker().resolve(
+            listOf(
+                RouteStop(
+                    id = "actual-only",
+                    name = "Unknown timing",
+                    arrival = "2026-09-26T08:15:00+02:00",
+                    departure = "2026-09-26T08:16:00+02:00",
+                ),
+            ),
+            nowEpochSeconds = "2026-09-26T08:15:30+02:00".toTransitEpochSecondsOrNull()!!,
+            allowRealtime = false,
+        )
+
+        assertEquals(false, progress.resolvedByProviderTime)
+        assertNull(progress.previous)
+        assertNull(progress.current)
+        assertNull(progress.next)
+    }
+
 }

@@ -34,11 +34,21 @@ fun LiveTripPanel(
     nowEpochSeconds: Long,
     modifier: Modifier = Modifier,
 ) {
-    val progress = RouteStopProgressTracker().resolve(selectedRoute.stops, nowEpochSeconds)
+    // A previously enriched route can outlive the provider's freshness window.
+    // Never describe its old stop timestamps as current vehicle progress.
+    val verifiedRealtime = !routeOffline &&
+        selectedRoute.realtime?.state == RouteRealtimeState.FRESH_MATCHED
+    val progress = RouteStopProgressTracker().resolve(
+        selectedRoute.stops,
+        nowEpochSeconds,
+        allowRealtime = verifiedRealtime,
+    )
     val target = selectedRoute.stops.lastOrNull()
     val targetLabel = target?.name ?: selectedRoute.destination.label
     val targetTime = routeStopClock(
-        target?.arrival ?: target?.plannedArrival ?: selectedRoute.arrival
+        (if (verifiedRealtime) target?.arrival else null)
+            ?: target?.plannedArrival
+            ?: selectedRoute.arrival
     )
 
     Card(

@@ -24,6 +24,7 @@ class LiveTripPanelTest {
     fun livePanelSeparatesProviderStopTimingFromRealGpsDistance() {
         val route = RouteOption(
             id = "route-1",
+            realtime = RouteRealtimeInfo(state = RouteRealtimeState.FRESH_MATCHED),
             origin = MapPoint(52.665, 8.237, "Lohne"),
             destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
             line = "RE 9",
@@ -84,4 +85,56 @@ class LiveTripPanelTest {
         rule.onNodeWithTag("live-trip-distance").assertTextContains("430", substring = true)
         rule.onNodeWithTag("live-trip-audio").performScrollTo().assertIsDisplayed()
     }
+    @Test
+    fun staleRealtimeDoesNotShowAnUnverifiedCurrentStop() {
+        val route = RouteOption(
+            id = "route-stale",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
+            line = "RE 9",
+            direction = "Bremen Hbf",
+            departure = "08:00",
+            arrival = "08:43",
+            walkingMinutes = 0,
+            transfers = 0,
+            realtime = RouteRealtimeInfo(state = RouteRealtimeState.STALE),
+            stops = listOf(
+                RouteStop(
+                    id = "a", name = "Lohne",
+                    plannedDeparture = "2026-09-26T07:58:00+02:00",
+                    departure = "2026-09-26T08:00:00+02:00",
+                ),
+                RouteStop(
+                    id = "b", name = "Diepholz",
+                    plannedArrival = "2026-09-26T08:13:00+02:00",
+                    plannedDeparture = "2026-09-26T08:14:00+02:00",
+                    arrival = "2026-09-26T08:15:00+02:00",
+                    departure = "2026-09-26T08:16:00+02:00",
+                ),
+                RouteStop(
+                    id = "c", name = "Bremen Hbf",
+                    plannedArrival = "2026-09-26T08:43:00+02:00",
+                    arrival = "2026-09-26T08:45:00+02:00",
+                ),
+            ),
+        )
+        rule.setContent {
+            MaterialTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    LiveTripPanel(
+                        selectedRoute = route,
+                        journey = JourneyUiState(phase = JourneyPhase.ARMED),
+                        guidanceState = GuidanceReliabilityState(),
+                        routeOffline = false,
+                        nowEpochSeconds =
+                            "2026-09-26T08:15:30+02:00".toTransitEpochSecondsOrNull()!!,
+                    )
+                }
+            }
+        }
+
+        rule.onNodeWithTag("live-trip-previous").assertTextContains("Diepholz", substring = true)
+        rule.onNodeWithTag("live-trip-next").assertTextContains("Bremen Hbf", substring = true)
+    }
+
 }
