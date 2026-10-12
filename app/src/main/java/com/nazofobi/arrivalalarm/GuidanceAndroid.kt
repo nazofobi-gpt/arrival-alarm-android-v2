@@ -31,6 +31,9 @@ class SharedPreferencesGuidanceStateStore(
             }.getOrDefault(GuidanceAudioRoute.DEVICE),
             lastSpokenKey = p.getString("last_key", null),
             pending = pending,
+            pendingSinceEpochMillis = if (pending != null) runCatching {
+                p.getLong("pending_since", 0L)
+            }.getOrNull() else null,
             status = p.getString("status", "İzinler bekleniyor") ?: "İzinler bekleniyor",
         )
     }
@@ -43,10 +46,12 @@ class SharedPreferencesGuidanceStateStore(
             putString("status", state.status)
             if (state.pending == null) {
                 remove("pending_key"); remove("pending_text"); remove("pending_locale")
+                remove("pending_since")
             } else {
                 putString("pending_key", state.pending.key)
                 putString("pending_text", state.pending.text)
                 putString("pending_locale", state.pending.localeTag)
+                putLong("pending_since", state.pendingSinceEpochMillis ?: 0L)
             }
         }.apply()
     }
