@@ -494,6 +494,7 @@ class GermanyGtfsRealtimeClientTest {
             GermanyRealtimeUnavailableReason.PARSE,
             (result as GermanyRealtimeFetchResult.Unavailable).reason,
         )
+        assertEquals("realtime_invalid_protobuf", result.detail)
     }
 
     @Test
