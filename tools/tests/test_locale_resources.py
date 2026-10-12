@@ -74,6 +74,29 @@ class LocaleResourceContractTest(unittest.TestCase):
         self.write("values", '<string name="arrival">Duplicate</string>', filename="strings_more.xml")
         self.assertTrue(any("duplicate default key" in e for e in validate(self.root)))
 
+    def test_extra_locale_file_with_unknown_key_is_rejected(self):
+        # A new localized XML file must not silently evade the parity gate.
+        self.write("values-de", '<string name="orphan">Zusatz</string>', "strings_extra.xml")
+        self.assertTrue(
+            any("unrecognized translation key orphan" in e for e in validate(self.root))
+        )
+
+    def test_extra_locale_file_with_duplicate_key_is_rejected(self):
+        self.write(
+            "values-en",
+            '<string name="arrival">Duplicate %1$s %2$d</string>',
+            "strings_extra.xml",
+        )
+        self.assertTrue(
+            any("duplicate en key across files: arrival" in e for e in validate(self.root))
+        )
+
+    def test_missing_locale_resource_file_is_reported_by_key(self):
+        (self.root / "values-de" / "strings.xml").unlink()
+        self.assertTrue(
+            any("missing translation for arrival" in e for e in validate(self.root))
+        )
+
     def test_escaped_percent_has_no_format_argument(self):
         self.assertEqual({}, placeholders("100%% complete"))
 
