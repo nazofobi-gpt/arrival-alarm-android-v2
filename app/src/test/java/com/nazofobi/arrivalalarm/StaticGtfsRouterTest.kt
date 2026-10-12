@@ -66,6 +66,29 @@ class StaticGtfsRouterTest {
         assertEquals("A", journey.access.stopId)
     }
 
+    @Test fun nearbyDestinationAfterSixteenDistantCandidatesIsStillRoutable() {
+        val data = FakeData(
+            candidates = mapOf("A" to listOf(candidate("NEAR-EGRESS", "R1", "S", 1, "10:01:00"))),
+            times = mapOf(
+                "NEAR-EGRESS" to listOf(
+                    st("NEAR-EGRESS", 1, "A", "10:01:00"),
+                    st("NEAR-EGRESS", 2, "B", "10:15:00"),
+                ),
+            ),
+        )
+        val distant = (1..16).map { StaticRouterAccess("DISTANT-EGRESS-$it", 900) }
+        val result = StaticGtfsRouter(data, zone).route(
+            origins = listOf(StaticRouterAccess("A", 0)),
+            destinations = distant + StaticRouterAccess("B", 30),
+            serviceDate = date,
+            departureEpochMillis = at("09:55:00"),
+        )
+        val journey = (result as StaticRouterResult.Journeys).journeys.single()
+        assertEquals("B", journey.egress.stopId)
+        assertEquals(30, journey.egress.walkSeconds)
+        assertEquals(at("10:15:00") + 30_000L, journey.arrivalEpochMillis)
+    }
+
     @Test fun implicitSameStopTransferWorksWithoutTransfersFile() {
         val data = baseTransferData()
         val result = StaticGtfsRouter(data, zone, implicitTransferSeconds = 120).route(
