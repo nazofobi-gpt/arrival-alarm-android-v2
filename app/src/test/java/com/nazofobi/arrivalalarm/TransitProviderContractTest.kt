@@ -110,4 +110,38 @@ class TransitProviderContractTest {
             )
         )
     }
+
+    @Test
+    fun providerFreshnessAcceptsOnlyBoundedPositiveClockSkew() {
+        val withinSkew = TransitProviderFreshness.evaluate(
+            updatedAtEpochSeconds = 1_030,
+            nowEpochSeconds = 1_000,
+            staleAfterSeconds = 60,
+        )
+        val outsideSkew = TransitProviderFreshness.evaluate(
+            updatedAtEpochSeconds = 1_031,
+            nowEpochSeconds = 1_000,
+            staleAfterSeconds = 60,
+        )
+
+        assertEquals(TransitProviderFreshnessState.FRESH, withinSkew.state)
+        assertEquals(0L, withinSkew.ageSeconds)
+        assertEquals(1_030L, withinSkew.updatedAtEpochSeconds)
+        assertEquals(TransitProviderFreshnessState.UNKNOWN, outsideSkew.state)
+        assertNull(outsideSkew.ageSeconds)
+        assertNull(outsideSkew.updatedAtEpochSeconds)
+    }
+
+    @Test
+    fun farFutureProviderTimestampCannotMasqueradeAsFresh() {
+        val invalid = TransitProviderFreshness.evaluate(
+            updatedAtEpochSeconds = Long.MAX_VALUE,
+            nowEpochSeconds = 0L,
+            staleAfterSeconds = 60,
+        )
+
+        assertEquals(TransitProviderFreshnessState.UNKNOWN, invalid.state)
+        assertNull(invalid.ageSeconds)
+        assertNull(invalid.updatedAtEpochSeconds)
+    }
 }
