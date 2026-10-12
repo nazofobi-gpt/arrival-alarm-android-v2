@@ -54,6 +54,28 @@ test("production rejects cleartext public or OAuth endpoints", () => {
   );
 });
 
+test("production OAuth metadata rejects credential-bearing URLs and URL fragments", () => {
+  const unsafeEndpoints = [
+    ["MCP_PUBLIC_BASE_URL", "https://user:password@connector.example"],
+    ["OAUTH_JWKS_URL", "https://auth.example/jwks.json#access_token"],
+    ["DEVICE_OAUTH_AUTHORIZATION_ENDPOINT", "https://alice:secret@auth.example/authorize"],
+    ["DEVICE_OAUTH_TOKEN_ENDPOINT", "https://auth.example/token#"],
+    ["DEVICE_OAUTH_REVOCATION_ENDPOINT", "https://auth.example/revoke#secret"],
+    ["DEVICE_OAUTH_RESOURCE", "https://user@connector.example/device"],
+  ];
+
+  for (const [name, unsafeUrl] of unsafeEndpoints) {
+    assert.throws(
+      () => validateProductionEnvironment(valid({ [name]: unsafeUrl })),
+      (error) =>
+        error.message === "production_config_unsafe_url_" + name.toLowerCase() &&
+        !error.message.includes("secret") &&
+        !error.message.includes("password"),
+      name
+    );
+  }
+});
+
 test("device OAuth overrides must be supplied as one complete set", () => {
   assert.throws(
     () =>
