@@ -101,13 +101,9 @@ class OfflineTransitCacheTest {
                     plannedPlatform = "2",
                 ),
             ),
-            realtime = RouteRealtimeInfo(
-                state = RouteRealtimeState.FRESH_MATCHED,
-                sourceLabel = "GTFS-RT",
-                updatedAtEpochSeconds = 500L,
-                ageSeconds = 2L,
-                matchedTripIds = listOf("T1"),
-            ),
+            // SharedPreferences JSON historically omitted RouteRealtimeInfo
+            // while retaining stop-level actual values and planned baselines.
+            realtime = null,
         )
         val departure = Departure(
             tripId = "T1",
