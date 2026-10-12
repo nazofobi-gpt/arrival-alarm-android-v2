@@ -85,8 +85,9 @@ def validate(root: Path) -> list[str]:
     for locale in LOCALES:
         directory = root / f"values-{locale}"
         localized: dict[str, StringValue] = {}
-        for name in by_filename:
-            file = directory / name
+        # Scan all localized files, not only filenames present in the default
+        # locale. Otherwise an extra strings_*.xml can bypass parity checks.
+        for file in sorted(directory.glob("strings*.xml")):
             entries, parse_errors = read_strings(file)
             errors.extend(parse_errors)
             for key, entry in entries.items():
