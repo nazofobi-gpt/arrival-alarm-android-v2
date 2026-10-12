@@ -136,7 +136,19 @@ class GtfsServiceCalendar(
         require(calendarByService.size == calendars.size) { "Duplicate calendar service_id" }
     }
 
-    fun isActive(serviceId: String, serviceDate: GtfsServiceDate): Boolean {
+    fun isActive(serviceId: String, serviceDate: GtfsServiceDate): Boolean =
+        isActiveOnWeekday(serviceId, serviceDate, precomputedWeekday = null)
+
+    /**
+     * A nationwide activeServices query visits many service IDs for the *same* civil date.
+     * Reuse its weekday instead of allocating a GregorianCalendar for every candidate.
+     * Direct isActive calls retain the early exception and date-range short circuits.
+     */
+    private fun isActiveOnWeekday(
+        serviceId: String,
+        serviceDate: GtfsServiceDate,
+        precomputedWeekday: GtfsWeekday?,
+    ): Boolean {
         when (exceptionByDate[serviceDate]?.get(serviceId)) {
             GtfsCalendarExceptionType.ADDED -> return true
             GtfsCalendarExceptionType.REMOVED -> return false
@@ -145,15 +157,18 @@ class GtfsServiceCalendar(
 
         val calendar = calendarByService[serviceId] ?: return false
         if (serviceDate < calendar.startDate || serviceDate > calendar.endDate) return false
-        return serviceDate.weekday in calendar.activeDays
+        return (precomputedWeekday ?: serviceDate.weekday) in calendar.activeDays
     }
 
     fun activeServices(serviceDate: GtfsServiceDate): Set<String> {
+        val weekday = serviceDate.weekday
         val candidateIds = buildSet {
             addAll(calendarByService.keys)
             exceptionByDate[serviceDate]?.keys?.let { addAll(it) }
         }
-        return candidateIds.filterTo(sortedSetOf()) { isActive(it, serviceDate) }
+        return candidateIds.filterTo(sortedSetOf()) {
+            isActiveOnWeekday(it, serviceDate, precomputedWeekday = weekday)
+        }
     }
 }
 
