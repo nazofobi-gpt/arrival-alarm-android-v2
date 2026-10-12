@@ -82,6 +82,20 @@ class BoundedHttpTransport(
             attempts += 1
             try {
                 val response = exchange.execute(request, connectTimeoutMs, readTimeoutMs)
+                // Informational (1xx) and invalid codes are not terminal provider
+                // responses. Do not report them as success or reset the circuit.
+                if (response.status !in 200..599) {
+                    if (attempts > allowedRetries) {
+                        recordFailure()
+                        return HttpTransportResult.Failure(
+                            kind = HttpTransportResult.Failure.Kind.NETWORK,
+                            attempts = attempts,
+                            message = "invalid_http_status",
+                        )
+                    }
+                    sleepOrStop(backoffMs(attempts), attempts)?.let { return it }
+                    continue
+                }
                 if (!isRetryableStatus(response.status)) {
                     recordSuccess()
                     return HttpTransportResult.Response(response, attempts)
