@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bicycle_gtfs_allowed">Bicycle: permitted according to GTFS (check ticket and fees separately).</string>
+    <string name="bicycle_gtfs_not_allowed">Bicycle: not permitted according to GTFS.</string>
+    <string name="bicycle_gtfs_unknown">Bicycle: carriage not confirmed by GTFS.</string>
+</resources>
