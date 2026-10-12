@@ -65,14 +65,19 @@ internal fun clipGtfsShapePolyline(
             }
         }
         add(end)
-    }.distinctBy { it.latitude to it.longitude }
-
-    if (selected.size < 2) return emptyList()
-    if (selected.size <= maxVertices) return selected
+    }
+    // Remove only consecutive duplicates: a circular service can legitimately
+    // revisit the same coordinates later in the selected trip.
+    val withoutConsecutiveDuplicates = selected.filterIndexed { index, point ->
+        index == 0 || point.latitude != selected[index - 1].latitude ||
+            point.longitude != selected[index - 1].longitude
+    }
+    if (withoutConsecutiveDuplicates.size < 2) return emptyList()
+    if (withoutConsecutiveDuplicates.size <= maxVertices) return withoutConsecutiveDuplicates
 
     // Stable bound: preserve both exact endpoints, and sample the ordered feed
     // points without sending an unbounded polyline to the map renderer.
     return (0 until maxVertices).map { index ->
-        selected[(index.toLong() * (selected.lastIndex) / (maxVertices - 1)).toInt()]
+        withoutConsecutiveDuplicates[(index.toLong() * (withoutConsecutiveDuplicates.lastIndex) / (maxVertices - 1)).toInt()]
     }
 }
