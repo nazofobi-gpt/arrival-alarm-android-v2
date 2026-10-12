@@ -5,7 +5,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -194,6 +196,59 @@ class LiveTripPanelTest {
         rule.onNodeWithTag("live-trip-current")
             .assertTextContains(unknownProgressText, substring = true)
 
+    }
+
+
+    @Test
+    fun malformedDestinationStopTimesAreNotPresentedAsValidArrivalClocks() {
+        val candidateTime = mutableStateOf("2026-09-26T08:99:00+02:00")
+        rule.setContent {
+            MaterialTheme {
+                val route = RouteOption(
+                    id = "bad-target-time",
+                    origin = MapPoint(52.665, 8.237, "Lohne"),
+                    destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
+                    line = "RE 9",
+                    direction = "Bremen Hbf",
+                    departure = "08:00",
+                    arrival = "08:45",
+                    walkingMinutes = 0,
+                    transfers = 0,
+                    stops = listOf(
+                        RouteStop(
+                            id = "destination",
+                            name = "Bremen Hbf",
+                            plannedArrival = candidateTime.value,
+                        ),
+                    ),
+                )
+                LiveTripPanel(
+                    selectedRoute = route,
+                    journey = JourneyUiState(phase = JourneyPhase.ARMED),
+                    guidanceState = GuidanceReliabilityState(),
+                    routeOffline = false,
+                    nowEpochSeconds = 0L,
+                )
+            }
+        }
+
+        // A malformed provider minute must not be shown as an arrival ETA.
+        rule.onNodeWithTag("live-trip-target-time").assertDoesNotExist()
+
+        // Nor should an implausibly large service hour be treated as a clock.
+        rule.runOnUiThread {
+            candidateTime.value = "2026-09-26T99:30:00+02:00"
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-target-time").assertDoesNotExist()
+
+        // Retain valid scheduled destination times after the fail-closed cases.
+        rule.runOnUiThread {
+            candidateTime.value = "2026-09-26T09:30:00+02:00"
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-target-time")
+            .assertTextContains("09:30", substring = true)
     }
 
 }
