@@ -42,6 +42,7 @@ data class RouteOption(
     val refreshToken: String? = null,
     val sourceUpdatedAtEpochSeconds: Long? = null,
     val realtime: RouteRealtimeInfo? = null,
+    val bicycleCarriage: BicycleCarriage = BicycleCarriage.UNKNOWN,
 )
 
 interface GeocodeProvider { fun search(query: String): List<MapPoint> }
