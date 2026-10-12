@@ -258,10 +258,11 @@ class GermanyGtfsRealtimeClient(
                     else -> if (!codedInput.skipField(tag)) break
                 }
             }
-        } catch (failure: InvalidProtocolBufferException) {
+        } catch (_: InvalidProtocolBufferException) {
+            // Never surface parser diagnostics from malformed provider bytes.
             return GermanyRealtimeFetchResult.Unavailable(
                 GermanyRealtimeUnavailableReason.PARSE,
-                failure.message,
+                "realtime_invalid_protobuf",
             )
         }
 
