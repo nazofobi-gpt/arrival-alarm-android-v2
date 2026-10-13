@@ -150,5 +150,44 @@ class LocaleResourceContractTest(unittest.TestCase):
         self.assertTrue(any("empty translation" in e for e in validate(self.root)))
 
 
+    def test_unsupported_java_conversion_fails_closed(self):
+        self.write("values-de", '<string name="arrival">Halt %1$q in %2$d Min.</string>')
+        self.assertTrue(
+            any("unsupported format conversion %q" in e for e in validate(self.root))
+        )
+
+    def test_invalid_date_suffix_fails_closed(self):
+        self.write("values", '<string name="arrival">Time: %1$tq</string>')
+        self.write("values-de", '<string name="arrival">Zeit: %1$tq</string>')
+        self.write("values-en", '<string name="arrival">Time: %1$tq</string>')
+        self.assertTrue(
+            any("unsupported date/time conversion %tq" in e for e in validate(self.root))
+        )
+
+    def test_dangling_index_fails_even_if_all_locales_match(self):
+        for locale in ("values", "values-de", "values-en"):
+            self.write(locale, '<string name="arrival">Stop %1$</string>')
+        self.assertTrue(
+            any("malformed format argument" in e for e in validate(self.root))
+        )
+
+    def test_lone_percent_in_formatted_translation_fails(self):
+        self.write(
+            "values-de",
+            '<string name="arrival">Halt %1$s in %2$d Min. 100%</string>',
+        )
+        self.assertTrue(
+            any("malformed format argument" in e for e in validate(self.root))
+        )
+
+    def test_escaped_percent_and_line_break_remain_valid(self):
+        for locale in ("values", "values-de", "values-en"):
+            self.write(
+                locale,
+                '<string name="arrival">Stop %1$s in %2$d min (100%%)%n</string>',
+            )
+        self.assertEqual([], validate(self.root))
+
+
 if __name__ == "__main__":
     unittest.main()
