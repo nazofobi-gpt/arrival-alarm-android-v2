@@ -77,4 +77,32 @@ class NearbyStationCanonicalizerTest {
             reversed.single().childStops.map { it.id },
         )
     }
+
+    @Test
+    fun fallbackStationsWithSameNameAndCoordinatesRemainSeparateAcrossProviders() {
+        val vbb = CatalogStop("vbb-central", "vbb", "Hauptbahnhof", 52.52, 13.405)
+        val mvv = CatalogStop("mvv-central", "mvv", "Hauptbahnhof", 52.52, 13.405)
+        val result = NearbyStationCanonicalizer.canonicalize(
+            52.52, 13.405,
+            listOf(NearbyStop(vbb, 0), NearbyStop(mvv, 0)),
+            limit = 5,
+        )
+        assertEquals(2, result.size)
+        assertEquals(setOf("vbb", "mvv"), result.map { it.stop.providerId }.toSet())
+        assertEquals(setOf("vbb-central", "mvv-central"), result.map { it.stop.id }.toSet())
+    }
+
+    @Test
+    fun sameProviderFallbackPlatformsStillCollapseToOneStation() {
+        val first = CatalogStop("a", "vbb", "Hauptbahnhof", 52.52, 13.405)
+        val second = CatalogStop("b", "vbb", "Hauptbahnhof", 52.52, 13.405)
+        val result = NearbyStationCanonicalizer.canonicalize(
+            52.52, 13.405,
+            listOf(NearbyStop(first, 0), NearbyStop(second, 0)),
+            limit = 5,
+        )
+        assertEquals(1, result.size)
+        assertEquals("a", result.single().stop.id)
+        assertEquals(listOf("b"), result.single().childStops.map { it.id })
+    }
 }
