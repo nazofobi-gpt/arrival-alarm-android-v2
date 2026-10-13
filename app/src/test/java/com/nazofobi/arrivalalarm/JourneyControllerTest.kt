@@ -92,6 +92,28 @@ class JourneyControllerTest {
         assertEquals(JourneyPhase.START_SELECTED, controller.state.phase)
     }
 
+    @Test fun invalidPersistedDistanceFailsClosedWithoutRejectingHealthyJourney() {
+        val start = GeoPoint(53.083, 8.813)
+        val destination = GeoPoint(53.1, 8.9)
+        var persisted = JourneyUiState(
+            phase = JourneyPhase.ARMED, start = start, destination = destination,
+            distanceMeters = Double.NaN,
+        )
+        val store = object : JourneyStateStore {
+            override fun load(): JourneyUiState = persisted
+            override fun save(state: JourneyUiState) = Unit
+        }
+        listOf(Double.NaN, Double.POSITIVE_INFINITY, -1.0).forEach { distance ->
+            persisted = persisted.copy(distanceMeters = distance)
+            assertEquals(JourneyPhase.EMPTY, JourneyController(stateStore = store).state.phase)
+        }
+        persisted = persisted.copy(distanceMeters = 500.0)
+        val restored = JourneyController(stateStore = store).state
+        assertEquals(JourneyPhase.ARMED, restored.phase)
+        assertEquals(500.0, restored.distanceMeters ?: -1.0, 0.0)
+        assertEquals(destination, restored.destination)
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun invalidRadiusCannotCreateAlwaysArrivingController() {
         JourneyController(arrivalRadiusMeters = Double.POSITIVE_INFINITY)
