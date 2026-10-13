@@ -35,18 +35,38 @@ class RouteStopProgressTracker {
             val plannedArrival = stop.plannedArrival.toTransitEpochSecondsOrNull()
             val actualDeparture = if (trustRealtime) stop.departure.toTransitEpochSecondsOrNull() else null
             val plannedDeparture = stop.plannedDeparture.toTransitEpochSecondsOrNull()
+            val candidateArrival = actualArrival ?: plannedArrival
+            val candidateDeparture = actualDeparture ?: plannedDeparture
+            // A delayed arrival combined with a scheduled departure can invert the dwell
+            // window. Never infer progress from an impossible or contradictory interval.
+            val reversedWindow = candidateArrival != null && candidateDeparture != null &&
+                candidateArrival > candidateDeparture
+            val coherentSchedule = plannedArrival != null && plannedDeparture != null &&
+                plannedArrival <= plannedDeparture
             StopWindow(
                 stop = stop,
-                arrival = actualArrival ?: plannedArrival,
-                departure = actualDeparture ?: plannedDeparture,
-                hasRealtimeDelta =
-                    (actualArrival != null && plannedArrival != null && actualArrival != plannedArrival) ||
-                        (actualDeparture != null && plannedDeparture != null && actualDeparture != plannedDeparture),
+                arrival = when {
+                    reversedWindow && coherentSchedule -> plannedArrival
+                    reversedWindow -> null
+                    else -> candidateArrival
+                },
+                departure = when {
+                    reversedWindow && coherentSchedule -> plannedDeparture
+                    reversedWindow -> null
+                    else -> candidateDeparture
+                },
+                hasRealtimeDelta = !reversedWindow &&
+                    ((actualArrival != null && plannedArrival != null && actualArrival != plannedArrival) ||
+                        (actualDeparture != null && plannedDeparture != null && actualDeparture != plannedDeparture)),
             )
         }
         if (windows.none { it.arrival != null || it.departure != null }) {
             return RouteStopProgress()
         }
+
+        // Preserve route-order semantics when schedule/realtime timestamps disagree.
+        // Two distinct stops must not occupy overlapping provider time windows.
+        if (!hasCoherentTimeline(windows)) return RouteStopProgress()
 
         val basis = if (windows.any { it.hasRealtimeDelta }) {
             TransitTimingBasis.REALTIME
@@ -90,6 +110,19 @@ class RouteStopProgressTracker {
             resolvedByProviderTime = true,
             timingBasis = basis,
         )
+    }
+
+    private fun hasCoherentTimeline(windows: List<StopWindow>): Boolean {
+        var priorEnd: Long? = null
+        for (window in windows) {
+            val start = window.arrival ?: window.departure
+            val end = window.departure ?: window.arrival
+            if (start != null && end != null && end < start) return false
+            val previous = priorEnd
+            if (start != null && previous != null && start < previous) return false
+            if (end != null) priorEnd = end
+        }
+        return true
     }
 
     private data class StopWindow(
