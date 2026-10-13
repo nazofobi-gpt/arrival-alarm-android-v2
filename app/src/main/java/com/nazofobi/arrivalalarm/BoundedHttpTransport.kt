@@ -62,6 +62,14 @@ class BoundedHttpTransport(
 
     @Synchronized
     fun execute(request: HttpTransportRequest): HttpTransportResult {
+        // A previously cancelled caller must not start new provider I/O.
+        if (Thread.currentThread().isInterrupted) {
+            return HttpTransportResult.Failure(
+                kind = HttpTransportResult.Failure.Kind.NETWORK,
+                attempts = 0,
+                message = "request_interrupted",
+            )
+        }
         val now = clock.nowMillis()
         if (now < circuitOpenUntilMs) {
             return HttpTransportResult.Failure(HttpTransportResult.Failure.Kind.CIRCUIT_OPEN, 0)
