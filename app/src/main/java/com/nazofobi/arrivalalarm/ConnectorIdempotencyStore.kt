@@ -100,15 +100,24 @@ class SharedPreferencesConnectorIdempotencyStore(
 
     private fun loadEntries(): List<ConnectorIdempotencyEntry> {
         val raw = preferences.getString(preferenceKey, null) ?: return emptyList()
-        return runCatching {
+        // Never discard an unreadable claim: a replay could duplicate a command
+        // whose side effect happened before its receipt was persisted.
+        return try {
             val array = JSONArray(raw)
+            val seenKeys = mutableSetOf<String>()
             buildList(array.length()) {
                 for (index in 0 until array.length()) {
-                    val value = array.optJSONObject(index) ?: continue
-                    value.decodeEntryOrNull()?.let(::add)
+                    val entry = array.getJSONObject(index).decodeEntry()
+                    check(entry.idempotencyKey.isNotBlank() && entry.commandType.isNotBlank())
+                    check(entry.stateVersionBefore >= 0L)
+                    check(seenKeys.add(entry.idempotencyKey))
+                    add(entry)
                 }
             }
-        }.getOrDefault(emptyList())
+        } catch (_: Exception) {
+            // Do not include journal content (possibly sensitive) in diagnostics.
+            throw IllegalStateException("Corrupt connector idempotency journal")
+        }
     }
 
     private fun persist(entries: List<ConnectorIdempotencyEntry>) {
@@ -137,15 +146,22 @@ class SharedPreferencesConnectorIdempotencyStore(
             .put("duplicate", duplicate)
             .apply { actionId?.let { put("action_id", it) } }
 
-    private fun JSONObject.decodeEntryOrNull(): ConnectorIdempotencyEntry? =
-        runCatching {
-            ConnectorIdempotencyEntry(
-                idempotencyKey = getString("idempotency_key"),
-                commandType = getString("command_type"),
-                stateVersionBefore = getLong("state_version_before"),
-                receipt = optJSONObject("receipt")?.decodeReceipt(),
-            )
-        }.getOrNull()
+    private fun JSONObject.decodeEntry(): ConnectorIdempotencyEntry {
+        // A present-but-malformed receipt is not equivalent to a pending claim.
+        val storedReceipt = if (has("receipt")) getJSONObject("receipt").decodeReceipt() else null
+        val entry = ConnectorIdempotencyEntry(
+            idempotencyKey = getString("idempotency_key"),
+            commandType = getString("command_type"),
+            stateVersionBefore = getLong("state_version_before"),
+            receipt = storedReceipt,
+        )
+        check(storedReceipt == null || (
+            storedReceipt.idempotencyKey == entry.idempotencyKey &&
+                storedReceipt.commandType == entry.commandType &&
+                storedReceipt.stateVersionBefore == entry.stateVersionBefore
+            ))
+        return entry
+    }
 
     private fun JSONObject.decodeReceipt(): ConnectorCommandReceipt =
         ConnectorCommandReceipt(
