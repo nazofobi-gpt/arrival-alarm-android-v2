@@ -87,7 +87,9 @@ private fun MapPoint.toJson(): JSONObject = JSONObject()
 private fun JSONObject.toMapPoint(): MapPoint? {
     val latitude = optDouble("latitude", Double.NaN)
     val longitude = optDouble("longitude", Double.NaN)
-    if (!latitude.isFinite() || !longitude.isFinite()) return null
+    if (!latitude.isFinite() || latitude !in -90.0..90.0 ||
+        !longitude.isFinite() || longitude !in -180.0..180.0
+    ) return null
     return MapPoint(latitude, longitude, optString("label"))
 }
 
