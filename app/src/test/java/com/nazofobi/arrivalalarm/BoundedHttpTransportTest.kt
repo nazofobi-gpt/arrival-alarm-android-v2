@@ -323,6 +323,39 @@ class BoundedHttpTransportTest {
     }
 
     @Test
+    fun alreadyInterruptedThreadDoesNotCallProviderOrChangeCircuitState() {
+        var calls = 0
+        val transport = BoundedHttpTransport(
+            exchange = HttpExchange { _, _, _ ->
+                calls += 1
+                HttpTransportResponse(200)
+            },
+            clock = HttpTransportClock { 100L },
+            sleeper = HttpTransportSleeper { error("pre-interrupted request must not back off") },
+            failureThreshold = 1,
+        )
+
+        try {
+            Thread.currentThread().interrupt()
+            val failure = transport.execute(HttpTransportRequest("https://provider.invalid")) as HttpTransportResult.Failure
+            assertEquals(HttpTransportResult.Failure.Kind.NETWORK, failure.kind)
+            assertEquals("request_interrupted", failure.message)
+            assertEquals(0, failure.attempts)
+            assertEquals(0, calls)
+            assertTrue(Thread.currentThread().isInterrupted)
+
+            // A cancellation must not trip the provider circuit for later requests.
+            Thread.interrupted()
+            val success = transport.execute(HttpTransportRequest("https://provider.invalid")) as HttpTransportResult.Response
+            assertEquals(200, success.response.status)
+            assertEquals(1, success.attempts)
+            assertEquals(1, calls)
+        } finally {
+            Thread.interrupted()
+        }
+    }
+
+    @Test
     fun interruptedNetworkIoDoesNotRetryLeakDetailsOrTripCircuit() {
         var calls = 0
         val secret = "secret_request_token"
