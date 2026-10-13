@@ -225,4 +225,64 @@ class ConnectorContractTest {
         assertEquals("SetDestination", store.get("pending-cross-key")?.commandType)
         assertEquals(null, store.get("pending-cross-key")?.receipt)
     }
+
+    @Test fun sameTypeDifferentDestinationCannotReuseCompletedIdempotencyReceipt() {
+        val port = FakePort(snapshot())
+        val store = InMemoryConnectorIdempotencyStore()
+        val processor = ConnectorCommandProcessor(port, idempotencyStore = store)
+        val original = ArrivalAlarmConnectorCommand.SetDestination(
+            MapPoint(53.0834, 8.8137, "Bremen Hbf"), "same-type-key",
+        )
+        val first = processor.execute(original, userConfirmed = true, nowEpochSeconds = 1_000)
+        val conflicting = processor.execute(
+            ArrivalAlarmConnectorCommand.SetDestination(
+                MapPoint(52.3759, 9.7320, "Hannover Hbf"), "same-type-key",
+            ),
+            userConfirmed = true,
+            nowEpochSeconds = 1_000,
+        )
+        val replay = processor.execute(original, userConfirmed = true, nowEpochSeconds = 1_000)
+
+        assertEquals(ConnectorCommandStatus.APPLIED, first.status)
+        assertEquals(ConnectorCommandStatus.REJECTED_DOMAIN, conflicting.status)
+        assertFalse(conflicting.duplicate)
+        assertEquals(null, conflicting.actionId)
+        assertEquals(1, port.writes)
+        assertTrue(replay.duplicate)
+        assertEquals(first.actionId, replay.actionId)
+    }
+
+    @Test fun legacyUnboundReceiptCannotAssertDifferentPayloadWasApplied() {
+        val store = InMemoryConnectorIdempotencyStore()
+        store.begin(
+            ConnectorIdempotencyEntry(
+                idempotencyKey = "old-claim",
+                commandType = "SetDestination",
+                stateVersionBefore = 7,
+            ),
+        )
+        store.complete(
+            ConnectorCommandReceipt(
+                idempotencyKey = "old-claim",
+                commandType = "SetDestination",
+                status = ConnectorCommandStatus.APPLIED,
+                message = "old receipt",
+                stateVersionBefore = 7,
+                stateVersionAfter = 8,
+            ),
+        )
+        val port = FakePort(snapshot(stateVersion = 8))
+        val result = ConnectorCommandProcessor(port, idempotencyStore = store).execute(
+            ArrivalAlarmConnectorCommand.SetDestination(
+                MapPoint(53.0834, 8.8137, "Bremen Hbf"), "old-claim",
+            ),
+            userConfirmed = true,
+            nowEpochSeconds = 1_000,
+        )
+        assertEquals(ConnectorCommandStatus.REJECTED_IDEMPOTENCY_RECOVERY_REQUIRED, result.status)
+        assertFalse(result.duplicate)
+        assertEquals(0, port.writes)
+        assertEquals(ConnectorCommandStatus.APPLIED, store.get("old-claim")?.receipt?.status)
+    }
+
 }

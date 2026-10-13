@@ -9,6 +9,7 @@ data class ConnectorIdempotencyEntry(
     val commandType: String,
     val stateVersionBefore: Long,
     val receipt: ConnectorCommandReceipt? = null,
+    val commandFingerprint: String? = null,
 )
 
 interface ConnectorIdempotencyStore {
@@ -143,7 +144,10 @@ class SharedPreferencesConnectorIdempotencyStore(
             .put("idempotency_key", idempotencyKey)
             .put("command_type", commandType)
             .put("state_version_before", stateVersionBefore)
-            .apply { receipt?.let { put("receipt", it.encode()) } }
+            .apply {
+                commandFingerprint?.let { put("command_fingerprint", it) }
+                receipt?.let { put("receipt", it.encode()) }
+            }
 
     private fun ConnectorCommandReceipt.encode(): JSONObject =
         JSONObject()
@@ -164,7 +168,10 @@ class SharedPreferencesConnectorIdempotencyStore(
             commandType = getString("command_type"),
             stateVersionBefore = getLong("state_version_before"),
             receipt = storedReceipt,
+            commandFingerprint = if (has("command_fingerprint")) getString("command_fingerprint") else null,
         )
+        check(entry.commandFingerprint == null ||
+            entry.commandFingerprint.matches(Regex("[0-9a-f]{64}")))
         check(storedReceipt == null || (
             storedReceipt.idempotencyKey == entry.idempotencyKey &&
                 storedReceipt.commandType == entry.commandType &&
