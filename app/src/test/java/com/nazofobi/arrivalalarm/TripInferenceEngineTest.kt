@@ -151,6 +151,26 @@ class TripInferenceEngineTest {
         }
     }
 
+    @Test fun extremeProviderEpochsCannotGainArtificialTimeConfidenceFromOverflow() {
+        val engine = TripInferenceEngine(
+            TripInferenceSettings(enabled = true, minimumConfidence = 0.90)
+        )
+        val malformedDirect = candidate("invalid-direct", "Flughafen", 180.0).copy(
+            scheduledEpochSeconds = Long.MIN_VALUE + now,
+            realtimeDelaySeconds = 0,
+        )
+        val malformedDelayed = candidate("invalid-delay", "Flughafen", 180.0).copy(
+            scheduledEpochSeconds = Long.MAX_VALUE - 100L,
+            realtimeDelaySeconds = now.toInt() + 101,
+        )
+        listOf(malformedDirect, malformedDelayed).forEach { invalid ->
+            val result = engine.infer(observation(), listOf(invalid))
+            assertNull("malformed epoch must not be accepted: ${invalid.routeId}", result.accepted)
+            assertEquals(0.0, result.suggestions.single().timeScore, 0.0)
+            assertTrue(result.requiresExplicitConfirmation)
+        }
+    }
+
     @Test fun parallelRouteAmbiguityFailsClosed() {
         val engine = TripInferenceEngine(TripInferenceSettings(enabled = true, ambiguityMargin = 0.08))
         val result = engine.infer(
