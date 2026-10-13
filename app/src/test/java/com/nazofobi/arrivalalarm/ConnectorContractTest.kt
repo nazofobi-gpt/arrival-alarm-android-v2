@@ -160,4 +160,75 @@ class ConnectorContractTest {
         assertEquals(first.actionId, duplicate.actionId)
         assertEquals(first.stateVersionAfter, duplicate.stateVersionAfter)
     }
+
+    @Test fun completedIdempotencyKeyCannotAcknowledgeAnotherCommandType() {
+        val store = InMemoryConnectorIdempotencyStore()
+        val port = FakePort(snapshot())
+        val processor = ConnectorCommandProcessor(port, idempotencyStore = store)
+        val destination = ArrivalAlarmConnectorCommand.SetDestination(
+            MapPoint(53.0834, 8.8137, "Bremen Hbf"), "shared-command-key",
+        )
+
+        val first = processor.execute(
+            destination, userConfirmed = true, nowEpochSeconds = 1_000,
+        )
+        val wrongType = processor.execute(
+            ArrivalAlarmConnectorCommand.ArmArrivalAlarm("shared-command-key"),
+            userConfirmed = true,
+            nowEpochSeconds = 1_000,
+        )
+
+        assertEquals(ConnectorCommandStatus.APPLIED, first.status)
+        assertEquals(ConnectorCommandStatus.REJECTED_DOMAIN, wrongType.status)
+        assertEquals("ArmArrivalAlarm", wrongType.commandType)
+        assertFalse(wrongType.duplicate)
+        assertEquals(8, wrongType.stateVersionBefore)
+        assertEquals(8, wrongType.stateVersionAfter)
+        assertEquals(1, port.writes)
+        assertEquals(first, store.get("shared-command-key")?.receipt)
+
+        val originalRetry = processor.execute(
+            destination, userConfirmed = true, nowEpochSeconds = 1_000,
+        )
+        assertTrue(originalRetry.duplicate)
+        assertEquals(first.actionId, originalRetry.actionId)
+        assertEquals(1, port.writes)
+    }
+
+    @Test fun pendingIdempotencyKeyCannotBeReusedForAnotherCommandType() {
+        val store = InMemoryConnectorIdempotencyStore()
+        store.begin(
+            ConnectorIdempotencyEntry(
+                idempotencyKey = "pending-shared-key",
+                commandType = "SetDestination",
+                stateVersionBefore = 7,
+            ),
+        )
+        val port = FakePort(snapshot())
+        val processor = ConnectorCommandProcessor(port, idempotencyStore = store)
+
+        val wrongType = processor.execute(
+            ArrivalAlarmConnectorCommand.ArmArrivalAlarm("pending-shared-key"),
+            userConfirmed = true,
+            nowEpochSeconds = 1_000,
+        )
+        assertEquals(ConnectorCommandStatus.REJECTED_DOMAIN, wrongType.status)
+        assertFalse(wrongType.duplicate)
+        assertEquals(0, port.writes)
+        assertEquals("SetDestination", store.get("pending-shared-key")?.commandType)
+        assertEquals(null, store.get("pending-shared-key")?.receipt)
+
+        val originalRetry = processor.execute(
+            ArrivalAlarmConnectorCommand.SetDestination(
+                MapPoint(53.0834, 8.8137, "Bremen Hbf"), "pending-shared-key",
+            ),
+            userConfirmed = true,
+            nowEpochSeconds = 1_000,
+        )
+        assertEquals(
+            ConnectorCommandStatus.REJECTED_IDEMPOTENCY_RECOVERY_REQUIRED,
+            originalRetry.status,
+        )
+        assertEquals(0, port.writes)
+    }
 }
