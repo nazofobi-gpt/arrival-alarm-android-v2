@@ -22,8 +22,9 @@ internal object NearbyStationCanonicalizer {
         return candidates
             .groupBy { candidate ->
                 val stop = candidate.stop
+                val normalizedParentId = stop.parentStationId?.trim()?.takeIf(String::isNotEmpty)
                 when {
-                    stop.parentStationId?.isNotBlank() == true -> "parent:" + stop.parentStationId
+                    normalizedParentId != null -> "parent:" + normalizedParentId
                     stop.id in parentIds -> "parent:" + stop.id
                     else -> fallbackKey(stop)
                 }
