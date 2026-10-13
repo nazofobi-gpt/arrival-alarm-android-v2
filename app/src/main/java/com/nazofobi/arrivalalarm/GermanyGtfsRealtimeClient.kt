@@ -258,10 +258,11 @@ class GermanyGtfsRealtimeClient(
                     else -> if (!codedInput.skipField(tag)) break
                 }
             }
-        } catch (failure: InvalidProtocolBufferException) {
+        } catch (_: InvalidProtocolBufferException) {
+            // Provider-controlled protobuf diagnostics must not disclose private payload details.
             return GermanyRealtimeFetchResult.Unavailable(
                 GermanyRealtimeUnavailableReason.PARSE,
-                failure.message,
+                "realtime_invalid_protobuf",
             )
         }
 
