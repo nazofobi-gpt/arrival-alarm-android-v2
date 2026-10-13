@@ -80,4 +80,39 @@ class ConnectorIdempotencyStoreInstrumentedTest {
         }
     }
 
+    @Test fun duplicateClaimIdsCannotBeSilentlyDeduplicated() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences("connector_idempotency_duplicate_test", Context.MODE_PRIVATE)
+        val claim = """{"idempotency_key":"pending","command_type":"SetDestination","state_version_before":7}"""
+        val raw = "[$claim,$claim]"
+        try {
+            assertEquals(true, prefs.edit().putString("connector_idempotency_v1", raw).commit())
+            val store = SharedPreferencesConnectorIdempotencyStore(prefs)
+            try {
+                store.get("pending")
+                fail("Duplicate durable claims must fail closed")
+            } catch (_: IllegalStateException) { }
+            assertEquals(raw, prefs.getString("connector_idempotency_v1", null))
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
+    @Test fun mismatchedReceiptCannotAuthorizeReplay() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences("connector_idempotency_receipt_test", Context.MODE_PRIVATE)
+        val raw = """[{"idempotency_key":"pending","command_type":"SetDestination","state_version_before":7,"receipt":{"idempotency_key":"another","command_type":"SetDestination","status":"APPLIED","message":"done","state_version_before":7,"state_version_after":8}}]"""
+        try {
+            assertEquals(true, prefs.edit().putString("connector_idempotency_v1", raw).commit())
+            val store = SharedPreferencesConnectorIdempotencyStore(prefs)
+            try {
+                store.get("pending")
+                fail("Mismatched receipt must fail closed")
+            } catch (_: IllegalStateException) { }
+            assertEquals(raw, prefs.getString("connector_idempotency_v1", null))
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
 }
