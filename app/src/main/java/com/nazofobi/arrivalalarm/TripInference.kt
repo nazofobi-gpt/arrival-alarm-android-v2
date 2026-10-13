@@ -64,7 +64,7 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
         // Reject corrupt location/movement samples before scoring a trip.
         if (!validCoordinates(observation.point) ||
             !observation.speedMps.isFinite() || observation.speedMps < 0.0 ||
-            observation.bearingDegrees?.isFinite() == false ||
+            !validBearing(observation.bearingDegrees) ||
             observation.epochSeconds <= 0L
         ) {
             return TripInferenceResult(emptyList(), null, "Konum veya hareket kanıtı geçersiz")
@@ -74,7 +74,7 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
             .filter {
                 it.serviceActive &&
                     validCoordinates(it.anchor) &&
-                    it.expectedBearingDegrees?.isFinite() != false &&
+                    validBearing(it.expectedBearingDegrees) &&
                     it.scheduledEpochSeconds > 0L
             }
             .map { score(observation, it) }
@@ -96,6 +96,10 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
         }
         return TripInferenceResult(scored, best, "Aday bulundu; hedef/alarm yalnız kullanıcı onayıyla kurulabilir")
     }
+
+    // Provider heading is degrees in [0, 360]; never modulo invalid input into a valid bearing.
+    private fun validBearing(degrees: Double?): Boolean =
+        degrees == null || (degrees.isFinite() && degrees in 0.0..360.0)
 
     private fun validCoordinates(point: GeoPoint): Boolean =
         point.latitude.isFinite() && point.latitude in -90.0..90.0 &&
