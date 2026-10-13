@@ -120,7 +120,11 @@ class GuidanceReliabilityController(
         if (state.permissionState == GuidancePermissionState.DENIED) {
             update(state.copy(
                 pending = utterance,
-                pendingSinceEpochMillis = nowEpochMillis(),
+                pendingSinceEpochMillis = if (state.pending == utterance) {
+                    state.pendingSinceEpochMillis ?: nowEpochMillis()
+                } else {
+                    nowEpochMillis()
+                },
                 status = "Guidance beklemede • izin kurtarma gerekli",
             ))
             return false
@@ -147,7 +151,14 @@ class GuidanceReliabilityController(
     }
 
     private fun deliver(utterance: GuidanceUtterance): Boolean {
-        val spoken = speaker.speak(utterance)
+        // A disconnected Android TTS engine can throw during route changes.
+        // Keep the original queued timestamp so exception retries cannot
+        // make an expired stop instruction live forever.
+        val spoken = try {
+            speaker.speak(utterance)
+        } catch (_: RuntimeException) {
+            false
+        }
         update(
             if (spoken) state.copy(
                 lastSpokenKey = utterance.key,
@@ -160,7 +171,7 @@ class GuidanceReliabilityController(
                 },
             ) else state.copy(
                 pending = utterance,
-                pendingSinceEpochMillis = if (state.pending?.key == utterance.key) {
+                pendingSinceEpochMillis = if (state.pending == utterance) {
                     state.pendingSinceEpochMillis ?: nowEpochMillis()
                 } else {
                     nowEpochMillis()
