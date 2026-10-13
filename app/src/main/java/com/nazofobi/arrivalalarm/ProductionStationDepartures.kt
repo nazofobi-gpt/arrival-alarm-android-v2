@@ -349,10 +349,7 @@ internal class ProductionRealtimeStationOverlay(
             val update = trip.stopUpdates.firstOrNull { it.scheduledStopId == stopId }
             matchedAny = true
             departure.copy(
-                realtimeEpochSeconds = update?.departureTimeEpochSeconds
-                    ?: update?.departureDelaySeconds?.let {
-                        departure.scheduledEpochSeconds + it
-                    },
+                realtimeEpochSeconds = safeRealtimeDepartureEpoch(departure, update),
                 cancelled = trip.cancelled,
                 platform = update?.platformCode ?: departure.platform,
             )
@@ -389,6 +386,24 @@ internal class ProductionRealtimeStationOverlay(
             realtimeSourceLabel = overlay.provenance.source,
             updatedAtEpochSeconds = overlay.updatedAtEpochSeconds(),
         )
+    }
+
+    /**
+     * Realtime timestamps are provider-controlled. Reject non-positive epochs and
+     * arithmetic overflow rather than showing a fabricated departure on the board.
+     */
+    private fun safeRealtimeDepartureEpoch(
+        departure: Departure,
+        update: GermanyRealtimeMatchedStopUpdate?,
+    ): Long? {
+        update?.departureTimeEpochSeconds?.takeIf { it > 0L }?.let { return it }
+        val delaySeconds = update?.departureDelaySeconds ?: return null
+        return try {
+            Math.addExact(departure.scheduledEpochSeconds, delaySeconds.toLong())
+                .takeIf { it > 0L }
+        } catch (_: ArithmeticException) {
+            null
+        }
     }
 
     private fun selectorMatchesStationBoard(
