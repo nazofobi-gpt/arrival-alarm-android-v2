@@ -151,6 +151,42 @@ class TripInferenceEngineTest {
         }
     }
 
+    @Test fun malformedSensorEvidenceCannotBecomeAConfidentTripSuggestion() {
+        val engine = TripInferenceEngine(TripInferenceSettings(enabled = true))
+        val valid = listOf(candidate("south", "Flughafen", 180.0))
+        val corrupt = listOf(
+            observation(speed = Double.NaN, bearing = null),
+            observation(speed = Double.POSITIVE_INFINITY, bearing = null),
+            observation(speed = -1.0, bearing = null),
+            observation(bearing = Double.NaN),
+            observation(bearing = Double.NEGATIVE_INFINITY),
+            observation(point = GeoPoint(93.0, 8.813)),
+            observation(point = GeoPoint(53.083, 181.0)),
+            observation(point = GeoPoint(Double.NaN, 8.813)),
+            observation(time = 0L),
+        )
+        corrupt.forEach { evidence ->
+            val result = engine.infer(evidence, valid)
+            assertNull("Invalid sensor evidence must not be accepted: $evidence", result.accepted)
+            assertTrue("Invalid evidence must produce no suggestions", result.suggestions.isEmpty())
+            assertTrue(result.requiresExplicitConfirmation)
+        }
+    }
+
+    @Test fun invalidCandidatesAreExcludedBeforeScoring() {
+        val engine = TripInferenceEngine(TripInferenceSettings(enabled = true))
+        val candidates = listOf(
+            candidate("invalid-lat", "Bad", 180.0, anchor = GeoPoint(91.0, 8.813)),
+            candidate("invalid-lon", "Bad", 180.0, anchor = GeoPoint(53.083, 181.0)),
+            candidate("invalid-bearing", "Bad", Double.NaN),
+            candidate("invalid-time", "Bad", 180.0).copy(scheduledEpochSeconds = 0L),
+        )
+        val result = engine.infer(observation(), candidates)
+        assertNull(result.accepted)
+        assertTrue(result.suggestions.isEmpty())
+        assertEquals("Uygun aktif sefer adayı yok", result.reason)
+    }
+
     @Test fun extremeProviderEpochsCannotGainArtificialTimeConfidenceFromOverflow() {
         val engine = TripInferenceEngine(
             TripInferenceSettings(enabled = true, minimumConfidence = 0.90)
@@ -163,12 +199,17 @@ class TripInferenceEngineTest {
             scheduledEpochSeconds = Long.MAX_VALUE - 100L,
             realtimeDelaySeconds = now.toInt() + 101,
         )
-        listOf(malformedDirect, malformedDelayed).forEach { invalid ->
-            val result = engine.infer(observation(), listOf(invalid))
-            assertNull("malformed epoch must not be accepted: ${invalid.routeId}", result.accepted)
-            assertEquals(0.0, result.suggestions.single().timeScore, 0.0)
-            assertTrue(result.requiresExplicitConfirmation)
-        }
+        // Negative/sentinel epochs are now discarded before scoring.
+        val direct = engine.infer(observation(), listOf(malformedDirect))
+        assertNull(direct.accepted)
+        assertTrue(direct.suggestions.isEmpty())
+        assertTrue(direct.requiresExplicitConfirmation)
+
+        // Positive but extreme timestamps remain candidates with zero time confidence.
+        val delayed = engine.infer(observation(), listOf(malformedDelayed))
+        assertNull(delayed.accepted)
+        assertEquals(0.0, delayed.suggestions.single().timeScore, 0.0)
+        assertTrue(delayed.requiresExplicitConfirmation)
     }
 
     @Test fun parallelRouteAmbiguityFailsClosed() {
