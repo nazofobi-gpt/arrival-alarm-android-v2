@@ -47,14 +47,20 @@ data class TripInferenceResult(
 class TripInferenceEngine(private val settings: TripInferenceSettings) {
     fun infer(observation: MovementObservation, candidates: List<TripCandidate>): TripInferenceResult {
         if (!settings.enabled) return TripInferenceResult(emptyList(), null, "Sefer algılama kullanıcı tarafından kapalı")
-        val scored = candidates
+        // Display size must not weaken the ambiguity gate: even topK=1 needs
+        // the runner-up to decide whether the leading trip is distinguishable.
+        if (settings.topK <= 0) {
+            return TripInferenceResult(emptyList(), null, "Gösterilecek sefer adayı sınırı geçersiz")
+        }
+        val ranked = candidates
             .asSequence()
             .filter { it.serviceActive }
             .map { score(observation, it) }
             .filter { it.confidence > 0.0 }
             .sortedByDescending { it.confidence }
-            .take(settings.topK)
+            .take(maxOf(settings.topK, 2))
             .toList()
+        val scored = ranked.take(settings.topK)
 
         val best = scored.firstOrNull()
             ?: return TripInferenceResult(emptyList(), null, "Uygun aktif sefer adayı yok")
@@ -62,7 +68,7 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
         if (best.confidence < settings.minimumConfidence) {
             return TripInferenceResult(scored, null, "Güven eşiği altında")
         }
-        val runnerUp = scored.getOrNull(1)
+        val runnerUp = ranked.getOrNull(1)
         if (runnerUp != null && best.confidence - runnerUp.confidence < settings.ambiguityMargin) {
             return TripInferenceResult(scored, null, "Adaylar belirsiz; kullanıcıya otomatik öneri yok")
         }
