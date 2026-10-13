@@ -439,6 +439,54 @@ class BoundedHttpTransportTest {
     }
 
     @Test
+    fun interruptedPlainIoExceptionStopsBeforeBackoff() {
+        var calls = 0
+        var sleeps = 0
+        val transport = BoundedHttpTransport(
+            exchange = HttpExchange { _, _, _ ->
+                calls += 1
+                if (calls == 1) {
+                    Thread.currentThread().interrupt()
+                    throw IOException("credential=secret&lat=52.1")
+                }
+                HttpTransportResponse(200)
+            },
+            clock = HttpTransportClock { 100L },
+            sleeper = HttpTransportSleeper {
+                sleeps += 1
+                // A poorly behaved adapter can consume a cancellation.
+                Thread.interrupted()
+            },
+            maxRetries = 2,
+            failureThreshold = 1,
+        )
+
+        try {
+            val failure = transport.execute(
+                HttpTransportRequest("https://provider.invalid")
+            ) as HttpTransportResult.Failure
+            assertEquals(HttpTransportResult.Failure.Kind.NETWORK, failure.kind)
+            assertEquals("request_interrupted", failure.message)
+            assertEquals(1, failure.attempts)
+            assertEquals(1, calls)
+            assertEquals(0, sleeps)
+            assertTrue(Thread.currentThread().isInterrupted)
+            assertTrue(!failure.toString().contains("secret"))
+
+            // Cancellation must not trip the provider circuit.
+            Thread.interrupted()
+            val success = transport.execute(
+                HttpTransportRequest("https://provider.invalid")
+            ) as HttpTransportResult.Response
+            assertEquals(200, success.response.status)
+            assertEquals(1, success.attempts)
+            assertEquals(2, calls)
+        } finally {
+            Thread.interrupted()
+        }
+    }
+
+    @Test
     fun interruptedBackoffStopsRetryAndPreservesThreadInterrupt() {
         var calls = 0
         val transport = BoundedHttpTransport(
