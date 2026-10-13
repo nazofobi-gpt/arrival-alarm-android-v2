@@ -52,6 +52,15 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
         if (settings.topK <= 0) {
             return TripInferenceResult(emptyList(), null, "Gösterilecek sefer adayı sınırı geçersiz")
         }
+        // Never let invalid persisted or injected calibration settings disable
+        // the confidence and runner-up ambiguity gates (NaN comparisons are false).
+        if (!settings.minimumConfidence.isFinite() ||
+            settings.minimumConfidence !in 0.0..1.0 ||
+            !settings.ambiguityMargin.isFinite() ||
+            settings.ambiguityMargin !in 0.0..1.0
+        ) {
+            return TripInferenceResult(emptyList(), null, "Sefer algılama güven ayarları geçersiz")
+        }
         val ranked = candidates
             .asSequence()
             .filter { it.serviceActive }
