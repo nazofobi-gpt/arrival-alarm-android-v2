@@ -70,7 +70,7 @@ fun TransitExperiencePanel(
     var favorite by remember(stopId) { mutableStateOf(store.isFavorite(stopId)) }
     var selectedTrip by remember { mutableStateOf<String?>(null) }
     val board = engine.departureBoard(departures, nowEpochSeconds)
-    val cancelled = departures.filter { it.cancelled }
+    val cancelled = upcomingCancelledDepartures(departures, nowEpochSeconds)
 
     Column(
         modifier = modifier.padding(vertical = 8.dp),
@@ -231,7 +231,7 @@ fun TransitExperiencePanel(
             }
         }
 
-        cancelled.take(3).forEachIndexed { index, departure ->
+        cancelled.forEachIndexed { index, departure ->
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -247,6 +247,14 @@ fun TransitExperiencePanel(
                     Text(
                         text = "${departure.line} → ${departure.direction}",
                         fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.departure_time_source,
+                            formatDepartureEpoch(departure.scheduledEpochSeconds),
+                            stringResource(R.string.departure_source_planned),
+                        ),
                         color = MaterialTheme.colorScheme.onErrorContainer,
                     )
                     Text(
