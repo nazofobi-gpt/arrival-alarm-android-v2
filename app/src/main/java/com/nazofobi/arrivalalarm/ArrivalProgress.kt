@@ -64,7 +64,12 @@ interface ArrivalProgressStateStore {
 class ArrivalProgressController(
     private val stateStore: ArrivalProgressStateStore? = null,
 ) {
-    var state: ArrivalProgressState = stateStore?.load() ?: ArrivalProgressState()
+    var state: ArrivalProgressState = try {
+        stateStore?.load() ?: ArrivalProgressState()
+    } catch (_: RuntimeException) {
+        // Legacy/wrong-typed persisted values must not crash journey restoration.
+        ArrivalProgressState()
+    }
         private set
 
     private var route: ArmedRoute? = null
