@@ -46,6 +46,25 @@ class TransitRealtimeTest {
         assertEquals(listOf("Bremen Hbf", "Am Brill", "Flughafen Bremen"), result.journey.legs.single().stops.map { it.name })
     }
 
+    @Test fun futureDatedSnapshotsCannotMakeRealtimeLookFresh() {
+        val futureTimestamps = listOf(now + 1L, Long.MAX_VALUE)
+        futureTimestamps.forEach { timestamp ->
+            val result = repo(
+                RealtimeSnapshot(timestamp, listOf(RealtimeUpdate("trip-42", delaySeconds = 600, cancelled = true)))
+            ).plan("fixture-bremen-hbf", "fixture-airport")!!
+            assertEquals(RealtimeFreshness.STALE, result.realtime.freshness)
+            assertNull(result.realtime.delaySeconds)
+            assertFalse(result.realtime.cancelled)
+            assertEquals("Fixture 6", result.journey.legs.single().line)
+        }
+    }
+
+    @Test fun invalidProviderEpochCannotCertifyFreshness() {
+        val result = repo(RealtimeSnapshot(0L, emptyList()))
+            .plan("fixture-bremen-hbf", "fixture-airport")!!
+        assertEquals(RealtimeFreshness.STALE, result.realtime.freshness)
+    }
+
     @Test fun unavailableAndTimeoutBothPreserveStaticJourney() {
         val unavailable = repo(null).plan("fixture-bremen-hbf", "fixture-airport")!!
         val timeout = repo(null, throws = true).plan("fixture-bremen-hbf", "fixture-airport")!!
