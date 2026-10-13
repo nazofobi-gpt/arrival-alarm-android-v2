@@ -83,7 +83,13 @@ class SharedPreferencesConnectorIdempotencyStore(
         val entries = loadEntries().toMutableList()
         val index = entries.indexOfFirst { it.idempotencyKey == receipt.idempotencyKey }
         check(index >= 0) { "Idempotency key must be claimed before completion" }
-        entries[index] = entries[index].copy(receipt = receipt)
+        val existing = entries[index]
+        // Never rewrite a completed receipt or attach a result to another command.
+        check(existing.receipt == null) { "Idempotency claim already completed" }
+        check(existing.commandType == receipt.commandType &&
+            existing.stateVersionBefore == receipt.stateVersionBefore
+        ) { "Idempotency receipt does not match claim" }
+        entries[index] = existing.copy(receipt = receipt)
         persist(trimCompleted(entries))
     }
 
