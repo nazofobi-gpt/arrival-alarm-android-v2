@@ -545,4 +545,16 @@ class GermanyGtfsRealtimeClientTest {
         assertEquals(GermanyRealtimeUnavailableReason.NETWORK, result.reason)
         assertEquals("realtime_unexpected_error", result.detail)
     }
+
+    @Test
+    fun malformedProtobufReportsStableRedactedParseError() {
+        // A header advertises five bytes but the payload supplies only one.
+        val malformed = byteArrayOf(0x0A, 0x05, 0x01)
+        val result = GermanyGtfsRealtimeClient(
+            loader = { malformed },
+        ).fetch() as GermanyRealtimeFetchResult.Unavailable
+
+        assertEquals(GermanyRealtimeUnavailableReason.PARSE, result.reason)
+        assertEquals("realtime_invalid_protobuf", result.detail)
+    }
 }
