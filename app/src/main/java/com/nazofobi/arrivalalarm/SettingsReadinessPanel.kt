@@ -106,6 +106,7 @@ fun SettingsReadinessPanel(
     onRequestJourneyPermissions: () -> Unit,
     onRequestGuidancePermissions: () -> Unit,
     onRefreshReadiness: () -> Unit,
+    onShareDiagnostics: () -> Unit,
     onOpenAppSettings: () -> Unit,
     onRetryData: () -> Unit,
     onConnectorAction: () -> Unit,
@@ -280,6 +281,20 @@ fun SettingsReadinessPanel(
             ) {
                 Text(stringResource(R.string.readiness_refresh))
             }
+            OutlinedButton(
+                onClick = onShareDiagnostics,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("readiness-share-diagnostics"),
+            ) {
+                Text(stringResource(R.string.readiness_share_diagnostics))
+            }
+            Text(
+                text = stringResource(R.string.readiness_share_diagnostics_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             OutlinedButton(
                 onClick = onOpenAppSettings,
                 modifier = Modifier
