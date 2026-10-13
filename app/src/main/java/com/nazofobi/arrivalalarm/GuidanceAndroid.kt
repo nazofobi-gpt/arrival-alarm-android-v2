@@ -17,24 +17,49 @@ class SharedPreferencesGuidanceStateStore(
 
     override fun load(): GuidanceReliabilityState? {
         if (!p.contains("permission")) return null
-        val pending = if (p.contains("pending_key")) GuidanceUtterance(
-            key = p.getString("pending_key", "") ?: "",
-            text = p.getString("pending_text", "") ?: "",
-            localeTag = p.getString("pending_locale", "tr-TR") ?: "tr-TR",
-        ) else null
+
+        // SharedPreferences is durable external state. A wrong-typed value must
+        // not crash active-journey recovery or become a spoken instruction.
+        fun stringValue(key: String, fallback: String? = null): String? =
+            try {
+                p.getString(key, fallback)
+            } catch (_: ClassCastException) {
+                null
+            }
+
+        val pendingKey = stringValue("pending_key")?.takeIf { it.isNotBlank() }
+        val pendingText = stringValue("pending_text")?.takeIf { it.isNotBlank() }
+        val pendingLocale = if (p.contains("pending_locale")) {
+            stringValue("pending_locale")?.takeIf { it.isNotBlank() }
+        } else {
+            "tr-TR"
+        }
+        val pending = if (pendingKey != null && pendingText != null && pendingLocale != null) {
+            GuidanceUtterance(pendingKey, pendingText, pendingLocale)
+        } else {
+            null
+        }
+
         return GuidanceReliabilityState(
-            permissionState = runCatching {
-                GuidancePermissionState.valueOf(p.getString("permission", GuidancePermissionState.DENIED.name)!!)
-            }.getOrDefault(GuidancePermissionState.DENIED),
-            audioRoute = runCatching {
-                GuidanceAudioRoute.valueOf(p.getString("route", GuidanceAudioRoute.DEVICE.name)!!)
-            }.getOrDefault(GuidanceAudioRoute.DEVICE),
-            lastSpokenKey = p.getString("last_key", null),
+            permissionState = stringValue("permission")?.let {
+                runCatching { GuidancePermissionState.valueOf(it) }.getOrNull()
+            } ?: GuidancePermissionState.DENIED,
+            audioRoute = stringValue("route")?.let {
+                runCatching { GuidanceAudioRoute.valueOf(it) }.getOrNull()
+            } ?: GuidanceAudioRoute.DEVICE,
+            lastSpokenKey = stringValue("last_key")?.takeIf { it.isNotBlank() },
             pending = pending,
-            pendingSinceEpochMillis = if (pending != null) runCatching {
-                p.getLong("pending_since", 0L)
-            }.getOrNull() else null,
-            status = p.getString("status", "İzinler bekleniyor") ?: "İzinler bekleniyor",
+            // Unknown, legacy, or wrong-typed ages are rejected by retryPending.
+            pendingSinceEpochMillis = if (pending != null) {
+                try {
+                    p.getLong("pending_since", 0L)
+                } catch (_: ClassCastException) {
+                    null
+                }
+            } else {
+                null
+            },
+            status = stringValue("status") ?: "İzinler bekleniyor",
         )
     }
 
