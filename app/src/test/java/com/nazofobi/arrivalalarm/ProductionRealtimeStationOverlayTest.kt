@@ -294,6 +294,66 @@ class ProductionRealtimeStationOverlayTest {
         assertTrue(caught)
     }
 
+    @Test
+    fun invalidRealtimeEpochAndOverflowingDelayDoNotCorruptStationBoard() {
+        val impossible = overlay(matchedDeparture(-1L, Int.MAX_VALUE))
+            .enrich("A", listOf(planned.copy(scheduledEpochSeconds = Long.MAX_VALUE - 1L)))
+        assertNull(impossible.departures.single().realtimeEpochSeconds)
+        assertEquals("5", impossible.departures.single().platform)
+
+        val zero = overlay(matchedDeparture(0L, null)).enrich("A", listOf(planned))
+        assertNull(zero.departures.single().realtimeEpochSeconds)
+
+        val negativeDelay = overlay(matchedDeparture(null, -2_000))
+            .enrich("A", listOf(planned))
+        assertNull(negativeDelay.departures.single().realtimeEpochSeconds)
+
+        val validExplicit = overlay(matchedDeparture(1_400L, Int.MAX_VALUE))
+            .enrich("A", listOf(planned))
+        assertEquals(1_400L, validExplicit.departures.single().realtimeEpochSeconds)
+
+        val validDelay = overlay(matchedDeparture(-1L, 120))
+            .enrich("A", listOf(planned))
+        assertEquals(1_120L, validDelay.departures.single().realtimeEpochSeconds)
+    }
+
+    private fun matchedDeparture(
+        explicitEpochSeconds: Long?,
+        delaySeconds: Int?,
+    ) = GermanyRealtimeOverlayResult.Matched(
+        tripOverlays = listOf(
+            GermanyRealtimeTripOverlay(
+                staticTrip = trip(),
+                startDate = null,
+                startTime = null,
+                cancelled = false,
+                scheduleRelationship = "SCHEDULED",
+                stopUpdates = listOf(
+                    GermanyRealtimeMatchedStopUpdate(
+                        stopSequence = 1,
+                        scheduledStopId = "A",
+                        realtimeStopId = "A",
+                        assignedStopId = null,
+                        platformCode = "5",
+                        arrivalDelaySeconds = null,
+                        departureDelaySeconds = delaySeconds,
+                        arrivalTimeEpochSeconds = null,
+                        departureTimeEpochSeconds = explicitEpochSeconds,
+                        scheduleRelationship = "SCHEDULED",
+                        pickupType = null,
+                        dropOffType = null,
+                        stopHeadsign = null,
+                    ),
+                ),
+                sourceTimestampEpochSeconds = 990L,
+            ),
+        ),
+        serviceAlerts = emptyList(),
+        freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+        ageSeconds = 10L,
+        provenance = provenance(),
+    )
+
     private fun overlay(
         result: GermanyRealtimeOverlayResult,
         isFrequencyTrip: (String) -> Boolean = { false },
