@@ -150,4 +150,111 @@ class GuidanceReliabilityTest {
         assertTrue(controller.retryPending())
         assertEquals("stop:3", controller.state.lastSpokenKey)
     }
+
+    @Test fun expiredPendingAnnouncementIsNotSpokenAfterPermissionRecovery() {
+        val speaker = RecordingSpeaker()
+        val store = InMemoryGuidanceStateStore()
+        var now = 10_000L
+        val controller = GuidanceReliabilityController(speaker, store, nowEpochMillis = { now })
+        val stop = GuidanceUtterance("stop:old", "Sıradaki durak Lohne", "tr-TR")
+
+        controller.onPermissions(GuidancePermissionSnapshot(false, false, false))
+        assertFalse(controller.requestGuidance(stop))
+        assertEquals(10_000L, controller.state.pendingSinceEpochMillis)
+
+        now += GuidanceReliabilityController.MAX_PENDING_AGE_MILLIS + 1L
+        controller.onPermissions(GuidancePermissionSnapshot(true, true, true))
+        assertTrue(speaker.spoken.isEmpty())
+        assertNull(controller.state.pending)
+        assertNull(controller.state.pendingSinceEpochMillis)
+    }
+
+    @Test fun repeatedTtsFailureDoesNotRefreshPendingExpiry() {
+        val speaker = RecordingSpeaker(available = false)
+        var now = 100_000L
+        val controller = GuidanceReliabilityController(
+            speaker, nowEpochMillis = { now },
+        )
+        controller.onPermissions(GuidancePermissionSnapshot(true, true, true))
+        val stop = GuidanceUtterance("stop:failed", "Sıradaki durak Bremen Hbf", "tr-TR")
+
+        assertFalse(controller.requestGuidance(stop))
+        assertEquals(100_000L, controller.state.pendingSinceEpochMillis)
+        now += 90_000L
+        assertFalse(controller.retryPending())
+        assertEquals(100_000L, controller.state.pendingSinceEpochMillis)
+
+        now += 30_001L
+        speaker.available = true
+        assertFalse(controller.retryPending())
+        assertTrue(speaker.spoken.isEmpty())
+        assertNull(controller.state.pending)
+    }
+
+    @Test fun validPendingAnnouncementSurvivesShortProcessRecreation() {
+        val speaker = RecordingSpeaker()
+        val store = InMemoryGuidanceStateStore()
+        var now = 1_000_000L
+        val first = GuidanceReliabilityController(speaker, store, nowEpochMillis = { now })
+        first.onPermissions(GuidancePermissionSnapshot(false, false, false))
+        val stop = GuidanceUtterance("stop:new", "Sıradaki durak Achim", "tr-TR")
+        assertFalse(first.requestGuidance(stop))
+
+        now += 45_000L
+        val restored = GuidanceReliabilityController(speaker, store, nowEpochMillis = { now })
+        restored.onPermissions(GuidancePermissionSnapshot(true, true, true))
+        assertEquals(listOf(stop), speaker.spoken)
+        assertNull(restored.state.pendingSinceEpochMillis)
+        assertFalse(restored.retryPending())
+    }
+
+    @Test fun repeatedDeniedRequestCannotExtendPendingStopLifetime() {
+        val speaker = RecordingSpeaker()
+        var now = 1_000_000L
+        val controller = GuidanceReliabilityController(speaker, nowEpochMillis = { now })
+        val stop = GuidanceUtterance("stop:lo", "Sıradaki durak Lohne", "tr-TR")
+        controller.onPermissions(GuidancePermissionSnapshot(false, false, false))
+        assertFalse(controller.requestGuidance(stop))
+        assertEquals(1_000_000L, controller.state.pendingSinceEpochMillis)
+
+        now += GuidanceReliabilityController.MAX_PENDING_AGE_MILLIS - 1L
+        assertFalse(controller.requestGuidance(stop))
+        assertEquals(1_000_000L, controller.state.pendingSinceEpochMillis)
+
+        now += 2L
+        controller.onPermissions(GuidancePermissionSnapshot(true, true, true))
+        assertTrue(speaker.spoken.isEmpty())
+        assertNull(controller.state.pending)
+    }
+
+    @Test fun throwingTtsSpeakerRetainsOriginalPendingExpiry() {
+        val spoken = mutableListOf<GuidanceUtterance>()
+        var engineConnected = false
+        val speaker = object : GuidanceSpeaker {
+            override fun speak(utterance: GuidanceUtterance): Boolean {
+                if (!engineConnected) throw IllegalStateException("TTS not ready")
+                spoken += utterance
+                return true
+            }
+        }
+        var now = 1_000_000L
+        val store = InMemoryGuidanceStateStore()
+        val first = GuidanceReliabilityController(speaker, store, nowEpochMillis = { now })
+        first.onPermissions(GuidancePermissionSnapshot(true, true, true))
+        val stop = GuidanceUtterance("stop:exception", "Sıradaki durak Achim", "tr-TR")
+        assertFalse(first.requestGuidance(stop))
+        assertEquals(1_000_000L, first.state.pendingSinceEpochMillis)
+
+        now += 60_000L
+        val recreated = GuidanceReliabilityController(speaker, store, nowEpochMillis = { now })
+        assertFalse(recreated.retryPending())
+        assertEquals(1_000_000L, recreated.state.pendingSinceEpochMillis)
+
+        engineConnected = true
+        now += GuidanceReliabilityController.MAX_PENDING_AGE_MILLIS - 60_000L + 1L
+        assertFalse(recreated.retryPending())
+        assertTrue(spoken.isEmpty())
+        assertNull(recreated.state.pending)
+    }
+
 }
