@@ -2,6 +2,7 @@ package com.nazofobi.arrivalalarm
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class JourneyControllerTest {
@@ -58,6 +59,46 @@ class JourneyControllerTest {
         c.selectDestination(GeoPoint(90.0, -180.0))
         c.arm()
         assertEquals(JourneyPhase.ARMED, c.state.phase)
+    }
+
+    @Test fun changingDestinationClearsOldDistanceAndPersistsReset() {
+        var persisted: JourneyUiState? = null
+        val store = object : JourneyStateStore {
+            override fun load(): JourneyUiState? = persisted
+            override fun save(state: JourneyUiState) { persisted = state }
+        }
+        val c = JourneyController(arrivalRadiusMeters = 250.0, stateStore = store)
+        c.selectStart(GeoPoint(53.5, 8.1))
+        c.selectDestination(GeoPoint(53.6, 8.2))
+        c.arm()
+        c.onDistanceChanged(600.0)
+        assertEquals(600.0, c.state.distanceMeters)
+
+        c.selectDestination(GeoPoint(53.7, 8.3))
+        assertEquals(JourneyPhase.DESTINATION_SELECTED, c.state.phase)
+        assertEquals(GeoPoint(53.7, 8.3), c.state.destination)
+        assertNull(c.state.distanceMeters)
+        assertNull(persisted?.distanceMeters)
+        assertEquals(JourneyPhase.DESTINATION_SELECTED, persisted?.phase)
+
+        c.arm()
+        assertNull(c.state.distanceMeters)
+        c.onDistanceChanged(120.0)
+        assertEquals(JourneyPhase.ARRIVED, c.state.phase)
+        assertEquals(120.0, c.state.distanceMeters)
+    }
+
+    @Test fun changingDestinationAfterArrivalRemovesPreviousArrivalDistance() {
+        val c = JourneyController(arrivalRadiusMeters = 250.0)
+        c.selectStart(GeoPoint(53.5, 8.1))
+        c.selectDestination(GeoPoint(53.6, 8.2))
+        c.arm()
+        c.onDistanceChanged(100.0)
+        assertEquals(JourneyPhase.ARRIVED, c.state.phase)
+
+        c.selectDestination(GeoPoint(53.8, 8.4))
+        assertEquals(JourneyPhase.DESTINATION_SELECTED, c.state.phase)
+        assertNull(c.state.distanceMeters)
     }
 
     @Test fun corruptedPersistedArmedJourneyFailsClosedOnRestart() {
