@@ -239,4 +239,7 @@
     <string name="departures_gtfsrt_unavailable">GTFS Deutschland lokale Abfahrten • GTFS-RT nicht verfügbar, Fahrplanzeiten</string>
     <string name="lookup_stale_results">Zwischengespeicherte Anbieter-Ergebnisse sind veraltet • Aktualität nicht bestätigt</string>
     <string name="lookup_provider_unavailable">Live-Suchanbieter nicht verfügbar • lokale Daten lieferten kein Ergebnis</string>
+    <string name="journey_stops_hidden_count">%1$d Zwischenhalte ausgeblendet</string>
+    <string name="journey_show_all_stops_count">Alle %1$d Halte anzeigen</string>
+    <string name="journey_show_fewer_stops">Weniger Halte anzeigen</string>
 </resources>
