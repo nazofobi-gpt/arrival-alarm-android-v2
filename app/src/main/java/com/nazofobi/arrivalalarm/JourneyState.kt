@@ -34,7 +34,9 @@ class JourneyController(
 
     @Volatile
     var state: JourneyUiState = runCatching { stateStore?.load() }.getOrNull()?.takeIf { saved ->
-        when (saved.phase) {
+        (saved.distanceMeters == null ||
+            (saved.distanceMeters.isFinite() && saved.distanceMeters >= 0.0)) &&
+            when (saved.phase) {
             JourneyPhase.EMPTY -> saved.start == null && saved.destination == null
             JourneyPhase.START_SELECTED -> saved.start?.isValidCoordinate() == true && saved.destination == null
             JourneyPhase.DESTINATION_SELECTED, JourneyPhase.ARMED, JourneyPhase.ARRIVED ->
