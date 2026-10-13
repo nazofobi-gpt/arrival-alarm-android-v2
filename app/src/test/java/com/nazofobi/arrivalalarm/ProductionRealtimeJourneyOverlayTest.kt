@@ -177,12 +177,47 @@ class ProductionRealtimeJourneyOverlayTest {
 
         val unavailable = GermanyRealtimeOverlayResult.Unavailable(
             reason = GermanyRealtimeUnavailableReason.NETWORK,
-            detail = "offline",
+            detail = "https://provider.example/?token=SECRET&lat=52.665",
         )
         val unavailableResult = overlay(unavailable).enrich(listOf(option())).single()
         assertEquals(RouteRealtimeState.UNAVAILABLE, unavailableResult.realtime?.state)
-        assertEquals("NETWORK: offline", unavailableResult.realtime?.unavailableReason)
+        assertEquals("NETWORK", unavailableResult.realtime?.unavailableReason)
         assertNull(unavailableResult.stops.last().arrival)
+    }
+
+    @Test
+    fun thrownProviderErrorsAreRedactedFromRouteReadiness() {
+        val realtime = ProductionRealtimeJourneyOverlay(
+            fetch = {
+                throw IllegalStateException(
+                    "Bearer SECRET_TOKEN https://provider.example/?lat=52.665&lon=8.237"
+                )
+            },
+            match = { _, _ -> error("matcher should not run") },
+            nowEpochSeconds = { at("08:00:00") / 1_000L },
+        )
+
+        val result = realtime.enrich(listOf(option())).single()
+
+        assertEquals(RouteRealtimeState.UNAVAILABLE, result.realtime?.state)
+        assertEquals("NETWORK", result.realtime?.unavailableReason)
+        assertNull(result.stops.first().departure)
+    }
+
+    @Test(expected = AssertionError::class)
+    fun fatalMatcherErrorsPropagateInsteadOfBeingMaskedAsNetworkFailures() {
+        val realtime = ProductionRealtimeJourneyOverlay(
+            fetch = {
+                GermanyRealtimeFetchResult.Unavailable(
+                    GermanyRealtimeUnavailableReason.NETWORK,
+                    "unused",
+                )
+            },
+            match = { _, _ -> throw AssertionError("fatal matcher state") },
+            nowEpochSeconds = { at("08:00:00") / 1_000L },
+        )
+
+        realtime.enrich(listOf(option()))
     }
 
     private fun overlay(
