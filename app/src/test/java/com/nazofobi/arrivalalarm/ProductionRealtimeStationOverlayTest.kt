@@ -3,6 +3,7 @@ package com.nazofobi.arrivalalarm
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProductionRealtimeStationOverlayTest {
@@ -246,6 +247,51 @@ class ProductionRealtimeStationOverlayTest {
         assertEquals(StationRealtimeState.UNAVAILABLE, unavailableResult.realtimeState)
         assertNull(unavailableResult.departures.single().realtimeEpochSeconds)
         assertEquals("1", unavailableResult.departures.single().platform)
+    }
+
+    @Test
+    fun matcherExceptionFallsBackToStaticDepartures() {
+        val result = ProductionRealtimeStationOverlay(
+            fetch = {
+                GermanyRealtimeFetchResult.Unavailable(
+                    GermanyRealtimeUnavailableReason.NETWORK,
+                    "offline",
+                )
+            },
+            match = { _, _ ->
+                throw IllegalStateException("provider?token=secret&lat=52.1")
+            },
+        ).enrich("A", listOf(planned))
+
+        assertEquals(StationRealtimeState.UNAVAILABLE, result.realtimeState)
+        assertEquals(listOf(planned), result.departures)
+        assertEquals(emptyList<ServiceAlert>(), result.alerts)
+    }
+
+    @Test(expected = AssertionError::class)
+    fun fatalProviderErrorIsNotSilencedAsNetworkUnavailable() {
+        ProductionRealtimeStationOverlay(
+            fetch = { throw AssertionError("fatal VM-level failure") },
+            match = { _, _ -> error("unreachable") },
+        ).enrich("A", listOf(planned))
+    }
+
+    @Test
+    fun providerInterruptionPropagatesAndPreservesInterruptFlag() {
+        var caught = false
+        try {
+            ProductionRealtimeStationOverlay(
+                fetch = { throw InterruptedException("cancelled") },
+                match = { _, _ -> error("unreachable") },
+            ).enrich("A", listOf(planned))
+        } catch (_: InterruptedException) {
+            caught = true
+            assertTrue(Thread.currentThread().isInterrupted)
+        } finally {
+            // Do not leak a test-only interrupt into the rest of the JVM suite.
+            Thread.interrupted()
+        }
+        assertTrue(caught)
     }
 
     private fun overlay(
