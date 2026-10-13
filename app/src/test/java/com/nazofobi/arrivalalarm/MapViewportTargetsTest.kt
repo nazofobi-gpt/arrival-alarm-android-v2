@@ -31,6 +31,24 @@ class MapViewportTargetsTest {
         )
     }
 
+    @Test fun oppositeAntimeridianLongitudesAreTheSameCameraTarget() {
+        val east = MapPoint(0.0, 180.0, "East")
+        val west = MapPoint(0.0, -180.0, "West")
+        assertEquals(
+            listOf(east),
+            selectionMapCameraTargets(germany, east, west),
+        )
+    }
+
+    @Test fun signedZeroAliasesDoNotGenerateDuplicateMapBounds() {
+        val first = MapPoint(0.0, -0.0, "Origin")
+        val second = MapPoint(-0.0, 0.0, "Destination")
+        assertEquals(
+            listOf(first),
+            selectionMapCameraTargets(germany, first, second),
+        )
+    }
+
     @Test fun invalidEndpointsAreNotPassedToMapLibreCamera() {
         val impossibleLatitude = MapPoint(90.0, 8.0, "Pole")
         val notANumber = MapPoint(Double.NaN, 12.0, "Invalid")

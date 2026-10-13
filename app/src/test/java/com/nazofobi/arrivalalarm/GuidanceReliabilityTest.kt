@@ -106,6 +106,39 @@ class GuidanceReliabilityTest {
         assertFalse(again.requestGuidance(pending))
     }
 
+    @Test fun throwingTtsAdapterKeepsGuidancePendingAcrossControllerRecreation() {
+        var engineAvailable = false
+        val delivered = mutableListOf<GuidanceUtterance>()
+        val speaker = object : GuidanceSpeaker {
+            override fun speak(utterance: GuidanceUtterance): Boolean {
+                if (!engineAvailable) throw IllegalStateException("TTS engine disconnected")
+                delivered += utterance
+                return true
+            }
+        }
+        val store = InMemoryGuidanceStateStore()
+        val controller = GuidanceReliabilityController(speaker, store)
+        controller.onPermissions(GuidancePermissionSnapshot(true, true, true))
+        val stop = GuidanceUtterance("stop:retry", "Sıradaki durak Bremen Hbf", "tr-TR")
+
+        assertFalse(controller.requestGuidance(stop))
+        assertEquals(stop, controller.state.pending)
+        assertNull(controller.state.lastSpokenKey)
+        // A route-change retry must also tolerate an unavailable speech engine.
+        controller.onAudioRoute(GuidanceAudioRoute.BLUETOOTH_DISCONNECTED)
+        assertEquals(stop, controller.state.pending)
+        assertTrue(delivered.isEmpty())
+
+        engineAvailable = true
+        val recreated = GuidanceReliabilityController(speaker, store)
+        assertTrue(recreated.retryPending())
+        assertEquals(listOf(stop), delivered)
+        assertEquals(stop.key, recreated.state.lastSpokenKey)
+        assertNull(recreated.state.pending)
+        assertFalse(recreated.requestGuidance(stop))
+        assertEquals(1, delivered.size)
+    }
+
     @Test fun ttsFailureKeepsPendingForRecovery() {
         val speaker = RecordingSpeaker(available = false)
         val controller = GuidanceReliabilityController(speaker)
