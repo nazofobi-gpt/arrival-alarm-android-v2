@@ -100,6 +100,15 @@ class BoundedHttpTransport(
             attempts += 1
             try {
                 val response = exchange.execute(request, connectTimeoutMs, readTimeoutMs)
+                // Some adapters flag cancellation but still return an HTTP response.
+                // Do not accept an interrupted exchange as fresh provider evidence.
+                if (Thread.currentThread().isInterrupted) {
+                    return HttpTransportResult.Failure(
+                        kind = HttpTransportResult.Failure.Kind.NETWORK,
+                        attempts = attempts,
+                        message = "request_interrupted",
+                    )
+                }
                 // Informational (1xx) and invalid codes are not terminal provider
                 // responses. Do not report them as success or reset the circuit.
                 if (response.status !in 200..599) {
