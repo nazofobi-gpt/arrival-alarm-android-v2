@@ -179,4 +179,42 @@ class ConnectorIdempotencyStoreInstrumentedTest {
         assertEquals(receipt, store.get("cmd-memory")?.receipt)
     }
 
+
+    @Test fun malformedClaimsAreRejectedBeforeInMemoryOrDurableMutation() {
+        val invalid = listOf(
+            ConnectorIdempotencyEntry("", "SetDestination", 7),
+            ConnectorIdempotencyEntry("invalid-type", "", 7),
+            ConnectorIdempotencyEntry("invalid-version", "SetDestination", -1),
+        )
+        val inMemory = InMemoryConnectorIdempotencyStore()
+        invalid.forEach { claim ->
+            try {
+                inMemory.begin(claim)
+                fail("Invalid in-memory claim must be rejected")
+            } catch (_: IllegalStateException) { }
+            assertNull(inMemory.get(claim.idempotencyKey))
+        }
+
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences("connector_invalid_claim_test", Context.MODE_PRIVATE)
+        prefs.edit().clear().commit()
+        try {
+            val durable = SharedPreferencesConnectorIdempotencyStore(prefs)
+            invalid.forEach { claim ->
+                try {
+                    durable.begin(claim)
+                    fail("Invalid durable claim must be rejected before writing")
+                } catch (_: IllegalStateException) { }
+                assertNull(prefs.getString("connector_idempotency_v1", null))
+            }
+            durable.begin(ConnectorIdempotencyEntry("valid", "SetDestination", 7))
+            val restored = SharedPreferencesConnectorIdempotencyStore(prefs)
+            assertEquals("SetDestination", restored.get("valid")?.commandType)
+            assertNull(restored.get("invalid-type"))
+            assertNull(restored.get("invalid-version"))
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
 }
