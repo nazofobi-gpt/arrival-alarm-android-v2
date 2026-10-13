@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import kotlin.math.*
+import java.security.MessageDigest
 
 data class LocationFix(
     val point: GeoPoint,
@@ -20,6 +21,23 @@ data class ArmedRoute(
         require(stops.isNotEmpty())
         require(targetIndex in stops.indices)
     }
+
+    // Route IDs may remain stable while the selected alarm target or stop
+    // sequence changes. Persist a compact identity for the *armed* geometry.
+    val persistenceFingerprint: String by lazy {
+        val canonical = buildString {
+            append(routeId).append('|').append(targetIndex)
+            stops.forEach { point ->
+                append('|').append(point.latitude.toBits())
+                append(',').append(point.longitude.toBits())
+            }
+        }
+        MessageDigest.getInstance("SHA-256")
+            .digest(canonical.toByteArray(Charsets.UTF_8))
+            .joinToString("") { byte ->
+                (byte.toInt() and 0xff).toString(16).padStart(2, '0')
+            }
+    }
 }
 
 enum class ArrivalAlertPhase { IDLE, TRACKING, APPROACHING, IMMINENT, ARRIVED, MISSED }
@@ -35,6 +53,7 @@ data class ArrivalProgressState(
     val consecutiveInsideThreshold: Int = 0,
     val consecutivePastTarget: Int = 0,
     val arrivalEventCount: Int = 0,
+    val routeFingerprint: String? = null,
 )
 
 interface ArrivalProgressStateStore {
@@ -52,12 +71,16 @@ class ArrivalProgressController(
 
     fun arm(route: ArmedRoute) {
         this.route = route
-        val restored = state.takeIf { it.routeId == route.routeId && it.armed }
+        val restored = state.takeIf {
+            it.routeId == route.routeId && it.armed &&
+                it.routeFingerprint == route.persistenceFingerprint
+        }
         setState(
             restored ?: ArrivalProgressState(
                 routeId = route.routeId,
                 armed = true,
                 phase = ArrivalAlertPhase.TRACKING,
+                routeFingerprint = route.persistenceFingerprint,
             )
         )
     }
