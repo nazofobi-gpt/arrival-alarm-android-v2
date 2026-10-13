@@ -151,6 +151,28 @@ class ArrivalProgressControllerTest {
         )
     }
 
+    @Test fun malformedArmedStopCoordinatesAreRejectedBeforeGpsMatching() {
+        val valid = GeoPoint(53.0830, 8.8130)
+        val invalid = listOf(
+            GeoPoint(Double.NaN, 8.8130),
+            GeoPoint(Double.POSITIVE_INFINITY, 8.8130),
+            GeoPoint(91.0, 8.8130),
+            GeoPoint(53.0830, Double.NaN),
+            GeoPoint(53.0830, 181.0),
+        )
+        for (bad in invalid) {
+            for (invalidIndex in 0..1) {
+                val stops = if (invalidIndex == 0) listOf(bad, valid) else listOf(valid, bad)
+                try {
+                    ArmedRoute("invalid-stop-geometry", stops, targetIndex = 1)
+                    fail("Invalid route geometry was accepted: $bad at $invalidIndex")
+                } catch (_: IllegalArgumentException) {
+                    // A malformed stop must not silently arm an alarm that cannot match GPS.
+                }
+            }
+        }
+    }
+
     @Test fun persistedStateResumesWithoutDuplicateArrival() {
         var saved: ArrivalProgressState? = null
         val store = object : ArrivalProgressStateStore {
