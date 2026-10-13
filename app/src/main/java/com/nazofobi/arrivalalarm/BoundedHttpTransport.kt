@@ -152,6 +152,13 @@ class BoundedHttpTransport(
             if (seconds < 0) return null
             return saturatingMultiply(seconds, 1_000L)
         }
+        // An overflowed but otherwise valid delta-seconds is still a server
+        // backoff request. Treat it as saturated, then apply maxRetryDelayMs;
+        // falling back to exponential backoff would retry a rate-limited
+        // provider almost immediately.
+        if (value.isNotEmpty() && value.all { it in '0'..'9' }) {
+            return Long.MAX_VALUE
+        }
         return try {
             val formatter = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US).apply {
                 isLenient = false
