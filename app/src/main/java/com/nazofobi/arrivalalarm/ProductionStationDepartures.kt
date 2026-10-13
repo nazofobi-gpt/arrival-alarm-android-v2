@@ -20,6 +20,22 @@ data class ProductionStationDeparturesResult(
     val updatedAtEpochSeconds: Long? = null,
 )
 
+/**
+ * Frequency start/headway arithmetic must not wrap signed Int and revisit past times.
+ * GTFS headway_secs is provider data, so compute the next eligible board on Long.
+ */
+internal fun firstFrequencyBoardAtOrAfter(
+    startSeconds: Long,
+    earliestSeconds: Long,
+    headwaySeconds: Int,
+): Long {
+    require(headwaySeconds > 0)
+    if (startSeconds >= earliestSeconds) return startSeconds
+    val headway = headwaySeconds.toLong()
+    val intervals = (earliestSeconds - startSeconds + headway - 1L) / headway
+    return startSeconds + intervals * headway
+}
+
 internal class ProductionStationDeparturesPlanner(
     private val index: NationwideTransitIndex,
     private val nowMillis: () -> Long = { System.currentTimeMillis() },
@@ -133,23 +149,20 @@ internal class ProductionStationDeparturesPlanner(
         return buildList {
             for (frequency in parsed) {
                 if (size >= MAX_FREQUENCY_DEPARTURES_PER_CANDIDATE) break
-                val windowStart = frequency.startSeconds + boardOffset
-                val windowEnd = frequency.endSeconds + boardOffset
-                if (earliestBoardSeconds >= windowEnd) continue
+                val windowStart = frequency.startSeconds.toLong() + boardOffset
+                val windowEnd = frequency.endSeconds.toLong() + boardOffset
+                if (earliestBoardSeconds.toLong() >= windowEnd) continue
 
-                var board = windowStart
-                if (board < earliestBoardSeconds) {
-                    val delta = earliestBoardSeconds - board
-                    board += (
-                        (delta + frequency.headwaySeconds - 1) /
-                            frequency.headwaySeconds
-                        ) * frequency.headwaySeconds
-                }
+                var board = firstFrequencyBoardAtOrAfter(
+                    windowStart, earliestBoardSeconds.toLong(), frequency.headwaySeconds,
+                )
                 while (
                     board < windowEnd &&
                     size < MAX_FREQUENCY_DEPARTURES_PER_CANDIDATE
                 ) {
-                    val scheduled = serviceEpochSeconds(serviceDate, board)
+                    val scheduled = if (board <= Int.MAX_VALUE) {
+                        serviceEpochSeconds(serviceDate, board.toInt())
+                    } else null
                     if (scheduled != null && scheduled >= nowEpochSeconds) {
                         add(
                             departure(
@@ -159,11 +172,11 @@ internal class ProductionStationDeparturesPlanner(
                                 scheduledEpochSeconds = scheduled,
                                 plannedPlatform = plannedPlatform,
                                 realtimeTripStartDate = formatServiceDate(serviceDate),
-                                realtimeTripStartTime = formatServiceTime(board - boardOffset),
+                                realtimeTripStartTime = formatServiceTime((board - boardOffset).toInt()),
                             ),
                         )
                     }
-                    board += frequency.headwaySeconds
+                    board += frequency.headwaySeconds.toLong()
                 }
             }
         }
