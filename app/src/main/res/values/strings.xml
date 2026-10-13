@@ -245,4 +245,12 @@
     <string name="departures_empty_action">Rota planla</string>
     <string name="lookup_stale_results">Önbellekteki eski sağlayıcı sonuçları gösteriliyor • güncellik doğrulanamadı</string>
     <string name="lookup_provider_unavailable">Canlı arama sağlayıcısına ulaşılamıyor • yerel veri sonuç vermedi</string>
+    <string name="active_tracking_channel_name">Aktif varış takibi</string>
+    <string name="arrival_alerts_channel_name">Varış uyarıları</string>
+    <string name="active_tracking_title">Varış alarmı etkin</string>
+    <string name="active_tracking_degraded">Konum doğruluğu yetersiz; alarm etkin, yeni GPS bekleniyor</string>
+    <string name="active_tracking_in_progress">Konum takip ediliyor</string>
+    <string name="active_tracking_distance">Hedefe yaklaşık %1$d m kaldı</string>
+    <string name="arrival_notification_title">Varış noktasına ulaşıldı</string>
+    <string name="arrival_notification_body">Varış alarmı tamamlandı.</string>
 </resources>

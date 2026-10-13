@@ -237,4 +237,12 @@
     <string name="departures_gtfsrt_unavailable">GTFS Deutschland local departures • GTFS-RT unavailable, scheduled times</string>
     <string name="lookup_stale_results">Cached provider results are stale • freshness could not be verified</string>
     <string name="lookup_provider_unavailable">Live search provider is unavailable • local data returned no result</string>
+    <string name="active_tracking_channel_name">Active arrival tracking</string>
+    <string name="arrival_alerts_channel_name">Arrival alerts</string>
+    <string name="active_tracking_title">Arrival alarm active</string>
+    <string name="active_tracking_degraded">Location accuracy low; alarm active, waiting for GPS</string>
+    <string name="active_tracking_in_progress">Tracking location</string>
+    <string name="active_tracking_distance">About %1$d m to your destination</string>
+    <string name="arrival_notification_title">Destination reached</string>
+    <string name="arrival_notification_body">Arrival alarm completed.</string>
 </resources>
