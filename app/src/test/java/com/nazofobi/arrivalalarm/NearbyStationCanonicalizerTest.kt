@@ -20,6 +20,32 @@ class NearbyStationCanonicalizerTest {
     }
 
     @Test
+    fun identicalParentIdsFromDifferentProvidersRemainSeparateStations() {
+        val berlin = CatalogStop("station", "vbb", "Berlin Hauptbahnhof", 52.525, 13.369)
+        val berlinPlatform = CatalogStop("platform", "vbb", "Berlin platform", 52.5251, 13.3691, "station")
+        val munich = CatalogStop("station", "mvv", "München Hauptbahnhof", 48.140, 11.558)
+        val munichPlatform = CatalogStop("platform", "mvv", "München platform", 48.1401, 11.5581, "station")
+        val candidates = listOf(berlinPlatform, munichPlatform, munich, berlin)
+            .map { NearbyStop(it, 1) }
+
+        val result = NearbyStationCanonicalizer.canonicalize(
+            52.525, 13.369, candidates, limit = 5,
+        )
+        assertEquals(2, result.size)
+        val byProvider = result.associateBy { it.stop.providerId }
+        assertEquals(setOf("vbb", "mvv"), byProvider.keys)
+        assertEquals("Berlin Hauptbahnhof", byProvider.getValue("vbb").stop.name)
+        assertEquals("München Hauptbahnhof", byProvider.getValue("mvv").stop.name)
+        assertEquals(listOf("platform"), byProvider.getValue("vbb").childStops.map { it.id })
+        assertEquals(listOf("platform"), byProvider.getValue("mvv").childStops.map { it.id })
+
+        val reversed = NearbyStationCanonicalizer.canonicalize(
+            52.525, 13.369, candidates.reversed(), limit = 5,
+        )
+        assertEquals(result, reversed)
+    }
+
+    @Test
     fun favoriteIdentityUsesParentStationAndIsStableAcrossInputOrder() {
         val first = CatalogStop("lohne-platform-1", "gtfs", "Lohne Bahnhof", 52.66501, 8.23701, "lohne-station")
         val second = CatalogStop("lohne-platform-2", "gtfs", "Lohne Bahnhof", 52.66502, 8.23702, "lohne-station")
