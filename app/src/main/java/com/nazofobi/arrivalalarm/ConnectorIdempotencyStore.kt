@@ -28,6 +28,11 @@ class InMemoryConnectorIdempotencyStore(
 
     @Synchronized
     override fun begin(entry: ConnectorIdempotencyEntry) {
+        // Reject malformed commands before changing the journal: an invalid durable
+        // claim would poison every subsequent lookup after process recreation.
+        check(entry.idempotencyKey.isNotBlank()) { "Idempotency key must not be blank" }
+        check(entry.commandType.isNotBlank()) { "Command type must not be blank" }
+        check(entry.stateVersionBefore >= 0L) { "State version must not be negative" }
         check(!entries.containsKey(entry.idempotencyKey)) {
             "Idempotency key already claimed"
         }
@@ -74,6 +79,11 @@ class SharedPreferencesConnectorIdempotencyStore(
 
     @Synchronized
     override fun begin(entry: ConnectorIdempotencyEntry) {
+        // Reject malformed commands before changing the journal: an invalid durable
+        // claim would poison every subsequent lookup after process recreation.
+        check(entry.idempotencyKey.isNotBlank()) { "Idempotency key must not be blank" }
+        check(entry.commandType.isNotBlank()) { "Command type must not be blank" }
+        check(entry.stateVersionBefore >= 0L) { "State version must not be negative" }
         val entries = loadEntries().toMutableList()
         check(entries.none { it.idempotencyKey == entry.idempotencyKey }) {
             "Idempotency key already claimed"
