@@ -15,7 +15,7 @@ class ArrivalProgressCounterRecoveryTest {
     )
 
     private fun restore(saved: ArrivalProgressState): ArrivalProgressController {
-        var persisted = saved
+        var persisted = saved.copy(routeFingerprint = route.persistenceFingerprint)
         val store = object : ArrivalProgressStateStore {
             override fun load(): ArrivalProgressState = persisted
             override fun save(state: ArrivalProgressState) { persisted = state }
