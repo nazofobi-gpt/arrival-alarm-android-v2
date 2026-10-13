@@ -115,8 +115,11 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
             }
         }
 
-        val expectedEpoch = candidate.scheduledEpochSeconds + (candidate.realtimeDelaySeconds ?: 0)
-        val timeDelta = abs(observation.epochSeconds - expectedEpoch).toDouble()
+        // Calculate in floating-point seconds to avoid signed Long overflow when
+        // malformed provider epochs or realtime delays cross the Long boundary.
+        val expectedEpoch = candidate.scheduledEpochSeconds.toDouble() +
+            (candidate.realtimeDelaySeconds ?: 0).toDouble()
+        val timeDelta = abs(observation.epochSeconds.toDouble() - expectedEpoch)
         val timeScore = linearScore(timeDelta, good = 90.0, bad = 900.0)
 
         val movementScore = when {
