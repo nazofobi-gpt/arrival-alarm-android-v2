@@ -108,9 +108,14 @@ class OverlayTransitRepository(
         val snapshot = runCatching { realtimeSource.fetch() }.getOrNull()
             ?: return TransitPlanWithRealtime(staticJourney, TransitRealtimeOverlay(
                 RealtimeFreshness.UNAVAILABLE, status = "Canlı veri kullanılamıyor • statik rota"))
-        val age = (clock.nowEpochSeconds() - snapshot.fetchedAtEpochSeconds).coerceAtLeast(0)
-        if (age > staleAfterSeconds) return TransitPlanWithRealtime(staticJourney, TransitRealtimeOverlay(
-            RealtimeFreshness.STALE, snapshot.fetchedAtEpochSeconds, status = "Canlı veri eski • statik rota"))
+        val now = clock.nowEpochSeconds()
+        val timestamp = snapshot.fetchedAtEpochSeconds
+        // Future/invalid provider timestamps cannot certify live trip status.
+        // Compare nonnegative epochs before subtracting to avoid Long overflow.
+        if (now < 0L || timestamp <= 0L || timestamp > now || now - timestamp > staleAfterSeconds) {
+            return TransitPlanWithRealtime(staticJourney, TransitRealtimeOverlay(
+                RealtimeFreshness.STALE, timestamp, status = "Canlı veri eski • statik rota"))
+        }
         val exactTripId = staticJourney.legs.singleOrNull()?.line?.takeIf { it.startsWith("gtfs-trip:") }?.removePrefix("gtfs-trip:")
         val update = exactTripId?.let { id -> snapshot.updates.firstOrNull { it.tripId == id } }
         return TransitPlanWithRealtime(staticJourney, TransitRealtimeOverlay(
