@@ -83,4 +83,48 @@ class OfflineTransitCachePersistenceInstrumentedTest {
         }
     }
 
+
+    @Test
+    fun corruptedCachedStopDoesNotSilentlyShortenJourney() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+            .edit().clear().commit()
+        val store = SharedPreferencesTransitCacheStore(context)
+        val route = RouteOption(
+            id = "ordered-stops",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
+            line = "RE",
+            direction = "Bremen",
+            departure = "10:00",
+            arrival = "11:00",
+            walkingMinutes = 0,
+            transfers = 0,
+            stops = listOf(
+                RouteStop(id = "start", name = "Lohne", latitude = 52.665, longitude = 8.237),
+                RouteStop(id = "end", name = "Bremen Hbf", latitude = 53.083, longitude = 8.813),
+            ),
+        )
+        OfflineTransitCache(backingStore = store).put(
+            CachedTransitPlan("valid-stops", listOf(route), emptyList(), 100L)
+        )
+        assertEquals(2, OfflineTransitCache(backingStore = store)
+            .routeOptions("valid-stops").single().stops.size)
+
+        val invalidStops = listOf(
+            route.stops[1].copy(latitude = 91.0),
+            route.stops[1].copy(longitude = 181.0),
+            route.stops[1].copy(name = ""),
+        )
+        invalidStops.forEachIndexed { index, invalidStop ->
+            val key = "invalid-stop-$index"
+            OfflineTransitCache(backingStore = store).put(
+                CachedTransitPlan(
+                    key, listOf(route.copy(stops = listOf(route.stops[0], invalidStop))),
+                    emptyList(), 100L,
+                )
+            )
+            assertTrue(OfflineTransitCache(backingStore = store).routeOptions(key).isEmpty())
+        }
+    }
 }
