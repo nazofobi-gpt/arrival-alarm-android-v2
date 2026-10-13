@@ -439,6 +439,43 @@ class BoundedHttpTransportTest {
     }
 
     @Test
+    fun interruptedSuccessfulExchangeFailsClosedWithoutTrippingCircuit() {
+        var calls = 0
+        val transport = BoundedHttpTransport(
+            exchange = HttpExchange { _, _, _ ->
+                calls += 1
+                if (calls == 1) Thread.currentThread().interrupt()
+                HttpTransportResponse(200)
+            },
+            clock = HttpTransportClock { 100L },
+            sleeper = HttpTransportSleeper { throw AssertionError("No retry backoff expected") },
+            maxRetries = 2,
+            failureThreshold = 1,
+        )
+
+        try {
+            val failure = transport.execute(
+                HttpTransportRequest("https://provider.invalid")
+            ) as HttpTransportResult.Failure
+            assertEquals(HttpTransportResult.Failure.Kind.NETWORK, failure.kind)
+            assertEquals("request_interrupted", failure.message)
+            assertEquals(1, failure.attempts)
+            assertEquals(1, calls)
+            assertTrue(Thread.currentThread().isInterrupted)
+
+            Thread.interrupted()
+            val recovered = transport.execute(
+                HttpTransportRequest("https://provider.invalid")
+            ) as HttpTransportResult.Response
+            assertEquals(200, recovered.response.status)
+            assertEquals(1, recovered.attempts)
+            assertEquals(2, calls)
+        } finally {
+            Thread.interrupted()
+        }
+    }
+
+    @Test
     fun interruptedPlainIoExceptionStopsBeforeBackoff() {
         var calls = 0
         var sleeps = 0
