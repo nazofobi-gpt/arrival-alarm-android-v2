@@ -180,6 +180,36 @@ class RouteStopProgressTest {
         assertEquals("First", progress.next?.name)
     }
 
+    @Test fun realtimeOnlyDepartureDoesNotAppearScheduled() {
+        val departure = "2026-09-26T08:10:00+02:00"
+        val actualOnly = listOf(RouteStop(id = "a", name = "Lohne", departure = departure))
+        val now = departure.toTransitEpochSecondsOrNull()!!
+
+        val live = RouteStopProgressTracker().resolve(actualOnly, now, trustRealtime = true)
+        assertTrue(live.resolvedByProviderTime)
+        assertEquals("Lohne", live.current?.name)
+        assertEquals(TransitTimingBasis.REALTIME, live.timingBasis)
+
+        val offline = RouteStopProgressTracker().resolve(actualOnly, now, trustRealtime = false)
+        assertFalse(offline.resolvedByProviderTime)
+        assertNull(offline.current)
+        assertEquals(TransitTimingBasis.SCHEDULED, offline.timingBasis)
+    }
+
+    @Test fun realtimeOnlyArrivalKeepsLiveBasisBetweenStops() {
+        val observations = listOf(
+            RouteStop(id = "a", name = "Lohne", plannedDeparture = "2026-09-26T08:00:00+02:00"),
+            RouteStop(id = "b", name = "Diepholz", arrival = "2026-09-26T08:15:00+02:00"),
+        )
+        val now = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
+        val progress = RouteStopProgressTracker().resolve(observations, now)
+
+        assertTrue(progress.resolvedByProviderTime)
+        assertEquals(TransitTimingBasis.REALTIME, progress.timingBasis)
+        assertEquals("Lohne", progress.previous?.name)
+        assertEquals("Diepholz", progress.next?.name)
+    }
+
     @Test fun onlyFreshMatchedOnlineUncancelledRealtimeIsTrusted() {
         assertTrue(isTrustedRealtimeForJourney(RouteRealtimeState.FRESH_MATCHED, false))
         assertFalse(isTrustedRealtimeForJourney(RouteRealtimeState.STALE, false))
