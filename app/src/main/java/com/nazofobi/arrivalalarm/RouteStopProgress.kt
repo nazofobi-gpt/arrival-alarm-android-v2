@@ -150,7 +150,7 @@ internal fun String?.toTransitEpochSecondsOrNull(): Long? {
                 val sign = if (match.groupValues[9] == "-") -1 else 1
                 val offsetHours = match.groupValues[10].toInt()
                 val offsetMinutes = match.groupValues[11].toInt()
-                require(offsetHours <= 23 && offsetMinutes <= 59)
+                require(offsetHours <= 14 && offsetMinutes <= 59 && (offsetHours != 14 || offsetMinutes == 0))
                 sign * (offsetHours * 3_600 + offsetMinutes * 60)
             }
         }
