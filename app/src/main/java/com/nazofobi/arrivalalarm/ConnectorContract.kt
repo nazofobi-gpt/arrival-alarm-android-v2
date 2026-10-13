@@ -1,5 +1,9 @@
 package com.nazofobi.arrivalalarm
 
+import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+
 /**
  * Provider-neutral contract exposed to a future remote gateway / ChatGPT connector.
  * The connector never receives raw database access; it can only read a bounded snapshot
@@ -130,6 +134,51 @@ data class ConnectorCommandReceipt(
  * Write commands always require explicit user confirmation. A stale snapshot or an optional
  * optimistic state-version mismatch fails closed. Successful writes are idempotent.
  */
+
+/**
+ * Stable, non-secret request binding for durable idempotency claims. Length-prefixing
+ * each field avoids ambiguous concatenations; raw IEEE bits preserve exact coordinates.
+ */
+private fun connectorCommandFingerprint(command: ArrivalAlarmConnectorCommand): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+
+    fun add(value: String?) {
+        if (value == null) {
+            digest.update(0.toByte())
+        } else {
+            val bytes = value.toByteArray(StandardCharsets.UTF_8)
+            digest.update(1.toByte())
+            digest.update(ByteBuffer.allocate(4).putInt(bytes.size).array())
+            digest.update(bytes)
+        }
+    }
+
+    fun addPoint(point: MapPoint) {
+        add(point.latitude.toRawBits().toString())
+        add(point.longitude.toRawBits().toString())
+        add(point.label)
+    }
+
+    add("connector-command-payload-v1")
+    add(command::class.simpleName ?: "UnknownCommand")
+    when (command) {
+        is ArrivalAlarmConnectorCommand.SetOrigin -> addPoint(command.point)
+        is ArrivalAlarmConnectorCommand.SetDestination -> addPoint(command.point)
+        is ArrivalAlarmConnectorCommand.SelectJourney -> add(command.routeId)
+        is ArrivalAlarmConnectorCommand.SetBoardingStop -> {
+            add(command.stop.id)
+            add(command.stop.name)
+            add(command.stop.latitude?.toRawBits()?.toString())
+            add(command.stop.longitude?.toRawBits()?.toString())
+        }
+        is ArrivalAlarmConnectorCommand.ArmArrivalAlarm,
+        is ArrivalAlarmConnectorCommand.CancelArrivalAlarm -> Unit
+    }
+    return digest.digest().joinToString("") {
+        (it.toInt() and 0xff).toString(16).padStart(2, '0')
+    }
+}
+
 class ConnectorCommandProcessor(
     private val port: ConnectorActionPort,
     maxReceipts: Int = 128,
@@ -145,17 +194,33 @@ class ConnectorCommandProcessor(
         nowEpochSeconds: Long,
     ): ConnectorCommandReceipt {
         val commandType = command::class.simpleName ?: "UnknownCommand"
+        val fingerprint = connectorCommandFingerprint(command)
         idempotencyStore.get(command.idempotencyKey)?.let { existing ->
             // An idempotency key is bound to its original command type. A different
             // command must never inherit its completed receipt or pending claim.
-            if (existing.commandType != commandType) {
+            if (existing.commandType != commandType ||
+                (existing.commandFingerprint != null && existing.commandFingerprint != fingerprint)
+            ) {
                 val current = port.readSnapshot()
                 return ConnectorCommandReceipt(
                     idempotencyKey = command.idempotencyKey,
                     commandType = commandType,
                     status = ConnectorCommandStatus.REJECTED_DOMAIN,
-                    message = "İdempotency anahtarı başka bir komut tipine ait",
+                    message = "İdempotency anahtarı farklı bir komut veya parametreleri için kullanılmış",
                     stateVersionBefore = current.stateVersion,
+                    stateVersionAfter = current.stateVersion,
+                )
+            }
+            // Old claims have no persisted payload binding. Never treat an unverified
+            // legacy receipt as proof that this precise command ran.
+            if (existing.commandFingerprint == null) {
+                val current = port.readSnapshot()
+                return ConnectorCommandReceipt(
+                    idempotencyKey = command.idempotencyKey,
+                    commandType = commandType,
+                    status = ConnectorCommandStatus.REJECTED_IDEMPOTENCY_RECOVERY_REQUIRED,
+                    message = "Eski komutun parametreleri doğrulanamıyor; yeniden çalıştırılmadı",
+                    stateVersionBefore = existing.stateVersionBefore,
                     stateVersionAfter = current.stateVersion,
                 )
             }
@@ -202,6 +267,7 @@ class ConnectorCommandProcessor(
                 idempotencyKey = command.idempotencyKey,
                 commandType = commandType,
                 stateVersionBefore = before.stateVersion,
+                commandFingerprint = fingerprint,
             )
         )
 
