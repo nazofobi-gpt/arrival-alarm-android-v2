@@ -156,13 +156,33 @@ class SharedPreferencesConnectorIdempotencyStore(
             .put("duplicate", duplicate)
             .apply { actionId?.let { put("action_id", it) } }
 
+    // org.json's getString/getLong/optBoolean coerce incompatible JSON types.
+    // Durable claims must have exact primitive types: coercion can reinterpret a
+    // corrupt record as another command and break replay protection.
+    private fun JSONObject.requireText(field: String): String =
+        (get(field) as? String) ?: error("Invalid journal string field")
+
+    private fun JSONObject.requireIntegerVersion(field: String): Long {
+        val value = when (val raw = get(field)) {
+            is Int -> raw.toLong()
+            is Long -> raw
+            else -> error("Invalid journal version field")
+        }
+        check(value >= 0L) { "Negative journal version" }
+        return value
+    }
+
+    private fun JSONObject.optionalStrictBoolean(field: String): Boolean =
+        if (has(field)) (get(field) as? Boolean) ?: error("Invalid journal boolean field")
+        else false
+
     private fun JSONObject.decodeEntry(): ConnectorIdempotencyEntry {
         // A present-but-malformed receipt is not equivalent to a pending claim.
         val storedReceipt = if (has("receipt")) getJSONObject("receipt").decodeReceipt() else null
         val entry = ConnectorIdempotencyEntry(
-            idempotencyKey = getString("idempotency_key"),
-            commandType = getString("command_type"),
-            stateVersionBefore = getLong("state_version_before"),
+            idempotencyKey = requireText("idempotency_key"),
+            commandType = requireText("command_type"),
+            stateVersionBefore = requireIntegerVersion("state_version_before"),
             receipt = storedReceipt,
         )
         check(storedReceipt == null || (
@@ -175,13 +195,13 @@ class SharedPreferencesConnectorIdempotencyStore(
 
     private fun JSONObject.decodeReceipt(): ConnectorCommandReceipt =
         ConnectorCommandReceipt(
-            idempotencyKey = getString("idempotency_key"),
-            commandType = getString("command_type"),
-            status = ConnectorCommandStatus.valueOf(getString("status")),
-            message = getString("message"),
-            stateVersionBefore = getLong("state_version_before"),
-            stateVersionAfter = getLong("state_version_after"),
-            actionId = optString("action_id").takeIf { it.isNotBlank() },
-            duplicate = optBoolean("duplicate", false),
+            idempotencyKey = requireText("idempotency_key"),
+            commandType = requireText("command_type"),
+            status = ConnectorCommandStatus.valueOf(requireText("status")),
+            message = requireText("message"),
+            stateVersionBefore = requireIntegerVersion("state_version_before"),
+            stateVersionAfter = requireIntegerVersion("state_version_after"),
+            actionId = if (has("action_id")) requireText("action_id").takeIf { it.isNotBlank() } else null,
+            duplicate = optionalStrictBoolean("duplicate"),
         )
 }
