@@ -172,7 +172,7 @@ internal class ProductionStationDeparturesPlanner(
                                 scheduledEpochSeconds = scheduled,
                                 plannedPlatform = plannedPlatform,
                                 realtimeTripStartDate = formatServiceDate(serviceDate),
-                                realtimeTripStartTime = formatServiceTime(board - boardOffset),
+                                realtimeTripStartTime = formatServiceTime((board - boardOffset).toInt()),
                             ),
                         )
                     }
