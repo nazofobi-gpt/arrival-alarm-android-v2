@@ -239,4 +239,7 @@
     <string name="departures_gtfsrt_unavailable">GTFS Deutschland local departures • GTFS-RT unavailable, scheduled times</string>
     <string name="lookup_stale_results">Cached provider results are stale • freshness could not be verified</string>
     <string name="lookup_provider_unavailable">Live search provider is unavailable • local data returned no result</string>
+    <string name="journey_stops_hidden_count">%1$d intermediate stops hidden</string>
+    <string name="journey_show_all_stops_count">Show all %1$d stops</string>
+    <string name="journey_show_fewer_stops">Show fewer stops</string>
 </resources>
