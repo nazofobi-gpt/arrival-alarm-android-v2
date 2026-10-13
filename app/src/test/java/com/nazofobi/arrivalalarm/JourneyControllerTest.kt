@@ -75,6 +75,23 @@ class JourneyControllerTest {
         assertEquals(JourneyPhase.EMPTY, c.state.phase)
     }
 
+    @Test fun invalidPersistentStoreReadFailsClosedOnRestart() {
+        // SharedPreferences can throw ClassCastException for wrong-typed/legacy values.
+        val store = object : JourneyStateStore {
+            override fun load(): JourneyUiState? =
+                throw ClassCastException("Corrupt stored journey phase")
+
+            override fun save(state: JourneyUiState) = Unit
+        }
+
+        val controller = JourneyController(stateStore = store)
+        assertEquals(JourneyPhase.EMPTY, controller.state.phase)
+        controller.arm()
+        assertEquals(JourneyPhase.EMPTY, controller.state.phase)
+        controller.selectStart(GeoPoint(53.083, 8.813))
+        assertEquals(JourneyPhase.START_SELECTED, controller.state.phase)
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun invalidRadiusCannotCreateAlwaysArrivingController() {
         JourneyController(arrivalRadiusMeters = Double.POSITIVE_INFINITY)
