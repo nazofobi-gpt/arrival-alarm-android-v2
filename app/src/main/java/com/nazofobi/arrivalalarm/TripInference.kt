@@ -52,9 +52,31 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
         if (settings.topK <= 0) {
             return TripInferenceResult(emptyList(), null, "Gösterilecek sefer adayı sınırı geçersiz")
         }
+        if (!settings.minimumConfidence.isFinite() ||
+            settings.minimumConfidence !in 0.0..1.0 ||
+            !settings.ambiguityMargin.isFinite() ||
+            settings.ambiguityMargin !in 0.0..1.0
+        ) {
+            return TripInferenceResult(emptyList(), null, "Sefer algılama güven ayarları geçersiz")
+        }
+        // Corrupt sensor data must not be converted into a high-confidence match.
+        // In particular NaN speed otherwise falls through to a low movement score,
+        // while the distance and time scores can still accept a candidate.
+        if (!validCoordinates(observation.point) ||
+            !observation.speedMps.isFinite() || observation.speedMps < 0.0 ||
+            observation.bearingDegrees?.isFinite() == false ||
+            observation.epochSeconds <= 0L
+        ) {
+            return TripInferenceResult(emptyList(), null, "Konum veya hareket kanıtı geçersiz")
+        }
         val ranked = candidates
             .asSequence()
-            .filter { it.serviceActive }
+            .filter {
+                it.serviceActive &&
+                    validCoordinates(it.anchor) &&
+                    it.expectedBearingDegrees?.isFinite() != false &&
+                    it.scheduledEpochSeconds > 0L
+            }
             .map { score(observation, it) }
             .filter { it.confidence > 0.0 }
             .sortedByDescending { it.confidence }
@@ -74,6 +96,10 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
         }
         return TripInferenceResult(scored, best, "Aday bulundu; hedef/alarm yalnız kullanıcı onayıyla kurulabilir")
     }
+
+    private fun validCoordinates(point: GeoPoint): Boolean =
+        point.latitude.isFinite() && point.latitude in -90.0..90.0 &&
+            point.longitude.isFinite() && point.longitude in -180.0..180.0
 
     private fun score(observation: MovementObservation, candidate: TripCandidate): TripCandidateScore {
         val distanceMeters = haversineMeters(observation.point, candidate.anchor)
