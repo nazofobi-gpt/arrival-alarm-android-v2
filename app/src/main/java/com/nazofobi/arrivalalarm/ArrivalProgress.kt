@@ -126,10 +126,12 @@ class ArrivalProgressController(
         // corrupted persisted counter must not overflow or trigger an arrival
         // from a single new GPS callback.
         val previousInside = state.consecutiveInsideThreshold.takeIf { it in 0..1 } ?: 0
-        val insideCount = when {
-            upperDistance <= threshold -> previousInside + 1
-            upperDistance >= threshold * 1.20 -> 0
-            else -> previousInside
+        // A valid but unconfirmed fix must break the two-confirmation streak,
+        // including fixes in the uncertainty band near the arrival threshold.
+        val insideCount = if (upperDistance <= threshold) {
+            previousInside + 1
+        } else {
+            0
         }
 
         // Missed-stop evidence must likewise be outside the radius with confidence.

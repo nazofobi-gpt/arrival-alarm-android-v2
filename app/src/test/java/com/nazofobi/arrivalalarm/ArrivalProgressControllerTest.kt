@@ -90,6 +90,31 @@ class ArrivalProgressControllerTest {
         assertEquals(1, c.state.arrivalEventCount)
     }
 
+    @Test fun borderlineFixBreaksTwoConsecutiveConfirmedArrivals() {
+        val c = ArrivalProgressController()
+        c.arm(route)
+        val target = route.stops[route.targetIndex]
+        val borderline = GeoPoint(target.latitude + 0.00112, target.longitude)
+        val confirmed = fix(target, accuracy = 10.0, speed = 0.0)
+        val uncertain = fix(borderline, accuracy = 10.0, speed = 0.0)
+        val upper = ArrivalProgressController.distanceMeters(borderline, target) + uncertain.accuracyMeters
+        val threshold = c.adaptiveThresholdMeters(uncertain)
+        assertTrue(upper > threshold)
+        assertTrue(upper < threshold * 1.20)
+
+        c.onLocation(confirmed)
+        assertEquals(1, c.state.consecutiveInsideThreshold)
+        c.onLocation(uncertain)
+        assertEquals(0, c.state.consecutiveInsideThreshold)
+        assertEquals(0, c.state.arrivalEventCount)
+        c.onLocation(confirmed)
+        assertEquals(1, c.state.consecutiveInsideThreshold)
+        assertEquals(ArrivalAlertPhase.IMMINENT, c.state.phase)
+        c.onLocation(confirmed)
+        assertEquals(ArrivalAlertPhase.ARRIVED, c.state.phase)
+        assertEquals(1, c.state.arrivalEventCount)
+    }
+
     @Test fun horizontalUncertaintyMustFitInsideAdaptiveThreshold() {
         val c = ArrivalProgressController()
         c.arm(route)
