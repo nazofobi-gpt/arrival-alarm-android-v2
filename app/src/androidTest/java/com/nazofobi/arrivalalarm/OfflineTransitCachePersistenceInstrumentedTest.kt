@@ -46,4 +46,41 @@ class OfflineTransitCachePersistenceInstrumentedTest {
         assertEquals(listOf("Lohne", "Bremen Hbf"), restored.single().stops.map { it.name })
         assertTrue(restored.single().tripIds.contains("trip-re9"))
     }
+
+    @Test
+    fun outOfRangeCachedRouteCoordinatesAreRejectedOnRestore() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+            .edit().clear().commit()
+        val store = SharedPreferencesTransitCacheStore(context)
+        val validRoute = RouteOption(
+            id = "valid-route",
+            origin = MapPoint(53.083, 8.813, "Bremen"),
+            destination = MapPoint(52.665, 8.237, "Lohne"),
+            line = "RE",
+            direction = "Lohne",
+            departure = "10:00",
+            arrival = "11:00",
+            walkingMinutes = 0,
+            transfers = 0,
+            tripIds = emptyList(),
+            stops = emptyList(),
+        )
+        OfflineTransitCache(backingStore = store).put(
+            CachedTransitPlan("valid", listOf(validRoute), emptyList(), 100L)
+        )
+        assertEquals(1, OfflineTransitCache(backingStore = store).routeOptions("valid").size)
+
+        val invalidRoutes = listOf(
+            "invalid-latitude" to validRoute.copy(origin = MapPoint(91.0, 8.813, "Invalid")),
+            "invalid-longitude" to validRoute.copy(destination = MapPoint(52.665, 181.0, "Invalid")),
+        )
+        invalidRoutes.forEach { (key, route) ->
+            OfflineTransitCache(backingStore = store).put(
+                CachedTransitPlan(key, listOf(route), emptyList(), 100L)
+            )
+            assertTrue(OfflineTransitCache(backingStore = store).routeOptions(key).isEmpty())
+        }
+    }
+
 }
