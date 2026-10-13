@@ -283,11 +283,30 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         val radii = listOf(5_000.0, 20_000.0, 80_000.0)
         for (radius in radii) {
             val latDelta = radius / 111_320.0
-            val lonDelta = radius / (111_320.0 * cos(Math.toRadians(latitude)).absoluteValue.coerceAtLeast(0.2))
-            val sql = "SELECT id,name,lat,lon,parent_station FROM stops WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? LIMIT 6000"
+            val longitudeScale = cos(Math.toRadians(latitude)).absoluteValue.coerceAtLeast(0.2)
+            val lonDelta = radius / (111_320.0 * longitudeScale)
+            val longitudeWeight = longitudeScale * longitudeScale
+            // Applying LIMIT before a spatial ranking loses the nearest stations in dense
+            // areas: the lat/lon index alone can return 6000 farther southern stops first.
+            // Rank in SQL before capping; the final ordering still uses exact haversine metres.
+            val sql = """
+                SELECT id,name,lat,lon,parent_station
+                FROM stops
+                WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?
+                ORDER BY ((lat-?)*(lat-?) + (lon-?)*(lon-?)*?), id
+                LIMIT 6000
+            """.trimIndent()
             val candidates = readableDatabase.rawQuery(
                 sql,
-                arrayOf((latitude - latDelta).toString(), (latitude + latDelta).toString(), (longitude - lonDelta).toString(), (longitude + lonDelta).toString()),
+                arrayOf(
+                    (latitude - latDelta).toString(),
+                    (latitude + latDelta).toString(),
+                    (longitude - lonDelta).toString(),
+                    (longitude + lonDelta).toString(),
+                    latitude.toString(), latitude.toString(),
+                    longitude.toString(), longitude.toString(),
+                    longitudeWeight.toString(),
+                ),
             ).use { c ->
                 buildList {
                     while (c.moveToNext()) {
