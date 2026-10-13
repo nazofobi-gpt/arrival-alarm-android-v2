@@ -69,6 +69,53 @@ class TripInferenceEngineTest {
         assertTrue(result.reason.contains("belirsiz"))
     }
 
+    @Test fun singleVisibleCandidateStillChecksRunnerUpBeforeAccepting() {
+        val engine = TripInferenceEngine(
+            TripInferenceSettings(enabled = true, topK = 1, ambiguityMargin = 0.10)
+        )
+        val result = engine.infer(
+            observation(bearing = null, speed = 0.2),
+            listOf(
+                candidate("south", "Flughafen", 180.0),
+                candidate("north", "Universität", 0.0),
+            )
+        )
+        assertEquals(1, result.suggestions.size)
+        assertNull(result.accepted)
+        assertTrue(result.reason.contains("belirsiz"))
+        assertTrue(result.requiresExplicitConfirmation)
+    }
+
+    @Test fun singleVisibleCandidateCanAcceptUnambiguousTrip() {
+        val engine = TripInferenceEngine(
+            TripInferenceSettings(enabled = true, topK = 1, ambiguityMargin = 0.10)
+        )
+        val result = engine.infer(
+            observation(),
+            listOf(
+                candidate("south", "Flughafen", 180.0),
+                candidate("north", "Universität", 0.0, offsetSec = 600),
+            )
+        )
+        assertEquals(1, result.suggestions.size)
+        assertEquals("south", result.accepted?.candidate?.routeId)
+        assertTrue(result.requiresExplicitConfirmation)
+    }
+
+    @Test fun nonpositiveTopKDoesNotCrashOrAcceptTrip() {
+        for (topK in listOf(0, -1)) {
+            val engine = TripInferenceEngine(
+                TripInferenceSettings(enabled = true, topK = topK)
+            )
+            val result = engine.infer(
+                observation(),
+                listOf(candidate("south", "Flughafen", 180.0))
+            )
+            assertTrue(result.suggestions.isEmpty())
+            assertNull(result.accepted)
+        }
+    }
+
     @Test fun parallelRouteAmbiguityFailsClosed() {
         val engine = TripInferenceEngine(TripInferenceSettings(enabled = true, ambiguityMargin = 0.08))
         val result = engine.infer(
