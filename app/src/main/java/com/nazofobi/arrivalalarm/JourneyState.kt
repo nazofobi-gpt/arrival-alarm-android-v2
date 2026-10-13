@@ -33,7 +33,7 @@ class JourneyController(
     }
 
     @Volatile
-    var state: JourneyUiState = stateStore?.load()?.takeIf { saved ->
+    var state: JourneyUiState = runCatching { stateStore?.load() }.getOrNull()?.takeIf { saved ->
         when (saved.phase) {
             JourneyPhase.EMPTY -> saved.start == null && saved.destination == null
             JourneyPhase.START_SELECTED -> saved.start?.isValidCoordinate() == true && saved.destination == null
