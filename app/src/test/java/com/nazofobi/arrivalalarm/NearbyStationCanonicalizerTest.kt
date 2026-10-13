@@ -51,4 +51,57 @@ class NearbyStationCanonicalizerTest {
             reversed.single().childStops.map { it.id },
         )
     }
+    @Test
+    fun identicalParentAndPlatformIdsAcrossProvidersRemainDistinctStations() {
+        val vbbStation = CatalogStop("shared-station", "vbb", "Central", 52.5200, 13.4050)
+        val vbbPlatform = CatalogStop("platform", "vbb", "Central", 52.52001, 13.4050, "shared-station")
+        val mvvStation = CatalogStop("shared-station", "mvv", "Central", 52.5200, 13.4050)
+        val mvvPlatform = CatalogStop("platform", "mvv", "Central", 52.52001, 13.4050, "shared-station")
+
+        val result = NearbyStationCanonicalizer.canonicalize(
+            52.5200, 13.4050,
+            listOf(vbbPlatform, mvvStation, mvvPlatform, vbbStation).map { NearbyStop(it, 0) },
+            5,
+        )
+
+        assertEquals(2, result.size)
+        assertEquals(setOf("vbb", "mvv"), result.map { it.stop.providerId }.toSet())
+        assertEquals(
+            setOf("vbb" to "platform", "mvv" to "platform"),
+            result.flatMap { station ->
+                station.childStops.map { platform -> platform.providerId to platform.id }
+            }.toSet(),
+        )
+        assertEquals(setOf("shared-station"), result.map { it.stop.id }.toSet())
+    }
+
+    @Test
+    fun orphanedParentReferencesDoNotMergeAcrossProviders() {
+        val first = CatalogStop("p-1", "vbb", "Station", 52.5200, 13.4050, "shared-parent")
+        val second = CatalogStop("p-2", "mvv", "Station", 52.5200, 13.4050, "shared-parent")
+        val result = NearbyStationCanonicalizer.canonicalize(
+            52.5200, 13.4050,
+            listOf(NearbyStop(first, 0), NearbyStop(second, 0)),
+            5,
+        )
+        assertEquals(2, result.size)
+        assertEquals(
+            setOf("vbb" to "shared-parent", "mvv" to "shared-parent"),
+            result.map { it.stop.providerId to it.stop.id }.toSet(),
+        )
+    }
+
+    @Test
+    fun fallbackGroupingDoesNotCollapseSameNameAndCoordinatesAcrossProviders() {
+        val first = CatalogStop("vbb-123", "vbb", "Hauptbahnhof", 52.5200, 13.4050)
+        val second = CatalogStop("mvv-123", "mvv", "Hauptbahnhof", 52.5200, 13.4050)
+        val result = NearbyStationCanonicalizer.canonicalize(
+            52.5200, 13.4050,
+            listOf(NearbyStop(first, 0), NearbyStop(second, 0)),
+            5,
+        )
+        assertEquals(2, result.size)
+        assertEquals(setOf("vbb", "mvv"), result.map { it.stop.providerId }.toSet())
+    }
+
 }
