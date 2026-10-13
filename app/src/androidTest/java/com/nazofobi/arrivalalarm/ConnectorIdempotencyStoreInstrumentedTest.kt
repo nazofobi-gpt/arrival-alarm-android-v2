@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -57,5 +58,44 @@ class ConnectorIdempotencyStoreInstrumentedTest {
         assertNull(inFlight?.receipt)
 
         prefs.edit().clear().commit()
+    }
+
+    @Test fun corruptJournalMustNotBecomeAnEmptyJournal() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences(
+            "connector_idempotency_g191_corruption_test",
+            Context.MODE_PRIVATE,
+        )
+        val key = "connector_idempotency_v1"
+        val validClaim = """{"idempotency_key":"already-claimed","command_type":"ArmArrivalAlarm","state_version_before":7}"""
+        val corruptPayloads = listOf(
+            "{not-json",
+            "[null]",
+            """[{"idempotency_key":"already-claimed"}]""",
+            "[$validClaim,$validClaim]",
+            """[{"idempotency_key":"already-claimed","command_type":"ArmArrivalAlarm","state_version_before":7,"receipt":{"idempotency_key":"different","command_type":"ArmArrivalAlarm","status":"APPLIED","message":"ok","state_version_before":7,"state_version_after":8}}]""",
+        )
+
+        try {
+            for (payload in corruptPayloads) {
+                assertTrue(prefs.edit().putString(key, payload).commit())
+                val store = SharedPreferencesConnectorIdempotencyStore(prefs)
+                val readFailure = runCatching { store.get("already-claimed") }.exceptionOrNull()
+                assertTrue("Corrupted claims must not be discarded", readFailure is IllegalStateException)
+                val writeFailure = runCatching {
+                    store.begin(
+                        ConnectorIdempotencyEntry(
+                            idempotencyKey = "already-claimed",
+                            commandType = "ArmArrivalAlarm",
+                            stateVersionBefore = 7,
+                        )
+                    )
+                }.exceptionOrNull()
+                assertTrue("A corrupted journal must reject new claims", writeFailure is IllegalStateException)
+                assertEquals("Recovery must not overwrite the journal", payload, prefs.getString(key, null))
+            }
+        } finally {
+            prefs.edit().clear().commit()
+        }
     }
 }
