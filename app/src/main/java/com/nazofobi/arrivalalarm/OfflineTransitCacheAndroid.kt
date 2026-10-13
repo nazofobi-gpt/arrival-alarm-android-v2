@@ -62,6 +62,11 @@ private fun JSONObject.toRouteOption(): RouteOption? {
     val origin = optJSONObject("origin")?.toMapPoint() ?: return null
     val destination = optJSONObject("destination")?.toMapPoint() ?: return null
     val id = optString("id").takeIf { it.isNotBlank() } ?: return null
+    val stopsJson = optJSONArray("stops")
+    if (has("stops") && !isNull("stops") && stopsJson == null) return null
+    val stops = stopsJson.toRouteStops()
+    // A silently dropped stop changes the ordered itinerary and may hide the alarm target.
+    if (stopsJson != null && stops.size != stopsJson.length()) return null
     return RouteOption(
         id = id,
         origin = origin,
@@ -73,7 +78,7 @@ private fun JSONObject.toRouteOption(): RouteOption? {
         walkingMinutes = optInt("walkingMinutes", 0),
         transfers = optInt("transfers", 0),
         tripIds = optJSONArray("tripIds").toStrings(),
-        stops = optJSONArray("stops").toRouteStops(),
+        stops = stops,
         refreshToken = optNullableString("refreshToken"),
         sourceUpdatedAtEpochSeconds = optNullableLong("sourceUpdatedAtEpochSeconds"),
     )
@@ -107,6 +112,10 @@ private fun RouteStop.toJson(): JSONObject = JSONObject()
 
 private fun JSONObject.toRouteStop(): RouteStop? {
     val name = optString("name").takeIf { it.isNotBlank() } ?: return null
+    // Optional coordinates may be absent, but supplied invalid values cannot be trusted.
+    if (hasInvalidCoordinate("latitude", -90.0, 90.0) ||
+        hasInvalidCoordinate("longitude", -180.0, 180.0)
+    ) return null
     return RouteStop(
         id = optNullableString("id"),
         name = name,
@@ -178,3 +187,9 @@ private fun JSONObject.optNullableLong(key: String): Long? =
 
 private fun JSONObject.optNullableDouble(key: String): Double? =
     if (!has(key) || isNull(key)) null else optDouble(key).takeIf { it.isFinite() }
+
+private fun JSONObject.hasInvalidCoordinate(key: String, min: Double, max: Double): Boolean {
+    if (!has(key) || isNull(key)) return false
+    val value = optDouble(key, Double.NaN)
+    return !value.isFinite() || value !in min..max
+}
