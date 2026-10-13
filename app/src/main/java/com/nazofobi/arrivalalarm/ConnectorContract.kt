@@ -146,6 +146,19 @@ class ConnectorCommandProcessor(
     ): ConnectorCommandReceipt {
         val commandType = command::class.simpleName ?: "UnknownCommand"
         idempotencyStore.get(command.idempotencyKey)?.let { existing ->
+            // A previously used key must never acknowledge a different command as applied.
+            // Check before returning a completed receipt or a pending-claim response.
+            if (existing.commandType != commandType) {
+                val current = port.readSnapshot()
+                return ConnectorCommandReceipt(
+                    idempotencyKey = command.idempotencyKey,
+                    commandType = commandType,
+                    status = ConnectorCommandStatus.REJECTED_DOMAIN,
+                    message = "İdempotency anahtarı başka bir komut tipi için kullanılmış",
+                    stateVersionBefore = current.stateVersion,
+                    stateVersionAfter = current.stateVersion,
+                )
+            }
             existing.receipt?.let { return it.copy(duplicate = true) }
             val current = port.readSnapshot()
             return ConnectorCommandReceipt(
