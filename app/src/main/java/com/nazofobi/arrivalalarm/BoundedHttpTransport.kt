@@ -124,6 +124,15 @@ class BoundedHttpTransport(
                 }
                 sleepOrStop(retryDelayMs(response, attempts), attempts)?.let { return it }
             } catch (error: IOException) {
+                // A provider adapter can flag cancellation before throwing a plain IOException.
+                // Do not back off/retry cancelled I/O or count it as a provider outage.
+                if (Thread.currentThread().isInterrupted) {
+                    return HttpTransportResult.Failure(
+                        kind = HttpTransportResult.Failure.Kind.NETWORK,
+                        attempts = attempts,
+                        message = "request_interrupted",
+                    )
+                }
                 // An interrupted network read/write represents cancellation, not a
                 // provider outage. Do not replay the request or trip the circuit.
                 // SocketTimeoutException also extends InterruptedIOException but is
