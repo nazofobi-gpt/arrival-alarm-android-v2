@@ -160,6 +160,8 @@ class TripInferenceEngineTest {
             observation(speed = -1.0, bearing = null),
             observation(bearing = Double.NaN),
             observation(bearing = Double.NEGATIVE_INFINITY),
+            observation(bearing = -1.0),
+            observation(bearing = 361.0),
             observation(point = GeoPoint(93.0, 8.813)),
             observation(point = GeoPoint(53.083, 181.0)),
             observation(point = GeoPoint(Double.NaN, 8.813)),
@@ -179,6 +181,8 @@ class TripInferenceEngineTest {
             candidate("invalid-lat", "Bad", 180.0, anchor = GeoPoint(91.0, 8.813)),
             candidate("invalid-lon", "Bad", 180.0, anchor = GeoPoint(53.083, 181.0)),
             candidate("invalid-bearing", "Bad", Double.NaN),
+            candidate("invalid-bearing-negative", "Bad", -1.0),
+            candidate("invalid-bearing-large", "Bad", 361.0),
             candidate("invalid-time", "Bad", 180.0).copy(scheduledEpochSeconds = 0L),
         )
         val result = engine.infer(observation(), candidates)
