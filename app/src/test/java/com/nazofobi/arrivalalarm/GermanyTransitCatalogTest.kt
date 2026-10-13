@@ -21,6 +21,45 @@ class GermanyTransitCatalogTest {
         assertTrue(berlin.first().distanceMeters < berlin.last().distanceMeters)
     }
 
+
+    @Test fun invalidLocationAndLimitsFailClosedWithoutThrowing() {
+        assertTrue(catalog.nearestStops(Double.NaN, 8.2).isEmpty())
+        assertTrue(catalog.nearestStops(52.0, Double.POSITIVE_INFINITY).isEmpty())
+        assertTrue(catalog.nearestStops(90.1, 8.2).isEmpty())
+        assertTrue(catalog.nearestStops(52.0, -180.1).isEmpty())
+        assertTrue(catalog.nearestStops(52.0, 8.2, -1).isEmpty())
+        assertTrue(catalog.nearestStops(52.0, 8.2, 0).isEmpty())
+        assertTrue(catalog.searchStops("Berlin", -1).isEmpty())
+        assertTrue(catalog.searchRoutes("S5", -1).isEmpty())
+        assertTrue(catalog.searchTrips("train", -1).isEmpty())
+    }
+
+    @Test fun malformedFeedStopCoordinatesCannotCrashNearbyResults() {
+        val valid = CatalogStop("valid", "gtfs", "Lohne", 52.665, 8.237)
+        val invalid = CatalogStop("nan", "gtfs", "Bad latitude", Double.NaN, 8.237)
+        val outside = CatalogStop("outside", "gtfs", "Bad longitude", 52.665, 181.0)
+        val snapshot = TestGermanyTransitFixtures.snapshot.copy(stops = listOf(invalid, outside, valid))
+        val result = GermanyTransitCatalog(snapshot).nearestStops(52.664, 8.237)
+        assertEquals(listOf("valid"), result.map { it.stop.id })
+    }
+
+    @Test fun boundedTripSearchPreservesFirstRouteForDuplicateIds() {
+        val primary = CatalogRoute("duplicate", "gtfs", "First", "Center", emptyList())
+        val laterDuplicate = primary.copy(shortName = "Second")
+        val trips = (1..128).map { index ->
+            CatalogTrip("trip-$index", "gtfs", "duplicate", "08:00")
+        }
+        val snapshot = TestGermanyTransitFixtures.snapshot.copy(
+            routes = listOf(primary, laterDuplicate),
+            trips = trips,
+        )
+        val localCatalog = GermanyTransitCatalog(snapshot)
+        val result = localCatalog.searchTrips("trip-", limit = 3)
+        assertEquals(listOf("trip-1", "trip-2", "trip-3"), result.map { it.first.id })
+        assertTrue(result.all { it.second.shortName == "First" })
+        assertEquals(128, localCatalog.searchTrips("trip-", limit = 200).size)
+    }
+
     @Test fun registryExposesCoverageFreshnessAndRealtimeCapability() {
         val delfi = requireNotNull(catalog.provider("delfi"))
         val vbb = requireNotNull(catalog.provider("vbb"))
