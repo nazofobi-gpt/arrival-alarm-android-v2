@@ -395,6 +395,50 @@ class BoundedHttpTransportTest {
     }
 
     @Test
+    fun interruptionDuringSuccessfulBackoffStillStopsBeforeRetrying() {
+        var calls = 0
+        var backoffs = 0
+        val transport = BoundedHttpTransport(
+            exchange = HttpExchange { _, _, _ ->
+                calls += 1
+                HttpTransportResponse(if (calls == 1) 503 else 200)
+            },
+            clock = HttpTransportClock { 100L },
+            // A cancellation-aware backoff adapter can return normally even
+            // when the thread has become interrupted.
+            sleeper = HttpTransportSleeper {
+                backoffs += 1
+                Thread.currentThread().interrupt()
+            },
+            maxRetries = 2,
+            failureThreshold = 1,
+        )
+
+        try {
+            val failure = transport.execute(
+                HttpTransportRequest("https://provider.invalid")
+            ) as HttpTransportResult.Failure
+            assertEquals(HttpTransportResult.Failure.Kind.NETWORK, failure.kind)
+            assertEquals("request_interrupted", failure.message)
+            assertEquals(1, failure.attempts)
+            assertEquals(1, calls)
+            assertEquals(1, backoffs)
+            assertTrue(Thread.currentThread().isInterrupted)
+
+            // Cancellation is not a provider outage and must not open the circuit.
+            Thread.interrupted()
+            val success = transport.execute(
+                HttpTransportRequest("https://provider.invalid")
+            ) as HttpTransportResult.Response
+            assertEquals(200, success.response.status)
+            assertEquals(1, success.attempts)
+            assertEquals(2, calls)
+        } finally {
+            Thread.interrupted()
+        }
+    }
+
+    @Test
     fun interruptedBackoffStopsRetryAndPreservesThreadInterrupt() {
         var calls = 0
         val transport = BoundedHttpTransport(

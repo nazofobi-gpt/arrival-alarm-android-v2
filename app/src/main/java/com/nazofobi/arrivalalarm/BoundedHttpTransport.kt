@@ -88,6 +88,15 @@ class BoundedHttpTransport(
 
         var attempts = 0
         while (true) {
+            // Backoff adapters may return normally after cancellation.
+            // Never begin the next provider exchange on an interrupted thread.
+            if (Thread.currentThread().isInterrupted) {
+                return HttpTransportResult.Failure(
+                    kind = HttpTransportResult.Failure.Kind.NETWORK,
+                    attempts = attempts,
+                    message = "request_interrupted",
+                )
+            }
             attempts += 1
             try {
                 val response = exchange.execute(request, connectTimeoutMs, readTimeoutMs)
