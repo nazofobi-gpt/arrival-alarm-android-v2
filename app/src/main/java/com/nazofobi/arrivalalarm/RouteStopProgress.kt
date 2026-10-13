@@ -55,9 +55,9 @@ class RouteStopProgressTracker {
                     reversedWindow -> null
                     else -> candidateDeparture
                 },
-                hasRealtimeDelta = !reversedWindow &&
-                    ((actualArrival != null && plannedArrival != null && actualArrival != plannedArrival) ||
-                        (actualDeparture != null && plannedDeparture != null && actualDeparture != plannedDeparture)),
+                hasRealtimeEvidence = !reversedWindow &&
+                    ((actualArrival != null && (plannedArrival == null || actualArrival != plannedArrival)) ||
+                        (actualDeparture != null && (plannedDeparture == null || actualDeparture != plannedDeparture))),
             )
         }
         if (windows.none { it.arrival != null || it.departure != null }) {
@@ -68,7 +68,7 @@ class RouteStopProgressTracker {
         // Two distinct stops must not occupy overlapping provider time windows.
         if (!hasCoherentTimeline(windows)) return RouteStopProgress()
 
-        val basis = if (windows.any { it.hasRealtimeDelta }) {
+        val basis = if (windows.any { it.hasRealtimeEvidence }) {
             TransitTimingBasis.REALTIME
         } else {
             TransitTimingBasis.SCHEDULED
@@ -129,7 +129,7 @@ class RouteStopProgressTracker {
         val stop: RouteStop,
         val arrival: Long?,
         val departure: Long?,
-        val hasRealtimeDelta: Boolean,
+        val hasRealtimeEvidence: Boolean,
     )
 }
 
