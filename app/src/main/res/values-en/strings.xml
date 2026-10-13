@@ -237,4 +237,6 @@
     <string name="departures_gtfsrt_unavailable">GTFS Deutschland local departures • GTFS-RT unavailable, scheduled times</string>
     <string name="lookup_stale_results">Cached provider results are stale • freshness could not be verified</string>
     <string name="lookup_provider_unavailable">Live search provider is unavailable • local data returned no result</string>
+    <string name="nearby_departures_action">Show departures</string>
+    <string name="departures_stop_unavailable">Departures for this stop could not be loaded. Please try again later.</string>
 </resources>

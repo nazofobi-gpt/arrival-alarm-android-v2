@@ -81,6 +81,8 @@
     <string name="restored_origin">Kaydedilmiş başlangıç</string>
     <string name="restored_destination">Kaydedilmiş varış</string>
     <string name="nearby_stops">En yakın duraklar</string>
+    <string name="nearby_departures_action">Kalkışları göster</string>
+    <string name="departures_stop_unavailable">Durak kalkışları alınamadı; daha sonra tekrar deneyin.</string>
     <string name="nearby_stop_format">%1$s • %2$s • %3$d m</string>
     <string name="nearby_child_stops_show">%1$d alt durak/peronu göster</string>
     <string name="nearby_child_stops_hide">Alt durakları/peronları gizle</string>
