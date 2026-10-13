@@ -160,15 +160,34 @@ class SharedPreferencesConnectorIdempotencyStore(
             .put("duplicate", duplicate)
             .apply { actionId?.let { put("action_id", it) } }
 
+    // Android org.json getters coerce strings, numbers and booleans. A persisted
+    // replay claim must retain its exact JSON primitive types or fail closed.
+    private fun JSONObject.requireJournalText(field: String): String =
+        (get(field) as? String) ?: error("Invalid journal string field")
+
+    private fun JSONObject.requireJournalVersion(field: String): Long {
+        val version = when (val value = get(field)) {
+            is Int -> value.toLong()
+            is Long -> value
+            else -> error("Invalid journal version field")
+        }
+        check(version >= 0L) { "Negative journal version" }
+        return version
+    }
+
+    private fun JSONObject.requireJournalBoolean(field: String): Boolean =
+        if (has(field)) (get(field) as? Boolean) ?: error("Invalid journal boolean field")
+        else false
+
     private fun JSONObject.decodeEntry(): ConnectorIdempotencyEntry {
         // A present-but-malformed receipt is not equivalent to a pending claim.
         val storedReceipt = if (has("receipt")) getJSONObject("receipt").decodeReceipt() else null
         val entry = ConnectorIdempotencyEntry(
-            idempotencyKey = getString("idempotency_key"),
-            commandType = getString("command_type"),
-            stateVersionBefore = getLong("state_version_before"),
+            idempotencyKey = requireJournalText("idempotency_key"),
+            commandType = requireJournalText("command_type"),
+            stateVersionBefore = requireJournalVersion("state_version_before"),
             receipt = storedReceipt,
-            commandFingerprint = if (has("command_fingerprint")) getString("command_fingerprint") else null,
+            commandFingerprint = if (has("command_fingerprint")) requireJournalText("command_fingerprint") else null,
         )
         check(entry.commandFingerprint == null ||
             entry.commandFingerprint.matches(Regex("[0-9a-f]{64}")))
@@ -182,13 +201,13 @@ class SharedPreferencesConnectorIdempotencyStore(
 
     private fun JSONObject.decodeReceipt(): ConnectorCommandReceipt =
         ConnectorCommandReceipt(
-            idempotencyKey = getString("idempotency_key"),
-            commandType = getString("command_type"),
-            status = ConnectorCommandStatus.valueOf(getString("status")),
-            message = getString("message"),
-            stateVersionBefore = getLong("state_version_before"),
-            stateVersionAfter = getLong("state_version_after"),
-            actionId = optString("action_id").takeIf { it.isNotBlank() },
-            duplicate = optBoolean("duplicate", false),
+            idempotencyKey = requireJournalText("idempotency_key"),
+            commandType = requireJournalText("command_type"),
+            status = ConnectorCommandStatus.valueOf(requireJournalText("status")),
+            message = requireJournalText("message"),
+            stateVersionBefore = requireJournalVersion("state_version_before"),
+            stateVersionAfter = requireJournalVersion("state_version_after"),
+            actionId = if (has("action_id")) requireJournalText("action_id").also { check(it.isNotBlank()) } else null,
+            duplicate = requireJournalBoolean("duplicate"),
         )
 }
