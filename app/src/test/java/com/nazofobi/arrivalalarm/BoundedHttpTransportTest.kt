@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import java.io.IOException
+import java.io.InterruptedIOException
 import java.net.SocketTimeoutException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -296,6 +297,45 @@ class BoundedHttpTransportTest {
         assertEquals("timeout", result.message)
         assertTrue(!result.toString().contains(secret))
         assertTrue(!result.toString().contains("https://provider.invalid"))
+    }
+
+    @Test
+    fun interruptedNetworkIoDoesNotRetryLeakDetailsOrTripCircuit() {
+        var calls = 0
+        val secret = "secret_request_token"
+        val transport = BoundedHttpTransport(
+            exchange = HttpExchange { _, _, _ ->
+                calls += 1
+                if (calls == 1) {
+                    throw InterruptedIOException("GET https://provider.invalid?token=$secret cancelled")
+                }
+                HttpTransportResponse(200)
+            },
+            clock = HttpTransportClock { 100L },
+            sleeper = HttpTransportSleeper { error("cancelled request must not be retried") },
+            maxRetries = 3,
+            failureThreshold = 1,
+        )
+
+        try {
+            val failure = transport.execute(HttpTransportRequest("https://provider.invalid")) as HttpTransportResult.Failure
+            assertEquals(HttpTransportResult.Failure.Kind.NETWORK, failure.kind)
+            assertEquals(1, failure.attempts)
+            assertEquals("request_interrupted", failure.message)
+            assertEquals(1, calls)
+            assertTrue(Thread.currentThread().isInterrupted)
+            assertTrue(!failure.toString().contains(secret))
+
+            // A client cancellation must not count as a failed provider and trip
+            // the circuit; a subsequent new request may still succeed.
+            Thread.interrupted()
+            val success = transport.execute(HttpTransportRequest("https://provider.invalid")) as HttpTransportResult.Response
+            assertEquals(200, success.response.status)
+            assertEquals(1, success.attempts)
+            assertEquals(2, calls)
+        } finally {
+            Thread.interrupted()
+        }
     }
 
     @Test
