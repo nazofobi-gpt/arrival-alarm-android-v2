@@ -199,12 +199,17 @@ class TripInferenceEngineTest {
             scheduledEpochSeconds = Long.MAX_VALUE - 100L,
             realtimeDelaySeconds = now.toInt() + 101,
         )
-        listOf(malformedDirect, malformedDelayed).forEach { invalid ->
-            val result = engine.infer(observation(), listOf(invalid))
-            assertNull("malformed epoch must not be accepted: ${invalid.routeId}", result.accepted)
-            assertEquals(0.0, result.suggestions.single().timeScore, 0.0)
-            assertTrue(result.requiresExplicitConfirmation)
-        }
+        // Negative/sentinel epochs are now discarded before scoring.
+        val direct = engine.infer(observation(), listOf(malformedDirect))
+        assertNull(direct.accepted)
+        assertTrue(direct.suggestions.isEmpty())
+        assertTrue(direct.requiresExplicitConfirmation)
+
+        // Positive but extreme timestamps remain candidates with zero time confidence.
+        val delayed = engine.infer(observation(), listOf(malformedDelayed))
+        assertNull(delayed.accepted)
+        assertEquals(0.0, delayed.suggestions.single().timeScore, 0.0)
+        assertTrue(delayed.requiresExplicitConfirmation)
     }
 
     @Test fun parallelRouteAmbiguityFailsClosed() {
