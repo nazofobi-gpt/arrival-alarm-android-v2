@@ -51,4 +51,46 @@ class NearbyStationCanonicalizerTest {
             reversed.single().childStops.map { it.id },
         )
     }
+
+    @Test
+    fun parentStationWithSurroundingWhitespaceStillCollapsesIntoExistingParent() {
+        val parent = CatalogStop("station", "gtfs", "Lohne Bahnhof", 52.665, 8.237)
+        val first = CatalogStop("p1", "gtfs", "Lohne Bahnhof", 52.665, 8.237, " station ")
+        val second = CatalogStop("p2", "gtfs", "Lohne Bahnhof", 52.665, 8.237, "station")
+        val result = NearbyStationCanonicalizer.canonicalize(
+            52.664, 8.237,
+            listOf(NearbyStop(first, 1), NearbyStop(parent, 1), NearbyStop(second, 1)),
+            5,
+        )
+        assertEquals(1, result.size)
+        assertEquals("station", result.single().stop.id)
+        assertEquals(listOf("p1", "p2"), result.single().childStops.map { it.id })
+    }
+
+    @Test
+    fun whitespaceParentStationWithoutParentKeepsStableCanonicalIdentity() {
+        val first = CatalogStop("p1", "gtfs", "Lohne Bahnhof", 52.665, 8.237, " station ")
+        val second = CatalogStop("p2", "gtfs", "Lohne Bahnhof", 52.665, 8.237, "station")
+        val result = NearbyStationCanonicalizer.canonicalize(
+            52.664, 8.237,
+            listOf(NearbyStop(first, 1), NearbyStop(second, 1)),
+            5,
+        )
+        assertEquals(1, result.size)
+        assertEquals("station", result.single().stop.id)
+        assertEquals(listOf("p1", "p2"), result.single().childStops.map { it.id })
+    }
+
+    @Test
+    fun nonPositiveLimitReturnsNoStations() {
+        val stop = CatalogStop("station", "gtfs", "Lohne Bahnhof", 52.665, 8.237)
+        assertEquals(
+            emptyList<NearbyStop>(),
+            NearbyStationCanonicalizer.canonicalize(52.664, 8.237, listOf(NearbyStop(stop, 1)), 0),
+        )
+        assertEquals(
+            emptyList<NearbyStop>(),
+            NearbyStationCanonicalizer.canonicalize(52.664, 8.237, listOf(NearbyStop(stop, 1)), -1),
+        )
+    }
 }
