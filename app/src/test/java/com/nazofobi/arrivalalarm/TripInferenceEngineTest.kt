@@ -160,6 +160,9 @@ class TripInferenceEngineTest {
             observation(speed = -1.0, bearing = null),
             observation(bearing = Double.NaN),
             observation(bearing = Double.NEGATIVE_INFINITY),
+            observation(bearing = -1.0),
+            observation(bearing = 360.0),
+            observation(bearing = 540.0),
             observation(point = GeoPoint(93.0, 8.813)),
             observation(point = GeoPoint(53.083, 181.0)),
             observation(point = GeoPoint(Double.NaN, 8.813)),
@@ -179,12 +182,41 @@ class TripInferenceEngineTest {
             candidate("invalid-lat", "Bad", 180.0, anchor = GeoPoint(91.0, 8.813)),
             candidate("invalid-lon", "Bad", 180.0, anchor = GeoPoint(53.083, 181.0)),
             candidate("invalid-bearing", "Bad", Double.NaN),
+            candidate("negative-bearing", "Bad", -1.0),
+            candidate("one-turn-bearing", "Bad", 360.0),
+            candidate("wrapped-bearing", "Bad", 540.0),
             candidate("invalid-time", "Bad", 180.0).copy(scheduledEpochSeconds = 0L),
         )
         val result = engine.infer(observation(), candidates)
         assertNull(result.accepted)
         assertTrue(result.suggestions.isEmpty())
         assertEquals("Uygun aktif sefer adayı yok", result.reason)
+    }
+
+    @Test fun validHeadingEndpointsAndAbsentHeadingRemainEligible() {
+        val engine = TripInferenceEngine(TripInferenceSettings(enabled = true))
+        listOf(0.0, 359.999).forEach { heading ->
+            val id = "valid-heading-$heading"
+            val result = engine.infer(
+                observation(bearing = heading),
+                listOf(candidate(id, "Flughafen", heading)),
+            )
+            assertEquals(id, result.accepted?.candidate?.routeId)
+            assertTrue(result.requiresExplicitConfirmation)
+        }
+
+        val absentObservation = engine.infer(
+            observation(bearing = null),
+            listOf(candidate("absent-observation", "Flughafen", 180.0)),
+        )
+        assertEquals("absent-observation", absentObservation.accepted?.candidate?.routeId)
+
+        val absentCandidate = engine.infer(
+            observation(),
+            listOf(candidate("absent-candidate", "Flughafen", 180.0)
+                .copy(expectedBearingDegrees = null)),
+        )
+        assertEquals("absent-candidate", absentCandidate.accepted?.candidate?.routeId)
     }
 
     @Test fun extremeProviderEpochsCannotGainArtificialTimeConfidenceFromOverflow() {
