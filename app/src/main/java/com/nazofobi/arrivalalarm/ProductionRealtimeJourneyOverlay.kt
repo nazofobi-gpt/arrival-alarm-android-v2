@@ -36,6 +36,9 @@ internal class ProductionRealtimeJourneyOverlay(
         // Exception messages may contain provider URLs, credentials or user coordinates.
         val overlay = try {
             match(fetch(), now)
+        } catch (interrupted: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw interrupted
         } catch (_: Exception) {
             GermanyRealtimeOverlayResult.Unavailable(
                 reason = GermanyRealtimeUnavailableReason.NETWORK,
@@ -157,6 +160,9 @@ internal class ProductionRealtimeJourneyOverlay(
     private fun frequencyTrip(tripId: String): Boolean =
         try {
             isFrequencyTrip(tripId)
+        } catch (interrupted: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw interrupted
         } catch (_: Exception) {
             // If frequency status cannot be verified, omit potentially misbound RT.
             true
