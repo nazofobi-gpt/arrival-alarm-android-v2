@@ -116,6 +116,41 @@ class TripInferenceEngineTest {
         }
     }
 
+    @Test fun invalidMinimumConfidenceNeverAcceptsOrSuggests() {
+        val values = listOf(-0.01, 1.01, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)
+        values.forEach { invalid ->
+            val engine = TripInferenceEngine(
+                TripInferenceSettings(enabled = true, minimumConfidence = invalid)
+            )
+            val result = engine.infer(
+                observation(),
+                listOf(candidate("south", "Flughafen", 180.0))
+            )
+            assertNull("invalid minimumConfidence=$invalid", result.accepted)
+            assertTrue("invalid minimumConfidence=$invalid", result.suggestions.isEmpty())
+            assertTrue(result.requiresExplicitConfirmation)
+        }
+    }
+
+    @Test fun invalidAmbiguityMarginNeverBypassesRunnerUpGate() {
+        val values = listOf(-0.01, 1.01, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)
+        values.forEach { invalid ->
+            val engine = TripInferenceEngine(
+                TripInferenceSettings(enabled = true, ambiguityMargin = invalid, topK = 1)
+            )
+            val result = engine.infer(
+                observation(bearing = null, speed = 0.2),
+                listOf(
+                    candidate("south", "Flughafen", 180.0),
+                    candidate("north", "Universität", 0.0),
+                )
+            )
+            assertNull("invalid ambiguityMargin=$invalid", result.accepted)
+            assertTrue("invalid ambiguityMargin=$invalid", result.suggestions.isEmpty())
+            assertTrue(result.requiresExplicitConfirmation)
+        }
+    }
+
     @Test fun parallelRouteAmbiguityFailsClosed() {
         val engine = TripInferenceEngine(TripInferenceSettings(enabled = true, ambiguityMargin = 0.08))
         val result = engine.infer(
