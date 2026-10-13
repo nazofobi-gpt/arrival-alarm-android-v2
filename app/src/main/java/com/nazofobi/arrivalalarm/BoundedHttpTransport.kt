@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import java.io.IOException
+import java.io.InterruptedIOException
 import java.net.SocketTimeoutException
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -106,6 +107,18 @@ class BoundedHttpTransport(
                 }
                 sleepOrStop(retryDelayMs(response, attempts), attempts)?.let { return it }
             } catch (error: IOException) {
+                // An interrupted network read/write represents cancellation, not a
+                // provider outage. Do not replay the request or trip the circuit.
+                // SocketTimeoutException also extends InterruptedIOException but is
+                // a real timeout and retains the bounded retry policy below.
+                if (error is InterruptedIOException && error !is SocketTimeoutException) {
+                    Thread.currentThread().interrupt()
+                    return HttpTransportResult.Failure(
+                        kind = HttpTransportResult.Failure.Kind.NETWORK,
+                        attempts = attempts,
+                        message = "request_interrupted",
+                    )
+                }
                 if (attempts > allowedRetries) {
                     recordFailure()
                     return HttpTransportResult.Failure(
