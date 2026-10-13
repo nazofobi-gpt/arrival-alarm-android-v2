@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -58,4 +59,25 @@ class ConnectorIdempotencyStoreInstrumentedTest {
 
         prefs.edit().clear().commit()
     }
+    @Test fun malformedDurableJournalCannotAuthorizeNewCommand() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences("connector_idempotency_corruption_test", Context.MODE_PRIVATE)
+        val raw = """[{"idempotency_key":"pending","command_type":"ArmArrivalAlarm","state_version_before":7},{}]"""
+        try {
+            assertEquals(true, prefs.edit().putString("connector_idempotency_v1", raw).commit())
+            val store = SharedPreferencesConnectorIdempotencyStore(prefs)
+            try {
+                store.get("pending")
+                fail("Unreadable journal must block lookup")
+            } catch (_: IllegalStateException) { }
+            try {
+                store.begin(ConnectorIdempotencyEntry("new", "SetDestination", 8))
+                fail("Unreadable journal must block any new claim")
+            } catch (_: IllegalStateException) { }
+            assertEquals(raw, prefs.getString("connector_idempotency_v1", null))
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
 }
