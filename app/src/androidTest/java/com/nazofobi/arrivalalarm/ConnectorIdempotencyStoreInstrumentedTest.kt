@@ -153,4 +153,30 @@ class ConnectorIdempotencyStoreInstrumentedTest {
         }
     }
 
+
+    @Test fun inMemoryStoreRejectsMismatchedAndRepeatedCompletion() {
+        val store = InMemoryConnectorIdempotencyStore()
+        store.begin(ConnectorIdempotencyEntry("cmd-memory", "SetDestination", 7))
+        val receipt = ConnectorCommandReceipt(
+            idempotencyKey = "cmd-memory",
+            commandType = "SetDestination",
+            status = ConnectorCommandStatus.APPLIED,
+            message = "applied",
+            stateVersionBefore = 7,
+            stateVersionAfter = 8,
+        )
+        try {
+            store.complete(receipt.copy(stateVersionBefore = 6))
+            fail("Mismatched version must not complete an in-memory claim")
+        } catch (_: IllegalStateException) { }
+        assertNull(store.get("cmd-memory")?.receipt)
+        store.complete(receipt)
+        assertEquals(receipt, store.get("cmd-memory")?.receipt)
+        try {
+            store.complete(receipt.copy(message = "overwritten"))
+            fail("Completed in-memory receipt must be immutable")
+        } catch (_: IllegalStateException) { }
+        assertEquals(receipt, store.get("cmd-memory")?.receipt)
+    }
+
 }
