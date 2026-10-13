@@ -22,13 +22,33 @@ class StringValue:
     translatable: bool
 
 
+VALID_CONVERSIONS = frozenset("bBhHsScCdoxXeEfgGaA%n")
+# Java Formatter's documented date/time suffixes (case-sensitive).
+VALID_DATETIME_SUFFIXES = frozenset("HIk" + "lMSLNpzZsQBbhAaCYyjmdeRTrDFc")
+
+
 def placeholders(value: str) -> Counter[tuple[int, str]]:
-    """Compare argument positions and conversion types, not language word order."""
+    """Validate each percent token and compare argument types and positions."""
     found: Counter[tuple[int, str]] = Counter()
     next_implicit = 1
     previous_position: int | None = None
-    for match in PLACEHOLDER.finditer(value):
+    cursor = 0
+    while True:
+        start = value.find("%", cursor)
+        if start < 0:
+            break
+        # finditer() silently skips malformed tokens such as %1$ or a bare %.
+        # Runtime String.format does not, so fail the locale gate instead.
+        match = PLACEHOLDER.match(value, start)
+        if match is None:
+            raise ValueError(f"malformed format argument at offset {start}")
         conversion = match.group(3)
+        if len(conversion) == 2:
+            if conversion[1] not in VALID_DATETIME_SUFFIXES:
+                raise ValueError(f"unsupported date/time conversion %{conversion} at offset {start}")
+        elif conversion not in VALID_CONVERSIONS:
+            raise ValueError(f"unsupported format conversion %{conversion} at offset {start}")
+        cursor = match.end()
         if conversion in ("%", "n"):
             continue
         # The '<' flag reuses the preceding argument, without advancing implicit numbering.
@@ -41,13 +61,10 @@ def placeholders(value: str) -> Counter[tuple[int, str]]:
             if not match.group(1):
                 next_implicit += 1
         previous_position = position
-        # Java Formatter date/time conversions use two characters (%tH, %tM, etc.).
-        # Preserve both, including the case of the conversion prefix/suffix.
-        # Treating every %tX as only "%t" masks translated hour/month drift.
+        # Date/time suffix case is meaningful (e.g. %tH versus %tM).
         signature = conversion if len(conversion) == 2 else conversion.lower()
         found[position, signature] += 1
     return found
-
 
 def read_strings(path: Path) -> tuple[dict[str, StringValue], list[str]]:
     errors: list[str] = []
