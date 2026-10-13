@@ -3,6 +3,7 @@ package com.nazofobi.arrivalalarm
 import java.util.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProductionRealtimeJourneyOverlayTest {
@@ -218,6 +219,27 @@ class ProductionRealtimeJourneyOverlayTest {
         )
 
         realtime.enrich(listOf(option()))
+    }
+
+    @Test
+    fun interruptedRealtimeFetchPreservesThreadCancellation() {
+        val realtime = ProductionRealtimeJourneyOverlay(
+            fetch = { throw InterruptedException("request cancelled") },
+            match = { _, _ -> error("matcher should not run") },
+            nowEpochSeconds = { at("08:00:00") / 1_000L },
+        )
+
+        var interruptionPropagated = false
+        try {
+            realtime.enrich(listOf(option()))
+        } catch (_: InterruptedException) {
+            interruptionPropagated = true
+            assertTrue(Thread.currentThread().isInterrupted)
+        } finally {
+            // Do not leak the test's interruption flag into the JUnit runner.
+            Thread.interrupted()
+        }
+        assertTrue(interruptionPropagated)
     }
 
     private fun overlay(
