@@ -32,6 +32,9 @@ class InMemoryConnectorIdempotencyStore(
         check(entry.idempotencyKey.isNotBlank()) { "Idempotency key must not be blank" }
         check(entry.commandType.isNotBlank()) { "Command type must not be blank" }
         check(entry.stateVersionBefore >= 0L) { "State version must not be negative" }
+        check(entry.commandFingerprint == null || entry.commandFingerprint.matches(Regex("[0-9a-f]{64}"))) {
+            "Malformed command fingerprint"
+        }
         check(!entries.containsKey(entry.idempotencyKey)) {
             "Idempotency key already claimed"
         }
@@ -81,6 +84,9 @@ class SharedPreferencesConnectorIdempotencyStore(
         check(entry.idempotencyKey.isNotBlank()) { "Idempotency key must not be blank" }
         check(entry.commandType.isNotBlank()) { "Command type must not be blank" }
         check(entry.stateVersionBefore >= 0L) { "State version must not be negative" }
+        check(entry.commandFingerprint == null || entry.commandFingerprint.matches(Regex("[0-9a-f]{64}"))) {
+            "Malformed command fingerprint"
+        }
         val entries = loadEntries().toMutableList()
         check(entries.none { it.idempotencyKey == entry.idempotencyKey }) {
             "Idempotency key already claimed"
