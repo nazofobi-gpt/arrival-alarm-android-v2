@@ -245,4 +245,9 @@
     <string name="departures_empty_action">Rota planla</string>
     <string name="lookup_stale_results">Önbellekteki eski sağlayıcı sonuçları gösteriliyor • güncellik doğrulanamadı</string>
     <string name="lookup_provider_unavailable">Canlı arama sağlayıcısına ulaşılamıyor • yerel veri sonuç vermedi</string>
+    <string name="map_accessible_coordinates_hint">Haritaya dokunmadan nokta seçmek için enlem ve boylam girin. Ondalık ayırıcı virgül veya nokta olabilir.</string>
+    <string name="map_coordinate_latitude">Enlem (−90 ile 90)</string>
+    <string name="map_coordinate_longitude">Boylam (−180 ile 180)</string>
+    <string name="map_coordinate_invalid">Koordinatlar geçersiz. Enlem −90 ile 90, boylam −180 ile 180 arasında olmalı.</string>
+    <string name="map_coordinate_select">Bu koordinatı seç</string>
 </resources>
