@@ -160,9 +160,9 @@ class SharedPreferencesConnectorIdempotencyStore(
         // A present-but-malformed receipt is not equivalent to a pending claim.
         val storedReceipt = if (has("receipt")) getJSONObject("receipt").decodeReceipt() else null
         val entry = ConnectorIdempotencyEntry(
-            idempotencyKey = getString("idempotency_key"),
-            commandType = getString("command_type"),
-            stateVersionBefore = getLong("state_version_before"),
+            idempotencyKey = strictString("idempotency_key"),
+            commandType = strictString("command_type"),
+            stateVersionBefore = strictLong("state_version_before"),
             receipt = storedReceipt,
         )
         check(storedReceipt == null || (
@@ -173,15 +173,30 @@ class SharedPreferencesConnectorIdempotencyStore(
         return entry
     }
 
+
+    // org.json getters coerce native booleans, numbers and numeric strings.
+    // Durable idempotency evidence must be parsed without such coercion.
+    private fun JSONObject.strictString(field: String): String =
+        get(field) as? String ?: error("Invalid connector journal string field")
+
+    private fun JSONObject.strictLong(field: String): Long {
+        val value = get(field)
+        check(value is Int || value is Long) { "Invalid connector journal integer field" }
+        return (value as Number).toLong()
+    }
+
+    private fun JSONObject.strictBoolean(field: String): Boolean =
+        get(field) as? Boolean ?: error("Invalid connector journal boolean field")
+
     private fun JSONObject.decodeReceipt(): ConnectorCommandReceipt =
         ConnectorCommandReceipt(
-            idempotencyKey = getString("idempotency_key"),
-            commandType = getString("command_type"),
-            status = ConnectorCommandStatus.valueOf(getString("status")),
-            message = getString("message"),
-            stateVersionBefore = getLong("state_version_before"),
-            stateVersionAfter = getLong("state_version_after"),
-            actionId = optString("action_id").takeIf { it.isNotBlank() },
-            duplicate = optBoolean("duplicate", false),
+            idempotencyKey = strictString("idempotency_key"),
+            commandType = strictString("command_type"),
+            status = ConnectorCommandStatus.valueOf(strictString("status")),
+            message = strictString("message"),
+            stateVersionBefore = strictLong("state_version_before"),
+            stateVersionAfter = strictLong("state_version_after"),
+            actionId = if (has("action_id")) strictString("action_id").also { check(it.isNotBlank()) } else null,
+            duplicate = if (has("duplicate")) strictBoolean("duplicate") else false,
         )
 }
