@@ -32,10 +32,17 @@ internal class ProductionRealtimeJourneyOverlay(
     fun enrich(options: List<RouteOption>): List<RouteOption> {
         if (options.isEmpty()) return options
         val now = nowEpochSeconds()
-        val overlay = runCatching { match(fetch(), now) }.getOrElse { error ->
+        // Degrade on ordinary provider failures, but never swallow JVM fatal Errors.
+        // Exception messages may contain provider URLs, credentials or user coordinates.
+        val overlay = try {
+            match(fetch(), now)
+        } catch (interrupted: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw interrupted
+        } catch (_: Exception) {
             GermanyRealtimeOverlayResult.Unavailable(
                 reason = GermanyRealtimeUnavailableReason.NETWORK,
-                detail = error.message,
+                detail = null,
             )
         }
         return when (overlay) {
@@ -79,12 +86,8 @@ internal class ProductionRealtimeJourneyOverlay(
                 option.copy(
                     realtime = RouteRealtimeInfo(
                         state = RouteRealtimeState.UNAVAILABLE,
-                        unavailableReason = buildString {
-                            append(overlay.reason.name)
-                            overlay.detail?.takeIf { it.isNotBlank() }?.let {
-                                append(": ").append(it)
-                            }
-                        },
+                        // Only the typed reason is safe to expose to route/UI consumers.
+                        unavailableReason = overlay.reason.name,
                     ),
                 )
             }
@@ -155,7 +158,15 @@ internal class ProductionRealtimeJourneyOverlay(
     }
 
     private fun frequencyTrip(tripId: String): Boolean =
-        runCatching { isFrequencyTrip(tripId) }.getOrDefault(true)
+        try {
+            isFrequencyTrip(tripId)
+        } catch (interrupted: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw interrupted
+        } catch (_: Exception) {
+            // If frequency status cannot be verified, omit potentially misbound RT.
+            true
+        }
 
     private fun realtimeIso(
         epochSeconds: Long?,
