@@ -15,16 +15,21 @@ internal object NearbyStationCanonicalizer {
         candidates: List<NearbyStop>,
         limit: Int,
     ): List<NearbyStop> {
-        val parentIds = candidates.mapNotNull {
-            it.stop.parentStationId?.trim()?.takeIf(String::isNotEmpty)
+        // GTFS stop IDs are unique within a provider/feed, not across providers.
+        // An identical station/parent ID from a second provider is a different stop.
+        val parentIds = candidates.mapNotNull { candidate ->
+            candidate.stop.parentStationId?.trim()?.takeIf(String::isNotEmpty)
+                ?.let { candidate.stop.providerId to it }
         }.toSet()
 
         return candidates
             .groupBy { candidate ->
                 val stop = candidate.stop
+                val parentId = stop.parentStationId?.trim()?.takeIf(String::isNotEmpty)
                 when {
-                    stop.parentStationId?.isNotBlank() == true -> "parent:" + stop.parentStationId
-                    stop.id in parentIds -> "parent:" + stop.id
+                    parentId != null -> "parent:${stop.providerId}:$parentId"
+                    (stop.providerId to stop.id) in parentIds ->
+                        "parent:${stop.providerId}:${stop.id}"
                     else -> fallbackKey(stop)
                 }
             }
@@ -34,7 +39,9 @@ internal object NearbyStationCanonicalizer {
                     it.stop.parentStationId?.trim()?.takeIf(String::isNotEmpty)
                 }.minOrNull()
                 val existingParent = parentId?.let { id ->
-                    members.firstOrNull { it.stop.id == id }?.stop
+                    members.firstOrNull {
+                        it.stop.providerId == members.first().stop.providerId && it.stop.id == id
+                    }?.stop
                 }
                 val base = existingParent ?: members.minBy { it.stop.id }.stop
                 val canonical = if (parentId != null && existingParent == null) {
@@ -45,7 +52,7 @@ internal object NearbyStationCanonicalizer {
                 val childStops = members
                     .map { it.stop }
                     .filter { it.id != canonical.id }
-                    .distinctBy { it.id }
+                    .distinctBy { it.providerId to it.id }
                     .sortedWith(
                         compareBy<CatalogStop>(
                             { it.name.lowercase(Locale.GERMANY) },
@@ -79,7 +86,7 @@ internal object NearbyStationCanonicalizer {
             .trim()
         val latBucket = (stop.latitude * 10_000).roundToInt()
         val lonBucket = (stop.longitude * 10_000).roundToInt()
-        return "fallback:$normalizedName:$latBucket:$lonBucket"
+        return "fallback:${stop.providerId}:$normalizedName:$latBucket:$lonBucket"
     }
 
     private fun initialBearingDegrees(
