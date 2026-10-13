@@ -115,4 +115,42 @@ class ConnectorIdempotencyStoreInstrumentedTest {
         }
     }
 
+
+    @Test fun completionMustMatchClaimAndCannotRewriteReceipt() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences("connector_idempotency_completion_test", Context.MODE_PRIVATE)
+        prefs.edit().clear().commit()
+        try {
+            val store = SharedPreferencesConnectorIdempotencyStore(prefs)
+            store.begin(ConnectorIdempotencyEntry("cmd-1", "SetDestination", 7))
+            val pendingRaw = prefs.getString("connector_idempotency_v1", null)
+            val mismatched = ConnectorCommandReceipt(
+                idempotencyKey = "cmd-1",
+                commandType = "ArmArrivalAlarm",
+                status = ConnectorCommandStatus.APPLIED,
+                message = "mismatch",
+                stateVersionBefore = 7,
+                stateVersionAfter = 8,
+            )
+            try {
+                store.complete(mismatched)
+                fail("Mismatched command receipt must not be persisted")
+            } catch (_: IllegalStateException) { }
+            assertEquals(pendingRaw, prefs.getString("connector_idempotency_v1", null))
+            assertNull(store.get("cmd-1")?.receipt)
+
+            val valid = mismatched.copy(commandType = "SetDestination", message = "applied")
+            store.complete(valid)
+            val committedRaw = prefs.getString("connector_idempotency_v1", null)
+            assertEquals("SetDestination", store.get("cmd-1")?.receipt?.commandType)
+            try {
+                store.complete(valid.copy(message = "overwritten"))
+                fail("Completed receipt must not be overwritten")
+            } catch (_: IllegalStateException) { }
+            assertEquals(committedRaw, prefs.getString("connector_idempotency_v1", null))
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
 }
