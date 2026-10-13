@@ -117,6 +117,11 @@ class GuidanceReliabilityController(
 
     fun requestGuidance(utterance: GuidanceUtterance): Boolean {
         if (utterance.key == state.lastSpokenKey) return false
+        // A retry of the same queued stop must pass the pending-age gate; otherwise
+        // a recovered TTS engine could speak a stale stop hours after it was queued.
+        if (state.pending == utterance && state.permissionState != GuidancePermissionState.DENIED) {
+            return retryPending()
+        }
         if (state.permissionState == GuidancePermissionState.DENIED) {
             update(state.copy(
                 pending = utterance,
