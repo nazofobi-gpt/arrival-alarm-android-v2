@@ -179,4 +179,73 @@ class ConnectorIdempotencyStoreInstrumentedTest {
         assertEquals(receipt, store.get("cmd-memory")?.receipt)
     }
 
+
+    @Test fun malformedClaimsAreRejectedBeforeInMemoryOrDurableMutation() {
+        val invalid = listOf(
+            ConnectorIdempotencyEntry("", "SetDestination", 7),
+            ConnectorIdempotencyEntry("invalid-type", "", 7),
+            ConnectorIdempotencyEntry("invalid-version", "SetDestination", -1),
+        )
+        val memory = InMemoryConnectorIdempotencyStore()
+        invalid.forEach { claim ->
+            try {
+                memory.begin(claim)
+                fail("Invalid in-memory claim must be rejected")
+            } catch (_: IllegalStateException) { }
+            assertNull(memory.get(claim.idempotencyKey))
+        }
+
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences("connector_invalid_claim_cleanmain", Context.MODE_PRIVATE)
+        prefs.edit().clear().commit()
+        try {
+            val durable = SharedPreferencesConnectorIdempotencyStore(prefs)
+            invalid.forEach { claim ->
+                try {
+                    durable.begin(claim)
+                    fail("Invalid durable claim must be rejected")
+                } catch (_: IllegalStateException) { }
+                assertNull(prefs.getString("connector_idempotency_v1", null))
+            }
+            durable.begin(ConnectorIdempotencyEntry("valid", "SetDestination", 7))
+            assertEquals("SetDestination",
+                SharedPreferencesConnectorIdempotencyStore(prefs).get("valid")?.commandType)
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
+    @Test fun nonCanonicalPrimitiveTypesCannotBypassJournalReplayGuard() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences("connector_strict_types_cleanmain", Context.MODE_PRIVATE)
+        val variants = listOf(
+            """[{"idempotency_key":"claim","command_type":"SetDestination","state_version_before":"7"}]""",
+            """[{"idempotency_key":"claim","command_type":"SetDestination","state_version_before":7.5}]""",
+            """[{"idempotency_key":123,"command_type":"SetDestination","state_version_before":7}]""",
+            """[{"idempotency_key":"claim","command_type":"SetDestination","state_version_before":7,"command_fingerprint":123}]""",
+            """[{"idempotency_key":"claim","command_type":"SetDestination","state_version_before":7,"receipt":{"idempotency_key":"claim","command_type":"SetDestination","status":"APPLIED","message":"done","state_version_before":7,"state_version_after":"8"}}]""",
+            """[{"idempotency_key":"claim","command_type":"SetDestination","state_version_before":7,"receipt":{"idempotency_key":"claim","command_type":"SetDestination","status":"APPLIED","message":"done","state_version_before":7,"state_version_after":8,"duplicate":"false"}}]""",
+            """[{"idempotency_key":"claim","command_type":"SetDestination","state_version_before":7,"receipt":{"idempotency_key":"claim","command_type":"SetDestination","status":"APPLIED","message":"done","state_version_before":7,"state_version_after":8,"action_id":42}}]""",
+        )
+        try {
+            variants.forEachIndexed { index, raw ->
+                assertEquals("seed #$index", true,
+                    prefs.edit().putString("connector_idempotency_v1", raw).commit())
+                val store = SharedPreferencesConnectorIdempotencyStore(prefs)
+                try {
+                    store.get("claim")
+                    fail("Corrupt journal #$index must fail closed")
+                } catch (_: IllegalStateException) { }
+                try {
+                    store.begin(ConnectorIdempotencyEntry("new", "SetDestination", 8))
+                    fail("Corrupt journal #$index must block a new command")
+                } catch (_: IllegalStateException) { }
+                assertEquals("journal unchanged #$index", raw,
+                    prefs.getString("connector_idempotency_v1", null))
+            }
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
 }
