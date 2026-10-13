@@ -50,25 +50,39 @@ class VbnJsonRealtimeSource(
                 val stops = tripUpdate.optJSONArray("StopTimeUpdate")
                 var delay: Int? = null
                 var platform: String? = null
+                var conflictingDelay = false
+                var conflictingPlatform = false
                 if (stops != null) {
                     for (j in 0 until stops.length()) {
                         val stop = stops.optJSONObject(j) ?: continue
-                        if (delay == null) {
-                            val departure = stop.optJSONObject("Departure")
-                            val arrival = stop.optJSONObject("Arrival")
-                            delay = when {
-                                departure?.has("Delay") == true -> departure.optInt("Delay")
-                                arrival?.has("Delay") == true -> arrival.optInt("Delay")
-                                else -> null
-                            }
+                        val departure = stop.optJSONObject("Departure")
+                        val arrival = stop.optJSONObject("Arrival")
+                        val observedDelay = when {
+                            departure?.has("Delay") == true -> departure.optInt("Delay")
+                            arrival?.has("Delay") == true -> arrival.optInt("Delay")
+                            else -> null
                         }
-                        if (platform == null) {
-                            platform = stop.optString("StopPlatform", "").takeIf { it.isNotBlank() }
+                        if (observedDelay != null) {
+                            if (delay != null && delay != observedDelay) conflictingDelay = true
+                            else if (delay == null) delay = observedDelay
+                        }
+                        val observedPlatform =
+                            stop.optString("StopPlatform", "").takeIf { it.isNotBlank() }
                                 ?: stop.optString("Platform", "").takeIf { it.isNotBlank() }
+                        if (observedPlatform != null) {
+                            if (platform != null && platform != observedPlatform) conflictingPlatform = true
+                            else if (platform == null) platform = observedPlatform
                         }
                     }
                 }
-                add(RealtimeUpdate(tripId, delay, cancelled, platform))
+                // GTFS-RT stop updates are stop-specific. Without a selected stop ID,
+                // conflicting values cannot safely be presented as whole-trip facts.
+                add(RealtimeUpdate(
+                    tripId,
+                    if (conflictingDelay) null else delay,
+                    cancelled,
+                    if (conflictingPlatform) null else platform,
+                ))
             }
         }
         return RealtimeSnapshot(timestamp, updates)
@@ -108,7 +122,19 @@ class OverlayTransitRepository(
         val snapshot = runCatching { realtimeSource.fetch() }.getOrNull()
             ?: return TransitPlanWithRealtime(staticJourney, TransitRealtimeOverlay(
                 RealtimeFreshness.UNAVAILABLE, status = "Canlı veri kullanılamıyor • statik rota"))
-        val age = (clock.nowEpochSeconds() - snapshot.fetchedAtEpochSeconds).coerceAtLeast(0)
+        val now = clock.nowEpochSeconds()
+        val timestamp = snapshot.fetchedAtEpochSeconds
+        // Future or invalid provider time is unknown, not stale or fresh evidence.
+        // Allow only bounded clock skew; never apply a future snapshot as live truth.
+        if (timestamp <= 0L || (timestamp > now &&
+                timestamp - now > MAX_FUTURE_CLOCK_SKEW_SECONDS)) return TransitPlanWithRealtime(
+            staticJourney,
+            TransitRealtimeOverlay(
+                RealtimeFreshness.UNAVAILABLE,
+                status = "Canlı veri zamanı doğrulanamadı • statik rota",
+            ),
+        )
+        val age = (now - timestamp).coerceAtLeast(0L)
         if (age > staleAfterSeconds) return TransitPlanWithRealtime(staticJourney, TransitRealtimeOverlay(
             RealtimeFreshness.STALE, snapshot.fetchedAtEpochSeconds, status = "Canlı veri eski • statik rota"))
         val exactTripId = staticJourney.legs.singleOrNull()?.line?.takeIf { it.startsWith("gtfs-trip:") }?.removePrefix("gtfs-trip:")
@@ -127,5 +153,9 @@ class OverlayTransitRepository(
                 else -> "Canlı veri güncel"
             },
         ))
+    }
+
+    private companion object {
+        const val MAX_FUTURE_CLOCK_SKEW_SECONDS = 30L
     }
 }

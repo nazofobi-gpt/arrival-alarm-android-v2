@@ -337,6 +337,37 @@ class GermanyRealtimeMatcherTest {
         )
     }
 
+    @Test
+    fun futureDatedSnapshotBeyondBoundCannotClaimFreshRealtime() {
+        val data = FakeRealtimeStaticData()
+        val matcher = matcher(data)
+        val tooFarAhead = matcher.match(
+            snapshot(feedTimestamp = 1_800_000_031L),
+            1_800_000_000L,
+        ) as GermanyRealtimeOverlayResult.NoMatch
+
+        assertEquals(GermanyRealtimeOverlayFreshnessState.STALE, tooFarAhead.freshness)
+        assertEquals(0L, tooFarAhead.ageSeconds)
+        assertEquals(1_800_000_031L, tooFarAhead.provenance.feedTimestampEpochSeconds)
+    }
+
+    @Test
+    fun boundedProviderClockSkewRemainsFreshButMissingFeedTimeIsChecked() {
+        val matcher = matcher(FakeRealtimeStaticData())
+        val skewWithinBound = matcher.match(
+            snapshot(feedTimestamp = 1_800_000_030L),
+            1_800_000_000L,
+        ) as GermanyRealtimeOverlayResult.NoMatch
+        assertEquals(GermanyRealtimeOverlayFreshnessState.FRESH, skewWithinBound.freshness)
+
+        val timestampAbsent = matcher.match(
+            snapshot(feedTimestamp = 1_800_000_031L)
+                .copy(feedTimestampEpochSeconds = null),
+            1_800_000_000L,
+        ) as GermanyRealtimeOverlayResult.NoMatch
+        assertEquals(GermanyRealtimeOverlayFreshnessState.STALE, timestampAbsent.freshness)
+    }
+
     private fun matcher(data: GermanyRealtimeStaticData) =
         GermanyRealtimeMatcher(data, freshWindowSeconds = 120)
 

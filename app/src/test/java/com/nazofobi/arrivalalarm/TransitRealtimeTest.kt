@@ -28,6 +28,23 @@ class TransitRealtimeTest {
         assertNull(snapshot.updates.single().platform)
     }
 
+    @Test fun vbnJsonConflictingStopUpdatesNeverBecomeWholeTripFacts() {
+        val json = """{"Header":{"Timestamp":2000000},"Entity":[{"TripUpdate":{"Trip":{"TripId":"trip-42","ScheduleRelationship":"Canceled"},"StopTimeUpdate":[{"Departure":{"Delay":60},"Platform":"1"},{"Departure":{"Delay":300},"Platform":"4"}]}}]}"""
+        val update = VbnJsonRealtimeSource(loader = { json }).fetch()!!.updates.single()
+        assertEquals("trip-42", update.tripId)
+        assertTrue(update.cancelled)
+        assertNull(update.delaySeconds)
+        assertNull(update.platform)
+    }
+
+    @Test fun vbnJsonConsistentStopUpdatesRetainProvenDelayAndPlatform() {
+        val json = """{"Header":{"Timestamp":2000000},"Entity":[{"TripUpdate":{"Trip":{"TripId":"trip-42"},"StopTimeUpdate":[{"Departure":{"Delay":120},"Platform":"2"},{"Arrival":{"Delay":120},"StopPlatform":"2"}]}}]}"""
+        val update = VbnJsonRealtimeSource(loader = { json }).fetch()!!.updates.single()
+        assertEquals(120, update.delaySeconds)
+        assertEquals("2", update.platform)
+        assertFalse(update.cancelled)
+    }
+
     @Test fun malformedVbnPayloadFailsClosed() {
         assertNull(VbnJsonRealtimeSource(loader = { "not-json" }).fetch())
         assertNull(VbnJsonRealtimeSource(loader = { "{}" }).fetch())
@@ -44,6 +61,42 @@ class TransitRealtimeTest {
         val result = repo(RealtimeSnapshot(now - 181, listOf(RealtimeUpdate("anything", delaySeconds = 600)))).plan("fixture-bremen-hbf", "fixture-airport")!!
         assertEquals(RealtimeFreshness.STALE, result.realtime.freshness); assertNull(result.realtime.delaySeconds)
         assertEquals(listOf("Bremen Hbf", "Am Brill", "Flughafen Bremen"), result.journey.legs.single().stops.map { it.name })
+    }
+
+    @Test fun futureDatedRealtimeBeyondClockSkewFailsClosedToStatic() {
+        val result = repo(RealtimeSnapshot(
+            now + 31,
+            listOf(RealtimeUpdate("trip-42", delaySeconds = 300, cancelled = true, platform = "2")),
+        )).plan("fixture-bremen-hbf", "fixture-airport")!!
+
+        assertEquals(RealtimeFreshness.UNAVAILABLE, result.realtime.freshness)
+        assertNull(result.realtime.lastUpdatedEpochSeconds)
+        assertNull(result.realtime.delaySeconds)
+        assertFalse(result.realtime.cancelled)
+        assertNull(result.realtime.platform)
+        assertTrue(result.realtime.status.contains("zamanı doğrulanamadı"))
+        assertEquals("Fixture 6", result.journey.legs.single().line)
+    }
+
+    @Test fun smallProviderClockSkewRemainsFresh() {
+        val result = repo(RealtimeSnapshot(now + 30, emptyList()))
+            .plan("fixture-bremen-hbf", "fixture-airport")!!
+
+        assertEquals(RealtimeFreshness.FRESH, result.realtime.freshness)
+        assertTrue(result.realtime.status.contains("eşleşen sefer yok"))
+    }
+
+    @Test fun nonPositiveProviderTimestampsCannotBecomeFresh() {
+        listOf(0L, -1L).forEach { invalidTime ->
+            val result = repo(RealtimeSnapshot(invalidTime, listOf(
+                RealtimeUpdate("trip-42", delaySeconds = 600, cancelled = true),
+            ))).plan("fixture-bremen-hbf", "fixture-airport")!!
+            assertEquals(RealtimeFreshness.UNAVAILABLE, result.realtime.freshness)
+            assertNull(result.realtime.lastUpdatedEpochSeconds)
+            assertNull(result.realtime.delaySeconds)
+            assertFalse(result.realtime.cancelled)
+            assertTrue(result.realtime.status.contains("statik rota"))
+        }
     }
 
     @Test fun unavailableAndTimeoutBothPreserveStaticJourney() {
