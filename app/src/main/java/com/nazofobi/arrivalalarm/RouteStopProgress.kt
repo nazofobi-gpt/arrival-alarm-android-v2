@@ -150,7 +150,10 @@ internal fun String?.toTransitEpochSecondsOrNull(): Long? {
                 val sign = if (match.groupValues[9] == "-") -1 else 1
                 val offsetHours = match.groupValues[10].toInt()
                 val offsetMinutes = match.groupValues[11].toInt()
-                require(offsetHours <= 23 && offsetMinutes <= 59)
+                // Align provider offset acceptance with java.time ZoneOffset (-18:00..+18:00).
+                // Larger or fractional boundary offsets must not create false stop progress.
+                require(offsetHours <= 18 && offsetMinutes <= 59 &&
+                    (offsetHours != 18 || offsetMinutes == 0))
                 sign * (offsetHours * 3_600 + offsetMinutes * 60)
             }
         }
