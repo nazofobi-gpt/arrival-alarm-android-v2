@@ -179,4 +179,53 @@ class ConnectorIdempotencyStoreInstrumentedTest {
         assertEquals(receipt, store.get("cmd-memory")?.receipt)
     }
 
+
+    private fun assertRejectsMalformedFieldWithoutErasingJournal(suffix: String, raw: String) {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences("connector_idempotency_type_test_" + suffix, Context.MODE_PRIVATE)
+        try {
+            assertEquals(true, prefs.edit().putString("connector_idempotency_v1", raw).commit())
+            val store = SharedPreferencesConnectorIdempotencyStore(prefs)
+            try {
+                store.get("safe")
+                fail("Type-corrupt journal must not authorize existing claim")
+            } catch (_: IllegalStateException) { }
+            try {
+                store.begin(ConnectorIdempotencyEntry("fresh", "SetDestination", 9))
+                fail("Type-corrupt journal must block new claims")
+            } catch (_: IllegalStateException) { }
+            assertEquals(raw, prefs.getString("connector_idempotency_v1", null))
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
+    @Test fun numericClaimKeyCannotBeCoercedIntoString() {
+        assertRejectsMalformedFieldWithoutErasingJournal(
+            "numeric_key",
+            """[{"idempotency_key":123,"command_type":"SetDestination","state_version_before":7}]""",
+        )
+    }
+
+    @Test fun stringifiedClaimVersionIsNotAcceptedAsNumber() {
+        assertRejectsMalformedFieldWithoutErasingJournal(
+            "string_version",
+            """[{"idempotency_key":"safe","command_type":"SetDestination","state_version_before":"7"}]""",
+        )
+    }
+
+    @Test fun stringifiedReceiptBooleanCannotBeAccepted() {
+        assertRejectsMalformedFieldWithoutErasingJournal(
+            "string_boolean",
+            """[{"idempotency_key":"safe","command_type":"SetDestination","state_version_before":7,"receipt":{"idempotency_key":"safe","command_type":"SetDestination","status":"APPLIED","message":"done","state_version_before":7,"state_version_after":8,"duplicate":"true"}}]""",
+        )
+    }
+
+    @Test fun numericReceiptActionIdCannotBeCoerced() {
+        assertRejectsMalformedFieldWithoutErasingJournal(
+            "numeric_action",
+            """[{"idempotency_key":"safe","command_type":"SetDestination","state_version_before":7,"receipt":{"idempotency_key":"safe","command_type":"SetDestination","status":"APPLIED","message":"done","state_version_before":7,"state_version_after":8,"action_id":42}}]""",
+        )
+    }
+
 }
