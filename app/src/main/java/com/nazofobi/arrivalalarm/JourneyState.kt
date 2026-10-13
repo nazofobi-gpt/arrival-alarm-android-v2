@@ -65,7 +65,8 @@ class JourneyController(
             update(state.copy(error = "Geçersiz hedef konumu"))
             return
         }
-        update(state.copy(phase = JourneyPhase.DESTINATION_SELECTED, start = start, destination = point, error = null))
+        // The previous GPS distance belongs to the old destination and must not survive reselection.
+        update(state.copy(phase = JourneyPhase.DESTINATION_SELECTED, start = start, destination = point, distanceMeters = null, error = null))
     }
 
     fun arm() {
