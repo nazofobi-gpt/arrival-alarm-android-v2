@@ -60,6 +60,23 @@ class GermanyTransitCatalogTest {
         assertEquals(128, localCatalog.searchTrips("trip-", limit = 200).size)
     }
 
+    @Test fun duplicateRouteIdsAcrossProvidersDoNotCrossAssociateTrips() {
+        val berlinRoute = CatalogRoute("shared-route", "vbb", "S1", "Berlin", emptyList())
+        val munichRoute = CatalogRoute("shared-route", "mvv", "S1", "Munich", emptyList())
+        val snapshot = TestGermanyTransitFixtures.snapshot.copy(
+            routes = listOf(berlinRoute, munichRoute),
+            trips = listOf(
+                CatalogTrip("trip-berlin", "vbb", "shared-route", "07:00"),
+                CatalogTrip("trip-munich", "mvv", "shared-route", "08:00"),
+                CatalogTrip("trip-orphan", "missing-provider", "shared-route", "09:00"),
+            ),
+        )
+
+        val matched = GermanyTransitCatalog(snapshot).searchTrips("trip-", limit = 10)
+        assertEquals(listOf("trip-berlin", "trip-munich"), matched.map { it.first.id })
+        assertEquals(listOf(berlinRoute, munichRoute), matched.map { it.second })
+    }
+
     @Test fun registryExposesCoverageFreshnessAndRealtimeCapability() {
         val delfi = requireNotNull(catalog.provider("delfi"))
         val vbb = requireNotNull(catalog.provider("vbb"))
