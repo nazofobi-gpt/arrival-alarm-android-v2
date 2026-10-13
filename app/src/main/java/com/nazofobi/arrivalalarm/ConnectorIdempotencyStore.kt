@@ -39,6 +39,10 @@ class InMemoryConnectorIdempotencyStore(
     override fun complete(receipt: ConnectorCommandReceipt) {
         val existing = entries[receipt.idempotencyKey]
             ?: error("Idempotency key must be claimed before completion")
+        check(existing.receipt == null) { "Idempotency claim already completed" }
+        check(existing.commandType == receipt.commandType &&
+            existing.stateVersionBefore == receipt.stateVersionBefore
+        ) { "Idempotency receipt does not match claim" }
         entries[receipt.idempotencyKey] = existing.copy(receipt = receipt)
         trimCompleted()
     }
