@@ -210,6 +210,27 @@ class RouteStopProgressTest {
         assertEquals("Diepholz", progress.next?.name)
     }
 
+    @Test fun impossibleUtcOffsetsCannotCreatePhantomStopProgress() {
+        // Real UTC civil offsets cannot exceed fourteen hours; +14 permits only :00.
+        for (invalid in listOf("+14:01", "-14:01", "+15:00", "-23:00")) {
+            val timestamp = "2026-09-26T08:10:00$invalid"
+            assertNull("Invalid offset $invalid must not be accepted", timestamp.toTransitEpochSecondsOrNull())
+            val route = listOf(RouteStop(id = "a", name = "Unverified", plannedDeparture = timestamp))
+            val progress = RouteStopProgressTracker().resolve(route, 1_000L, trustRealtime = false)
+            assertFalse(progress.resolvedByProviderTime)
+            assertNull(progress.current)
+            assertNull(progress.next)
+        }
+        assertEquals(
+            "2026-09-25T18:10:00Z".toTransitEpochSecondsOrNull(),
+            "2026-09-26T08:10:00+14:00".toTransitEpochSecondsOrNull(),
+        )
+        assertEquals(
+            "2026-09-26T20:10:00Z".toTransitEpochSecondsOrNull(),
+            "2026-09-26T08:10:00-12:00".toTransitEpochSecondsOrNull(),
+        )
+    }
+
     @Test fun onlyFreshMatchedOnlineUncancelledRealtimeIsTrusted() {
         assertTrue(isTrustedRealtimeForJourney(RouteRealtimeState.FRESH_MATCHED, false))
         assertFalse(isTrustedRealtimeForJourney(RouteRealtimeState.STALE, false))
