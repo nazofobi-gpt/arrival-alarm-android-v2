@@ -190,6 +190,7 @@ class ConnectorIdempotencyStoreInstrumentedTest {
             """[{"idempotency_key":"claim","command_type":"SetDestination","state_version_before":7,"receipt":{"idempotency_key":"claim","command_type":"SetDestination","status":"APPLIED","message":"done","state_version_before":7,"state_version_after":"8"}}]""",
             """[{"idempotency_key":"claim","command_type":"SetDestination","state_version_before":7,"receipt":{"idempotency_key":"claim","command_type":"SetDestination","status":"APPLIED","message":"done","state_version_before":7,"state_version_after":8,"duplicate":"false"}}]""",
             """[{"idempotency_key":"claim","command_type":"SetDestination","state_version_before":7,"receipt":{"idempotency_key":"claim","command_type":"SetDestination","status":"APPLIED","message":"done","state_version_before":7,"state_version_after":8,"action_id":42}}]""",
+            """[{"idempotency_key":"claim","command_type":"SetDestination","state_version_before":7,"receipt":{"idempotency_key":"claim","command_type":"SetDestination","status":"APPLIED","message":"done","state_version_before":7,"state_version_after":8,"action_id":""}}]""",
         )
         try {
             variants.forEachIndexed { index, raw ->
