@@ -201,7 +201,7 @@ class SharedPreferencesConnectorIdempotencyStore(
             message = requireText("message"),
             stateVersionBefore = requireIntegerVersion("state_version_before"),
             stateVersionAfter = requireIntegerVersion("state_version_after"),
-            actionId = if (has("action_id")) requireText("action_id").takeIf { it.isNotBlank() } else null,
+            actionId = if (has("action_id")) requireText("action_id").also { check(it.isNotBlank()) } else null,
             duplicate = optionalStrictBoolean("duplicate"),
         )
 }
