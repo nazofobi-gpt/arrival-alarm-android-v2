@@ -100,15 +100,27 @@ class SharedPreferencesConnectorIdempotencyStore(
 
     private fun loadEntries(): List<ConnectorIdempotencyEntry> {
         val raw = preferences.getString(preferenceKey, null) ?: return emptyList()
-        return runCatching {
+        // Dropping an unreadable claim would permit its side effect to run again.
+        // Fail closed for the entire journal, including malformed individual rows.
+        return try {
             val array = JSONArray(raw)
             buildList(array.length()) {
+                val seenKeys = HashSet<String>()
                 for (index in 0 until array.length()) {
-                    val value = array.optJSONObject(index) ?: continue
-                    value.decodeEntryOrNull()?.let(::add)
+                    val value = array.optJSONObject(index)
+                        ?: error("Invalid idempotency journal entry")
+                    val entry = value.decodeEntryOrNull()
+                        ?: error("Invalid idempotency journal entry")
+                    check(seenKeys.add(entry.idempotencyKey)) {
+                        "Duplicate idempotency journal key"
+                    }
+                    add(entry)
                 }
             }
-        }.getOrDefault(emptyList())
+        } catch (_: Exception) {
+            // Do not put stored command content or parser exception details in logs/UI.
+            throw IllegalStateException("Connector idempotency journal unreadable; recovery required")
+        }
     }
 
     private fun persist(entries: List<ConnectorIdempotencyEntry>) {
@@ -139,11 +151,21 @@ class SharedPreferencesConnectorIdempotencyStore(
 
     private fun JSONObject.decodeEntryOrNull(): ConnectorIdempotencyEntry? =
         runCatching {
+            val key = getString("idempotency_key")
+            val type = getString("command_type")
+            val version = getLong("state_version_before")
+            require(key.isNotBlank() && type.isNotBlank())
+            val receipt = if (has("receipt")) getJSONObject("receipt").decodeReceipt() else null
+            require(receipt == null || (
+                receipt.idempotencyKey == key &&
+                    receipt.commandType == type &&
+                    receipt.stateVersionBefore == version
+            ))
             ConnectorIdempotencyEntry(
-                idempotencyKey = getString("idempotency_key"),
-                commandType = getString("command_type"),
-                stateVersionBefore = getLong("state_version_before"),
-                receipt = optJSONObject("receipt")?.decodeReceipt(),
+                idempotencyKey = key,
+                commandType = type,
+                stateVersionBefore = version,
+                receipt = receipt,
             )
         }.getOrNull()
 
