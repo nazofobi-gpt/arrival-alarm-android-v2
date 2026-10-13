@@ -41,8 +41,9 @@ data class CatalogSnapshot(val providers:List<TransitProvider>,val stops:List<Ca
  */
 class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
     // Preserve the first route when a malformed feed has duplicate route IDs.
+    // Use provider + route ID so unrelated feeds cannot cross-associate trips.
     // Lookup once rather than scanning every route for every trip search result.
-    private val routesById = snapshot.routes.asReversed().associateBy { it.id }
+    private val routesByProviderAndId = snapshot.routes.asReversed().associateBy { it.providerId to it.id }
 
     fun searchStops(query:String,limit:Int=20):List<CatalogStop> {
         val q = query.trim()
@@ -62,7 +63,7 @@ class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
         val q = query.trim()
         if (q.isEmpty() || limit <= 0) return emptyList()
         return snapshot.trips.asSequence()
-            .mapNotNull { trip -> routesById[trip.routeId]?.let { trip to it } }
+            .mapNotNull { trip -> routesByProviderAndId[trip.providerId to trip.routeId]?.let { trip to it } }
             .filter { (trip, route) ->
                 trip.id.contains(q, true) || trip.departure.contains(q, true) ||
                     route.shortName.contains(q, true) || route.direction.contains(q, true)
