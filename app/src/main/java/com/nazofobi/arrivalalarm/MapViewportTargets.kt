@@ -21,7 +21,18 @@ internal fun selectionMapCameraTargets(
 ): List<MapPoint> {
     val endpoints = listOfNotNull(origin, destination)
         .filter(::isRenderableMapPoint)
-        .distinctBy { it.latitude to it.longitude }
+        .distinctBy {
+            // +180 and -180 represent the same meridian. Normalize signed zero
+            // as well so equivalent endpoints never produce a world-spanning
+            // or degenerate map-camera bounds request.
+            val latitude = if (it.latitude == 0.0) 0.0 else it.latitude
+            val longitude = when {
+                it.longitude == -180.0 -> 180.0
+                it.longitude == 0.0 -> 0.0
+                else -> it.longitude
+            }
+            latitude to longitude
+        }
     return endpoints.ifEmpty {
         listOf(center).filter(::isRenderableMapPoint)
     }
