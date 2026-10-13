@@ -245,4 +245,6 @@
     <string name="departures_empty_action">Rota planla</string>
     <string name="lookup_stale_results">Önbellekteki eski sağlayıcı sonuçları gösteriliyor • güncellik doğrulanamadı</string>
     <string name="lookup_provider_unavailable">Canlı arama sağlayıcısına ulaşılamıyor • yerel veri sonuç vermedi</string>
+    <string name="active_journey_tracking_channel">Aktif varış takibi</string>
+    <string name="active_journey_arrival_channel">Varış uyarıları</string>
 </resources>

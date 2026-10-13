@@ -205,7 +205,8 @@ class ActiveJourneyService : Service(), LocationListener {
     }
 
     private fun startLocationForeground(): Boolean {
-        val notification = trackingNotification(graph.controller.state.distanceMeters)
+        // A persisted distance cannot stand in for a fresh GPS callback after FGS recreation.
+        val notification = trackingNotification(null, accuracyDegraded = true)
         return try {
             if (Build.VERSION.SDK_INT >= 29) {
                 startForeground(
@@ -280,14 +281,14 @@ class ActiveJourneyService : Service(), LocationListener {
         manager.createNotificationChannel(
             NotificationChannel(
                 TRACKING_CHANNEL_ID,
-                "Aktif varış takibi",
+                getString(R.string.active_journey_tracking_channel),
                 NotificationManager.IMPORTANCE_LOW,
             )
         )
         manager.createNotificationChannel(
             NotificationChannel(
                 ARRIVAL_CHANNEL_ID,
-                "Varış uyarıları",
+                getString(R.string.active_journey_arrival_channel),
                 NotificationManager.IMPORTANCE_HIGH,
             )
         )
