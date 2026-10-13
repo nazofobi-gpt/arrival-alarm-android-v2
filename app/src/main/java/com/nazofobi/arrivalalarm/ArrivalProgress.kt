@@ -20,6 +20,12 @@ data class ArmedRoute(
         require(routeId.isNotBlank())
         require(stops.isNotEmpty())
         require(targetIndex in stops.indices)
+        // Reject invalid route geometry before arming: NaN distances otherwise
+        // prevent a real GPS fix from ever confirming the arrival target.
+        require(stops.all { point ->
+            point.latitude.isFinite() && point.latitude in -90.0..90.0 &&
+                point.longitude.isFinite() && point.longitude in -180.0..180.0
+        }) { "route stop coordinates must be finite and in range" }
     }
 
     // Route IDs may remain stable while the selected alarm target or stop
