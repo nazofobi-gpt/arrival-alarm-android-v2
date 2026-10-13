@@ -257,4 +257,41 @@ class GuidanceReliabilityTest {
         assertNull(recreated.state.pending)
     }
 
+
+    @Test fun directRetryCannotSpeakExpiredPendingStop() {
+        val speaker = RecordingSpeaker(available = false)
+        var now = 1_000_000L
+        val controller = GuidanceReliabilityController(speaker, nowEpochMillis = { now })
+        controller.onPermissions(GuidancePermissionSnapshot(true, true, true))
+        val stop = GuidanceUtterance("stop:expired-direct", "Sıradaki durak Lohne", "tr-TR")
+
+        assertFalse(controller.requestGuidance(stop))
+        assertEquals(now, controller.state.pendingSinceEpochMillis)
+        now += GuidanceReliabilityController.MAX_PENDING_AGE_MILLIS + 1L
+        speaker.available = true
+
+        assertFalse(controller.requestGuidance(stop))
+        assertTrue(speaker.spoken.isEmpty())
+        assertNull(controller.state.pending)
+        assertNull(controller.state.pendingSinceEpochMillis)
+    }
+
+    @Test fun directRetryWithinPendingWindowStillDeliversOnce() {
+        val speaker = RecordingSpeaker(available = false)
+        var now = 1_000_000L
+        val controller = GuidanceReliabilityController(speaker, nowEpochMillis = { now })
+        controller.onPermissions(GuidancePermissionSnapshot(true, true, true))
+        val stop = GuidanceUtterance("stop:recent-direct", "Sıradaki durak Achim", "tr-TR")
+
+        assertFalse(controller.requestGuidance(stop))
+        now += 60_000L
+        speaker.available = true
+
+        assertTrue(controller.requestGuidance(stop))
+        assertEquals(listOf(stop), speaker.spoken)
+        assertNull(controller.state.pending)
+        assertFalse(controller.requestGuidance(stop))
+        assertEquals(1, speaker.spoken.size)
+    }
+
 }
