@@ -13,13 +13,15 @@ REQUIRED = ("stops.txt", "routes.txt", "trips.txt", "stop_times.txt")
 
 
 class GtfsArchiveMemberTest(unittest.TestCase):
-    def run_archive(self, entries: tuple[str, ...]) -> tuple[subprocess.CompletedProcess[str], Path]:
+    def run_archive(
+        self, entries: tuple[str, ...], overrides: dict[str, bytes] | None = None
+    ) -> tuple[subprocess.CompletedProcess[str], Path]:
         with tempfile.TemporaryDirectory() as dirname:
             archive = Path(dirname) / "feed.zip"
             report = Path(dirname) / "report.json"
             with zipfile.ZipFile(archive, "w") as zf:
                 for member in entries:
-                    zf.writestr(member, "id,name\n1,Example\n")
+                    zf.writestr(member, (overrides or {}).get(member, "id,name\n1,Example\n"))
             result = subprocess.run(
                 [sys.executable, str(SCRIPT), str(archive), str(report)],
                 capture_output=True,
@@ -46,6 +48,20 @@ class GtfsArchiveMemberTest(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertIn("missing required GTFS files", result.stderr)
         self.assertIn("stop_times.txt", result.stderr)
+
+    def test_invalid_utf8_in_required_table_reports_table_without_traceback(self):
+        malformed = b"stop_id,stop_name,stop_lat,stop_lon\n1,\xff,52.0,8.0\n"
+        result, _ = self.run_archive(REQUIRED, {"stops.txt": malformed})
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("invalid UTF-8 in GTFS table stops.txt", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_invalid_utf8_in_optional_table_reports_table_without_traceback(self):
+        malformed = b"feed_publisher_name,feed_publisher_url\n\xff,https://example.org\n"
+        result, _ = self.run_archive(REQUIRED + ("feed_info.txt",), {"feed_info.txt": malformed})
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("invalid UTF-8 in GTFS table feed_info.txt", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
 
 
 if __name__ == "__main__":

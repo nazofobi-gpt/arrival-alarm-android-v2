@@ -15,11 +15,14 @@ optional = [
 ]
 
 def inspect(zf, member):
-    with zf.open(member) as raw:
-        text = io.TextIOWrapper(raw, encoding="utf-8-sig", newline="")
-        reader = csv.reader(text)
-        header = next(reader)
-        return {"rows": sum(1 for _ in reader), "header": header}
+    try:
+        with zf.open(member) as raw:
+            text = io.TextIOWrapper(raw, encoding="utf-8-sig", newline="")
+            reader = csv.reader(text)
+            header = next(reader)
+            return {"rows": sum(1 for _ in reader), "header": header}
+    except UnicodeDecodeError:
+        raise SystemExit(f"invalid UTF-8 in GTFS table {member}") from None
 
 with zipfile.ZipFile(archive) as zf:
     # A ZIP can contain both stops.txt and nested/stops.txt (or a case alias).
