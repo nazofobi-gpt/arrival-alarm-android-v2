@@ -345,8 +345,23 @@ private fun JourneyDetailCard(option: RouteOption) {
                     testTag = "journey-stop-destination",
                 )
             } else {
-                val visibleStops = option.stops.take(16)
-                visibleStops.forEachIndexed { index, stop ->
+                val expandedStops = remember(option.id) { mutableStateOf(false) }
+                val visibleStopIndices = journeyStopPreviewIndices(option.stops.size, expandedStops.value)
+                visibleStopIndices.forEachIndexed { visibleIndex, stopIndex ->
+                    if (visibleIndex > 0) {
+                        val hiddenCount = stopIndex - visibleStopIndices[visibleIndex - 1] - 1
+                        if (hiddenCount > 0) {
+                            Text(
+                                text = stringResource(R.string.journey_stops_hidden_count, hiddenCount),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.testTag("journey-stops-hidden"),
+                            )
+                            HorizontalDivider()
+                        }
+                    }
+                    val index = stopIndex
+                    val stop = option.stops[stopIndex]
                     val actual = stop.departure ?: stop.arrival
                     val planned = stop.plannedDeparture ?: stop.plannedArrival
                     val displayTime = routeClock(actual ?: planned)
@@ -398,8 +413,25 @@ private fun JourneyDetailCard(option: RouteOption) {
                             )
                         }
                     }
-                    if (index != visibleStops.lastIndex) {
+                    if (visibleIndex != visibleStopIndices.lastIndex) {
                         HorizontalDivider()
+                    }
+                }
+                if (option.stops.size > COLLAPSED_JOURNEY_STOP_LIMIT) {
+                    OutlinedButton(
+                        onClick = { expandedStops.value = !expandedStops.value },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("journey-stops-toggle"),
+                    ) {
+                        Text(
+                            if (expandedStops.value) {
+                                stringResource(R.string.journey_show_fewer_stops)
+                            } else {
+                                stringResource(R.string.journey_show_all_stops_count, option.stops.size)
+                            },
+                        )
                     }
                 }
             }
