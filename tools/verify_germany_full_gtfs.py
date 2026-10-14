@@ -22,11 +22,21 @@ def inspect(zf, member):
         return {"rows": sum(1 for _ in reader), "header": header}
 
 with zipfile.ZipFile(archive) as zf:
-    names = {
-        name.rsplit("/", 1)[-1].lower(): name
-        for name in zf.namelist()
-        if not name.endswith("/")
-    }
+    # A ZIP can contain both stops.txt and nested/stops.txt (or a case alias).
+    # Never silently select the last table: a mixed source would be unverifiable.
+    known_tables = set(required) | set(optional)
+    names = {}
+    for name in zf.namelist():
+        if name.endswith("/"):
+            continue
+        basename = name.rsplit("/", 1)[-1].lower()
+        if basename not in known_tables:
+            continue
+        if basename in names:
+            raise SystemExit(
+                f"duplicate GTFS table {basename}: {names[basename]} and {name}"
+            )
+        names[basename] = name
     missing = [name for name in required if name not in names]
     if missing:
         raise SystemExit(f"missing required GTFS files: {missing}")
