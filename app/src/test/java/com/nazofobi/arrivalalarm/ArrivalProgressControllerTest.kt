@@ -26,6 +26,52 @@ class ArrivalProgressControllerTest {
         assertEquals(0, c.state.arrivalEventCount)
     }
 
+    @Test fun corruptedProgressStoreReadFailsClosedAndAllowsFreshTracking() {
+        // Android persisted values may have the wrong type after a corrupt/legacy write.
+        var saved: ArrivalProgressState? = null
+        val store = object : ArrivalProgressStateStore {
+            override fun load(): ArrivalProgressState? =
+                throw ClassCastException("Corrupt stored arrival progress")
+            override fun save(state: ArrivalProgressState) { saved = state }
+        }
+        val controller = ArrivalProgressController(store)
+        assertEquals(ArrivalAlertPhase.IDLE, controller.state.phase)
+        assertFalse(controller.state.armed)
+        controller.arm(route)
+        assertEquals(ArrivalAlertPhase.TRACKING, controller.state.phase)
+        assertEquals(route.persistenceFingerprint, saved?.routeFingerprint)
+        controller.onLocation(fix(route.stops[1]))
+        assertTrue(controller.state.armed)
+    }
+
+    @Test fun outOfBoundsRestoredStopIndexCannotCreatePhantomArrival() {
+        val poisoned = ArrivalProgressState(
+            routeId = route.routeId,
+            armed = true,
+            phase = ArrivalAlertPhase.ARRIVED,
+            lastMatchedStopIndex = Int.MAX_VALUE,
+            progressFraction = 1.0,
+            arrivalEventCount = 1,
+            routeFingerprint = route.persistenceFingerprint,
+        )
+        var persisted: ArrivalProgressState? = poisoned
+        val store = object : ArrivalProgressStateStore {
+            override fun load(): ArrivalProgressState? = persisted
+            override fun save(state: ArrivalProgressState) { persisted = state }
+        }
+
+        val controller = ArrivalProgressController(store)
+        controller.arm(route)
+
+        assertEquals(ArrivalAlertPhase.TRACKING, controller.state.phase)
+        assertEquals(0, controller.state.lastMatchedStopIndex)
+        assertEquals(0, controller.state.arrivalEventCount)
+        assertEquals(route.persistenceFingerprint, persisted?.routeFingerprint)
+        controller.onLocation(fix(route.stops[0]))
+        assertTrue(controller.state.armed)
+        assertTrue(controller.state.lastMatchedStopIndex in route.stops.indices)
+    }
+
     @Test fun adaptiveThresholdIsBoundedAndRespondsToUncertainty() {
         val c = ArrivalProgressController()
         val clean = c.adaptiveThresholdMeters(fix(route.stops[0], accuracy = 3.0, speed = 0.0, rt = 0))

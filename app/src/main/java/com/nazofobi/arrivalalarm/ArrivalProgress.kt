@@ -64,7 +64,12 @@ interface ArrivalProgressStateStore {
 class ArrivalProgressController(
     private val stateStore: ArrivalProgressStateStore? = null,
 ) {
-    var state: ArrivalProgressState = stateStore?.load() ?: ArrivalProgressState()
+    var state: ArrivalProgressState = try {
+        stateStore?.load() ?: ArrivalProgressState()
+    } catch (_: RuntimeException) {
+        // Legacy/wrong-typed persisted values must not crash journey restoration.
+        ArrivalProgressState()
+    }
         private set
 
     private var route: ArmedRoute? = null
@@ -73,7 +78,8 @@ class ArrivalProgressController(
         this.route = route
         val restored = state.takeIf {
             it.routeId == route.routeId && it.armed &&
-                it.routeFingerprint == route.persistenceFingerprint
+                it.routeFingerprint == route.persistenceFingerprint &&
+                it.lastMatchedStopIndex in route.stops.indices
         }
         setState(
             restored ?: ArrivalProgressState(

@@ -27,7 +27,7 @@ jobs:
 
       - name: Validate Android locale resources
         run: |
-          python3 -m unittest discover -s tools/tests -p 'test_locale_resources.py'
+          python3 -m unittest discover -s tools/tests -p 'test_*.py'
           python3 tools/check_locale_resources.py
 
       - name: Set up JDK 17

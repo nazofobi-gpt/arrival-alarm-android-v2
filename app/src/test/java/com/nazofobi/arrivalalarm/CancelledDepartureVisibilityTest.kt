@@ -34,6 +34,24 @@ class CancelledDepartureVisibilityTest {
         assertEquals(listOf("first", "second", "third"), actual.map { it.tripId })
     }
 
+    @Test fun repeatedProviderCancellationDoesNotHideOtherDepartures() {
+        val actual = upcomingCancelledDepartures(
+            listOf(
+                cancelled("a", 1_100L),
+                cancelled("a", 1_100L, realtime = 1_800L),
+                cancelled("b", 1_200L),
+                cancelled("a", 1_300L),
+            ),
+            nowEpochSeconds = 1_000L,
+            limit = 3,
+        )
+        // Same trip at a different scheduled time represents a distinct departure.
+        assertEquals(
+            listOf("a" to 1_100L, "b" to 1_200L, "a" to 1_300L),
+            actual.map { it.tripId to it.scheduledEpochSeconds },
+        )
+    }
+
     @Test fun realtimeTimestampDoesNotResurrectAlreadyPassedCancellation() {
         val actual = upcomingCancelledDepartures(
             listOf(cancelled("past", 900L, realtime = 1_500L)),
