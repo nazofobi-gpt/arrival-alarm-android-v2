@@ -26,6 +26,24 @@ class ArrivalProgressControllerTest {
         assertEquals(0, c.state.arrivalEventCount)
     }
 
+    @Test fun corruptedProgressStoreReadFailsClosedAndAllowsFreshTracking() {
+        // Android persisted values may have the wrong type after a corrupt/legacy write.
+        var saved: ArrivalProgressState? = null
+        val store = object : ArrivalProgressStateStore {
+            override fun load(): ArrivalProgressState? =
+                throw ClassCastException("Corrupt stored arrival progress")
+            override fun save(state: ArrivalProgressState) { saved = state }
+        }
+        val controller = ArrivalProgressController(store)
+        assertEquals(ArrivalAlertPhase.IDLE, controller.state.phase)
+        assertFalse(controller.state.armed)
+        controller.arm(route)
+        assertEquals(ArrivalAlertPhase.TRACKING, controller.state.phase)
+        assertEquals(route.persistenceFingerprint, saved?.routeFingerprint)
+        controller.onLocation(fix(route.stops[1]))
+        assertTrue(controller.state.armed)
+    }
+
     @Test fun adaptiveThresholdIsBoundedAndRespondsToUncertainty() {
         val c = ArrivalProgressController()
         val clean = c.adaptiveThresholdMeters(fix(route.stops[0], accuracy = 3.0, speed = 0.0, rt = 0))
