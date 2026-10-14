@@ -14,6 +14,8 @@ internal fun upcomingCancelledDepartures(
     limit: Int = 3,
 ): List<Departure> = departures.asSequence()
     .filter { it.cancelled && it.scheduledEpochSeconds >= nowEpochSeconds }
+    // Providers can repeat the same scheduled cancellation: one board card per service.
+    .distinctBy { it.tripId to it.scheduledEpochSeconds }
     .sortedBy { it.scheduledEpochSeconds }
     .take(limit.coerceAtLeast(0))
     .toList()
