@@ -856,10 +856,19 @@ fun ArrivalAlarmApp(
                         },
                         onNearbyStopSelected = { candidate ->
                             if (origin == null) {
-                                openDepartureBoard(candidate.stop)
+                                setOrigin(
+                                    MapPoint(
+                                        candidate.stop.latitude,
+                                        candidate.stop.longitude,
+                                        candidate.stop.name,
+                                    )
+                                )
                             } else {
                                 setDestination(candidate.stop)
                             }
+                        },
+                        onNearbyDeparturesSelected = { candidate ->
+                            openDepartureBoard(candidate.stop)
                         },
                     )
                 }
