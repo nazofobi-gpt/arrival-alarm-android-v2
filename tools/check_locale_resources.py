@@ -126,10 +126,16 @@ def validate(root: Path) -> list[str]:
         expected = {key for key, value in defaults.items() if value.translatable}
         missing = expected - set(localized)
         unexpected = set(localized) - set(defaults)
+        # Android marks translatable="false" values as locale-independent.
+        # A localized override (including endpoints or machine-readable IDs)
+        # must not silently bypass that contract.
+        nontranslatable_overrides = set(localized) & (set(defaults) - expected)
         for key in sorted(missing):
             errors.append(f"values-{locale}: missing translation for {key}")
         for key in sorted(unexpected):
             errors.append(f"values-{locale}: unrecognized translation key {key}")
+        for key in sorted(nontranslatable_overrides):
+            errors.append(f"values-{locale}: nontranslatable key must not be localized: {key}")
 
         for key in sorted(expected & set(localized)):
             source = defaults[key]

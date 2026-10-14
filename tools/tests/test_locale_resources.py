@@ -72,6 +72,33 @@ class LocaleResourceContractTest(unittest.TestCase):
         )
         self.assertEqual([], validate(self.root))
 
+    def test_nontranslatable_source_cannot_be_overridden_in_locale(self):
+        self.write(
+            "values",
+            '<string name="arrival">Stop %1$s in %2$d min</string>'
+            '<string name="provider_endpoint" translatable="false">https://example.org</string>',
+        )
+        self.write(
+            "values-de",
+            '<string name="arrival">In %2$d Min. zu %1$s</string>'
+            '<string name="provider_endpoint">https://untrusted.example</string>',
+        )
+        errors = validate(self.root)
+        self.assertTrue(
+            any(
+                "nontranslatable key must not be localized: provider_endpoint" in e
+                for e in errors
+            )
+        )
+
+    def test_nontranslatable_source_still_may_be_omitted(self):
+        self.write(
+            "values",
+            '<string name="arrival">Stop %1$s in %2$d min</string>'
+            '<string name="provider_endpoint" translatable="false">https://example.org</string>',
+        )
+        self.assertEqual([], validate(self.root))
+
     def test_formatted_false_does_not_validate_literal_percent_text(self):
         self.write(
             "values",
