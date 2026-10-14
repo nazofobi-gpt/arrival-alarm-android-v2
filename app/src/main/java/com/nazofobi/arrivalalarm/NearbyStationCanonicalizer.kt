@@ -30,7 +30,7 @@ internal object NearbyStationCanonicalizer {
                 when {
                     parentId != null -> GroupKey("parent", stop.providerId, parentId)
                     (stop.providerId to stop.id) in parentIds -> GroupKey("parent", stop.providerId, stop.id)
-                    else -> GroupKey("fallback", null, fallbackKey(stop))
+                    else -> GroupKey("fallback", stop.providerId, fallbackKey(stop))
                 }
             }
             .values
