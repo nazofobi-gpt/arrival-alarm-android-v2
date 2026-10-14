@@ -83,6 +83,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             ?: connection.lastModified.takeIf { it > 0L }?.toString()
             ?: connection.url.toString()
         val counts = linkedMapOf<String, Int>()
+        val seenGtfsTables = hashSetOf<String>()
 
         db.beginTransaction()
         try {
@@ -92,6 +93,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
                 while (entry != null) {
                     val file = entry.name.substringAfterLast('/').lowercase(Locale.ROOT)
                     if (!entry.isDirectory) {
+                        rejectDuplicateGtfsZipMember(entry.name, seenGtfsTables)
                         val reader = BufferedReader(InputStreamReader(zip, StandardCharsets.UTF_8), 128 * 1024)
                         val count = when (file) {
                             "stops.txt" -> importStopsEntry(db, reader, onCount)
@@ -710,4 +712,18 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
     private fun putMetadata(db: SQLiteDatabase, key: String, value: String) {
         db.execSQL("INSERT OR REPLACE INTO metadata(key,value) VALUES(?,?)", arrayOf(key, value))
     }
+}
+
+// Do not mix rows from duplicate GTFS tables (including nested/case aliases).
+// A thrown exception leaves the existing SQLite import transaction uncommitted.
+private val GTFS_IMPORT_TABLES = setOf(
+    "stops.txt", "agency.txt", "routes.txt", "trips.txt", "stop_times.txt",
+    "calendar.txt", "calendar_dates.txt", "transfers.txt", "shapes.txt",
+    "levels.txt", "pathways.txt", "frequencies.txt", "attributions.txt", "feed_info.txt",
+)
+
+internal fun rejectDuplicateGtfsZipMember(entryName: String, seen: MutableSet<String>) {
+    val table = entryName.substringAfterLast('/').lowercase(Locale.ROOT)
+    if (table !in GTFS_IMPORT_TABLES) return
+    check(seen.add(table)) { "Duplicate GTFS ZIP table: $table" }
 }
