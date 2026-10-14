@@ -50,6 +50,12 @@ def placeholders(value: str) -> Counter[tuple[int, str]]:
             raise ValueError(f"unsupported format conversion %{conversion} at offset {start}")
         cursor = match.end()
         if conversion in ("%", "n"):
+            # Java Formatter accepts no reused argument for %% or %n.
+            # Even after an ordinary argument, %<% and %<n are invalid.
+            if "<" in match.group(2):
+                raise ValueError(
+                    f"relative flag invalid for no-argument conversion %{conversion} at offset {start}"
+                )
             continue
         # The '<' flag reuses the preceding argument, without advancing implicit numbering.
         if "<" in match.group(2):
