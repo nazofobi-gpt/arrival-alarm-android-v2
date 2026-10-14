@@ -9,7 +9,13 @@ class SharedPreferencesTransitCacheStore(context: Context) : TransitCacheBacking
         .getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
 
     override fun load(): List<CachedTransitPlan> {
-        val raw = prefs.getString("plans_json", null) ?: return emptyList()
+        // Legacy/foreign preferences may contain a non-string value at this key.
+        // A broken offline cache must not prevent the main app from starting.
+        val raw = try {
+            prefs.getString("plans_json", null)
+        } catch (_: ClassCastException) {
+            null
+        } ?: return emptyList()
         return runCatching {
             val array = JSONArray(raw)
             buildList {

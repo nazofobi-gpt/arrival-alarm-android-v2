@@ -85,6 +85,22 @@ class OfflineTransitCachePersistenceInstrumentedTest {
 
 
     @Test
+    fun wrongTypedLegacyCacheIsIgnoredAndCanBeReplaced() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        prefs.edit().clear().putLong("plans_json", 123L).commit()
+        try {
+            val store = SharedPreferencesTransitCacheStore(context)
+            assertTrue(store.load().isEmpty())
+            val cache = OfflineTransitCache(backingStore = store)
+            cache.put(CachedTransitPlan("recovered", emptyList(), emptyList(), 1_000L))
+            assertEquals("recovered", store.load().single().key)
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
+    @Test
     fun corruptedCachedStopDoesNotSilentlyShortenJourney() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
