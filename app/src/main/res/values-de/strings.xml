@@ -239,4 +239,7 @@
     <string name="departures_gtfsrt_unavailable">GTFS Deutschland lokale Abfahrten • GTFS-RT nicht verfügbar, Fahrplanzeiten</string>
     <string name="lookup_stale_results">Zwischengespeicherte Anbieter-Ergebnisse sind veraltet • Aktualität nicht bestätigt</string>
     <string name="lookup_provider_unavailable">Live-Suchanbieter nicht verfügbar • lokale Daten lieferten kein Ergebnis</string>
+    <string name="journey_ticket_information_title">Ticket- und Fahrradinfos</string>
+    <string name="journey_ticket_information_unverified">Für diese Verbindung sind Deutschland-Ticket-Gültigkeit, Fahrpreis und Fahrradmitnahme nicht bestätigt. Bitte vor Fahrtantritt die Bedingungen des Verkehrsunternehmens prüfen.</string>
+    <string name="journey_ticket_information_link">Offizielle Ticketinformationen der DB öffnen</string>
 </resources>
