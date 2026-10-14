@@ -198,6 +198,8 @@ fun ArrivalAlarmApp(
         )
     }
     var destinationStopId by remember { mutableStateOf<String?>(null) }
+    // Browsing departures must not create or modify the current journey.
+    var departureBoardStop by remember { mutableStateOf<CatalogStop?>(null) }
     var nearby by remember { mutableStateOf(emptyList<NearbyStop>()) }
     var nearbySource by remember { mutableStateOf<String?>(null) }
     var nearbyMessage by remember { mutableStateOf<String?>(null) }
@@ -329,6 +331,7 @@ fun ArrivalAlarmApp(
         origin = point
         destination = null
         destinationStopId = null
+        departureBoardStop = null
         routeOptions = emptyList()
         selectedRouteId = null
         graph.routeRegistry.clear()
@@ -404,6 +407,7 @@ fun ArrivalAlarmApp(
     }
 
     fun setDestinationPoint(point: MapPoint, stopId: String? = null): Boolean {
+        departureBoardStop = null
         val currentOrigin = origin
         if (currentOrigin == null) {
             setOrigin(point)
@@ -442,6 +446,12 @@ fun ArrivalAlarmApp(
         ) {
             loadStationDepartures(stop)
         }
+    }
+
+    fun openDepartureBoard(stop: CatalogStop) {
+        departureBoardStop = stop
+        loadStationDepartures(stop)
+        activeScreen = ArrivalAppScreen.DEPARTURES
     }
 
     fun saveRecentSearch(rawQuery: String) {
@@ -846,13 +856,7 @@ fun ArrivalAlarmApp(
                         },
                         onNearbyStopSelected = { candidate ->
                             if (origin == null) {
-                                setOrigin(
-                                    MapPoint(
-                                        candidate.stop.latitude,
-                                        candidate.stop.longitude,
-                                        candidate.stop.name,
-                                    )
-                                )
+                                openDepartureBoard(candidate.stop)
                             } else {
                                 setDestination(candidate.stop)
                             }
@@ -1059,10 +1063,14 @@ fun ArrivalAlarmApp(
                 }
 
                 if (activeScreen == ArrivalAppScreen.DEPARTURES) {
-                val destinationPoint = destination
+                val selectedStop = departureBoardStop
+                val boardStopId = selectedStop?.id ?: destinationStopId
+                val destinationPoint = selectedStop?.let {
+                    MapPoint(it.latitude, it.longitude, it.name)
+                } ?: destination
                 if (destinationPoint != null && shouldDisplayDepartureBoard(
-                    hasDestination = true,
-                    hasSelectedStop = !destinationStopId.isNullOrBlank(),
+                    hasDestination = destination != null,
+                    hasSelectedStop = !boardStopId.isNullOrBlank(),
                     hasRouteOptions = routeOptions.isNotEmpty(),
                 )) {
                     val boardNow = System.currentTimeMillis() / 1_000
@@ -1077,17 +1085,17 @@ fun ArrivalAlarmApp(
                     }
                     val selectedRoute = routeOptions.firstOrNull { it.id == selectedRouteId }
                         ?: routeOptions.firstOrNull()
-                    val boardDepartures = if (destinationStopId != null) stationDepartures else departures
+                    val boardDepartures = if (boardStopId != null) stationDepartures else departures
                     val boardAlerts = if (stationResolved) stationAlerts else emptyList()
                     TransitExperiencePanel(
-                        stopId = destinationStopId
+                        stopId = boardStopId
                             ?: "coord:${destinationPoint.latitude},${destinationPoint.longitude}",
                         stopName = destinationPoint.label,
                         lineName = selectedRoute?.line.orEmpty(),
                         direction = selectedRoute?.direction.orEmpty(),
                         departures = boardDepartures,
                         alerts = boardAlerts,
-                        isOfflineCache = destinationStopId == null && routeOffline,
+                        isOfflineCache = boardStopId == null && routeOffline,
                         nowEpochSeconds = boardNow,
                         providerCapabilities = TransitProviderCapabilities(
                             realtimeDepartures = stationResolved &&
@@ -1099,7 +1107,7 @@ fun ArrivalAlarmApp(
                                 ?.let { selectRouteOption(it) }
                         },
                         statusMessage = stationStatus
-                            ?: if (destinationStopId == null && !stationResolved && !stationLoading) {
+                            ?: if (boardStopId == null && !stationResolved && !stationLoading) {
                                 context.getString(R.string.departures_route_fallback)
                             } else null,
                         sourceLabel = if (stationResolved) stationSource else null,
