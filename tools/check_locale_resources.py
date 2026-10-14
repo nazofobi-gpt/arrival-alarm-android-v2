@@ -142,6 +142,8 @@ def validate(root: Path) -> list[str]:
             target = localized[key]
             if source.formatted != target.formatted:
                 errors.append(f"values-{locale}: formatted flag differs for {key}")
+            if source.translatable != target.translatable:
+                errors.append(f"values-{locale}: translatable flag differs for {key}")
             if source.text.strip() and not target.text.strip():
                 errors.append(f"values-{locale}: empty translation for {key}")
             if source.formatted and target.formatted:
