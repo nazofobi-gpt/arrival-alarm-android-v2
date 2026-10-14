@@ -239,4 +239,8 @@
     <string name="departures_gtfsrt_unavailable">GTFS Deutschland local departures • GTFS-RT unavailable, scheduled times</string>
     <string name="lookup_stale_results">Cached provider results are stale • freshness could not be verified</string>
     <string name="lookup_provider_unavailable">Live search provider is unavailable • local data returned no result</string>
+    <string name="germany_ticket_unknown">Deutschland-Ticket: Validity for this journey is unverified. Check the operator\'s ticket rules.</string>
+    <string name="germany_bike_allowed">Bicycle: Permitted according to GTFS trip data. Extra tickets or restrictions may apply.</string>
+    <string name="germany_bike_disallowed">Bicycle: GTFS data prohibits bicycles on at least one leg.</string>
+    <string name="germany_bike_unknown">Bicycle: Eligibility is not verified for this journey.</string>
 </resources>

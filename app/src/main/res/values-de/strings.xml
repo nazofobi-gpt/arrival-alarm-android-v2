@@ -239,4 +239,8 @@
     <string name="departures_gtfsrt_unavailable">GTFS Deutschland lokale Abfahrten • GTFS-RT nicht verfügbar, Fahrplanzeiten</string>
     <string name="lookup_stale_results">Zwischengespeicherte Anbieter-Ergebnisse sind veraltet • Aktualität nicht bestätigt</string>
     <string name="lookup_provider_unavailable">Live-Suchanbieter nicht verfügbar • lokale Daten lieferten kein Ergebnis</string>
+    <string name="germany_ticket_unknown">Deutschland-Ticket: Gültigkeit für diese Verbindung nicht verifiziert. Bitte die Tarifregeln des Betreibers prüfen.</string>
+    <string name="germany_bike_allowed">Fahrrad: Laut GTFS-Fahrtdaten erlaubt. Zusatzticket oder Einschränkungen möglich.</string>
+    <string name="germany_bike_disallowed">Fahrrad: Laut GTFS-Daten auf mindestens einem Abschnitt nicht erlaubt.</string>
+    <string name="germany_bike_unknown">Fahrrad: Mitnahme für diese Verbindung nicht verifiziert.</string>
 </resources>

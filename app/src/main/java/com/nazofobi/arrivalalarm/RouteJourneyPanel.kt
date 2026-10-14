@@ -331,6 +331,8 @@ private fun JourneyDetailCard(option: RouteOption) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            GermanyFareDisclosurePanel(option.bicycleAllowance)
+
             HorizontalDivider()
 
             if (option.stops.isEmpty()) {

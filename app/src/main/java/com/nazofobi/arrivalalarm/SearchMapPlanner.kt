@@ -42,6 +42,8 @@ data class RouteOption(
     val refreshToken: String? = null,
     val sourceUpdatedAtEpochSeconds: Long? = null,
     val realtime: RouteRealtimeInfo? = null,
+    // Evidence from GTFS trips only. Unknown for provider-only or incomplete routes.
+    val bicycleAllowance: BicycleAllowance = BicycleAllowance.UNKNOWN,
 )
 
 interface GeocodeProvider { fun search(query: String): List<MapPoint> }

@@ -247,4 +247,8 @@
     <string name="departures_empty_action">Rota planla</string>
     <string name="lookup_stale_results">Önbellekteki eski sağlayıcı sonuçları gösteriliyor • güncellik doğrulanamadı</string>
     <string name="lookup_provider_unavailable">Canlı arama sağlayıcısına ulaşılamıyor • yerel veri sonuç vermedi</string>
+    <string name="germany_ticket_unknown">Deutschland-Ticket: Bu rota için geçerlilik doğrulanmadı. Bilet koşullarını işletmeciden kontrol et.</string>
+    <string name="germany_bike_allowed">Bisiklet: GTFS sefer verisinde izinli. Ek bilet veya kısıtlamalar olabilir.</string>
+    <string name="germany_bike_disallowed">Bisiklet: GTFS verisine göre bu rotadaki en az bir seferde izin verilmiyor.</string>
+    <string name="germany_bike_unknown">Bisiklet: Bu rota için uygunluk bilgisi doğrulanamadı.</string>
 </resources>
