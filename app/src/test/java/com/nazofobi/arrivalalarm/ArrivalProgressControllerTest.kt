@@ -44,6 +44,34 @@ class ArrivalProgressControllerTest {
         assertTrue(controller.state.armed)
     }
 
+    @Test fun outOfBoundsRestoredStopIndexCannotCreatePhantomArrival() {
+        val poisoned = ArrivalProgressState(
+            routeId = route.routeId,
+            armed = true,
+            phase = ArrivalAlertPhase.ARRIVED,
+            lastMatchedStopIndex = Int.MAX_VALUE,
+            progressFraction = 1.0,
+            arrivalEventCount = 1,
+            routeFingerprint = route.persistenceFingerprint,
+        )
+        var persisted: ArrivalProgressState? = poisoned
+        val store = object : ArrivalProgressStateStore {
+            override fun load(): ArrivalProgressState? = persisted
+            override fun save(state: ArrivalProgressState) { persisted = state }
+        }
+
+        val controller = ArrivalProgressController(store)
+        controller.arm(route)
+
+        assertEquals(ArrivalAlertPhase.TRACKING, controller.state.phase)
+        assertEquals(0, controller.state.lastMatchedStopIndex)
+        assertEquals(0, controller.state.arrivalEventCount)
+        assertEquals(route.persistenceFingerprint, persisted?.routeFingerprint)
+        controller.onLocation(fix(route.stops[0]))
+        assertTrue(controller.state.armed)
+        assertTrue(controller.state.lastMatchedStopIndex in route.stops.indices)
+    }
+
     @Test fun adaptiveThresholdIsBoundedAndRespondsToUncertainty() {
         val c = ArrivalProgressController()
         val clean = c.adaptiveThresholdMeters(fix(route.stops[0], accuracy = 3.0, speed = 0.0, rt = 0))

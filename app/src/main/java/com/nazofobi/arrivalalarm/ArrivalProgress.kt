@@ -78,7 +78,8 @@ class ArrivalProgressController(
         this.route = route
         val restored = state.takeIf {
             it.routeId == route.routeId && it.armed &&
-                it.routeFingerprint == route.persistenceFingerprint
+                it.routeFingerprint == route.persistenceFingerprint &&
+                it.lastMatchedStopIndex in route.stops.indices
         }
         setState(
             restored ?: ArrivalProgressState(
