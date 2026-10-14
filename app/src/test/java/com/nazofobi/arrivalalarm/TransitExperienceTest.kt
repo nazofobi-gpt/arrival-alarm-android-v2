@@ -41,6 +41,32 @@ class TransitExperienceTest {
         assertEquals(5,TransitExperienceEngine(TransitProviderCapabilities(accessibility=false)).walkingTransferMinutes(5,pref))
     }
 
+    @Test fun largeAccessibilityTransferDurationsNeverWrapToZero() {
+        val accessible = TransitExperienceEngine(TransitProviderCapabilities(accessibility = true))
+        val plain = TransitExperienceEngine(TransitProviderCapabilities(accessibility = false))
+        val preference = AccessibilityPreference(stepFreeOnly = true, extraTransferMinutes = 6)
+        assertEquals(Int.MAX_VALUE, accessible.walkingTransferMinutes(Int.MAX_VALUE - 2, preference))
+        assertEquals(Int.MAX_VALUE - 2, plain.walkingTransferMinutes(Int.MAX_VALUE - 2, preference))
+        assertEquals(
+            Int.MAX_VALUE,
+            accessible.walkingTransferMinutes(
+                Int.MAX_VALUE,
+                AccessibilityPreference(stepFreeOnly = true, extraTransferMinutes = Int.MAX_VALUE),
+            ),
+        )
+    }
+
+    @Test fun negativeBaseMinutesStillClampToZero() {
+        val engine = TransitExperienceEngine(TransitProviderCapabilities(accessibility = true))
+        assertEquals(
+            0,
+            engine.walkingTransferMinutes(
+                -10,
+                AccessibilityPreference(stepFreeOnly = true, extraTransferMinutes = 6),
+            ),
+        )
+    }
+
     @Test fun favoritesAndRecentsAreDeterministicAndBounded() {
         val store=TransitRecentsStore(maxItems=2)
         assertTrue(store.toggleFavorite("s1")); assertFalse(store.toggleFavorite("s1"))
