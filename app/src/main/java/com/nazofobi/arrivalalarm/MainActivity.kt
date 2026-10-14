@@ -407,7 +407,6 @@ fun ArrivalAlarmApp(
     }
 
     fun setDestinationPoint(point: MapPoint, stopId: String? = null): Boolean {
-        departureBoardStop = null
         val currentOrigin = origin
         if (currentOrigin == null) {
             setOrigin(point)
@@ -421,6 +420,7 @@ fun ArrivalAlarmApp(
         }
         destination = point
         destinationStopId = stopId
+        departureBoardStop = null
         routeOffline = false
         routeOptions = emptyList()
         selectedRouteId = null
