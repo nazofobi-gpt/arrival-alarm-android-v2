@@ -35,6 +35,22 @@ class TransitExperienceTest {
         assertEquals(listOf("a"),engine.alternateDepartures(departures,"b",now).map{it.tripId})
     }
 
+    @Test fun frequencyTemplateInstancesAreDistinctAlternatives() {
+        val first = Departure(
+            tripId = "template", line = "RE 9", direction = "Bremen",
+            scheduledEpochSeconds = 1_200, realtimeTripStartDate = "20261011",
+            realtimeTripStartTime = "08:00:00",
+        )
+        val next = first.copy(
+            scheduledEpochSeconds = 1_500,
+            realtimeTripStartTime = "08:05:00",
+        )
+        val engine = TransitExperienceEngine(TransitProviderCapabilities())
+        assertEquals(listOf(1_500L),
+            engine.alternateDepartures(listOf(first, next), first, now)
+                .map { it.scheduledEpochSeconds })
+    }
+
     @Test fun accessibilityPenaltyOnlyAppliesWhenProviderSupportsIt() {
         val pref=AccessibilityPreference(stepFreeOnly=true,extraTransferMinutes=6)
         assertEquals(11,TransitExperienceEngine(TransitProviderCapabilities(accessibility=true)).walkingTransferMinutes(5,pref))

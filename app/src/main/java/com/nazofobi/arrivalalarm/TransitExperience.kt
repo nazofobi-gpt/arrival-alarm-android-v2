@@ -49,6 +49,16 @@ class TransitExperienceEngine(private val capabilities: TransitProviderCapabilit
     fun alerts(values: List<ServiceAlert>): List<ServiceAlert> = if (capabilities.serviceAlerts) values else emptyList()
     fun vehicles(values: List<LiveVehicle>): List<LiveVehicle> = if (capabilities.liveVehiclePositions) values else emptyList()
 
+    // A frequency-based GTFS trip can have multiple departures with the same template tripId.
+    // Preserve the concrete service instance when suggesting alternatives.
+    fun alternateDepartures(values: List<Departure>, selected: Departure, nowEpochSeconds: Long): List<Departure> =
+        departureBoard(values, nowEpochSeconds).filterNot {
+            it.tripId == selected.tripId &&
+                it.scheduledEpochSeconds == selected.scheduledEpochSeconds &&
+                it.realtimeTripStartDate == selected.realtimeTripStartDate &&
+                it.realtimeTripStartTime == selected.realtimeTripStartTime
+        }
+
     fun alternateDepartures(values: List<Departure>, selectedTripId: String, nowEpochSeconds: Long): List<Departure> =
         departureBoard(values, nowEpochSeconds).filterNot { it.tripId == selectedTripId }
 
