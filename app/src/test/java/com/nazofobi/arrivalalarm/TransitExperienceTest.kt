@@ -21,6 +21,27 @@ class TransitExperienceTest {
         assertTrue(board.first().isRealtime)
     }
 
+    @Test fun invalidRealtimeEpochFallsBackToScheduledDeparture() {
+        val engine = TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures = true))
+        val samples = listOf(
+            Departure("zero", "1", "Lohne", 1_100L, realtimeEpochSeconds = 0L),
+            Departure("negative", "2", "Diepholz", 1_200L, realtimeEpochSeconds = -1L),
+            Departure("sentinel", "3", "Bremen", 1_300L, realtimeEpochSeconds = Long.MIN_VALUE),
+        )
+        val board = engine.departureBoard(samples, now)
+        assertEquals(listOf("zero", "negative", "sentinel"), board.map { it.tripId })
+        assertEquals(listOf(1_100L, 1_200L, 1_300L), board.map { it.effectiveEpochSeconds })
+        assertTrue(board.none { it.isRealtime })
+    }
+
+    @Test fun validRealtimeTimestampStillOverridesSchedule() {
+        val engine = TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures = true))
+        val departure = Departure("late", "1", "Bremen", 1_300L, realtimeEpochSeconds = 1_050L)
+        val board = engine.departureBoard(listOf(departure), now)
+        assertEquals(1_050L, board.single().effectiveEpochSeconds)
+        assertTrue(board.single().isRealtime)
+    }
+
     @Test fun unsupportedRealtimeFallsBackToScheduleWithoutInventingLiveState() {
         val engine=TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures=false))
         val board=engine.departureBoard(departures,now)
