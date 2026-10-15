@@ -107,6 +107,22 @@ class TransitExperienceTest {
         )
     }
 
+    @Test fun negativeAccessibilityPenaltyCannotShortenTransferTime() {
+        val engine = TransitExperienceEngine(TransitProviderCapabilities(accessibility = true))
+        for (negative in listOf(-1, -6, Int.MIN_VALUE)) {
+            val preference = AccessibilityPreference(stepFreeOnly = true, extraTransferMinutes = negative)
+            assertEquals(
+                "Negative accessibility penalty must not reduce base walking minutes: $negative",
+                8,
+                engine.walkingTransferMinutes(8, preference),
+            )
+        }
+        assertEquals(
+            14,
+            engine.walkingTransferMinutes(8, AccessibilityPreference(stepFreeOnly = true, extraTransferMinutes = 6)),
+        )
+    }
+
     @Test fun negativeBaseMinutesStillClampToZero() {
         val engine = TransitExperienceEngine(TransitProviderCapabilities(accessibility = true))
         assertEquals(
