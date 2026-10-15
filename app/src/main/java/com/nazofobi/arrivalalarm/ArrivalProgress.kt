@@ -73,9 +73,11 @@ class ArrivalProgressController(
         private set
 
     private var route: ArmedRoute? = null
+    private var latestAcceptedFixEpochMillis: Long = 0L
 
     fun arm(route: ArmedRoute) {
         this.route = route
+        latestAcceptedFixEpochMillis = 0L
         val restored = state.takeIf {
             it.routeId == route.routeId && it.armed &&
                 it.routeFingerprint == route.persistenceFingerprint &&
@@ -94,6 +96,7 @@ class ArrivalProgressController(
 
     fun disarm() {
         route = null
+        latestAcceptedFixEpochMillis = 0L
         setState(ArrivalProgressState())
     }
 
@@ -115,6 +118,13 @@ class ArrivalProgressController(
                 setState(state.copy(consecutiveInsideThreshold = 0, consecutivePastTarget = 0))
             }
             return state
+        }
+
+        // A callback replay or older timestamp is not a second independent GPS fix.
+        // Zero means timestamp unavailable; retain the legacy path for those providers.
+        if (fix.epochMillis > 0L) {
+            if (fix.epochMillis <= latestAcceptedFixEpochMillis) return state
+            latestAcceptedFixEpochMillis = fix.epochMillis
         }
 
         val nearestIndex = activeRoute.stops.indices.minBy { index ->
