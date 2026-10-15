@@ -5,9 +5,11 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.io.BufferedInputStream
 import java.io.BufferedReader
+import java.io.InputStream
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 import java.util.zip.ZipInputStream
@@ -94,7 +96,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
                     val file = entry.name.substringAfterLast('/').lowercase(Locale.ROOT)
                     if (!entry.isDirectory) {
                         rejectDuplicateGtfsZipMember(entry.name, seenGtfsTables)
-                        val reader = BufferedReader(InputStreamReader(zip, StandardCharsets.UTF_8), 128 * 1024)
+                        val reader = strictGtfsUtf8Reader(zip)
                         val count = when (file) {
                             "stops.txt" -> importStopsEntry(db, reader, onCount)
                             "agency.txt" -> importAgency(db, reader)
@@ -727,3 +729,17 @@ internal fun rejectDuplicateGtfsZipMember(entryName: String, seen: MutableSet<St
     if (table !in GTFS_IMPORT_TABLES) return
     check(seen.add(table)) { "Duplicate GTFS ZIP table: $table" }
 }
+
+
+// Reject corrupted feed text rather than persisting U+FFFD substitutions.
+// Decoder errors abort the existing SQLite transaction, preserving last-known-good data.
+internal fun strictGtfsUtf8Reader(input: InputStream): BufferedReader =
+    BufferedReader(
+        InputStreamReader(
+            input,
+            StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT),
+        ),
+        128 * 1024,
+    )
