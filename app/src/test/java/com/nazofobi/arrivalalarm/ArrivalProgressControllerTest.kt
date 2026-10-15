@@ -437,6 +437,51 @@ class ArrivalProgressControllerTest {
         )
     }
 
+    @Test fun failingStateWriteDoesNotStopArrivalAndLaterSuccessfulSave() {
+        var failWrites = true
+        var persisted: ArrivalProgressState? = null
+        val store = object : ArrivalProgressStateStore {
+            override fun load(): ArrivalProgressState? = null
+            override fun save(state: ArrivalProgressState) {
+                if (failWrites) throw IllegalStateException("Simulated full disk")
+                persisted = state
+            }
+        }
+        val controller = ArrivalProgressController(store)
+        controller.arm(route)
+        assertEquals(ArrivalAlertPhase.TRACKING, controller.state.phase)
+        val target = route.stops[route.targetIndex]
+        controller.onLocation(LocationFix(target, 10.0, 0.0, epochMillis = 1000L))
+        assertEquals(1, controller.state.consecutiveInsideThreshold)
+
+        failWrites = false
+        controller.onLocation(LocationFix(target, 10.0, 0.0, epochMillis = 2000L))
+        assertEquals(ArrivalAlertPhase.ARRIVED, controller.state.phase)
+        assertEquals(1, controller.state.arrivalEventCount)
+        assertEquals(ArrivalAlertPhase.ARRIVED, persisted?.phase)
+        assertEquals(1, persisted?.arrivalEventCount)
+    }
+
+    @Test fun failingStateWriteDoesNotStopMissedOrDisarm() {
+        val store = object : ArrivalProgressStateStore {
+            override fun load(): ArrivalProgressState? = null
+            override fun save(state: ArrivalProgressState) {
+                throw IllegalStateException("Simulated storage failure")
+            }
+        }
+        val controller = ArrivalProgressController(store)
+        controller.arm(route)
+        val pastTarget = route.stops.last()
+        controller.onLocation(LocationFix(pastTarget, 10.0, 0.0, epochMillis = 1000L))
+        controller.onLocation(LocationFix(pastTarget, 10.0, 0.0, epochMillis = 2000L))
+        assertEquals(ArrivalAlertPhase.MISSED, controller.state.phase)
+        assertEquals(0, controller.state.arrivalEventCount)
+
+        controller.disarm()
+        assertFalse(controller.state.armed)
+        assertEquals(ArrivalAlertPhase.IDLE, controller.state.phase)
+    }
+
     @Test fun persistedStateResumesWithoutDuplicateArrival() {
         var saved: ArrivalProgressState? = null
         val store = object : ArrivalProgressStateStore {
