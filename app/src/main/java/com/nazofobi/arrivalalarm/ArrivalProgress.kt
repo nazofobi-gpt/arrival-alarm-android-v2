@@ -20,6 +20,12 @@ data class ArmedRoute(
         require(routeId.isNotBlank())
         require(stops.isNotEmpty())
         require(targetIndex in stops.indices)
+        // Malformed static GTFS stop coordinates must never enter the armed
+        // alarm engine; NaN distances could otherwise suppress arrival/missed events.
+        require(stops.all { stop ->
+            stop.latitude.isFinite() && stop.latitude in -90.0..90.0 &&
+                stop.longitude.isFinite() && stop.longitude in -180.0..180.0
+        }) { "Route contains invalid stop coordinates" }
     }
 
     // Route IDs may remain stable while the selected alarm target or stop
