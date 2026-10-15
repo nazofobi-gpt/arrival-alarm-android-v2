@@ -28,6 +28,25 @@ class TransitRealtimeTest {
         assertNull(snapshot.updates.single().platform)
     }
 
+    @Test fun malformedVbnDelayNeverClaimsZeroMinuteRealtimeEvidence() {
+        val invalid = listOf("\"not-a-delay\"", "true", "12.5", "2147483648", "null")
+        for (raw in invalid) {
+            val json = """{"Header":{"Timestamp":2000000},"Entity":[{"TripUpdate":{"Trip":{"TripId":"trip-42"},"StopTimeUpdate":[{"Departure":{"Delay":$raw}}]}}]}"""
+            val snapshot = VbnJsonRealtimeSource(loader = { json }).fetch()
+            assertNotNull("Malformed delay should not invalidate the snapshot", snapshot)
+            assertNull("Malformed delay must not be treated as zero: $raw", snapshot!!.updates.single().delaySeconds)
+        }
+    }
+
+    @Test fun validSignedDelayAndArrivalFallbackRemainSupported() {
+        for ((raw, expected) in listOf("300" to 300, "-120" to -120)) {
+            val json = """{"Header":{"Timestamp":2000000},"Entity":[{"TripUpdate":{"Trip":{"TripId":"trip-42"},"StopTimeUpdate":[{"Departure":{"Delay":$raw}}]}}]}"""
+            assertEquals(expected, VbnJsonRealtimeSource(loader = { json }).fetch()!!.updates.single().delaySeconds)
+        }
+        val fallback = """{"Header":{"Timestamp":2000000},"Entity":[{"TripUpdate":{"Trip":{"TripId":"trip-42"},"StopTimeUpdate":[{"Departure":{"Delay":"invalid"},"Arrival":{"Delay":90}}]}}]}"""
+        assertEquals(90, VbnJsonRealtimeSource(loader = { fallback }).fetch()!!.updates.single().delaySeconds)
+    }
+
     @Test fun malformedVbnPayloadFailsClosed() {
         assertNull(VbnJsonRealtimeSource(loader = { "not-json" }).fetch())
         assertNull(VbnJsonRealtimeSource(loader = { "{}" }).fetch())
