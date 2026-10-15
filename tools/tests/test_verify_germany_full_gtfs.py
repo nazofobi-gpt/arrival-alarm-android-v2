@@ -14,7 +14,8 @@ REQUIRED = ("stops.txt", "routes.txt", "trips.txt", "stop_times.txt")
 
 class GtfsArchiveMemberTest(unittest.TestCase):
     def run_archive(
-        self, entries: tuple[str, ...], overrides: dict[str, bytes] | None = None
+        self, entries: tuple[str, ...], overrides: dict[str, bytes] | None = None,
+        optimized: bool = False,
     ) -> tuple[subprocess.CompletedProcess[str], Path]:
         with tempfile.TemporaryDirectory() as dirname:
             archive = Path(dirname) / "feed.zip"
@@ -23,7 +24,7 @@ class GtfsArchiveMemberTest(unittest.TestCase):
                 for member in entries:
                     zf.writestr(member, (overrides or {}).get(member, "id,name\n1,Example\n"))
             result = subprocess.run(
-                [sys.executable, str(SCRIPT), str(archive), str(report)],
+                [sys.executable, *(["-O"] if optimized else []), str(SCRIPT), str(archive), str(report)],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -62,6 +63,18 @@ class GtfsArchiveMemberTest(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertIn("invalid UTF-8 in GTFS table feed_info.txt", result.stderr)
         self.assertNotIn("Traceback", result.stderr)
+
+
+    def test_optimized_interpreter_rejects_undersized_feed_before_reporting_success(self):
+        result, _ = self.run_archive(REQUIRED + ("calendar.txt",), optimized=True)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("stops.txt row count below minimum", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_normal_interpreter_rejects_undersized_feed_with_same_diagnostic(self):
+        result, _ = self.run_archive(REQUIRED + ("calendar.txt",))
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("stops.txt row count below minimum", result.stderr)
 
 
 if __name__ == "__main__":
