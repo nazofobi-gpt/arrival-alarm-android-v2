@@ -56,6 +56,33 @@ class TripInferenceEngineTest {
         assertTrue(result.requiresExplicitConfirmation)
     }
 
+    @Test fun locationAndHeadingAloneCannotAcceptTemporallyImpossibleTrip() {
+        val engine = TripInferenceEngine(TripInferenceSettings(enabled = true))
+        // At 15+ minutes from the expected departure, location/heading/motion
+        // still contribute up to 0.75 and used to exceed the 0.72 threshold.
+        val result = engine.infer(
+            observation(),
+            listOf(candidate("stale-trip", "Flughafen", 180.0, offsetSec = -3_600L)),
+        )
+
+        assertEquals(1, result.suggestions.size)
+        assertEquals(0.0, result.suggestions.single().timeScore, 0.0)
+        assertTrue(result.suggestions.single().confidence >= 0.72)
+        assertNull(result.accepted)
+        assertTrue(result.reason.contains("zaman"))
+        assertTrue(result.requiresExplicitConfirmation)
+    }
+
+    @Test fun departureWithPositiveTimeEvidenceRemainsEligible() {
+        val engine = TripInferenceEngine(TripInferenceSettings(enabled = true))
+        val result = engine.infer(
+            observation(),
+            listOf(candidate("nearby-trip", "Flughafen", 180.0, offsetSec = 120L)),
+        )
+        assertEquals("nearby-trip", result.accepted?.candidate?.routeId)
+        assertTrue(result.suggestions.single().timeScore > 0.0)
+    }
+
     @Test fun oppositeDirectionAmbiguityFailsClosed() {
         val engine = TripInferenceEngine(TripInferenceSettings(enabled = true, ambiguityMargin = 0.12))
         val result = engine.infer(
