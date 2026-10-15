@@ -106,6 +106,55 @@ class ArrivalProgressControllerTest {
         assertTrue(controller.state.lastMatchedStopIndex in route.stops.indices)
     }
 
+    @Test fun invalidRestoredArrivalEventCountCannotSuppressFutureGpsTracking() {
+        // A persisted ARRIVED phase with no recorded event cannot be trusted:
+        // onLocation otherwise returns early and never rechecks the target.
+        for (count in listOf(0, -1)) {
+            var persisted: ArrivalProgressState? = ArrivalProgressState(
+                routeId = route.routeId,
+                armed = true,
+                phase = ArrivalAlertPhase.ARRIVED,
+                lastMatchedStopIndex = route.targetIndex,
+                progressFraction = 0.75,
+                arrivalEventCount = count,
+                routeFingerprint = route.persistenceFingerprint,
+            )
+            val store = object : ArrivalProgressStateStore {
+                override fun load(): ArrivalProgressState? = persisted
+                override fun save(state: ArrivalProgressState) { persisted = state }
+            }
+            val controller = ArrivalProgressController(store)
+            controller.arm(route)
+            assertEquals(ArrivalAlertPhase.TRACKING, controller.state.phase)
+            assertEquals(0, controller.state.arrivalEventCount)
+            assertEquals(0, controller.state.lastMatchedStopIndex)
+            controller.onLocation(fix(route.stops[route.targetIndex]))
+            assertEquals(1, controller.state.consecutiveInsideThreshold)
+            controller.onLocation(fix(route.stops[route.targetIndex]))
+            assertEquals(ArrivalAlertPhase.ARRIVED, controller.state.phase)
+            assertEquals(1, controller.state.arrivalEventCount)
+        }
+    }
+
+    @Test fun negativeRestoredEventCountCannotPropagateIntoNewArrival() {
+        var persisted: ArrivalProgressState? = ArrivalProgressState(
+            routeId = route.routeId,
+            armed = true,
+            phase = ArrivalAlertPhase.TRACKING,
+            arrivalEventCount = -1,
+            routeFingerprint = route.persistenceFingerprint,
+        )
+        val store = object : ArrivalProgressStateStore {
+            override fun load(): ArrivalProgressState? = persisted
+            override fun save(state: ArrivalProgressState) { persisted = state }
+        }
+        val controller = ArrivalProgressController(store)
+        controller.arm(route)
+        repeat(2) { controller.onLocation(fix(route.stops[route.targetIndex])) }
+        assertEquals(ArrivalAlertPhase.ARRIVED, controller.state.phase)
+        assertEquals(1, controller.state.arrivalEventCount)
+    }
+
     @Test fun invalidRestoredProgressFractionCannotPreserveTerminalArrival() {
         val invalidFractions = listOf(
             Double.NaN,
