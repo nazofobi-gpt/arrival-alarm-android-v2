@@ -64,6 +64,16 @@ class LocaleResourceContractTest(unittest.TestCase):
             any("format arguments differ" in e for e in validate(self.root))
         )
 
+    def test_localized_key_cannot_disable_required_translation(self):
+        # A localized override cannot downgrade a required translation.
+        self.write(
+            "values-de",
+            '<string name="arrival" translatable="false">In %2$d Min. zu %1$s</string>',
+        )
+        self.assertTrue(
+            any("translatable flag differs for arrival" in error for error in validate(self.root))
+        )
+
     def test_nontranslatable_source_may_be_omitted(self):
         self.write(
             "values",
