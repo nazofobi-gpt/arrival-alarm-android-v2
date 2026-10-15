@@ -28,6 +28,20 @@ class TransitRealtimeTest {
         assertNull(snapshot.updates.single().platform)
     }
 
+
+    @Test fun vbnHeaderTimestampRejectsCoercedValuesWithoutLosingIntegerEpochs() {
+        val malformed = listOf("\"2000000\"", "2000000.5", "2e6", "true", "null")
+        for (raw in malformed) {
+            val json = """{"Header":{"Timestamp":$raw},"Entity":[{"TripUpdate":{"Trip":{"TripId":"trip-42"},"StopTimeUpdate":[{"Departure":{"Delay":600}}]}}]}"""
+            assertNull("Untrusted header Timestamp must not claim realtime freshness: $raw",
+                VbnJsonRealtimeSource(loader = { json }).fetch())
+        }
+        for ((raw, epoch) in listOf("2000000" to 2_000_000L, "2147483648" to 2_147_483_648L)) {
+            val json = """{"Header":{"Timestamp":$raw},"Entity":[]}"""
+            assertEquals(epoch, VbnJsonRealtimeSource(loader = { json }).fetch()!!.fetchedAtEpochSeconds)
+        }
+    }
+
     @Test fun malformedVbnDelayNeverClaimsZeroMinuteRealtimeEvidence() {
         val invalid = listOf("\"not-a-delay\"", "true", "12.5", "2147483648", "null")
         for (raw in invalid) {
