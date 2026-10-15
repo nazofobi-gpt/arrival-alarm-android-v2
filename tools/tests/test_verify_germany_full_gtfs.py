@@ -64,5 +64,18 @@ class GtfsArchiveMemberTest(unittest.TestCase):
         self.assertNotIn("Traceback", result.stderr)
 
 
+    def test_empty_required_table_reports_table_without_traceback(self):
+        result, _ = self.run_archive(REQUIRED, {"stops.txt": b""})
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("empty GTFS table stops.txt: missing CSV header", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_empty_optional_table_reports_table_without_traceback(self):
+        result, _ = self.run_archive(REQUIRED + ("feed_info.txt",), {"feed_info.txt": b""})
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("empty GTFS table feed_info.txt: missing CSV header", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
