@@ -73,6 +73,8 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
             .asSequence()
             .filter {
                 it.serviceActive &&
+                    // An unidentifiable route cannot become an accepted trip.
+                    it.routeId.isNotBlank() &&
                     validCoordinates(it.anchor) &&
                     validBearing(it.expectedBearingDegrees) &&
                     it.scheduledEpochSeconds > 0L

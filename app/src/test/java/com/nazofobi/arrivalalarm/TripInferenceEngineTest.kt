@@ -203,6 +203,25 @@ class TripInferenceEngineTest {
         }
     }
 
+    @Test fun missingRouteIdentityCannotProduceConfidentTripOrAmbiguity() {
+        val engine = TripInferenceEngine(TripInferenceSettings(enabled = true))
+        for (missing in listOf("", " ", "\t")) {
+            val invalid = candidate("valid", "Flughafen", 180.0).copy(routeId = missing)
+            val alone = engine.infer(observation(), listOf(invalid))
+            assertNull("Missing route ID must not be accepted", alone.accepted)
+            assertTrue("Missing route ID must not be suggested", alone.suggestions.isEmpty())
+            assertTrue(alone.requiresExplicitConfirmation)
+
+            // Invalid provider rows must not tie with a valid candidate.
+            val mixed = engine.infer(
+                observation(),
+                listOf(invalid, candidate("valid", "Flughafen", 180.0)),
+            )
+            assertEquals("valid", mixed.accepted?.candidate?.routeId)
+            assertEquals(1, mixed.suggestions.size)
+        }
+    }
+
     @Test fun invalidCandidatesAreExcludedBeforeScoring() {
         val engine = TripInferenceEngine(TripInferenceSettings(enabled = true))
         val candidates = listOf(
