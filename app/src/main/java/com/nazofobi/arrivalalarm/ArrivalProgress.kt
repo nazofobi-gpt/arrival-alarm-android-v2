@@ -80,7 +80,9 @@ class ArrivalProgressController(
             it.routeId == route.routeId && it.armed &&
                 it.routeFingerprint == route.persistenceFingerprint &&
                 it.lastMatchedStopIndex in route.stops.indices &&
-                it.progressFraction.isFinite() && it.progressFraction in 0.0..1.0
+                it.progressFraction.isFinite() && it.progressFraction in 0.0..1.0 &&
+                it.arrivalEventCount >= 0 &&
+                (it.phase != ArrivalAlertPhase.ARRIVED || it.arrivalEventCount > 0)
         }
         setState(
             restored ?: ArrivalProgressState(
