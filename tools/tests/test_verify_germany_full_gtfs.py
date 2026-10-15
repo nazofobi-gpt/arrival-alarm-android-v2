@@ -32,6 +32,30 @@ class GtfsArchiveMemberTest(unittest.TestCase):
             self.assertFalse(report.exists(), "Unverified feed must not create a success report")
             return result, report
 
+    def test_missing_required_columns_fail_before_large_feed_count_checks(self):
+        valid = {
+            "stops.txt": b"stop_id,stop_name,stop_lat,stop_lon\n1,Test,52.0,8.0\n",
+            "routes.txt": b"route_id,route_type\nR,3\n",
+            "trips.txt": b"route_id,service_id,trip_id\nR,S,T\n",
+            "stop_times.txt": (
+                b"trip_id,arrival_time,departure_time,stop_id,stop_sequence\n"
+                b"T,10:00:00,10:00:00,1,1\n"
+            ),
+        }
+        invalid = (
+            ("routes.txt", "route_type", b"route_id\nR\n"),
+            ("trips.txt", "service_id", b"route_id,trip_id\nR,T\n"),
+            ("stop_times.txt", "stop_sequence", b"trip_id,arrival_time,departure_time,stop_id\nT,10:00:00,10:00:00,1\n"),
+        )
+        for table, column, content in invalid:
+            with self.subTest(table=table, column=column):
+                entries = dict(valid)
+                entries[table] = content
+                result, _ = self.run_archive(REQUIRED, entries)
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn(f"{table} missing required GTFS column {column}", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+
     def test_duplicate_required_table_in_nested_directory_fails_closed(self):
         result, _ = self.run_archive(REQUIRED + ("feed/STOPS.TXT",))
         self.assertNotEqual(0, result.returncode)
