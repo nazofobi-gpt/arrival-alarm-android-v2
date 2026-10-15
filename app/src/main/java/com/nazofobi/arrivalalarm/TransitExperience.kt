@@ -52,8 +52,13 @@ class TransitExperienceEngine(private val capabilities: TransitProviderCapabilit
     fun alternateDepartures(values: List<Departure>, selectedTripId: String, nowEpochSeconds: Long): List<Departure> =
         departureBoard(values, nowEpochSeconds).filterNot { it.tripId == selectedTripId }
 
-    fun walkingTransferMinutes(baseMinutes: Int, preference: AccessibilityPreference): Int =
-        (baseMinutes + if (preference.stepFreeOnly && capabilities.accessibility) preference.extraTransferMinutes else 0).coerceAtLeast(0)
+    fun walkingTransferMinutes(baseMinutes: Int, preference: AccessibilityPreference): Int {
+        val penalty = if (preference.stepFreeOnly && capabilities.accessibility) {
+            preference.extraTransferMinutes.toLong()
+        } else 0L
+        // Saturate before converting: Int overflow must not turn a long transfer into 0 minutes.
+        return (baseMinutes.toLong() + penalty).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
+    }
 }
 
 /** Small deterministic store contract: Android persistence can replace this without changing UX semantics. */
