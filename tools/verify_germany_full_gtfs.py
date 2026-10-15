@@ -14,6 +14,14 @@ optional = [
     "attributions.txt", "feed_info.txt",
 ]
 
+# Inspect headers before accepting the nationwide feed by volume alone.
+required_columns = {
+    "stops.txt": ("stop_id", "stop_name", "stop_lat", "stop_lon"),
+    "routes.txt": ("route_id", "route_type"),
+    "trips.txt": ("route_id", "service_id", "trip_id"),
+    "stop_times.txt": ("trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence"),
+}
+
 def inspect(zf, member):
     try:
         with zf.open(member) as raw:
@@ -48,6 +56,12 @@ with zipfile.ZipFile(archive) as zf:
         if name in names:
             report[name] = inspect(zf, names[name])
 
+for name, columns in required_columns.items():
+    header = set(report[name]["header"])
+    for column in columns:
+        if column not in header:
+            raise SystemExit(f"{name} missing required GTFS column {column}")
+
 assert report["stops.txt"]["rows"] >= 500_000
 assert report["routes.txt"]["rows"] >= 10_000
 assert report["trips.txt"]["rows"] >= 1_000_000
@@ -56,10 +70,6 @@ assert (
     report.get("calendar.txt", {}).get("rows", 0) > 0
     or report.get("calendar_dates.txt", {}).get("rows", 0) > 0
 ), "service calendar missing"
-
-stop_header = set(report["stops.txt"]["header"])
-for column in ("stop_id", "stop_name", "stop_lat", "stop_lon"):
-    assert column in stop_header, f"stops.txt missing {column}"
 
 with open(report_path, "w", encoding="utf-8") as output:
     json.dump(report, output, ensure_ascii=False, indent=2)
