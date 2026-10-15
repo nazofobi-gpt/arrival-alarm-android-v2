@@ -85,7 +85,12 @@ class ArrivalProgressController(
                 it.progressFraction.isFinite() && it.progressFraction in 0.0..1.0
         }
         setState(
-            restored ?: ArrivalProgressState(
+            // A restored debounce counter has no persisted GPS timestamp
+            // watermark, so it cannot prove a second independent fix.
+            restored?.copy(
+                consecutiveInsideThreshold = 0,
+                consecutivePastTarget = 0,
+            ) ?: ArrivalProgressState(
                 routeId = route.routeId,
                 armed = true,
                 phase = ArrivalAlertPhase.TRACKING,
