@@ -48,18 +48,28 @@ with zipfile.ZipFile(archive) as zf:
         if name in names:
             report[name] = inspect(zf, names[name])
 
-assert report["stops.txt"]["rows"] >= 500_000
-assert report["routes.txt"]["rows"] >= 10_000
-assert report["trips.txt"]["rows"] >= 1_000_000
-assert report["stop_times.txt"]["rows"] > report["trips.txt"]["rows"]
-assert (
+# Fail closed even when Python is launched with -O (which removes assert statements).
+for table, minimum in (
+    ("stops.txt", 500_000),
+    ("routes.txt", 10_000),
+    ("trips.txt", 1_000_000),
+):
+    rows = report[table]["rows"]
+    if rows < minimum:
+        raise SystemExit(f"{table} row count below minimum: {rows} < {minimum}")
+
+if report["stop_times.txt"]["rows"] <= report["trips.txt"]["rows"]:
+    raise SystemExit("stop_times.txt must contain more rows than trips.txt")
+if not (
     report.get("calendar.txt", {}).get("rows", 0) > 0
     or report.get("calendar_dates.txt", {}).get("rows", 0) > 0
-), "service calendar missing"
+):
+    raise SystemExit("service calendar missing")
 
 stop_header = set(report["stops.txt"]["header"])
 for column in ("stop_id", "stop_name", "stop_lat", "stop_lon"):
-    assert column in stop_header, f"stops.txt missing {column}"
+    if column not in stop_header:
+        raise SystemExit(f"stops.txt missing {column}")
 
 with open(report_path, "w", encoding="utf-8") as output:
     json.dump(report, output, ensure_ascii=False, indent=2)
