@@ -17,6 +17,7 @@ internal object NearbyStationCanonicalizer {
         candidates: List<NearbyStop>,
         limit: Int,
     ): List<NearbyStop> {
+        if (limit <= 0) return emptyList()
         // GTFS stop IDs are scoped to the feed/provider, not globally unique.
         val parentIds = candidates.mapNotNull { candidate ->
             val stop = candidate.stop
