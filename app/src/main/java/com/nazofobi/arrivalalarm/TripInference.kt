@@ -73,6 +73,9 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
             .asSequence()
             .filter {
                 it.serviceActive &&
+                    // A provider row without a route identity cannot be confirmed
+                    // as a real trip, regardless of its sensor confidence.
+                    it.routeId.isNotBlank() &&
                     validCoordinates(it.anchor) &&
                     validBearing(it.expectedBearingDegrees) &&
                     it.scheduledEpochSeconds > 0L
