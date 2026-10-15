@@ -15,7 +15,21 @@ internal fun upcomingCancelledDepartures(
 ): List<Departure> = departures.asSequence()
     .filter { it.cancelled && it.scheduledEpochSeconds >= nowEpochSeconds }
     // Providers can repeat the same scheduled cancellation: one board card per service.
-    .distinctBy { it.tripId to it.scheduledEpochSeconds }
+    // Some feeds omit trip IDs. Two anonymous lines leaving at the same time are
+    // different cancellations, not a single service identified by ("", scheduled).
+    .distinctBy { departure ->
+        if (departure.tripId.isNotBlank()) {
+            listOf("trip", departure.tripId, departure.scheduledEpochSeconds.toString())
+        } else {
+            listOf(
+                "anonymous",
+                departure.routeId.orEmpty(),
+                departure.line,
+                departure.direction,
+                departure.scheduledEpochSeconds.toString(),
+            )
+        }
+    }
     .sortedBy { it.scheduledEpochSeconds }
     .take(limit.coerceAtLeast(0))
     .toList()
