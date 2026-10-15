@@ -26,11 +26,13 @@ class OfflineTransitCache(
     private val backingStore: TransitCacheBackingStore = NoOpTransitCacheBackingStore,
 ) {
     private val entries = LinkedHashMap<String, CachedTransitPlan>()
+    // A zero or negative capacity must disable retention, not silently keep one trip.
+    private val capacity = maxEntries.coerceAtLeast(0)
 
     init {
         // Persisted records may predate the realtime-stripping write contract.
         // Never reintroduce live cancellation, platform or ETA data after process restore.
-        backingStore.load().takeLast(maxEntries.coerceAtLeast(1)).forEach { plan ->
+        backingStore.load().takeLast(capacity).forEach { plan ->
             val safe = plan.forOfflineCache()
             entries[safe.key] = safe
         }
@@ -40,7 +42,7 @@ class OfflineTransitCache(
         val cacheSafe = plan.forOfflineCache()
         entries.remove(cacheSafe.key)
         entries[cacheSafe.key] = cacheSafe
-        while (entries.size > maxEntries.coerceAtLeast(1)) entries.remove(entries.keys.first())
+        while (entries.size > capacity) entries.remove(entries.keys.first())
         backingStore.save(entries.values.toList())
     }
 

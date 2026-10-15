@@ -163,6 +163,27 @@ class OfflineTransitCacheTest {
         assertEquals(listOf("seed", "next"), saved.map { it.key })
     }
 
+    @Test fun disabledCapacityCannotRestoreOrRetainOfflineTrips() {
+        val existing = CachedTransitPlan("previous", emptyList(), emptyList(), 1L)
+        val incoming = existing.copy(key = "next", savedAtEpochSeconds = 2L)
+        for (capacity in listOf(0, -3)) {
+            var persisted: List<CachedTransitPlan>? = null
+            val backing = object : TransitCacheBackingStore {
+                override fun load(): List<CachedTransitPlan> = listOf(existing)
+                override fun save(plans: List<CachedTransitPlan>) {
+                    persisted = plans
+                }
+            }
+            val cache = OfflineTransitCache(maxEntries = capacity, backingStore = backing)
+            assertNull(cache.get("previous"))
+            assertNull(cache.snapshot("previous"))
+            cache.put(incoming)
+            assertNull(cache.get("next"))
+            assertNull(cache.snapshot("next"))
+            assertEquals(emptyList<CachedTransitPlan>(), persisted)
+        }
+    }
+
     @Test fun boundedCacheEvictsOldest() {
         val cache = OfflineTransitCache(maxEntries = 1)
         cache.put(CachedTransitPlan("a", emptyList(), emptyList(), 1))
