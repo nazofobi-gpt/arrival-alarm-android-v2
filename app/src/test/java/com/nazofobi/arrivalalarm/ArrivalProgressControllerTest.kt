@@ -211,6 +211,102 @@ class ArrivalProgressControllerTest {
         assertTrue(c.state.progressFraction >= afterForward.progressFraction)
     }
 
+    @Test fun repeatedOrOlderTimestampCannotSatisfyArrivalDebounce() {
+        val controller = ArrivalProgressController()
+        controller.arm(route)
+        val target = route.stops[route.targetIndex]
+        fun gps(epoch: Long) = LocationFix(target, 10.0, 0.0, epochMillis = epoch)
+
+        controller.onLocation(gps(1_700_000_000_000L))
+        assertEquals(1, controller.state.consecutiveInsideThreshold)
+        controller.onLocation(gps(1_700_000_000_000L))
+        controller.onLocation(gps(1_699_999_999_999L))
+        assertEquals(1, controller.state.consecutiveInsideThreshold)
+        assertEquals(0, controller.state.arrivalEventCount)
+
+        controller.onLocation(gps(1_700_000_001_000L))
+        assertEquals(ArrivalAlertPhase.ARRIVED, controller.state.phase)
+        assertEquals(1, controller.state.arrivalEventCount)
+    }
+
+    @Test fun repeatedTimestampCannotSatisfyMissedStopDebounce() {
+        val controller = ArrivalProgressController()
+        controller.arm(route)
+        val pastTarget = route.stops.last()
+        fun gps(epoch: Long) = LocationFix(pastTarget, 10.0, 0.0, epochMillis = epoch)
+
+        controller.onLocation(gps(1_700_000_000_000L))
+        assertEquals(1, controller.state.consecutivePastTarget)
+        controller.onLocation(gps(1_700_000_000_000L))
+        assertEquals(1, controller.state.consecutivePastTarget)
+        assertNotEquals(ArrivalAlertPhase.MISSED, controller.state.phase)
+
+        controller.onLocation(gps(1_700_000_001_000L))
+        assertEquals(ArrivalAlertPhase.MISSED, controller.state.phase)
+    }
+
+    @Test fun restoredArrivalCounterNeedsFreshFixesAfterProcessRecreation() {
+        var saved: ArrivalProgressState? = null
+        val store = object : ArrivalProgressStateStore {
+            override fun load(): ArrivalProgressState? = saved
+            override fun save(state: ArrivalProgressState) { saved = state }
+        }
+        val target = route.stops[route.targetIndex]
+        fun gps(epoch: Long) = LocationFix(target, 10.0, 0.0, epochMillis = epoch)
+        val initial = ArrivalProgressController(store)
+        initial.arm(route)
+        initial.onLocation(gps(10_000L))
+        assertEquals(1, initial.state.consecutiveInsideThreshold)
+
+        // The GPS timestamp watermark is in-memory; a persisted single-fix
+        // streak must not survive controller recreation as independent evidence.
+        val restored = ArrivalProgressController(store)
+        restored.arm(route)
+        assertEquals(0, restored.state.consecutiveInsideThreshold)
+        restored.onLocation(gps(10_000L))
+        assertEquals(1, restored.state.consecutiveInsideThreshold)
+        assertEquals(0, restored.state.arrivalEventCount)
+        restored.onLocation(gps(10_000L))
+        assertEquals(1, restored.state.consecutiveInsideThreshold)
+        restored.onLocation(gps(11_000L))
+        assertEquals(ArrivalAlertPhase.ARRIVED, restored.state.phase)
+        assertEquals(1, restored.state.arrivalEventCount)
+    }
+
+    @Test fun restoredMissedStopCounterNeedsFreshFixesAfterProcessRecreation() {
+        var saved: ArrivalProgressState? = null
+        val store = object : ArrivalProgressStateStore {
+            override fun load(): ArrivalProgressState? = saved
+            override fun save(state: ArrivalProgressState) { saved = state }
+        }
+        val past = route.stops.last()
+        fun gps(epoch: Long) = LocationFix(past, 10.0, 0.0, epochMillis = epoch)
+        val initial = ArrivalProgressController(store)
+        initial.arm(route)
+        initial.onLocation(gps(20_000L))
+        assertEquals(1, initial.state.consecutivePastTarget)
+
+        val restored = ArrivalProgressController(store)
+        restored.arm(route)
+        assertEquals(0, restored.state.consecutivePastTarget)
+        restored.onLocation(gps(20_000L))
+        assertEquals(1, restored.state.consecutivePastTarget)
+        assertNotEquals(ArrivalAlertPhase.MISSED, restored.state.phase)
+        restored.onLocation(gps(21_000L))
+        assertEquals(ArrivalAlertPhase.MISSED, restored.state.phase)
+    }
+
+    @Test fun newArmedTripResetsGpsTimestampWatermark() {
+        val controller = ArrivalProgressController()
+        controller.arm(route)
+        val target = route.stops[route.targetIndex]
+        controller.onLocation(LocationFix(target, 10.0, 0.0, epochMillis = 9_000L))
+        controller.disarm()
+        controller.arm(route)
+        controller.onLocation(LocationFix(target, 10.0, 0.0, epochMillis = 1_000L))
+        assertEquals(1, controller.state.consecutiveInsideThreshold)
+    }
+
     @Test fun arrivalNeedsDebounceAndFiresExactlyOnce() {
         val c = ArrivalProgressController()
         c.arm(route)
