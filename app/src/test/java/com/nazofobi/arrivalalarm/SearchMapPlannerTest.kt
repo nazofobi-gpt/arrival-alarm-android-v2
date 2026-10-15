@@ -37,6 +37,39 @@ class SearchMapPlannerTest {
         assertEquals(0, options.first().transfers)
     }
 
+    @Test fun journeyOptionsUseProviderScopedTripsWhenRouteIdsOverlap() {
+        val originStop = CatalogStop("berlin-a", "vbb", "Berlin Test A", 52.5200, 13.4050)
+        val destinationStop = CatalogStop("berlin-b", "vbb", "Berlin Test B", 52.5210, 13.4080)
+        val munichStop = CatalogStop("munich-a", "mvv", "München Test A", 48.1400, 11.5800)
+        val berlinRoute = CatalogRoute(
+            "shared-id", "vbb", "RE 1", "Berlin Test B",
+            listOf(originStop.id, destinationStop.id),
+        )
+        val munichRoute = CatalogRoute(
+            "shared-id", "mvv", "RE 1", "München Test A",
+            listOf(munichStop.id, "munich-b"),
+        )
+        val snapshot = TestGermanyTransitFixtures.snapshot.copy(
+            stops = listOf(originStop, destinationStop, munichStop),
+            routes = listOf(berlinRoute, munichRoute),
+            trips = listOf(
+                CatalogTrip("berlin-trip", "vbb", "shared-id", "08:00"),
+                CatalogTrip("munich-trip", "mvv", "shared-id", "09:00"),
+            ),
+        )
+        val planner = SearchMapPlanner(GermanyTransitCatalog(snapshot))
+        val journeys = planner.routeOptions(
+            MapPoint(originStop.latitude, originStop.longitude, "Berlin Test A"),
+            MapPoint(destinationStop.latitude, destinationStop.longitude, "Berlin Test B"),
+        )
+
+        assertEquals(1, journeys.size)
+        assertEquals("shared-id:berlin-trip", journeys.single().id)
+        assertEquals("08:00", journeys.single().departure)
+        assertFalse(journeys.single().id.startsWith("shared-id:static-"))
+        assertFalse(journeys.any { it.id.contains("munich-trip") })
+    }
+
     @Test fun geocoderIsProviderSwappable() {
         val custom = SearchMapPlanner(GermanyTransitCatalog(TestGermanyTransitFixtures.snapshot), object : GeocodeProvider {
             override fun search(query: String) = listOf(MapPoint(50.0, 8.0, "POI:$query"))
