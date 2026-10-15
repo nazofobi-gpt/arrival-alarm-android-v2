@@ -52,6 +52,32 @@ class CancelledDepartureVisibilityTest {
         )
     }
 
+    @Test fun sharedTripIdAndScheduleAcrossDifferentRoutesDoesNotHideCancellation() {
+        val routeA = Departure(
+            "shared", "RE 1", "Bremen", 1_100L, cancelled = true, routeId = "route-a",
+        )
+        val routeB = Departure(
+            "shared", "S 1", "Oldenburg", 1_100L, cancelled = true, routeId = "route-b",
+        )
+        val duplicateUpdate = routeA.copy(realtimeEpochSeconds = 1_400L)
+
+        val actual = upcomingCancelledDepartures(
+            listOf(routeA, duplicateUpdate, routeB),
+            nowEpochSeconds = 1_000L,
+        )
+        assertEquals(listOf(routeA, routeB), actual)
+    }
+
+    @Test fun routeIdUnavailableStillKeepsDistinctDisplayedServices() {
+        val bremen = cancelled("shared", 1_100L)
+        val oldenburg = bremen.copy(line = "S 1", direction = "Oldenburg")
+
+        assertEquals(
+            listOf(bremen, oldenburg),
+            upcomingCancelledDepartures(listOf(bremen, oldenburg), nowEpochSeconds = 1_000L),
+        )
+    }
+
     @Test fun realtimeTimestampDoesNotResurrectAlreadyPassedCancellation() {
         val actual = upcomingCancelledDepartures(
             listOf(cancelled("past", 900L, realtime = 1_500L)),
