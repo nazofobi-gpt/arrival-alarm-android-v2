@@ -226,5 +226,22 @@ class LocaleResourceContractTest(unittest.TestCase):
         self.assertEqual([], validate(self.root))
 
 
+    def test_relative_flag_on_newline_is_rejected_even_when_locales_match(self):
+        for locale in ("values", "values-de", "values-en"):
+            self.write(locale, '<string name="arrival">Stop %1$s%&lt;n</string>')
+        self.assertTrue(
+            any("relative flag invalid for no-argument conversion %n" in e
+                for e in validate(self.root))
+        )
+
+    def test_relative_flag_on_escaped_percent_is_rejected_even_when_locales_match(self):
+        for locale in ("values", "values-de", "values-en"):
+            self.write(locale, '<string name="arrival">Stop %1$s 100%&lt;%</string>')
+        self.assertTrue(
+            any("relative flag invalid for no-argument conversion %%" in e
+                for e in validate(self.root))
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
