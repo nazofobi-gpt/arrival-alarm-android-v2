@@ -21,6 +21,27 @@ class TransitExperienceTest {
         assertTrue(board.first().isRealtime)
     }
 
+    @Test fun invalidRealtimeEpochFallsBackToScheduledDeparture() {
+        val engine = TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures = true))
+        val samples = listOf(
+            Departure("zero", "1", "Lohne", 1_100L, realtimeEpochSeconds = 0L),
+            Departure("negative", "2", "Diepholz", 1_200L, realtimeEpochSeconds = -1L),
+            Departure("sentinel", "3", "Bremen", 1_300L, realtimeEpochSeconds = Long.MIN_VALUE),
+        )
+        val board = engine.departureBoard(samples, now)
+        assertEquals(listOf("zero", "negative", "sentinel"), board.map { it.tripId })
+        assertEquals(listOf(1_100L, 1_200L, 1_300L), board.map { it.effectiveEpochSeconds })
+        assertTrue(board.none { it.isRealtime })
+    }
+
+    @Test fun validRealtimeTimestampStillOverridesSchedule() {
+        val engine = TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures = true))
+        val departure = Departure("late", "1", "Bremen", 1_300L, realtimeEpochSeconds = 1_050L)
+        val board = engine.departureBoard(listOf(departure), now)
+        assertEquals(1_050L, board.single().effectiveEpochSeconds)
+        assertTrue(board.single().isRealtime)
+    }
+
     @Test fun unsupportedRealtimeFallsBackToScheduleWithoutInventingLiveState() {
         val engine=TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures=false))
         val board=engine.departureBoard(departures,now)
@@ -33,6 +54,36 @@ class TransitExperienceTest {
     @Test fun alternateDepartureExcludesSelectedTrip() {
         val engine=TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures=true))
         assertEquals(listOf("a"),engine.alternateDepartures(departures,"b",now).map{it.tripId})
+    }
+
+    @Test fun selectedTripCannotExhaustEightDepartureSlotsBeforeAlternatives() {
+        val engine = TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures = true))
+        val selected = (0 until 10).map { index ->
+            Departure("selected", "1", "A", 1_010L + index)
+        }
+        val alternatives = listOf(
+            Departure("alternative-a", "2", "B", 1_100L),
+            Departure("alternative-b", "3", "C", 1_200L),
+        )
+        assertEquals(
+            listOf("alternative-a", "alternative-b"),
+            engine.alternateDepartures(selected + alternatives, "selected", now)
+                .map { it.tripId },
+        )
+    }
+
+    @Test fun alternateDeparturesRemainSortedFilteredAndBounded() {
+        val engine = TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures = true))
+        val selected = (0 until 9).map { Departure("selected", "1", "A", 1_010L + it) }
+        val alternates = (0 until 10).map { index ->
+            Departure("alternative-$index", "2", "B", 1_100L + index * 10L)
+        }
+        val candidates = selected + alternates + listOf(
+            Departure("cancelled", "3", "C", 1_001L, cancelled = true),
+            Departure("past", "4", "D", 900L),
+        )
+        val board = engine.alternateDepartures(candidates, "selected", now)
+        assertEquals((0 until 8).map { "alternative-$it" }, board.map { it.tripId })
     }
 
     @Test fun accessibilityPenaltyOnlyAppliesWhenProviderSupportsIt() {

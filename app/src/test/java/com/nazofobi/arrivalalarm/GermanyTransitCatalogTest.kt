@@ -77,6 +77,40 @@ class GermanyTransitCatalogTest {
         assertEquals(listOf(berlinRoute, munichRoute), matched.map { it.second })
     }
 
+    @Test fun unscopedRouteTripLookupFailsClosedWhenProvidersShareRouteId() {
+        val snapshot = TestGermanyTransitFixtures.snapshot.copy(
+            routes = listOf(
+                CatalogRoute("common-route", "vbb", "RE", "Berlin", emptyList()),
+                CatalogRoute("common-route", "mvv", "RE", "München", emptyList()),
+            ),
+            trips = listOf(
+                CatalogTrip("berlin-trip", "vbb", "common-route", "07:00"),
+                CatalogTrip("munich-trip", "mvv", "common-route", "08:00"),
+                CatalogTrip("orphan-trip", "other", "common-route", "09:00"),
+            ),
+        )
+        val localCatalog = GermanyTransitCatalog(snapshot)
+
+        // The old unqualified lookup must never mix Berlin and München services.
+        assertTrue(localCatalog.tripsForRoute("common-route").isEmpty())
+        assertEquals(
+            listOf("berlin-trip"),
+            localCatalog.tripsForRoute("vbb", "common-route").map { it.id },
+        )
+        assertEquals(
+            listOf("munich-trip"),
+            localCatalog.tripsForRoute("mvv", "common-route").map { it.id },
+        )
+        assertTrue(localCatalog.tripsForRoute("other", "common-route").isEmpty())
+        assertTrue(localCatalog.tripsForRoute("", "common-route").isEmpty())
+    }
+
+    @Test fun unambiguousRouteTripLookupRetainsExistingSingleProviderBehavior() {
+        val one = catalog.tripsForRoute("r-hb-6")
+        assertEquals(1, one.size)
+        assertEquals(one, catalog.tripsForRoute(one.single().providerId, "r-hb-6"))
+    }
+
     @Test fun registryExposesCoverageFreshnessAndRealtimeCapability() {
         val delfi = requireNotNull(catalog.provider("delfi"))
         val vbb = requireNotNull(catalog.provider("vbb"))

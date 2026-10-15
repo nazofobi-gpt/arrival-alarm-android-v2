@@ -26,13 +26,21 @@ class OfflineTransitCache(
     private val backingStore: TransitCacheBackingStore = NoOpTransitCacheBackingStore,
 ) {
     private val entries = LinkedHashMap<String, CachedTransitPlan>()
+    // A zero or negative capacity must disable retention, not silently keep one trip.
+    private val capacity = maxEntries.coerceAtLeast(0)
 
     init {
         // Persisted records may predate the realtime-stripping write contract.
         // Never reintroduce live cancellation, platform or ETA data after process restore.
-        backingStore.load().takeLast(maxEntries.coerceAtLeast(1)).forEach { plan ->
-            val safe = plan.forOfflineCache()
-            entries[safe.key] = safe
+        try {
+            backingStore.load().takeLast(capacity).forEach { plan ->
+                val safe = plan.forOfflineCache()
+                entries[safe.key] = safe
+            }
+        } catch (_: RuntimeException) {
+            // Corrupt or unavailable disk state must not crash offline routing.
+            // Reject the entire partial restore rather than expose unverified entries.
+            entries.clear()
         }
     }
 
@@ -40,8 +48,13 @@ class OfflineTransitCache(
         val cacheSafe = plan.forOfflineCache()
         entries.remove(cacheSafe.key)
         entries[cacheSafe.key] = cacheSafe
-        while (entries.size > maxEntries.coerceAtLeast(1)) entries.remove(entries.keys.first())
-        backingStore.save(entries.values.toList())
+        while (entries.size > capacity) entries.remove(entries.keys.first())
+        try {
+            backingStore.save(entries.values.toList())
+        } catch (_: RuntimeException) {
+            // Retain a scheduled-only fallback for this session even if disk is full.
+            // Persistence is not guaranteed after a failed save.
+        }
     }
 
     fun get(key: String): CachedTransitPlan? = entries[key]

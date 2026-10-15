@@ -26,6 +26,17 @@ data class RealtimeSnapshot(val fetchedAtEpochSeconds: Long, val updates: List<R
 interface RealtimeTransitSource { fun fetch(): RealtimeSnapshot? }
 fun interface EpochClock { fun nowEpochSeconds(): Long }
 
+// GTFS-RT Delay is a signed integer. optInt() silently coerces strings,
+// booleans and malformed data to zero, falsely claiming on-time evidence.
+private fun parseRealtimeDelay(event: JSONObject?): Int? {
+    if (event?.has("Delay") != true) return null
+    return when (val value = event.opt("Delay")) {
+        is Int -> value
+        is Long -> value.takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() }?.toInt()
+        else -> null
+    }
+}
+
 /** Concrete, bounded adapter for the documented VBN JSON GTFS-RT shape. */
 class VbnJsonRealtimeSource(
     private val endpoint: String = VbnRealtimeProvenance.JSON_URL,
@@ -56,11 +67,7 @@ class VbnJsonRealtimeSource(
                         if (delay == null) {
                             val departure = stop.optJSONObject("Departure")
                             val arrival = stop.optJSONObject("Arrival")
-                            delay = when {
-                                departure?.has("Delay") == true -> departure.optInt("Delay")
-                                arrival?.has("Delay") == true -> arrival.optInt("Delay")
-                                else -> null
-                            }
+                            delay = parseRealtimeDelay(departure) ?: parseRealtimeDelay(arrival)
                         }
                         if (platform == null) {
                             platform = stop.optString("StopPlatform", "").takeIf { it.isNotBlank() }
@@ -108,7 +115,17 @@ class OverlayTransitRepository(
         val snapshot = runCatching { realtimeSource.fetch() }.getOrNull()
             ?: return TransitPlanWithRealtime(staticJourney, TransitRealtimeOverlay(
                 RealtimeFreshness.UNAVAILABLE, status = "Canlı veri kullanılamıyor • statik rota"))
-        val age = (clock.nowEpochSeconds() - snapshot.fetchedAtEpochSeconds).coerceAtLeast(0)
+        val now = clock.nowEpochSeconds()
+        val snapshotTime = snapshot.fetchedAtEpochSeconds
+        // A provider clock far ahead of the device does not constitute fresh evidence.
+        // Keep the static journey without applying untrusted delay/cancellation updates.
+        if (now < 0L || snapshotTime <= 0L ||
+            (snapshotTime > now && snapshotTime - now > MAX_PROVIDER_FUTURE_SKEW_SECONDS)
+        ) {
+            return TransitPlanWithRealtime(staticJourney, TransitRealtimeOverlay(
+                RealtimeFreshness.UNAVAILABLE, status = "Canlı veri kullanılamıyor • statik rota"))
+        }
+        val age = (now - snapshotTime).coerceAtLeast(0L)
         if (age > staleAfterSeconds) return TransitPlanWithRealtime(staticJourney, TransitRealtimeOverlay(
             RealtimeFreshness.STALE, snapshot.fetchedAtEpochSeconds, status = "Canlı veri eski • statik rota"))
         val exactTripId = staticJourney.legs.singleOrNull()?.line?.takeIf { it.startsWith("gtfs-trip:") }?.removePrefix("gtfs-trip:")

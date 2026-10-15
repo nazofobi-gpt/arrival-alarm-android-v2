@@ -20,8 +20,10 @@ data class Departure(
     val realtimeTripStartDate: String? = null,
     val realtimeTripStartTime: String? = null,
 ) {
-    val effectiveEpochSeconds: Long get() = realtimeEpochSeconds ?: scheduledEpochSeconds
-    val isRealtime: Boolean get() = realtimeEpochSeconds != null
+    // A non-positive provider timestamp is malformed/unavailable, not a real
+    // departure in 1970. Preserve the known scheduled departure instead.
+    val effectiveEpochSeconds: Long get() = realtimeEpochSeconds?.takeIf { it > 0L } ?: scheduledEpochSeconds
+    val isRealtime: Boolean get() = realtimeEpochSeconds?.let { it > 0L } == true
 }
 
 data class ServiceAlert(val id: String, val title: String, val detail: String)
@@ -50,7 +52,7 @@ class TransitExperienceEngine(private val capabilities: TransitProviderCapabilit
     fun vehicles(values: List<LiveVehicle>): List<LiveVehicle> = if (capabilities.liveVehiclePositions) values else emptyList()
 
     fun alternateDepartures(values: List<Departure>, selectedTripId: String, nowEpochSeconds: Long): List<Departure> =
-        departureBoard(values, nowEpochSeconds).filterNot { it.tripId == selectedTripId }
+        departureBoard(values.filterNot { it.tripId == selectedTripId }, nowEpochSeconds)
 
     fun walkingTransferMinutes(baseMinutes: Int, preference: AccessibilityPreference): Int {
         val penalty = if (preference.stepFreeOnly && capabilities.accessibility) {

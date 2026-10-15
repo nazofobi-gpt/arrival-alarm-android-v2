@@ -73,8 +73,7 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
             .asSequence()
             .filter {
                 it.serviceActive &&
-                    // A provider row without a route identity cannot be confirmed
-                    // as a real trip, regardless of its sensor confidence.
+                    // An unidentifiable route cannot become an accepted trip.
                     it.routeId.isNotBlank() &&
                     validCoordinates(it.anchor) &&
                     validBearing(it.expectedBearingDegrees) &&
@@ -92,6 +91,11 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
 
         if (best.confidence < settings.minimumConfidence) {
             return TripInferenceResult(scored, null, "Güven eşiği altında")
+        }
+        // Distance, bearing and motion alone can contribute 0.75 confidence.
+        // Never accept a trip when its timetable provides zero time evidence.
+        if (best.timeScore <= 0.0) {
+            return TripInferenceResult(scored, null, "Sefer zamanı hareket kanıtıyla uyumsuz")
         }
         val runnerUp = ranked.getOrNull(1)
         if (runnerUp != null && best.confidence - runnerUp.confidence < settings.ambiguityMargin) {
