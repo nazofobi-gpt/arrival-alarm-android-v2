@@ -349,4 +349,34 @@ class TripInferenceEngineTest {
         assertEquals(0.4, metrics.coverage, 0.0)
         assertEquals(1.0, metrics.accuracy, 0.0)
     }
+
+    @Test fun emptyPredictionsReportZeroPrecisionInsteadOfPerfectScore() {
+        val engine = TripInferenceEngine(TripInferenceSettings(enabled = true))
+        val fixtures = listOf(
+            LabeledInferenceFixture(
+                "true negative",
+                observation(),
+                listOf(candidate("closed", "Flughafen", 180.0, active = false)),
+                null,
+            ),
+            LabeledInferenceFixture(
+                "missed service",
+                observation(),
+                listOf(candidate("stale", "Flughafen", 180.0, offsetSec = -3600L)),
+                "stale",
+            ),
+        )
+        val metrics = TripInferenceEvaluator.evaluate(engine, fixtures)
+        assertEquals(2, metrics.total)
+        assertEquals(1, metrics.correct)
+        assertEquals(0, metrics.falsePositive)
+        assertEquals(1, metrics.falseNegative)
+        assertEquals(0.0, metrics.coverage, 0.0)
+        assertEquals(0.0, metrics.precision, 0.0)
+        assertEquals(0.5, metrics.accuracy, 0.0)
+
+        val empty = TripInferenceEvaluator.evaluate(engine, emptyList())
+        assertEquals(0.0, empty.precision, 0.0)
+        assertEquals(0.0, empty.coverage, 0.0)
+    }
 }
