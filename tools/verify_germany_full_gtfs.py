@@ -52,6 +52,19 @@ with zipfile.ZipFile(archive) as zf:
         if name in names:
             report[name] = inspect(zf, names[name])
 
+# Require structural GTFS columns before counting a feed as valid.
+required_columns = {
+    "stops.txt": ("stop_id", "stop_name", "stop_lat", "stop_lon"),
+    "routes.txt": ("route_id", "route_type"),
+    "trips.txt": ("route_id", "service_id", "trip_id"),
+    "stop_times.txt": ("trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence"),
+}
+for table, columns in required_columns.items():
+    header = set(report[table]["header"])
+    for column in columns:
+        if column not in header:
+            raise SystemExit(f"{table} missing required GTFS column {column}")
+
 # Fail closed even when Python is launched with -O (which removes assert statements).
 for table, minimum in (
     ("stops.txt", 500_000),
@@ -69,11 +82,6 @@ if not (
     or report.get("calendar_dates.txt", {}).get("rows", 0) > 0
 ):
     raise SystemExit("service calendar missing")
-
-stop_header = set(report["stops.txt"]["header"])
-for column in ("stop_id", "stop_name", "stop_lat", "stop_lon"):
-    if column not in stop_header:
-        raise SystemExit(f"stops.txt missing {column}")
 
 with open(report_path, "w", encoding="utf-8") as output:
     json.dump(report, output, ensure_ascii=False, indent=2)

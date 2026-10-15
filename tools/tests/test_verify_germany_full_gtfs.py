@@ -20,9 +20,19 @@ class GtfsArchiveMemberTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as dirname:
             archive = Path(dirname) / "feed.zip"
             report = Path(dirname) / "report.json"
+            # Default samples need valid GTFS headers; size-threshold tests
+            # must exercise row counts rather than unrelated column failures.
+            fixtures = {
+                "stops.txt": "stop_id,stop_name,stop_lat,stop_lon\n1,Test,52.0,8.0\n",
+                "routes.txt": "route_id,route_type\nR,3\n",
+                "trips.txt": "route_id,service_id,trip_id\nR,S,T\n",
+                "stop_times.txt": "trip_id,arrival_time,departure_time,stop_id,stop_sequence\nT,10:00:00,10:00:00,1,1\n",
+            }
             with zipfile.ZipFile(archive, "w") as zf:
                 for member in entries:
-                    zf.writestr(member, (overrides or {}).get(member, "id,name\n1,Example\n"))
+                    base = member.rsplit("/", 1)[-1].lower()
+                    default = fixtures.get(base, "id,name\n1,Example\n")
+                    zf.writestr(member, (overrides or {}).get(member, default))
             result = subprocess.run(
                 [sys.executable, *(["-O"] if optimized else []), str(SCRIPT), str(archive), str(report)],
                 capture_output=True,
@@ -32,6 +42,29 @@ class GtfsArchiveMemberTest(unittest.TestCase):
             )
             self.assertFalse(report.exists(), "Unverified feed must not create a success report")
             return result, report
+
+    def test_missing_required_columns_fail_closed_in_normal_and_optimized_python(self):
+        valid = {
+            "stops.txt": b"stop_id,stop_name,stop_lat,stop_lon\n1,Test,52.0,8.0\n",
+            "routes.txt": b"route_id,route_type\nR,3\n",
+            "trips.txt": b"route_id,service_id,trip_id\nR,S,T\n",
+            "stop_times.txt": b"trip_id,arrival_time,departure_time,stop_id,stop_sequence\nT,10:00:00,10:00:00,1,1\n",
+        }
+        invalid = (
+            ("stops.txt", "stop_id", b"stop_name,stop_lat,stop_lon\nTest,52.0,8.0\n"),
+            ("routes.txt", "route_type", b"route_id\nR\n"),
+            ("trips.txt", "service_id", b"route_id,trip_id\nR,T\n"),
+            ("stop_times.txt", "stop_sequence", b"trip_id,arrival_time,departure_time,stop_id\nT,10:00:00,10:00:00,1\n"),
+        )
+        for optimized in (False, True):
+            for table, column, content in invalid:
+                with self.subTest(optimized=optimized, table=table, column=column):
+                    entries = dict(valid)
+                    entries[table] = content
+                    result, _ = self.run_archive(REQUIRED, entries, optimized=optimized)
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn(f"{table} missing required GTFS column {column}", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
 
     def test_duplicate_required_table_in_nested_directory_fails_closed(self):
         result, _ = self.run_archive(REQUIRED + ("feed/STOPS.TXT",))
