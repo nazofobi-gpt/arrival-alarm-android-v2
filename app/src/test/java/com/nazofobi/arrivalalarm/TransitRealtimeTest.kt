@@ -40,6 +40,35 @@ class TransitRealtimeTest {
         assertTrue(result.realtime.status.contains("eşleşen sefer yok"))
     }
 
+    @Test fun futureDatedSnapshotCannotBePresentedAsFresh() {
+        val future = RealtimeSnapshot(
+            now + MAX_PROVIDER_FUTURE_SKEW_SECONDS + 1L,
+            listOf(RealtimeUpdate("trip-42", delaySeconds = 600, cancelled = true)),
+        )
+        val result = repo(future).plan("fixture-bremen-hbf", "fixture-airport")!!
+        assertEquals(RealtimeFreshness.UNAVAILABLE, result.realtime.freshness)
+        assertNull(result.realtime.delaySeconds)
+        assertFalse(result.realtime.cancelled)
+        assertEquals("Fixture 6", result.journey.legs.single().line)
+    }
+
+    @Test fun smallProviderClockSkewRemainsAllowed() {
+        for (skew in listOf(1L, MAX_PROVIDER_FUTURE_SKEW_SECONDS)) {
+            val snapshot = RealtimeSnapshot(now + skew, emptyList())
+            val result = repo(snapshot).plan("fixture-bremen-hbf", "fixture-airport")!!
+            assertEquals(RealtimeFreshness.FRESH, result.realtime.freshness)
+        }
+    }
+
+    @Test fun invalidSnapshotEpochNeverBecomesFresh() {
+        for (epoch in listOf(-1L, 0L, Long.MAX_VALUE)) {
+            val result = repo(RealtimeSnapshot(epoch, emptyList()))
+                .plan("fixture-bremen-hbf", "fixture-airport")!!
+            assertEquals(RealtimeFreshness.UNAVAILABLE, result.realtime.freshness)
+            assertEquals("Fixture 6", result.journey.legs.single().line)
+        }
+    }
+
     @Test fun staleSnapshotFallsBackToStaticJourney() {
         val result = repo(RealtimeSnapshot(now - 181, listOf(RealtimeUpdate("anything", delaySeconds = 600)))).plan("fixture-bremen-hbf", "fixture-airport")!!
         assertEquals(RealtimeFreshness.STALE, result.realtime.freshness); assertNull(result.realtime.delaySeconds)
