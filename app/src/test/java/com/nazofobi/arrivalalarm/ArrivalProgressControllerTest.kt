@@ -394,6 +394,30 @@ class ArrivalProgressControllerTest {
         assertEquals(1, c.state.arrivalEventCount)
     }
 
+    @Test fun negativeGpsTimestampCannotConfirmArrivalOrPreservePendingFix() {
+        val controller = ArrivalProgressController()
+        controller.arm(route)
+        val target = route.stops[route.targetIndex]
+        fun gps(epoch: Long) = LocationFix(target, 10.0, 0.0, epochMillis = epoch)
+
+        // Negative epochs are malformed provider data, not missing timestamps.
+        repeat(2) { controller.onLocation(gps(-1L)) }
+        assertEquals(0, controller.state.consecutiveInsideThreshold)
+        assertEquals(0, controller.state.arrivalEventCount)
+
+        controller.onLocation(gps(100L))
+        assertEquals(1, controller.state.consecutiveInsideThreshold)
+        controller.onLocation(gps(-2L))
+        assertEquals(0, controller.state.consecutiveInsideThreshold)
+        assertEquals(0, controller.state.arrivalEventCount)
+
+        controller.onLocation(gps(101L))
+        assertEquals(1, controller.state.consecutiveInsideThreshold)
+        controller.onLocation(gps(102L))
+        assertEquals(ArrivalAlertPhase.ARRIVED, controller.state.phase)
+        assertEquals(1, controller.state.arrivalEventCount)
+    }
+
     @Test fun invalidCoordinatesAndMovementEvidenceCannotAdvanceProgress() {
         val c = ArrivalProgressController()
         c.arm(route)
