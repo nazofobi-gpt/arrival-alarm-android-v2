@@ -78,7 +78,7 @@ class SearchMapPlanner(
         val originStop = catalog.nearestStops(origin.latitude, origin.longitude, 1).firstOrNull()?.stop ?: return emptyList()
         val destinationStop = catalog.nearestStops(destination.latitude, destination.longitude, 1).firstOrNull()?.stop ?: return emptyList()
         return catalog.routesServing(originStop.id, destinationStop.id).flatMap { route ->
-            val trips = catalog.tripsForRoute(route.id).ifEmpty { listOf(CatalogTrip("static-${route.id}", route.providerId, route.id, "Planlı")) }
+            val trips = catalog.tripsForRoute(route.providerId, route.id).ifEmpty { listOf(CatalogTrip("static-${route.id}", route.providerId, route.id, "Planlı")) }
             trips.take(3).mapIndexed { index, trip ->
                 RouteOption(
                     id = "${route.id}:${trip.id}", origin = origin, destination = destination,
