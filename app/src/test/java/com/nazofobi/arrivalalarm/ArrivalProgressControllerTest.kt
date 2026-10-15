@@ -72,6 +72,43 @@ class ArrivalProgressControllerTest {
         assertTrue(controller.state.lastMatchedStopIndex in route.stops.indices)
     }
 
+    @Test fun invalidRestoredProgressFractionCannotPreserveTerminalArrival() {
+        val invalidFractions = listOf(
+            Double.NaN,
+            Double.POSITIVE_INFINITY,
+            Double.NEGATIVE_INFINITY,
+            -0.1,
+            1.01,
+        )
+        invalidFractions.forEach { invalidFraction ->
+            var persisted: ArrivalProgressState? = ArrivalProgressState(
+                routeId = route.routeId,
+                armed = true,
+                phase = ArrivalAlertPhase.ARRIVED,
+                lastMatchedStopIndex = 1,
+                progressFraction = invalidFraction,
+                arrivalEventCount = 1,
+                routeFingerprint = route.persistenceFingerprint,
+            )
+            val store = object : ArrivalProgressStateStore {
+                override fun load(): ArrivalProgressState? = persisted
+                override fun save(state: ArrivalProgressState) { persisted = state }
+            }
+
+            val controller = ArrivalProgressController(store)
+            controller.arm(route)
+
+            assertEquals("Restored fraction $invalidFraction", ArrivalAlertPhase.TRACKING, controller.state.phase)
+            assertEquals(0.0, controller.state.progressFraction, 0.0)
+            assertEquals(0, controller.state.arrivalEventCount)
+            assertEquals(0, controller.state.lastMatchedStopIndex)
+            controller.onLocation(fix(route.stops[0]))
+            assertTrue(controller.state.progressFraction.isFinite())
+            assertTrue(controller.state.progressFraction in 0.0..1.0)
+            assertEquals(0, controller.state.arrivalEventCount)
+        }
+    }
+
     @Test fun adaptiveThresholdIsBoundedAndRespondsToUncertainty() {
         val c = ArrivalProgressController()
         val clean = c.adaptiveThresholdMeters(fix(route.stops[0], accuracy = 3.0, speed = 0.0, rt = 0))
