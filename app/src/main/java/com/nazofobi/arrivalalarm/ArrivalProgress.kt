@@ -125,7 +125,8 @@ class ArrivalProgressController(
             !point.longitude.isFinite() || point.longitude !in -180.0..180.0 ||
             !fix.accuracyMeters.isFinite() || fix.accuracyMeters < 0.0 ||
             fix.accuracyMeters > ArrivalLocationQuality.MAX_TRACKING_ACCURACY_METERS ||
-            !fix.speedMps.isFinite() || fix.speedMps < 0.0
+            !fix.speedMps.isFinite() || fix.speedMps < 0.0 ||
+            fix.epochMillis < 0L
         ) {
             if (state.consecutiveInsideThreshold != 0 || state.consecutivePastTarget != 0) {
                 setState(state.copy(consecutiveInsideThreshold = 0, consecutivePastTarget = 0))
