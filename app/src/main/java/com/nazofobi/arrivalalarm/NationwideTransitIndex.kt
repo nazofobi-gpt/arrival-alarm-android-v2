@@ -663,7 +663,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
     }
 
     private fun rows(reader: BufferedReader): Pair<List<String>, Sequence<List<String>>> {
-        val header = parseCsvLine(reader.readLine() ?: error("GTFS dosyası boş"))
+        val header = parseGtfsCsvHeader(reader.readLine() ?: error("GTFS dosyası boş"))
         return header to generateSequence { reader.readLine() }.map(::parseCsvLine)
     }
 
@@ -743,3 +743,8 @@ internal fun strictGtfsUtf8Reader(input: InputStream): BufferedReader =
         ),
         128 * 1024,
     )
+
+
+// GTFS tables may begin with a UTF-8 BOM; it is a file marker, not part of column one.
+internal fun parseGtfsCsvHeader(line: String): List<String> =
+    parseCsvLine(line.removePrefix("\uFEFF"))
