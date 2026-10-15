@@ -72,7 +72,24 @@ class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
             .toList()
     }
 
-    fun tripsForRoute(routeId:String)=snapshot.trips.filter{it.routeId==routeId}
+    // A GTFS route ID is only unique within one provider. Legacy callers lacking
+    // provider context must not accidentally return trips from two transit feeds.
+    fun tripsForRoute(routeId: String): List<CatalogTrip> {
+        val providers = snapshot.routes.asSequence()
+            .filter { it.id == routeId }
+            .map { it.providerId }
+            .distinct()
+            .take(2)
+            .toList()
+        return if (providers.size == 1) tripsForRoute(providers.single(), routeId) else emptyList()
+    }
+
+    fun tripsForRoute(providerId: String, routeId: String): List<CatalogTrip> {
+        if (providerId.isBlank() || routeId.isBlank() ||
+            (providerId to routeId) !in routesByProviderAndId
+        ) return emptyList()
+        return snapshot.trips.filter { it.providerId == providerId && it.routeId == routeId }
+    }
     fun routesServing(originStopId:String,destinationStopId:String):List<CatalogRoute> = snapshot.routes.filter { route -> val a=route.stopIds.indexOf(originStopId); val b=route.stopIds.indexOf(destinationStopId); a>=0 && b>a }
 
     fun nearestStops(latitude:Double,longitude:Double,limit:Int=5):List<NearbyStop> {
