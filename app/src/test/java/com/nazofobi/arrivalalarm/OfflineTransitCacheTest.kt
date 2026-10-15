@@ -163,6 +163,45 @@ class OfflineTransitCacheTest {
         assertEquals(listOf("seed", "next"), saved.map { it.key })
     }
 
+    @Test fun unreadableBackingStoreFailsClosedAndAllowsNewSessionCache() {
+        val backing = object : TransitCacheBackingStore {
+            override fun load(): List<CachedTransitPlan> = error("corrupt JSON")
+            override fun save(plans: List<CachedTransitPlan>) = Unit
+        }
+        val cache = OfflineTransitCache(backingStore = backing)
+        assertNull(cache.get("unverified"))
+
+        cache.put(CachedTransitPlan(
+            "fresh", emptyList(),
+            listOf(Departure("T1", "RE 9", "Bremen", 1_000L,
+                realtimeEpochSeconds = 1_200L, cancelled = true, platform = "4")),
+            900L,
+        ))
+        val fallback = cache.snapshot("fresh")!!
+        assertTrue(fallback.isOfflineCache)
+        assertEquals(1_000L, fallback.departures.single().effectiveEpochSeconds)
+        assertFalse(fallback.departures.single().cancelled)
+        assertNull(fallback.departures.single().platform)
+    }
+
+    @Test fun diskWriteFailureLeavesSafeScheduledTripAvailableInMemory() {
+        val backing = object : TransitCacheBackingStore {
+            override fun load(): List<CachedTransitPlan> = emptyList()
+            override fun save(plans: List<CachedTransitPlan>): Unit = error("disk full")
+        }
+        val cache = OfflineTransitCache(backingStore = backing)
+        cache.put(CachedTransitPlan(
+            "session", emptyList(),
+            listOf(Departure("T1", "RE 9", "Bremen", 1_000L,
+                realtimeEpochSeconds = 1_100L, cancelled = true, platform = "3")),
+            950L,
+        ))
+        assertEquals(1_000L, cache.snapshot("session")!!.departures.single().effectiveEpochSeconds)
+        assertFalse(cache.snapshot("session")!!.departures.single().isRealtime)
+        assertNull(cache.snapshot("session")!!.departures.single().platform)
+        assertFalse(cache.snapshot("session")!!.departures.single().cancelled)
+    }
+
     @Test fun disabledCapacityCannotRestoreOrRetainOfflineTrips() {
         val existing = CachedTransitPlan("previous", emptyList(), emptyList(), 1L)
         val incoming = existing.copy(key = "next", savedAtEpochSeconds = 2L)
