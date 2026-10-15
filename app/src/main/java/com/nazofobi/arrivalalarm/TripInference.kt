@@ -90,6 +90,11 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
         if (best.confidence < settings.minimumConfidence) {
             return TripInferenceResult(scored, null, "Güven eşiği altında")
         }
+        // Distance, bearing and motion alone can contribute 0.75 confidence.
+        // Never accept a trip when its timetable provides zero time evidence.
+        if (best.timeScore <= 0.0) {
+            return TripInferenceResult(scored, null, "Sefer zamanı hareket kanıtıyla uyumsuz")
+        }
         val runnerUp = ranked.getOrNull(1)
         if (runnerUp != null && best.confidence - runnerUp.confidence < settings.ambiguityMargin) {
             return TripInferenceResult(scored, null, "Adaylar belirsiz; kullanıcıya otomatik öneri yok")
