@@ -35,6 +35,36 @@ class TransitExperienceTest {
         assertEquals(listOf("a"),engine.alternateDepartures(departures,"b",now).map{it.tripId})
     }
 
+    @Test fun selectedTripCannotExhaustEightDepartureSlotsBeforeAlternatives() {
+        val engine = TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures = true))
+        val selected = (0 until 10).map { index ->
+            Departure("selected", "1", "A", 1_010L + index)
+        }
+        val alternatives = listOf(
+            Departure("alternative-a", "2", "B", 1_100L),
+            Departure("alternative-b", "3", "C", 1_200L),
+        )
+        assertEquals(
+            listOf("alternative-a", "alternative-b"),
+            engine.alternateDepartures(selected + alternatives, "selected", now)
+                .map { it.tripId },
+        )
+    }
+
+    @Test fun alternateDeparturesRemainSortedFilteredAndBounded() {
+        val engine = TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures = true))
+        val selected = (0 until 9).map { Departure("selected", "1", "A", 1_010L + it) }
+        val alternates = (0 until 10).map { index ->
+            Departure("alternative-$index", "2", "B", 1_100L + index * 10L)
+        }
+        val candidates = selected + alternates + listOf(
+            Departure("cancelled", "3", "C", 1_001L, cancelled = true),
+            Departure("past", "4", "D", 900L),
+        )
+        val board = engine.alternateDepartures(candidates, "selected", now)
+        assertEquals((0 until 8).map { "alternative-$it" }, board.map { it.tripId })
+    }
+
     @Test fun accessibilityPenaltyOnlyAppliesWhenProviderSupportsIt() {
         val pref=AccessibilityPreference(stepFreeOnly=true,extraTransferMinutes=6)
         assertEquals(11,TransitExperienceEngine(TransitProviderCapabilities(accessibility=true)).walkingTransferMinutes(5,pref))
