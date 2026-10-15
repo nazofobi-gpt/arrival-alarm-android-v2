@@ -212,7 +212,13 @@ class ArrivalProgressController(
 
     private fun setState(newState: ArrivalProgressState) {
         state = newState
-        stateStore?.save(newState)
+        try {
+            stateStore?.save(newState)
+        } catch (_: RuntimeException) {
+            // A broken preference store must not interrupt live GPS progress,
+            // suppress an arrival alert, or prevent the user from disarming.
+            // The in-memory state remains authoritative for this session.
+        }
     }
 
     companion object {
