@@ -18,6 +18,40 @@ class ArrivalProgressControllerTest {
     private fun fix(point: GeoPoint, accuracy: Double = 10.0, speed: Double = 8.0, rt: Int = 0) =
         LocationFix(point, accuracy, speed, rt)
 
+    @Test fun invalidArmedRouteCoordinatesAreRejected() {
+        val invalidStops = listOf(
+            GeoPoint(Double.NaN, 8.80),
+            GeoPoint(Double.POSITIVE_INFINITY, 8.80),
+            GeoPoint(53.0, Double.NEGATIVE_INFINITY),
+            GeoPoint(90.01, 8.80),
+            GeoPoint(-90.01, 8.80),
+            GeoPoint(53.0, 180.01),
+            GeoPoint(53.0, -180.01),
+        )
+        invalidStops.forEachIndexed { index, point ->
+            for (position in 0..1) {
+                val stops = mutableListOf(GeoPoint(53.0, 8.8), GeoPoint(53.1, 8.9))
+                stops[position] = point
+                try {
+                    ArmedRoute("invalid-$index-$position", stops, targetIndex = 1)
+                    fail("Invalid route stop must not be armed: $point")
+                } catch (_: IllegalArgumentException) {
+                    // Fail closed before any location or arrival state is created.
+                }
+            }
+        }
+    }
+
+    @Test fun boundaryRouteCoordinatesRemainValid() {
+        val boundary = ArmedRoute(
+            "boundary",
+            stops = listOf(GeoPoint(-90.0, -180.0), GeoPoint(90.0, 180.0)),
+            targetIndex = 1,
+        )
+        assertEquals(1, boundary.targetIndex)
+        assertEquals(2, boundary.stops.size)
+    }
+
     @Test fun noRouteMeansNoAutonomousTarget() {
         val c = ArrivalProgressController()
         c.onLocation(fix(route.stops[0]))
