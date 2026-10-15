@@ -50,7 +50,7 @@ class TransitExperienceEngine(private val capabilities: TransitProviderCapabilit
     fun vehicles(values: List<LiveVehicle>): List<LiveVehicle> = if (capabilities.liveVehiclePositions) values else emptyList()
 
     fun alternateDepartures(values: List<Departure>, selectedTripId: String, nowEpochSeconds: Long): List<Departure> =
-        departureBoard(values, nowEpochSeconds).filterNot { it.tripId == selectedTripId }
+        departureBoard(values.filterNot { it.tripId == selectedTripId }, nowEpochSeconds)
 
     fun walkingTransferMinutes(baseMinutes: Int, preference: AccessibilityPreference): Int {
         val penalty = if (preference.stepFreeOnly && capabilities.accessibility) {
