@@ -6,6 +6,21 @@ import org.junit.Test
 
 class TransitResultLimitTest {
     @Test
+    fun sqlLikeWildcardsInUserTextAreEscapedBeforePrefixSearch() {
+        assertEquals("20!%%", escapeTransitLikePrefix("20%"))
+        assertEquals("S!_B%", escapeTransitLikePrefix("S_B"))
+        assertEquals("A!!B%", escapeTransitLikePrefix("A!B"))
+        assertEquals("S!_20!%!!%", escapeTransitLikePrefix("S_20%!"))
+    }
+
+    @Test
+    fun ordinaryTransitSearchPrefixesStillWork() {
+        assertEquals("ICE%", escapeTransitLikePrefix("ICE"))
+        assertEquals("RB 58%", escapeTransitLikePrefix("RB 58"))
+        assertEquals("%", escapeTransitLikePrefix(""))
+    }
+
+    @Test
     fun nonPositiveRequestsNeverBecomeUnboundedSqliteLimits() {
         listOf(Int.MIN_VALUE, -1, 0).forEach { requested ->
             assertEquals(0 to 0, boundedTransitResultSplit(requested))
