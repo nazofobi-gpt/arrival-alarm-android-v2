@@ -90,5 +90,18 @@ class GtfsArchiveMemberTest(unittest.TestCase):
         self.assertNotIn("Traceback", result.stderr)
 
 
+    def test_blank_line_optional_table_is_not_valid_csv_header(self):
+        result, _ = self.run_archive(REQUIRED + ("feed_info.txt",), {"feed_info.txt": b"\n"})
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("empty GTFS table feed_info.txt: missing CSV header", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_blank_column_optional_table_is_not_valid_csv_header(self):
+        result, _ = self.run_archive(REQUIRED + ("feed_info.txt",), {"feed_info.txt": b" , , \n"})
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("empty GTFS table feed_info.txt: missing CSV header", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
