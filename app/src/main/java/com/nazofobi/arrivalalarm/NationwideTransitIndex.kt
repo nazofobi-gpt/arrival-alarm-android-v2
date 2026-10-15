@@ -173,11 +173,11 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         query: String,
         limit: Int,
     ): List<TransitLocationResult> {
+        val (lineLimit, tripLimit) = boundedTransitResultSplit(limit)
+        val boundedLimit = lineLimit + tripLimit
         val q = query.trim()
-        if (q.length < 2 || limit <= 0) return emptyList()
+        if (q.length < 2 || boundedLimit == 0) return emptyList()
         val prefix = "$q%"
-        val lineLimit = (limit + 1) / 2
-        val tripLimit = limit - lineLimit
 
         val lines = readableDatabase.rawQuery(
             """
@@ -224,7 +224,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             }
         }
 
-        if (tripLimit <= 0) return lines.take(limit)
+        if (tripLimit <= 0) return lines.take(boundedLimit)
 
         val trips = readableDatabase.rawQuery(
             """
@@ -268,7 +268,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             }
         }
 
-        return (lines + trips).take(limit)
+        return (lines + trips).take(boundedLimit)
     }
 
     fun nearest(latitude: Double, longitude: Double, limit: Int): List<NearbyStop> =
@@ -743,3 +743,11 @@ internal fun strictGtfsUtf8Reader(input: InputStream): BufferedReader =
         ),
         128 * 1024,
     )
+
+
+// Keep both SQLite LIMIT clauses positive and bounded even for Int.MAX_VALUE requests.
+internal fun boundedTransitResultSplit(requestedLimit: Int): Pair<Int, Int> {
+    val boundedLimit = requestedLimit.coerceIn(0, 100)
+    val lineLimit = (boundedLimit + 1) / 2
+    return lineLimit to (boundedLimit - lineLimit)
+}
