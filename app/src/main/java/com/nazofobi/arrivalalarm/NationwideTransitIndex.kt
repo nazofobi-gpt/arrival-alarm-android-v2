@@ -177,16 +177,16 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         val boundedLimit = lineLimit + tripLimit
         val q = query.trim()
         if (q.length < 2 || boundedLimit == 0) return emptyList()
-        val prefix = "$q%"
+        val prefix = escapeTransitLikePrefix(q)
 
         val lines = readableDatabase.rawQuery(
             """
             SELECT route_id, COALESCE(short_name, ''), COALESCE(long_name, '')
             FROM routes
-            WHERE short_name LIKE ? COLLATE NOCASE
-               OR long_name LIKE ? COLLATE NOCASE
+            WHERE short_name LIKE ? ESCAPE '!' COLLATE NOCASE
+               OR long_name LIKE ? ESCAPE '!' COLLATE NOCASE
             ORDER BY
-                CASE WHEN short_name LIKE ? COLLATE NOCASE THEN 0 ELSE 1 END,
+                CASE WHEN short_name LIKE ? ESCAPE '!' COLLATE NOCASE THEN 0 ELSE 1 END,
                 short_name COLLATE NOCASE,
                 long_name COLLATE NOCASE,
                 route_id
@@ -231,8 +231,8 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             SELECT t.trip_id, COALESCE(r.short_name, ''), COALESCE(t.headsign, '')
             FROM trips t
             JOIN routes r ON r.route_id = t.route_id
-            WHERE t.headsign LIKE ? COLLATE NOCASE
-               OR t.trip_id LIKE ? COLLATE NOCASE
+            WHERE t.headsign LIKE ? ESCAPE '!' COLLATE NOCASE
+               OR t.trip_id LIKE ? ESCAPE '!' COLLATE NOCASE
             ORDER BY
                 t.headsign COLLATE NOCASE,
                 r.short_name COLLATE NOCASE,
@@ -755,4 +755,15 @@ internal fun boundedTransitResultSplit(requestedLimit: Int): Pair<Int, Int> {
     val boundedLimit = requestedLimit.coerceIn(0, 100)
     val lineLimit = (boundedLimit + 1) / 2
     return lineLimit to (boundedLimit - lineLimit)
+}
+
+    
+// Treat user-entered percent, underscore and escape characters as literal
+// GTFS names. Only the final % is a deliberate autocomplete wildcard.
+internal fun escapeTransitLikePrefix(text: String): String = buildString {
+    for (character in text) {
+        if (character == '!' || character == '%' || character == '_') append('!')
+        append(character)
+    }
+    append('%')
 }
