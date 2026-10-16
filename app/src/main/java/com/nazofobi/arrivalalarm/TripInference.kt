@@ -218,7 +218,9 @@ object TripInferenceEvaluator {
                 if (fixture.expectedRouteId != null) falseNegative++
             }
         }
-        val precision = if (suggestions == 0) 1.0 else truePositive.toDouble() / suggestions
+        // With no accepted predictions precision is undefined, not perfect.
+        // Report zero to avoid false-positive evaluation and readiness claims.
+        val precision = if (suggestions == 0) 0.0 else truePositive.toDouble() / suggestions
         return TripInferenceMetrics(
             total = fixtures.size,
             correct = correct,
