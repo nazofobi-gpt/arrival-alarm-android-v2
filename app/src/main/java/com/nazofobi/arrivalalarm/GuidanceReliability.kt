@@ -82,7 +82,12 @@ class GuidanceReliabilityController(
         // A next-stop instruction is time-sensitive; never replay it hours later.
         const val MAX_PENDING_AGE_MILLIS = 2 * 60_000L
     }
-    var state: GuidanceReliabilityState = store.load() ?: GuidanceReliabilityState()
+    var state: GuidanceReliabilityState = try {
+        store.load() ?: GuidanceReliabilityState()
+    } catch (_: RuntimeException) {
+        // Broken persistence must not prevent in-session TTS guidance.
+        GuidanceReliabilityState()
+    }
         private set
 
     fun onPermissions(snapshot: GuidancePermissionSnapshot) {
@@ -184,6 +189,10 @@ class GuidanceReliabilityController(
 
     private fun update(newState: GuidanceReliabilityState) {
         state = newState
-        store.save(newState)
+        try {
+            store.save(newState)
+        } catch (_: RuntimeException) {
+            // Keep the in-memory guidance state usable during storage failures.
+        }
     }
 }
