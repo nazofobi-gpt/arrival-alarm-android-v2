@@ -141,6 +141,31 @@ class TransitExperienceTest {
         assertEquals(listOf("c","a"),store.recents())
     }
 
+    @Test fun failedRecentsPersistenceKeepsCurrentSessionStateAndCanRecover() {
+        var backingStoreAvailable = false
+        var persistedFavorites = emptyList<String>()
+        var persistedRecents = emptyList<String>()
+        val store = TransitRecentsStore(maxItems = 2) { favorites, recents ->
+            if (!backingStoreAvailable) throw IllegalStateException("Simulated preferences write failure")
+            persistedFavorites = favorites
+            persistedRecents = recents
+        }
+
+        assertTrue(store.toggleFavorite("stop-a"))
+        store.recordTrip("trip-a")
+        assertEquals(listOf("stop-a"), store.favorites())
+        assertEquals(listOf("trip-a"), store.recents())
+        assertTrue(persistedFavorites.isEmpty())
+        assertTrue(persistedRecents.isEmpty())
+
+        backingStoreAvailable = true
+        store.recordTrip("trip-b")
+        assertEquals(listOf("stop-a"), persistedFavorites)
+        assertEquals(listOf("trip-b", "trip-a"), persistedRecents)
+        assertFalse(store.toggleFavorite("stop-a"))
+        assertTrue(persistedFavorites.isEmpty())
+    }
+
     @Test fun favoritesAndRecentsCanSeedAndPublishPersistentState() {
         var savedFavorites = emptyList<String>()
         var savedRecents = emptyList<String>()
