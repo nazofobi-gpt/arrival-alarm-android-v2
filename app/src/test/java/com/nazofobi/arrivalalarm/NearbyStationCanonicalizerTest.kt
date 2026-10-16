@@ -5,6 +5,21 @@ import org.junit.Test
 
 class NearbyStationCanonicalizerTest {
     @Test
+    fun nonPositiveLimitReturnsNoStopsWithoutThrowing() {
+        val stop = CatalogStop("station", "gtfs", "Lohne Bahnhof", 52.665, 8.237)
+        for (requestedLimit in listOf(0, -1, Int.MIN_VALUE)) {
+            assertEquals(
+                emptyList<NearbyStop>(),
+                NearbyStationCanonicalizer.canonicalize(
+                    52.665, 8.237,
+                    listOf(NearbyStop(stop, 0)),
+                    requestedLimit,
+                ),
+            )
+        }
+    }
+
+    @Test
     fun duplicatePlatformsCollapseToParentStation() {
         val station = CatalogStop("station", "gtfs", "Lohne Bahnhof", 52.665, 8.237)
         val first = CatalogStop("p1", "gtfs", "Lohne Bahnhof", 52.665, 8.237, "station")
