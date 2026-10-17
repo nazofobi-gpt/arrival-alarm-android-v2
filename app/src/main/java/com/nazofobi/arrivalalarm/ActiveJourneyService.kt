@@ -33,9 +33,10 @@ object ActiveJourneyPermissions {
     }
 
     fun hasRequired(context: Context): Boolean {
-        val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val hasProvider = runCatching { manager.getProviders(true).isNotEmpty() }.getOrDefault(false)
-        return hasRuntimeGrants(context) && hasProvider
+        if (!hasRuntimeGrants(context)) return false
+        val manager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+            ?: return false
+        return isDeviceLocationEnabledForTracking(manager)
     }
 
     fun runtimePermissions(): Array<String> = buildList {
