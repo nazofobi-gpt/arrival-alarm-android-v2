@@ -27,6 +27,9 @@ class TripInferenceUiTest {
                 .putBoolean("onboarding_complete", true)
                 .commit()
         }
+        // The Activity creates a process-wide controller before @Before runs.
+        // Clearing preferences alone leaves its previously loaded journey in memory.
+        ArrivalAlarmRuntimeGraph.resetForTests()
         rule.activityRule.scenario.recreate()
         rule.waitForIdle()
     }
