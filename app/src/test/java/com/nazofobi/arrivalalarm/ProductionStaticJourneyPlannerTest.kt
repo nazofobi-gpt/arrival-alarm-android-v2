@@ -61,6 +61,8 @@ class ProductionStaticJourneyPlannerTest {
         assertEquals("Berlin", option.direction)
         assertEquals("08:00", option.departure)
         assertEquals("08:47", option.arrival)
+        assertEquals(at("08:00:00"), option.departureEpochMillis)
+        assertEquals(at("08:47:00"), option.arrivalEpochMillis)
         assertEquals(3, option.walkingMinutes)
         assertEquals(1, option.transfers)
         assertEquals(listOf("T1", "T2"), option.tripIds)

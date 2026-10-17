@@ -94,6 +94,8 @@ internal class StaticRouteOptionMapper(
             stops = routeStops,
             refreshToken = null,
             sourceUpdatedAtEpochSeconds = sourceUpdatedAtEpochSeconds,
+            departureEpochMillis = journey.legs.firstOrNull()?.departureEpochMillis,
+            arrivalEpochMillis = journey.arrivalEpochMillis,
         )
     }
 
