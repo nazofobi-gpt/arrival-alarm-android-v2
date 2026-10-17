@@ -33,7 +33,12 @@ class JourneyController(
     }
 
     @Volatile
-    var state: JourneyUiState = runCatching { stateStore?.load() }.getOrNull()?.takeIf { saved ->
+    var state: JourneyUiState = (try {
+        stateStore?.load()
+    } catch (_: RuntimeException) {
+        // Corrupt/unavailable local state is recoverable; fatal JVM errors are not.
+        null
+    })?.takeIf { saved ->
         (saved.distanceMeters == null ||
             (saved.distanceMeters.isFinite() && saved.distanceMeters >= 0.0)) &&
             when (saved.phase) {
