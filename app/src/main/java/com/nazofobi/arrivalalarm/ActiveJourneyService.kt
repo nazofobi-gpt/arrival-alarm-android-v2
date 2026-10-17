@@ -36,7 +36,11 @@ object ActiveJourneyPermissions {
         if (!hasRuntimeGrants(context)) return false
         val manager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
             ?: return false
-        return isDeviceLocationEnabledForTracking(manager)
+        if (!isDeviceLocationEnabledForTracking(manager)) return false
+        // Do not report a trackable journey if the only enabled provider is passive.
+        return runCatching {
+            ActiveJourneyLocationProviderSelection.choose(manager.getProviders(true)) != null
+        }.getOrDefault(false)
     }
 
     fun runtimePermissions(): Array<String> = buildList {
