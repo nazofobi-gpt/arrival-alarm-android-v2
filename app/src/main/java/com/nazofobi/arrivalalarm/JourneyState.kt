@@ -47,7 +47,11 @@ class JourneyController(
 
     private fun update(newState: JourneyUiState) {
         state = newState
-        stateStore?.save(newState)
+        try {
+            stateStore?.save(newState)
+        } catch (_: RuntimeException) {
+            // Keep the current journey usable if local persistence becomes unavailable.
+        }
     }
 
     fun selectStart(point: GeoPoint) {
