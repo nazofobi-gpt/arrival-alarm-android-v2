@@ -68,6 +68,58 @@ class ConnectorJsonCodecTest {
         assertEquals(53.0834, destination.point.latitude, 0.0001)
     }
 
+    @Test fun decoderRejectsInvalidOriginAndDestinationCoordinates() {
+        val invalidPoints = listOf(
+            """{"latitude":90.0001,"longitude":8.8,"label":"Invalid north"}""",
+            """{"latitude":-90.0001,"longitude":8.8,"label":"Invalid south"}""",
+            """{"latitude":53.0,"longitude":180.0001,"label":"Invalid east"}""",
+            """{"latitude":53.0,"longitude":-180.0001,"label":"Invalid west"}""",
+            """{"latitude":"NaN","longitude":8.8,"label":"Non-finite"}""",
+        )
+        for (type in listOf("set_origin", "set_destination")) {
+            for (point in invalidPoints) {
+                val result = runCatching {
+                    ConnectorJsonCodec.decodeCommand(
+                        """{"type":"$type","idempotency_key":"invalid","point":$point}"""
+                    )
+                }
+                assertTrue("Expected rejection of $type with $point", result.isFailure)
+            }
+        }
+    }
+
+    @Test fun decoderRejectsIncompleteOrInvalidBoardingStopCoordinates() {
+        val invalidStops = listOf(
+            """{"name":"Bremen Hbf","latitude":53.0}""",
+            """{"name":"Bremen Hbf","longitude":8.8}""",
+            """{"name":"Bremen Hbf","latitude":91.0,"longitude":8.8}""",
+            """{"name":"Bremen Hbf","latitude":53.0,"longitude":181.0}""",
+        )
+        for (stop in invalidStops) {
+            val result = runCatching {
+                ConnectorJsonCodec.decodeCommand(
+                    """{"type":"set_boarding_stop","idempotency_key":"invalid","stop":$stop}"""
+                )
+            }
+            assertTrue("Expected rejection of boarding stop $stop", result.isFailure)
+        }
+    }
+
+    @Test fun decoderPreservesValidBoundaryCoordinatesAndCoordinateFreeStops() {
+        val origin = ConnectorJsonCodec.decodeCommand(
+            """{"type":"set_origin","idempotency_key":"valid","point":{"latitude":-90,"longitude":180,"label":"Boundary"}}"""
+        ) as ArrivalAlarmConnectorCommand.SetOrigin
+        assertEquals(-90.0, origin.point.latitude, 0.0)
+        assertEquals(180.0, origin.point.longitude, 0.0)
+
+        val stop = ConnectorJsonCodec.decodeCommand(
+            """{"type":"set_boarding_stop","idempotency_key":"valid-stop","stop":{"id":"stop-1","name":"Bremen Hbf"}}"""
+        ) as ArrivalAlarmConnectorCommand.SetBoardingStop
+        assertEquals("Bremen Hbf", stop.stop.name)
+        assertEquals(null, stop.stop.latitude)
+        assertEquals(null, stop.stop.longitude)
+    }
+
     @Test fun decoderRejectsUnknownCommandType() {
         val error = runCatching {
             ConnectorJsonCodec.decodeCommand(
