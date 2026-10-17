@@ -482,6 +482,39 @@ class ArrivalProgressControllerTest {
         assertEquals(ArrivalAlertPhase.IDLE, controller.state.phase)
     }
 
+    @Test fun futureDatedGpsFixCannotPoisonWatermarkOrDebounce() {
+        val now = 50_000L
+        val controller = ArrivalProgressController(nowEpochMillis = { now })
+        val target = route.stops[route.targetIndex]
+        fun gps(timestamp: Long) = LocationFix(target, 10.0, 0.0, epochMillis = timestamp)
+        controller.arm(route)
+
+        controller.onLocation(gps(49_000L))
+        assertEquals(1, controller.state.consecutiveInsideThreshold)
+        // A far-future provider timestamp must not become the last accepted fix.
+        controller.onLocation(gps(now + ArrivalProgressController.MAX_FUTURE_FIX_SKEW_MILLIS + 1L))
+        assertEquals(0, controller.state.consecutiveInsideThreshold)
+        assertEquals(0, controller.state.arrivalEventCount)
+
+        controller.onLocation(gps(49_001L))
+        assertEquals(1, controller.state.consecutiveInsideThreshold)
+        controller.onLocation(gps(49_002L))
+        assertEquals(ArrivalAlertPhase.ARRIVED, controller.state.phase)
+        assertEquals(1, controller.state.arrivalEventCount)
+    }
+
+    @Test fun gpsTimestampAtFutureSkewBoundaryRemainsUsable() {
+        val now = 50_000L
+        val controller = ArrivalProgressController(nowEpochMillis = { now })
+        val target = route.stops[route.targetIndex]
+        controller.arm(route)
+
+        controller.onLocation(LocationFix(target, 10.0, 0.0, epochMillis = 79_999L))
+        controller.onLocation(LocationFix(target, 10.0, 0.0, epochMillis = 80_000L))
+        assertEquals(ArrivalAlertPhase.ARRIVED, controller.state.phase)
+        assertEquals(1, controller.state.arrivalEventCount)
+    }
+
     @Test fun persistedStateResumesWithoutDuplicateArrival() {
         var saved: ArrivalProgressState? = null
         val store = object : ArrivalProgressStateStore {
