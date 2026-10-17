@@ -153,6 +153,7 @@
     <string name="departure_source_planned">Fahrplan</string>
     <string name="alternate_departures">Alternative Abfahrten: %1$d</string>
     <string name="recent_trips">Letzte Fahrten: %1$d</string>
+    <string name="recent_trips_clear">Letzte Fahrten löschen</string>
     <string name="source_gtfs_local">GTFS Deutschland lokaler Index</string>
     <string name="source_live_germany">Live-Suche Deutschland</string>
     <string name="min_two_chars">Mindestens 2 Zeichen eingeben</string>

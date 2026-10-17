@@ -172,6 +172,7 @@
     <string name="departure_source_planned">planlı</string>
     <string name="alternate_departures">Alternatif kalkışlar: %1$d</string>
     <string name="recent_trips">Son yolculuklar: %1$d</string>
+    <string name="recent_trips_clear">Son yolculuk geçmişini sil</string>
 
     <string name="source_gtfs_local">GTFS Deutschland yerel indeks</string>
     <string name="source_live_germany">Canlı Almanya araması</string>

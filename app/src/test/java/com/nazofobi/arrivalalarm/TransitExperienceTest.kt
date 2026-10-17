@@ -141,6 +141,34 @@ class TransitExperienceTest {
         assertEquals(listOf("c","a"),store.recents())
     }
 
+    @Test fun clearingTripHistoryPreservesFavoritesAndPublishesOnce() {
+        var writes = 0
+        var persistedFavorites = emptyList<String>()
+        var persistedRecents = emptyList<String>()
+        val store = TransitRecentsStore(maxItems = 3) { favorites, recents ->
+            writes++
+            persistedFavorites = favorites
+            persistedRecents = recents
+        }
+        assertTrue(store.toggleFavorite("stop-a"))
+        store.recordTrip("trip-a")
+        store.recordTrip("trip-b")
+        val beforeClear = writes
+
+        store.clearRecents()
+        assertTrue(store.recents().isEmpty())
+        assertEquals(listOf("stop-a"), store.favorites())
+        assertEquals(listOf("stop-a"), persistedFavorites)
+        assertTrue(persistedRecents.isEmpty())
+        assertEquals(beforeClear + 1, writes)
+
+        store.clearRecents()
+        assertEquals(beforeClear + 1, writes) // Empty-history clear is idempotent.
+        store.recordTrip("trip-new")
+        assertEquals(listOf("trip-new"), persistedRecents)
+        assertEquals(listOf("stop-a"), persistedFavorites)
+    }
+
     @Test fun failedRecentsPersistenceKeepsCurrentSessionStateAndCanRecover() {
         var backingStoreAvailable = false
         var persistedFavorites = emptyList<String>()
