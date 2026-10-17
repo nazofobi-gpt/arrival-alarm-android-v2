@@ -335,6 +335,14 @@ class GermanyRealtimeMatcher(
             staticStopTimes.filter { it.stopId == stopId }.singleOrNull()
         } ?: return null
 
+        // stop_sequence identifies the scheduled stop, but an explicit stop_id
+        // must agree unless this is a declared reassignment. Never project
+        // another stop's cancellation, delay or platform onto this one.
+        if (update.stopId != null &&
+            update.stopId != scheduled.stopId &&
+            update.assignedStopId == null
+        ) return null
+
         val realtimeStopId = update.assignedStopId ?: update.stopId
         val platformCode = realtimeStopId?.let(data::stop)?.platformCode
             ?: data.stop(scheduled.stopId)?.platformCode

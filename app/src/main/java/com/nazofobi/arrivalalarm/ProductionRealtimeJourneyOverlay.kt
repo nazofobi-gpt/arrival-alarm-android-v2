@@ -32,10 +32,17 @@ internal class ProductionRealtimeJourneyOverlay(
     fun enrich(options: List<RouteOption>): List<RouteOption> {
         if (options.isEmpty()) return options
         val now = nowEpochSeconds()
-        val overlay = runCatching { match(fetch(), now) }.getOrElse { error ->
+        // Degrade on ordinary provider failures, but never swallow JVM fatal Errors.
+        // Exception messages may contain provider URLs, credentials or user coordinates.
+        val overlay = try {
+            match(fetch(), now)
+        } catch (interrupted: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw interrupted
+        } catch (_: Exception) {
             GermanyRealtimeOverlayResult.Unavailable(
                 reason = GermanyRealtimeUnavailableReason.NETWORK,
-                detail = error.message,
+                detail = null,
             )
         }
         return when (overlay) {
@@ -79,12 +86,8 @@ internal class ProductionRealtimeJourneyOverlay(
                 option.copy(
                     realtime = RouteRealtimeInfo(
                         state = RouteRealtimeState.UNAVAILABLE,
-                        unavailableReason = buildString {
-                            append(overlay.reason.name)
-                            overlay.detail?.takeIf { it.isNotBlank() }?.let {
-                                append(": ").append(it)
-                            }
-                        },
+                        // Only the typed reason is safe to expose to route/UI consumers.
+                        unavailableReason = overlay.reason.name,
                     ),
                 )
             }
@@ -95,9 +98,12 @@ internal class ProductionRealtimeJourneyOverlay(
         option: RouteOption,
         overlay: GermanyRealtimeOverlayResult.Matched,
     ): RouteOption {
-        val tripOverlays = overlay.tripOverlays.filter {
-            it.staticTrip.id in option.tripIds && !frequencyTrip(it.staticTrip.id)
-        }
+        // Provider updates are unordered. A transfer stop belongs to the
+        // arriving leg first and the departing leg last in the selected journey.
+        val legOrder = option.tripIds.withIndex().associate { it.value to it.index }
+        val tripOverlays = overlay.tripOverlays
+            .filter { it.staticTrip.id in legOrder && !frequencyTrip(it.staticTrip.id) }
+            .sortedBy { legOrder[it.staticTrip.id] }
         if (tripOverlays.isEmpty()) {
             return option.copy(
                 realtime = RouteRealtimeInfo(
@@ -155,14 +161,25 @@ internal class ProductionRealtimeJourneyOverlay(
     }
 
     private fun frequencyTrip(tripId: String): Boolean =
-        runCatching { isFrequencyTrip(tripId) }.getOrDefault(true)
+        try {
+            isFrequencyTrip(tripId)
+        } catch (interrupted: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw interrupted
+        } catch (_: Exception) {
+            // If frequency status cannot be verified, omit potentially misbound RT.
+            true
+        }
 
     private fun realtimeIso(
         epochSeconds: Long?,
         plannedIso: String?,
         delaySeconds: Int?,
     ): String? {
-        epochSeconds?.let { return iso(it * 1_000L) }
+        // A GTFS-RT Unix timestamp must be positive and safe to convert to millis.
+        // Otherwise use the scheduled time plus delay instead of a bogus date.
+        epochSeconds?.takeIf { it > 0L && it <= Long.MAX_VALUE / 1_000L }
+            ?.let { return iso(it * 1_000L) }
         if (plannedIso == null || delaySeconds == null) return null
         val plannedMillis = parseIsoMillis(plannedIso) ?: return null
         return iso(plannedMillis + delaySeconds * 1_000L)

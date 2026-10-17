@@ -12,7 +12,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 LOCALES = ("de", "en")
-PLACEHOLDER = re.compile(r"%(?:([1-9][0-9]*)\$)?[-#+0,(]*[0-9]*(?:\.[0-9]+)?([tT][A-Za-z]|[A-Za-z%])")
+PLACEHOLDER = re.compile(r"%(?:([1-9][0-9]*)\$)?([-#+ 0,(<]*)[0-9]*(?:\.[0-9]+)?([tT][A-Za-z]|[A-Za-z%])")
 
 
 @dataclass(frozen=True)
@@ -22,24 +22,68 @@ class StringValue:
     translatable: bool
 
 
+VALID_CONVERSIONS = frozenset("bBhHsScCdoxXeEfgGaA%n")
+# Java Formatter's documented date/time suffixes (case-sensitive).
+VALID_DATETIME_SUFFIXES = frozenset("HIk" + "lMSLNpzZsQBbhAaCYyjmdeRTrDFc")
+
+
 def placeholders(value: str) -> Counter[tuple[int, str]]:
-    """Compare argument positions and conversion types, not language word order."""
+    """Validate each percent token and compare argument types and positions."""
     found: Counter[tuple[int, str]] = Counter()
     next_implicit = 1
-    for match in PLACEHOLDER.finditer(value):
-        conversion = match.group(2)
+    previous_position: int | None = None
+    cursor = 0
+    while True:
+        start = value.find("%", cursor)
+        if start < 0:
+            break
+        # finditer() silently skips malformed tokens such as %1$ or a bare %.
+        # Runtime String.format does not, so fail the locale gate instead.
+        match = PLACEHOLDER.match(value, start)
+        if match is None:
+            raise ValueError(f"malformed format argument at offset {start}")
+        conversion = match.group(3)
+        if len(conversion) == 2:
+            if conversion[1] not in VALID_DATETIME_SUFFIXES:
+                raise ValueError(f"unsupported date/time conversion %{conversion} at offset {start}")
+        elif conversion not in VALID_CONVERSIONS:
+            raise ValueError(f"unsupported format conversion %{conversion} at offset {start}")
+        if conversion.lower() == "s":
+            # Java Formatter rejects numeric/sign/grouping flags for ordinary strings.
+            # Allow width, left alignment and reuse as normal for %s/%S.
+            if set(match.group(2)).intersection("+0 ,("):
+                raise ValueError(f"invalid string format flags for %{conversion} at offset {start}")
+        cursor = match.end()
         if conversion in ("%", "n"):
+            # Java Formatter accepts no reused argument for %% or %n.
+            # Even after an ordinary argument, %<% and %<n are invalid.
+            if "<" in match.group(2):
+                raise ValueError(
+                    f"relative flag invalid for no-argument conversion %{conversion} at offset {start}"
+                )
+            if conversion == "n":
+                # Java Formatter permits an argument index but no width,
+                # precision or flags on the line-separator conversion.
+                token = match.group(0)[1:]
+                if match.group(1):
+                    token = token[len(match.group(1)) + 1:]
+                if token != "n":
+                    raise ValueError(f"invalid width, precision or flags for %n at offset {start}")
             continue
-        position = int(match.group(1)) if match.group(1) else next_implicit
-        if not match.group(1):
-            next_implicit += 1
-        # Java Formatter date/time conversions use two characters (%tH, %tM, etc.).
-        # Preserve both, including the case of the conversion prefix/suffix.
-        # Treating every %tX as only "%t" masks translated hour/month drift.
+        # The '<' flag reuses the preceding argument, without advancing implicit numbering.
+        if "<" in match.group(2):
+            if previous_position is None:
+                raise ValueError("relative format argument has no previous argument")
+            position = previous_position
+        else:
+            position = int(match.group(1)) if match.group(1) else next_implicit
+            if not match.group(1):
+                next_implicit += 1
+        previous_position = position
+        # Date/time suffix case is meaningful (e.g. %tH versus %tM).
         signature = conversion if len(conversion) == 2 else conversion.lower()
         found[position, signature] += 1
     return found
-
 
 def read_strings(path: Path) -> tuple[dict[str, StringValue], list[str]]:
     errors: list[str] = []
@@ -101,24 +145,37 @@ def validate(root: Path) -> list[str]:
         expected = {key for key, value in defaults.items() if value.translatable}
         missing = expected - set(localized)
         unexpected = set(localized) - set(defaults)
+        # Android marks translatable="false" values as locale-independent.
+        # A localized override (including endpoints or machine-readable IDs)
+        # must not silently bypass that contract.
+        nontranslatable_overrides = set(localized) & (set(defaults) - expected)
         for key in sorted(missing):
             errors.append(f"values-{locale}: missing translation for {key}")
         for key in sorted(unexpected):
             errors.append(f"values-{locale}: unrecognized translation key {key}")
+        for key in sorted(nontranslatable_overrides):
+            errors.append(f"values-{locale}: nontranslatable key must not be localized: {key}")
 
         for key in sorted(expected & set(localized)):
             source = defaults[key]
             target = localized[key]
             if source.formatted != target.formatted:
                 errors.append(f"values-{locale}: formatted flag differs for {key}")
+            if source.translatable != target.translatable:
+                errors.append(f"values-{locale}: translatable flag differs for {key}")
             if source.text.strip() and not target.text.strip():
                 errors.append(f"values-{locale}: empty translation for {key}")
             if source.formatted and target.formatted:
-                if placeholders(source.text) != placeholders(target.text):
+                try:
+                    base_arguments = placeholders(source.text)
+                    locale_arguments = placeholders(target.text)
+                except ValueError as exc:
+                    errors.append(f"values-{locale}: invalid format for {key}: {exc}")
+                    continue
+                if base_arguments != locale_arguments:
                     errors.append(
                         f"values-{locale}: format arguments differ for {key}: "
-                        f"base={dict(placeholders(source.text))}, "
-                        f"locale={dict(placeholders(target.text))}"
+                        f"base={dict(base_arguments)}, locale={dict(locale_arguments)}"
                     )
     return errors
 

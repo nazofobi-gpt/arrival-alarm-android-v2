@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import java.io.IOException
+import java.io.InterruptedIOException
 import java.net.SocketTimeoutException
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -61,6 +62,14 @@ class BoundedHttpTransport(
 
     @Synchronized
     fun execute(request: HttpTransportRequest): HttpTransportResult {
+        // A previously cancelled caller must not start new provider I/O.
+        if (Thread.currentThread().isInterrupted) {
+            return HttpTransportResult.Failure(
+                kind = HttpTransportResult.Failure.Kind.NETWORK,
+                attempts = 0,
+                message = "request_interrupted",
+            )
+        }
         val now = clock.nowMillis()
         if (now < circuitOpenUntilMs) {
             return HttpTransportResult.Failure(HttpTransportResult.Failure.Kind.CIRCUIT_OPEN, 0)
@@ -70,22 +79,82 @@ class BoundedHttpTransport(
             consecutiveFailures = 0
         }
 
+        // Only read-only methods can be retried without risking duplicate side effects.
+        // A timed-out POST, PUT, PATCH or DELETE may already have reached the server.
+        val allowedRetries = if (
+            request.method.equals("GET", ignoreCase = true) ||
+            request.method.equals("HEAD", ignoreCase = true)
+        ) maxRetries else 0
+
         var attempts = 0
         while (true) {
+            // Backoff adapters may return normally after cancellation.
+            // Never begin the next provider exchange on an interrupted thread.
+            if (Thread.currentThread().isInterrupted) {
+                return HttpTransportResult.Failure(
+                    kind = HttpTransportResult.Failure.Kind.NETWORK,
+                    attempts = attempts,
+                    message = "request_interrupted",
+                )
+            }
             attempts += 1
             try {
                 val response = exchange.execute(request, connectTimeoutMs, readTimeoutMs)
+                // Some adapters flag cancellation but still return an HTTP response.
+                // Do not accept an interrupted exchange as fresh provider evidence.
+                if (Thread.currentThread().isInterrupted) {
+                    return HttpTransportResult.Failure(
+                        kind = HttpTransportResult.Failure.Kind.NETWORK,
+                        attempts = attempts,
+                        message = "request_interrupted",
+                    )
+                }
+                // Informational (1xx) and invalid codes are not terminal provider
+                // responses. Do not report them as success or reset the circuit.
+                if (response.status !in 200..599) {
+                    if (attempts > allowedRetries) {
+                        recordFailure()
+                        return HttpTransportResult.Failure(
+                            kind = HttpTransportResult.Failure.Kind.NETWORK,
+                            attempts = attempts,
+                            message = "invalid_http_status",
+                        )
+                    }
+                    sleepOrStop(backoffMs(attempts), attempts)?.let { return it }
+                    continue
+                }
                 if (!isRetryableStatus(response.status)) {
                     recordSuccess()
                     return HttpTransportResult.Response(response, attempts)
                 }
-                if (attempts > maxRetries) {
+                if (attempts > allowedRetries) {
                     recordFailure()
                     return HttpTransportResult.Response(response, attempts)
                 }
                 sleepOrStop(retryDelayMs(response, attempts), attempts)?.let { return it }
             } catch (error: IOException) {
-                if (attempts > maxRetries) {
+                // A provider adapter can flag cancellation before throwing a plain IOException.
+                // Do not back off/retry cancelled I/O or count it as a provider outage.
+                if (Thread.currentThread().isInterrupted) {
+                    return HttpTransportResult.Failure(
+                        kind = HttpTransportResult.Failure.Kind.NETWORK,
+                        attempts = attempts,
+                        message = "request_interrupted",
+                    )
+                }
+                // An interrupted network read/write represents cancellation, not a
+                // provider outage. Do not replay the request or trip the circuit.
+                // SocketTimeoutException also extends InterruptedIOException but is
+                // a real timeout and retains the bounded retry policy below.
+                if (error is InterruptedIOException && error !is SocketTimeoutException) {
+                    Thread.currentThread().interrupt()
+                    return HttpTransportResult.Failure(
+                        kind = HttpTransportResult.Failure.Kind.NETWORK,
+                        attempts = attempts,
+                        message = "request_interrupted",
+                    )
+                }
+                if (attempts > allowedRetries) {
                     recordFailure()
                     return HttpTransportResult.Failure(
                         if (error is SocketTimeoutException) {
@@ -130,6 +199,13 @@ class BoundedHttpTransport(
         value.toLongOrNull()?.let { seconds ->
             if (seconds < 0) return null
             return saturatingMultiply(seconds, 1_000L)
+        }
+        // An overflowed but otherwise valid delta-seconds is still a server
+        // backoff request. Treat it as saturated, then apply maxRetryDelayMs;
+        // falling back to exponential backoff would retry a rate-limited
+        // provider almost immediately.
+        if (value.isNotEmpty() && value.all { it in '0'..'9' }) {
+            return Long.MAX_VALUE
         }
         return try {
             val formatter = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US).apply {

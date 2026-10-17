@@ -98,6 +98,139 @@ class RouteStopProgressTest {
         assertNull(progress.next)
     }
 
+    @Test fun invertedMixedRealtimeWindowFallsBackToCoherentSchedule() {
+        val observations = listOf(
+            RouteStop(
+                id = "b",
+                name = "Diepholz",
+                arrival = "2026-09-26T08:40:00+02:00",
+                plannedArrival = "2026-09-26T08:13:00+02:00",
+                plannedDeparture = "2026-09-26T08:14:00+02:00",
+            ),
+        )
+        val now = "2026-09-26T08:13:30+02:00".toTransitEpochSecondsOrNull()!!
+
+        val progress = RouteStopProgressTracker().resolve(observations, now)
+
+        assertEquals("Diepholz", progress.current?.name)
+        assertEquals(TransitTimingBasis.SCHEDULED, progress.timingBasis)
+        assertTrue(progress.resolvedByProviderTime)
+    }
+
+    @Test fun invertedWindowWithoutCoherentScheduleFailsUnknown() {
+        val observations = listOf(
+            RouteStop(
+                id = "b",
+                name = "Diepholz",
+                arrival = "2026-09-26T08:40:00+02:00",
+                departure = "2026-09-26T08:14:00+02:00",
+            ),
+        )
+        val now = "2026-09-26T08:30:00+02:00".toTransitEpochSecondsOrNull()!!
+
+        val progress = RouteStopProgressTracker().resolve(observations, now)
+
+        assertFalse(progress.resolvedByProviderTime)
+        assertNull(progress.previous)
+        assertNull(progress.current)
+        assertNull(progress.next)
+    }
+
+    @Test fun reversedStopTimelineDoesNotInventPreviousOrNext() {
+        val inconsistent = listOf(
+            RouteStop(id = "a", name = "First", departure = "2026-09-26T08:20:00+02:00"),
+            RouteStop(id = "b", name = "Second", arrival = "2026-09-26T08:10:00+02:00"),
+        )
+        val now = "2026-09-26T08:15:00+02:00".toTransitEpochSecondsOrNull()!!
+        val progress = RouteStopProgressTracker().resolve(inconsistent, now)
+        assertFalse(progress.resolvedByProviderTime)
+        assertNull(progress.previous)
+        assertNull(progress.current)
+        assertNull(progress.next)
+    }
+
+    @Test fun overlappingStopDwellWindowsDoNotInventVehiclePosition() {
+        val overlapping = listOf(
+            RouteStop(
+                id = "a", name = "First",
+                arrival = "2026-09-26T08:00:00+02:00",
+                departure = "2026-09-26T08:15:00+02:00",
+            ),
+            RouteStop(
+                id = "b", name = "Second",
+                arrival = "2026-09-26T08:10:00+02:00",
+                departure = "2026-09-26T08:20:00+02:00",
+            ),
+        )
+        val now = "2026-09-26T08:12:00+02:00".toTransitEpochSecondsOrNull()!!
+        val progress = RouteStopProgressTracker().resolve(overlapping, now)
+        assertFalse(progress.resolvedByProviderTime)
+        assertNull(progress.current)
+    }
+
+    @Test fun equalStopBoundaryAndUntimedIntermediateRemainUsable() {
+        val coherent = listOf(
+            RouteStop(id = "a", name = "First", departure = "2026-09-26T08:10:00+02:00"),
+            RouteStop(id = "untimed", name = "Intermediate"),
+            RouteStop(id = "c", name = "Last", arrival = "2026-09-26T08:10:00+02:00"),
+        )
+        val now = "2026-09-26T08:05:00+02:00".toTransitEpochSecondsOrNull()!!
+        val progress = RouteStopProgressTracker().resolve(coherent, now)
+        assertTrue(progress.resolvedByProviderTime)
+        assertEquals("First", progress.next?.name)
+    }
+
+    @Test fun realtimeOnlyDepartureDoesNotAppearScheduled() {
+        val departure = "2026-09-26T08:10:00+02:00"
+        val actualOnly = listOf(RouteStop(id = "a", name = "Lohne", departure = departure))
+        val now = departure.toTransitEpochSecondsOrNull()!!
+
+        val live = RouteStopProgressTracker().resolve(actualOnly, now, trustRealtime = true)
+        assertTrue(live.resolvedByProviderTime)
+        assertEquals("Lohne", live.current?.name)
+        assertEquals(TransitTimingBasis.REALTIME, live.timingBasis)
+
+        val offline = RouteStopProgressTracker().resolve(actualOnly, now, trustRealtime = false)
+        assertFalse(offline.resolvedByProviderTime)
+        assertNull(offline.current)
+        assertEquals(TransitTimingBasis.SCHEDULED, offline.timingBasis)
+    }
+
+    @Test fun realtimeOnlyArrivalKeepsLiveBasisBetweenStops() {
+        val observations = listOf(
+            RouteStop(id = "a", name = "Lohne", plannedDeparture = "2026-09-26T08:00:00+02:00"),
+            RouteStop(id = "b", name = "Diepholz", arrival = "2026-09-26T08:15:00+02:00"),
+        )
+        val now = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
+        val progress = RouteStopProgressTracker().resolve(observations, now)
+
+        assertTrue(progress.resolvedByProviderTime)
+        assertEquals(TransitTimingBasis.REALTIME, progress.timingBasis)
+        assertEquals("Lohne", progress.previous?.name)
+        assertEquals("Diepholz", progress.next?.name)
+    }
+
+    @Test fun impossibleUtcOffsetsCannotCreatePhantomStopProgress() {
+        // Real UTC civil offsets cannot exceed fourteen hours; +14 permits only :00.
+        for (invalid in listOf("+14:01", "-14:01", "+15:00", "-23:00")) {
+            val timestamp = "2026-09-26T08:10:00$invalid"
+            assertNull("Invalid offset $invalid must not be accepted", timestamp.toTransitEpochSecondsOrNull())
+            val route = listOf(RouteStop(id = "a", name = "Unverified", plannedDeparture = timestamp))
+            val progress = RouteStopProgressTracker().resolve(route, 1_000L, trustRealtime = false)
+            assertFalse(progress.resolvedByProviderTime)
+            assertNull(progress.current)
+            assertNull(progress.next)
+        }
+        assertEquals(
+            "2026-09-25T18:10:00Z".toTransitEpochSecondsOrNull(),
+            "2026-09-26T08:10:00+14:00".toTransitEpochSecondsOrNull(),
+        )
+        assertEquals(
+            "2026-09-26T20:10:00Z".toTransitEpochSecondsOrNull(),
+            "2026-09-26T08:10:00-12:00".toTransitEpochSecondsOrNull(),
+        )
+    }
+
     @Test fun onlyFreshMatchedOnlineUncancelledRealtimeIsTrusted() {
         assertTrue(isTrustedRealtimeForJourney(RouteRealtimeState.FRESH_MATCHED, false))
         assertFalse(isTrustedRealtimeForJourney(RouteRealtimeState.STALE, false))

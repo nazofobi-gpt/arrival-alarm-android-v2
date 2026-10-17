@@ -8,4 +8,4 @@ internal fun shouldDisplayDepartureBoard(
     hasDestination: Boolean,
     hasSelectedStop: Boolean,
     hasRouteOptions: Boolean,
-): Boolean = hasDestination && (hasSelectedStop || hasRouteOptions)
+): Boolean = hasSelectedStop || (hasDestination && hasRouteOptions)

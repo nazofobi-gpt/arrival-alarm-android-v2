@@ -87,6 +87,8 @@
     <string name="nearby_child_stop_format">%1$d. %2$s</string>
 
     <string name="route_calculating">Rota hesaplanıyor…</string>
+    <string name="route_direct_only_filter">Yalnız aktarmasız rotalar</string>
+    <string name="route_direct_only_empty">Aktarmasız rota bulunamadı. Diğer seçenekleri görmek için filtreyi kapatın.</string>
     <string name="route_results_title">Rota Sonuçları</string>
     <string name="route_points_format">%1$s → %2$s</string>
     <string name="route_offline_badge">Çevrimdışı önbellek</string>
@@ -170,6 +172,7 @@
     <string name="departure_source_planned">planlı</string>
     <string name="alternate_departures">Alternatif kalkışlar: %1$d</string>
     <string name="recent_trips">Son yolculuklar: %1$d</string>
+    <string name="recent_trips_clear">Son yolculuk geçmişini sil</string>
 
     <string name="source_gtfs_local">GTFS Deutschland yerel indeks</string>
     <string name="source_live_germany">Canlı Almanya araması</string>
@@ -245,4 +248,7 @@
     <string name="departures_empty_action">Rota planla</string>
     <string name="lookup_stale_results">Önbellekteki eski sağlayıcı sonuçları gösteriliyor • güncellik doğrulanamadı</string>
     <string name="lookup_provider_unavailable">Canlı arama sağlayıcısına ulaşılamıyor • yerel veri sonuç vermedi</string>
+    <string name="journey_stops_hidden_count">%1$d ara durak gizlendi</string>
+    <string name="journey_show_all_stops_count">Tüm %1$d durağı göster</string>
+    <string name="journey_show_fewer_stops">Daha az durak göster</string>
 </resources>
