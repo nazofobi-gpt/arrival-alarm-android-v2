@@ -369,10 +369,13 @@ internal class ProductionRealtimeStationOverlay(
             val skippedAtStop = update?.scheduleRelationship == "SKIPPED"
             departure.copy(
                 realtimeEpochSeconds = if (skippedAtStop) null else {
-                    update?.departureTimeEpochSeconds
+                    // An invalid provider timestamp must not turn a 2026 board into
+                    // a 1970/overflowed departure. Valid early-running delays remain usable.
+                    val predicted = update?.departureTimeEpochSeconds
                         ?: update?.departureDelaySeconds?.let {
-                            departure.scheduledEpochSeconds + it
+                            departure.scheduledEpochSeconds + it.toLong()
                         }
+                    predicted?.takeIf { it > 0L && it <= Long.MAX_VALUE / 1_000L }
                 },
                 cancelled = trip.cancelled || skippedAtStop,
                 platform = update?.platformCode ?: departure.platform,
