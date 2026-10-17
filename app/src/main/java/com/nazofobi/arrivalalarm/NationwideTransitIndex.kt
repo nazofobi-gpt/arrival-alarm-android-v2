@@ -5,9 +5,11 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.io.BufferedInputStream
 import java.io.BufferedReader
+import java.io.InputStream
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 import java.util.zip.ZipInputStream
@@ -70,8 +72,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             readTimeout = 60_000
         }
         val http = connection as? HttpURLConnection
-        // Conditional GET is safe only for a verified, ready snapshot of the same feed URL.
-        // A different provider URL must never reuse a previous feed's validators.
+        // Revalidate only an already usable snapshot fetched from this exact URL.
         val validators = gtfsConditionalHeaders(
             ready = isReady(),
             sameSource = metadata(SOURCE_URL_KEY) == url,
@@ -88,8 +89,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             val status = http.responseCode
             if (status == HttpURLConnection.HTTP_NOT_MODIFIED) {
                 http.disconnect()
-                // Preserve the entire known-good graph and its original fetch timestamp.
-                // A 304 without sent validators must not make an unready DB look healthy.
+                // HTTP 304 does not change the usable feed or fetch timestamp.
                 if (validators.isNotEmpty() && isReady()) return
                 error("GTFS beklenmeyen HTTP 304")
             }
@@ -106,6 +106,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             ?: connection.lastModified.takeIf { it > 0L }?.toString()
             ?: connection.url.toString()
         val counts = linkedMapOf<String, Int>()
+        val seenGtfsTables = hashSetOf<String>()
 
         db.beginTransaction()
         try {
@@ -115,7 +116,8 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
                 while (entry != null) {
                     val file = entry.name.substringAfterLast('/').lowercase(Locale.ROOT)
                     if (!entry.isDirectory) {
-                        val reader = BufferedReader(InputStreamReader(zip, StandardCharsets.UTF_8), 128 * 1024)
+                        rejectDuplicateGtfsZipMember(entry.name, seenGtfsTables)
+                        val reader = strictGtfsUtf8Reader(zip)
                         val count = when (file) {
                             "stops.txt" -> importStopsEntry(db, reader, onCount)
                             "agency.txt" -> importAgency(db, reader)
@@ -174,13 +176,17 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
     }
 
     fun search(query: String, limit: Int): List<CatalogStop> {
+        // SQLite interprets a negative LIMIT as unlimited. Never allow a caller to
+        // materialize the full nationwide stop index through an unbounded search.
+        if (limit <= 0) return emptyList()
+        val boundedLimit = limit.coerceAtMost(100)
         val tokens = query.lowercase(Locale.GERMANY)
             .split(Regex("[^\\p{L}\\p{N}]+"))
             .filter { it.isNotBlank() }
         if (tokens.isEmpty()) return emptyList()
         val match = tokens.joinToString(" ") { "$it*" }
         val sql = "SELECT s.id,s.name,s.lat,s.lon FROM stop_search f JOIN stops s ON s.id=f.stop_id WHERE stop_search MATCH ? LIMIT ?"
-        return readableDatabase.rawQuery(sql, arrayOf(match, limit.toString())).use { c ->
+        return readableDatabase.rawQuery(sql, arrayOf(match, boundedLimit.toString())).use { c ->
             buildList {
                 while (c.moveToNext()) add(CatalogStop(c.getString(0), PROVIDER_ID, c.getString(1), c.getDouble(2), c.getDouble(3)))
             }
@@ -191,20 +197,20 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         query: String,
         limit: Int,
     ): List<TransitLocationResult> {
+        val (lineLimit, tripLimit) = boundedTransitResultSplit(limit)
+        val boundedLimit = lineLimit + tripLimit
         val q = query.trim()
-        if (q.length < 2 || limit <= 0) return emptyList()
-        val prefix = "$q%"
-        val lineLimit = (limit + 1) / 2
-        val tripLimit = limit - lineLimit
+        if (q.length < 2 || boundedLimit == 0) return emptyList()
+        val prefix = escapeTransitLikePrefix(q)
 
         val lines = readableDatabase.rawQuery(
             """
             SELECT route_id, COALESCE(short_name, ''), COALESCE(long_name, '')
             FROM routes
-            WHERE short_name LIKE ? COLLATE NOCASE
-               OR long_name LIKE ? COLLATE NOCASE
+            WHERE short_name LIKE ? ESCAPE '!' COLLATE NOCASE
+               OR long_name LIKE ? ESCAPE '!' COLLATE NOCASE
             ORDER BY
-                CASE WHEN short_name LIKE ? COLLATE NOCASE THEN 0 ELSE 1 END,
+                CASE WHEN short_name LIKE ? ESCAPE '!' COLLATE NOCASE THEN 0 ELSE 1 END,
                 short_name COLLATE NOCASE,
                 long_name COLLATE NOCASE,
                 route_id
@@ -242,15 +248,15 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             }
         }
 
-        if (tripLimit <= 0) return lines.take(limit)
+        if (tripLimit <= 0) return lines.take(boundedLimit)
 
         val trips = readableDatabase.rawQuery(
             """
             SELECT t.trip_id, COALESCE(r.short_name, ''), COALESCE(t.headsign, '')
             FROM trips t
             JOIN routes r ON r.route_id = t.route_id
-            WHERE t.headsign LIKE ? COLLATE NOCASE
-               OR t.trip_id LIKE ? COLLATE NOCASE
+            WHERE t.headsign LIKE ? ESCAPE '!' COLLATE NOCASE
+               OR t.trip_id LIKE ? ESCAPE '!' COLLATE NOCASE
             ORDER BY
                 t.headsign COLLATE NOCASE,
                 r.short_name COLLATE NOCASE,
@@ -286,7 +292,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             }
         }
 
-        return (lines + trips).take(limit)
+        return (lines + trips).take(boundedLimit)
     }
 
     fun nearest(latitude: Double, longitude: Double, limit: Int): List<NearbyStop> =
@@ -305,11 +311,30 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         val radii = listOf(5_000.0, 20_000.0, 80_000.0)
         for (radius in radii) {
             val latDelta = radius / 111_320.0
-            val lonDelta = radius / (111_320.0 * cos(Math.toRadians(latitude)).absoluteValue.coerceAtLeast(0.2))
-            val sql = "SELECT id,name,lat,lon,parent_station FROM stops WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? LIMIT 6000"
+            val longitudeScale = cos(Math.toRadians(latitude)).absoluteValue.coerceAtLeast(0.2)
+            val lonDelta = radius / (111_320.0 * longitudeScale)
+            val longitudeWeight = longitudeScale * longitudeScale
+            // Applying LIMIT before a spatial ranking loses the nearest stations in dense
+            // areas: the lat/lon index alone can return 6000 farther southern stops first.
+            // Rank in SQL before capping; the final ordering still uses exact haversine metres.
+            val sql = """
+                SELECT id,name,lat,lon,parent_station
+                FROM stops
+                WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?
+                ORDER BY ((lat-?)*(lat-?) + (lon-?)*(lon-?)*?), id
+                LIMIT 6000
+            """.trimIndent()
             val candidates = readableDatabase.rawQuery(
                 sql,
-                arrayOf((latitude - latDelta).toString(), (latitude + latDelta).toString(), (longitude - lonDelta).toString(), (longitude + lonDelta).toString()),
+                arrayOf(
+                    (latitude - latDelta).toString(),
+                    (latitude + latDelta).toString(),
+                    (longitude - lonDelta).toString(),
+                    (longitude + lonDelta).toString(),
+                    latitude.toString(), latitude.toString(),
+                    longitude.toString(), longitude.toString(),
+                    longitudeWeight.toString(),
+                ),
             ).use { c ->
                 buildList {
                     while (c.moveToNext()) {
@@ -380,7 +405,10 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             val name = r.value(h, "stop_name")
             val lat = r.value(h, "stop_lat").toDoubleOrNull()
             val lon = r.value(h, "stop_lon").toDoubleOrNull()
-            if (id.isBlank() || name.isBlank() || lat == null || lon == null) return@forEach
+            if (id.isBlank() || name.isBlank() || lat == null || lon == null ||
+                !lat.isFinite() || lat !in -90.0..90.0 ||
+                !lon.isFinite() || lon !in -180.0..180.0
+            ) return@forEach
             stmt.bindValues(
                 id, name, lat, lon,
                 r.nullValue(h, "parent_station"),
@@ -662,7 +690,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
     }
 
     private fun rows(reader: BufferedReader): Pair<List<String>, Sequence<List<String>>> {
-        val header = parseCsvLine(reader.readLine() ?: error("GTFS dosyası boş"))
+        val header = parseGtfsCsvHeader(reader.readLine() ?: error("GTFS dosyası boş"))
         return header to generateSequence { reader.readLine() }.map(::parseCsvLine)
     }
 
@@ -715,10 +743,59 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
     }
 }
 
-/**
- * HTTP validators may be reused only for a ready snapshot of the same feed URL.
- * Missing/empty values are deliberately ignored, forcing an unconditional GET.
- */
+// Do not mix rows from duplicate GTFS tables (including nested/case aliases).
+// A thrown exception leaves the existing SQLite import transaction uncommitted.
+private val GTFS_IMPORT_TABLES = setOf(
+    "stops.txt", "agency.txt", "routes.txt", "trips.txt", "stop_times.txt",
+    "calendar.txt", "calendar_dates.txt", "transfers.txt", "shapes.txt",
+    "levels.txt", "pathways.txt", "frequencies.txt", "attributions.txt", "feed_info.txt",
+)
+
+internal fun rejectDuplicateGtfsZipMember(entryName: String, seen: MutableSet<String>) {
+    val table = entryName.substringAfterLast('/').lowercase(Locale.ROOT)
+    if (table !in GTFS_IMPORT_TABLES) return
+    check(seen.add(table)) { "Duplicate GTFS ZIP table: $table" }
+}
+
+
+// Reject corrupted feed text rather than persisting U+FFFD substitutions.
+// Decoder errors abort the existing SQLite transaction, preserving last-known-good data.
+internal fun strictGtfsUtf8Reader(input: InputStream): BufferedReader =
+    BufferedReader(
+        InputStreamReader(
+            input,
+            StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT),
+        ),
+        128 * 1024,
+    )
+
+
+// GTFS tables may begin with a UTF-8 BOM; it is a file marker, not part of column one.
+internal fun parseGtfsCsvHeader(line: String): List<String> =
+    parseCsvLine(line.removePrefix("\uFEFF"))
+
+
+// Keep both SQLite LIMIT clauses positive and bounded even for Int.MAX_VALUE requests.
+internal fun boundedTransitResultSplit(requestedLimit: Int): Pair<Int, Int> {
+    val boundedLimit = requestedLimit.coerceIn(0, 100)
+    val lineLimit = (boundedLimit + 1) / 2
+    return lineLimit to (boundedLimit - lineLimit)
+}
+
+    
+// Treat user-entered percent, underscore and escape characters as literal
+// GTFS names. Only the final % is a deliberate autocomplete wildcard.
+internal fun escapeTransitLikePrefix(text: String): String = buildString {
+    for (character in text) {
+        if (character == '!' || character == '%' || character == '_') append('!')
+        append(character)
+    }
+    append('%')
+}
+
+/** Conditional validators are valid only for the ready snapshot from this source. */
 internal fun gtfsConditionalHeaders(
     ready: Boolean,
     sameSource: Boolean,

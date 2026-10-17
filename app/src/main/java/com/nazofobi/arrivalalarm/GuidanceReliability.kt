@@ -46,6 +46,7 @@ data class GuidanceReliabilityState(
     val audioRoute: GuidanceAudioRoute = GuidanceAudioRoute.DEVICE,
     val lastSpokenKey: String? = null,
     val pending: GuidanceUtterance? = null,
+    val pendingSinceEpochMillis: Long? = null,
     val status: String = "İzinler bekleniyor",
 )
 
@@ -75,8 +76,18 @@ object TtsVoicePolicy {
 class GuidanceReliabilityController(
     private val speaker: GuidanceSpeaker,
     private val store: GuidanceStateStore = InMemoryGuidanceStateStore(),
+    private val nowEpochMillis: () -> Long = { System.currentTimeMillis() },
 ) {
-    var state: GuidanceReliabilityState = store.load() ?: GuidanceReliabilityState()
+    companion object {
+        // A next-stop instruction is time-sensitive; never replay it hours later.
+        const val MAX_PENDING_AGE_MILLIS = 2 * 60_000L
+    }
+    var state: GuidanceReliabilityState = try {
+        store.load() ?: GuidanceReliabilityState()
+    } catch (_: RuntimeException) {
+        // Broken persistence must not prevent in-session TTS guidance.
+        GuidanceReliabilityState()
+    }
         private set
 
     fun onPermissions(snapshot: GuidancePermissionSnapshot) {
@@ -112,7 +123,15 @@ class GuidanceReliabilityController(
     fun requestGuidance(utterance: GuidanceUtterance): Boolean {
         if (utterance.key == state.lastSpokenKey) return false
         if (state.permissionState == GuidancePermissionState.DENIED) {
-            update(state.copy(pending = utterance, status = "Guidance beklemede • izin kurtarma gerekli"))
+            update(state.copy(
+                pending = utterance,
+                pendingSinceEpochMillis = if (state.pending == utterance) {
+                    state.pendingSinceEpochMillis ?: nowEpochMillis()
+                } else {
+                    nowEpochMillis()
+                },
+                status = "Guidance beklemede • izin kurtarma gerekli",
+            ))
             return false
         }
         return deliver(utterance)
@@ -120,28 +139,64 @@ class GuidanceReliabilityController(
 
     fun retryPending(): Boolean {
         val pending = state.pending ?: return false
+        if (pending.key == state.lastSpokenKey) {
+            update(state.copy(pending = null, pendingSinceEpochMillis = null))
+            return false
+        }
+        val queuedAt = state.pendingSinceEpochMillis
+        val now = nowEpochMillis()
+        if (queuedAt == null || queuedAt <= 0L || now < queuedAt ||
+            now - queuedAt > MAX_PENDING_AGE_MILLIS
+        ) {
+            update(state.copy(
+                pending = null,
+                pendingSinceEpochMillis = null,
+                status = "Eski durak anonsu atlandı",
+            ))
+            return false
+        }
         if (state.permissionState == GuidancePermissionState.DENIED) return false
         return deliver(pending)
     }
 
     private fun deliver(utterance: GuidanceUtterance): Boolean {
-        val spoken = speaker.speak(utterance)
+        // A disconnected Android TTS engine can throw during route changes.
+        // Keep the original queued timestamp so exception retries cannot
+        // make an expired stop instruction live forever.
+        val spoken = try {
+            speaker.speak(utterance)
+        } catch (_: RuntimeException) {
+            false
+        }
         update(
             if (spoken) state.copy(
                 lastSpokenKey = utterance.key,
                 pending = null,
+                pendingSinceEpochMillis = null,
                 status = when (state.audioRoute) {
                     GuidanceAudioRoute.BLUETOOTH_CONNECTED -> "Guidance Bluetooth üzerinden gönderildi"
                     GuidanceAudioRoute.BLUETOOTH_DISCONNECTED, GuidanceAudioRoute.DEVICE ->
                         "Guidance cihaz TTS üzerinden gönderildi"
                 },
-            ) else state.copy(pending = utterance, status = "TTS kullanılamıyor • guidance beklemede")
+            ) else state.copy(
+                pending = utterance,
+                pendingSinceEpochMillis = if (state.pending == utterance) {
+                    state.pendingSinceEpochMillis ?: nowEpochMillis()
+                } else {
+                    nowEpochMillis()
+                },
+                status = "TTS kullanılamıyor • guidance beklemede",
+            )
         )
         return spoken
     }
 
     private fun update(newState: GuidanceReliabilityState) {
         state = newState
-        store.save(newState)
+        try {
+            store.save(newState)
+        } catch (_: RuntimeException) {
+            // Keep the in-memory guidance state usable during storage failures.
+        }
     }
 }

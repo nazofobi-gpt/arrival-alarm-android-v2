@@ -25,6 +25,41 @@ class GtfsDeutschlandLoaderTest {
         assertTrue(snapshot.providers.single().staticSource.contains("download.gtfs.de"))
     }
 
+
+    @Test fun missingCoreTablesFailClosedInsteadOfPublishingEmptySuccessfulSnapshot() {
+        val required = listOf(
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,stop_id,stop_sequence\nt1,s1,1\n",
+        )
+        for ((missing, _) in required) {
+            val partial = required.filterNot { it.first == missing }
+            val failure = runCatching {
+                GtfsDeutschlandLoader.parse(zipOf(*partial.toTypedArray()), "truncated", "2026-10-17")
+            }.exceptionOrNull()
+            assertTrue("Missing $missing must fail closed: $failure",
+                failure is IllegalArgumentException && failure.message.orEmpty().contains(missing))
+        }
+    }
+
+    @Test fun duplicateCoreZipMembersDoNotSilentlyOverwriteEarlierFeedData() {
+        val zip = zipOf(
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\n",
+            "nested/stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Wrong,52.66,8.23\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,stop_id,stop_sequence\nt1,s1,1\n",
+        )
+        val failure = runCatching {
+            GtfsDeutschlandLoader.parse(zip, "duplicate", "2026-10-17")
+        }.exceptionOrNull()
+        assertTrue(
+            "Duplicate normalized core member must fail closed: $failure",
+            failure is IllegalArgumentException && failure.message.orEmpty().contains("stops.txt"),
+        )
+    }
+
     private fun zipOf(vararg files: Pair<String, String>): ByteArray {
         val bytes = ByteArrayOutputStream()
         ZipOutputStream(bytes).use { zip -> files.forEach { (name, content) -> zip.putNextEntry(ZipEntry(name)); zip.write(content.toByteArray()); zip.closeEntry() } }

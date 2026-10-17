@@ -3,6 +3,7 @@ package com.nazofobi.arrivalalarm
 import java.util.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProductionRealtimeJourneyOverlayTest {
@@ -71,6 +72,129 @@ class ProductionRealtimeJourneyOverlayTest {
         assertEquals("7", result.stops.last().platform)
         assertEquals("1", result.stops.first().plannedPlatform)
         assertEquals("2", result.stops.last().plannedPlatform)
+    }
+
+    @Test
+    fun reversedProviderOrderUsesSelectedLegOrderAtTransferStop() {
+        val selected = option().copy(
+            tripIds = listOf("T1", "T2"),
+            transfers = 1,
+            stops = listOf(
+                option().stops.first(),
+                RouteStop(
+                    id = "B",
+                    name = "Transfer",
+                    plannedArrival = "2026-10-04T08:15:00+02:00",
+                    plannedDeparture = "2026-10-04T08:17:00+02:00",
+                    plannedPlatform = "1",
+                ),
+                RouteStop(
+                    id = "C",
+                    name = "Destination",
+                    plannedArrival = "2026-10-04T08:45:00+02:00",
+                    plannedPlatform = "3",
+                ),
+            ),
+        )
+
+        fun transferUpdate(arrival: String, departure: String, platform: String) =
+            GermanyRealtimeMatchedStopUpdate(
+                stopSequence = 2,
+                scheduledStopId = "B",
+                realtimeStopId = "B",
+                assignedStopId = null,
+                platformCode = platform,
+                arrivalDelaySeconds = null,
+                departureDelaySeconds = null,
+                arrivalTimeEpochSeconds = at(arrival) / 1_000L,
+                departureTimeEpochSeconds = at(departure) / 1_000L,
+                scheduleRelationship = "SCHEDULED",
+                pickupType = null,
+                dropOffType = null,
+                stopHeadsign = null,
+            )
+
+        fun tripOverlay(id: String, stop: GermanyRealtimeMatchedStopUpdate) =
+            GermanyRealtimeTripOverlay(
+                staticTrip = trip(id),
+                startDate = "20261004",
+                startTime = null,
+                cancelled = false,
+                scheduleRelationship = "SCHEDULED",
+                stopUpdates = listOf(stop),
+                sourceTimestampEpochSeconds = at("07:59:00") / 1_000L,
+            )
+
+        // GTFS-RT contains the departing T2 update before the arriving T1.
+        // Arrival must still come from T1 and departure from T2.
+        val reversedFeed = GermanyRealtimeOverlayResult.Matched(
+            tripOverlays = listOf(
+                tripOverlay("T2", transferUpdate("08:09:00", "08:19:00", "4")),
+                tripOverlay("T1", transferUpdate("08:16:00", "08:39:00", "2")),
+            ),
+            serviceAlerts = emptyList(),
+            freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+            ageSeconds = 30,
+            provenance = provenance(),
+        )
+
+        val result = overlay(reversedFeed).enrich(listOf(selected)).single()
+        val transfer = result.stops[1]
+
+        assertEquals("2026-10-04T08:16:00+02:00", transfer.arrival)
+        assertEquals("2026-10-04T08:19:00+02:00", transfer.departure)
+        assertEquals("4", transfer.platform)
+        assertEquals(listOf("T1", "T2"), result.realtime?.matchedTripIds)
+    }
+
+    @Test
+    fun invalidAbsoluteRealtimeEpochsUseScheduledDelayInsteadOfBogusDates() {
+        for (invalidEpoch in listOf(0L, -1L, Long.MIN_VALUE, Long.MAX_VALUE)) {
+            val matched = GermanyRealtimeOverlayResult.Matched(
+                tripOverlays = listOf(
+                    GermanyRealtimeTripOverlay(
+                        staticTrip = trip("T1"),
+                        startDate = "20261004",
+                        startTime = "08:00:00",
+                        cancelled = false,
+                        scheduleRelationship = "SCHEDULED",
+                        stopUpdates = listOf(
+                            GermanyRealtimeMatchedStopUpdate(
+                                stopSequence = 2,
+                                scheduledStopId = "B",
+                                realtimeStopId = "B",
+                                assignedStopId = null,
+                                platformCode = null,
+                                arrivalDelaySeconds = 90,
+                                departureDelaySeconds = null,
+                                arrivalTimeEpochSeconds = invalidEpoch,
+                                departureTimeEpochSeconds = null,
+                                scheduleRelationship = "SCHEDULED",
+                                pickupType = null,
+                                dropOffType = null,
+                                stopHeadsign = null,
+                            ),
+                        ),
+                        sourceTimestampEpochSeconds = at("07:59:00") / 1_000L,
+                    ),
+                ),
+                serviceAlerts = emptyList(),
+                freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+                ageSeconds = 30,
+                provenance = provenance(),
+            )
+
+            val result = overlay(matched).enrich(listOf(option())).single()
+            assertEquals(
+                "epoch=$invalidEpoch",
+                "2026-10-04T08:31:30+02:00",
+                result.stops.last().arrival,
+            )
+            assertEquals(
+                "2026-10-04T08:30:00+02:00",
+                result.stops.last().plannedArrival,
+            )
+        }
     }
 
     @Test
@@ -177,12 +301,68 @@ class ProductionRealtimeJourneyOverlayTest {
 
         val unavailable = GermanyRealtimeOverlayResult.Unavailable(
             reason = GermanyRealtimeUnavailableReason.NETWORK,
-            detail = "offline",
+            detail = "https://provider.example/?token=SECRET&lat=52.665",
         )
         val unavailableResult = overlay(unavailable).enrich(listOf(option())).single()
         assertEquals(RouteRealtimeState.UNAVAILABLE, unavailableResult.realtime?.state)
-        assertEquals("NETWORK: offline", unavailableResult.realtime?.unavailableReason)
+        assertEquals("NETWORK", unavailableResult.realtime?.unavailableReason)
         assertNull(unavailableResult.stops.last().arrival)
+    }
+
+    @Test
+    fun thrownProviderErrorsAreRedactedFromRouteReadiness() {
+        val realtime = ProductionRealtimeJourneyOverlay(
+            fetch = {
+                throw IllegalStateException(
+                    "Bearer SECRET_TOKEN https://provider.example/?lat=52.665&lon=8.237"
+                )
+            },
+            match = { _, _ -> error("matcher should not run") },
+            nowEpochSeconds = { at("08:00:00") / 1_000L },
+        )
+
+        val result = realtime.enrich(listOf(option())).single()
+
+        assertEquals(RouteRealtimeState.UNAVAILABLE, result.realtime?.state)
+        assertEquals("NETWORK", result.realtime?.unavailableReason)
+        assertNull(result.stops.first().departure)
+    }
+
+    @Test(expected = AssertionError::class)
+    fun fatalMatcherErrorsPropagateInsteadOfBeingMaskedAsNetworkFailures() {
+        val realtime = ProductionRealtimeJourneyOverlay(
+            fetch = {
+                GermanyRealtimeFetchResult.Unavailable(
+                    GermanyRealtimeUnavailableReason.NETWORK,
+                    "unused",
+                )
+            },
+            match = { _, _ -> throw AssertionError("fatal matcher state") },
+            nowEpochSeconds = { at("08:00:00") / 1_000L },
+        )
+
+        realtime.enrich(listOf(option()))
+    }
+
+    @Test
+    fun interruptedRealtimeFetchPreservesThreadCancellation() {
+        val realtime = ProductionRealtimeJourneyOverlay(
+            fetch = { throw InterruptedException("request cancelled") },
+            match = { _, _ -> error("matcher should not run") },
+            nowEpochSeconds = { at("08:00:00") / 1_000L },
+        )
+
+        var interruptionPropagated = false
+        try {
+            realtime.enrich(listOf(option()))
+        } catch (_: InterruptedException) {
+            interruptionPropagated = true
+            assertTrue(Thread.currentThread().isInterrupted)
+        } finally {
+            // Do not leak the test's interruption flag into the JUnit runner.
+            Thread.interrupted()
+        }
+        assertTrue(interruptionPropagated)
     }
 
     private fun overlay(
