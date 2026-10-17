@@ -33,7 +33,13 @@ class OfflineTransitCache(
         // Persisted records may predate the realtime-stripping write contract.
         // Never reintroduce live cancellation, platform or ETA data after process restore.
         try {
-            backingStore.load().takeLast(capacity).forEach { plan ->
+            // Prefer the most recent version of each key before applying
+            // capacity, so duplicate legacy records cannot evict valid trips.
+            backingStore.load().asReversed().asSequence()
+                .distinctBy { it.key }
+                .take(capacity)
+                .toList().asReversed()
+                .forEach { plan ->
                 val safe = plan.forOfflineCache()
                 entries[safe.key] = safe
             }
