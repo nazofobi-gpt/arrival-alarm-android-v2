@@ -58,6 +58,14 @@ def placeholders(value: str) -> Counter[tuple[int, str]]:
                 raise ValueError(
                     f"relative flag invalid for no-argument conversion %{conversion} at offset {start}"
                 )
+            if conversion == "n":
+                # Java Formatter permits an argument index but no width,
+                # precision or flags on the line-separator conversion.
+                token = match.group(0)[1:]
+                if match.group(1):
+                    token = token[len(match.group(1)) + 1:]
+                if token != "n":
+                    raise ValueError(f"invalid width, precision or flags for %n at offset {start}")
             continue
         # The '<' flag reuses the preceding argument, without advancing implicit numbering.
         if "<" in match.group(2):
