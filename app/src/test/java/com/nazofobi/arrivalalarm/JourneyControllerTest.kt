@@ -155,6 +155,54 @@ class JourneyControllerTest {
         assertEquals(destination, restored.destination)
     }
 
+    @Test fun journeyStorageFailureDoesNotInterruptArrivalAndLaterSaves() {
+        var failWrites = true
+        var persisted: JourneyUiState? = null
+        val store = object : JourneyStateStore {
+            override fun load(): JourneyUiState? = persisted
+            override fun save(state: JourneyUiState) {
+                if (failWrites) throw IllegalStateException("preferences unavailable")
+                persisted = state
+            }
+        }
+        val controller = JourneyController(stateStore = store)
+        controller.selectStart(GeoPoint(53.083, 8.813))
+        controller.selectDestination(GeoPoint(53.1, 8.9))
+        controller.arm()
+        controller.onDistanceChanged(100.0)
+        assertEquals(JourneyPhase.ARRIVED, controller.state.phase)
+        assertNull(persisted)
+
+        failWrites = false
+        controller.selectDestination(GeoPoint(53.2, 8.9))
+        assertEquals(JourneyPhase.DESTINATION_SELECTED, persisted?.phase)
+        assertNull(persisted?.distanceMeters)
+        controller.arm()
+        assertEquals(JourneyPhase.ARMED, persisted?.phase)
+    }
+
+    @Test fun journeyStorageFailureDoesNotPreventErrorOrAlarmCancellation() {
+        val store = object : JourneyStateStore {
+            override fun load(): JourneyUiState? = null
+            override fun save(state: JourneyUiState) {
+                throw IllegalStateException("storage full")
+            }
+        }
+        val controller = JourneyController(stateStore = store)
+        controller.selectDestination(GeoPoint(53.2, 8.8))
+        assertEquals(JourneyPhase.EMPTY, controller.state.phase)
+        assertNotNull(controller.state.error)
+
+        controller.selectStart(GeoPoint(53.0, 8.0))
+        controller.selectDestination(GeoPoint(53.1, 8.1))
+        controller.arm()
+        controller.onDistanceChanged(350.0)
+        controller.cancelAlarm()
+        assertEquals(JourneyPhase.DESTINATION_SELECTED, controller.state.phase)
+        assertNull(controller.state.distanceMeters)
+        assertNull(controller.state.error)
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun invalidRadiusCannotCreateAlwaysArrivingController() {
         JourneyController(arrivalRadiusMeters = Double.POSITIVE_INFINITY)
