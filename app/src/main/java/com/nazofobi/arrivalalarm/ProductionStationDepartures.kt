@@ -36,6 +36,22 @@ internal fun firstFrequencyBoardAtOrAfter(
     return startSeconds + intervals * headway
 }
 
+/**
+ * Nationwide feeds can reuse a trip ID at the same departure time on different
+ * routes. Distinguish visible service identity before limiting board results.
+ * Repeated updates to the same service still collapse to its first occurrence.
+ */
+internal fun distinctStationDepartures(departures: List<Departure>): List<Departure> =
+    departures.distinctBy { departure ->
+        listOf(
+            departure.tripId,
+            departure.scheduledEpochSeconds,
+            departure.routeId,
+            departure.line,
+            departure.direction,
+        )
+    }
+
 internal class ProductionStationDeparturesPlanner(
     private val index: NationwideTransitIndex,
     private val nowMillis: () -> Long = { System.currentTimeMillis() },
@@ -72,7 +88,7 @@ internal class ProductionStationDeparturesPlanner(
                     )
                 }
             }
-            .distinctBy { it.tripId to it.scheduledEpochSeconds }
+            .let(::distinctStationDepartures)
             .sortedWith(
                 compareBy<Departure> { it.scheduledEpochSeconds }
                     .thenBy { it.tripId }
