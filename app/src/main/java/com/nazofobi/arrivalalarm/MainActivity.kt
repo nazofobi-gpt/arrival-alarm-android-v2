@@ -122,6 +122,7 @@ fun ArrivalAlarmApp(
     onOAuthCallbackConsumed: () -> Unit = {},
     themeMode: ArrivalThemeMode = ArrivalThemeMode.SYSTEM,
     onThemeModeChange: (ArrivalThemeMode) -> Unit = {},
+    transitOverride: ArrivalTransitClient? = null,
 ) {
     val context = LocalContext.current.applicationContext
     val graph = remember(context) { ArrivalAlarmRuntimeGraph.get(context) }
@@ -132,7 +133,9 @@ fun ArrivalAlarmApp(
     val connectorSessionStore = graph.connectorSessionStore
     val connectorBaseUrl = BuildConfig.CONNECTOR_BASE_URL.trim().trimEnd('/')
     val coroutineScope = rememberCoroutineScope()
-    val transit = remember { NationwideTransitGateway(context) }
+    val transit: ArrivalTransitClient = remember(context, transitOverride) {
+        transitOverride ?: NationwideTransitGateway(context)
+    }
     val currentLocation = remember { AndroidCurrentLocation(context) }
     val appPreferences = remember(context) {
         context.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
