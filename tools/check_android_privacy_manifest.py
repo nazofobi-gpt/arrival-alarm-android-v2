@@ -67,6 +67,9 @@ def validate_manifest(source: str) -> list[str]:
         errors.append("android:allowBackup must explicitly be false")
     if app.get(ANDROID + "usesCleartextTraffic") != "false":
         errors.append("android:usesCleartextTraffic must explicitly be false")
+    # Disabled application components cannot run the location foreground service.
+    if app.get(ANDROID + "enabled") not in (None, "true"):
+        errors.append("application must be enabled for tracking")
 
     # A foreign package with the same class basename is not this app's service.
     expected_service_names = {
@@ -85,6 +88,8 @@ def validate_manifest(source: str) -> list[str]:
         service = services[0]
         if service.get(ANDROID + "exported") != "false":
             errors.append("ActiveJourneyService must not be exported")
+        if service.get(ANDROID + "enabled") not in (None, "true"):
+            errors.append("ActiveJourneyService must be enabled")
         types = {
             part.strip()
             for part in (service.get(ANDROID + "foregroundServiceType") or "").split("|")

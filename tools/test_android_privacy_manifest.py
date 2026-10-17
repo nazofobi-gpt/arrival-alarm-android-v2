@@ -74,6 +74,39 @@ class AndroidManifestPrivacyPolicyTest(unittest.TestCase):
         bad = VALID.replace('android:exported="false"', 'android:exported="true"')
         self.assertTrue(any("must not be exported" in e for e in validate_manifest(bad)))
 
+    def test_disabled_application_cannot_pass_tracking_manifest_gate(self):
+        for enabled in ("false", "@bool/tracking_enabled"):
+            with self.subTest(enabled=enabled):
+                bad = VALID.replace(
+                    "<application ",
+                    f'<application android:enabled="{enabled}" ',
+                )
+                self.assertIn(
+                    "application must be enabled for tracking",
+                    validate_manifest(bad),
+                )
+
+    def test_disabled_tracking_service_cannot_pass_manifest_gate(self):
+        for enabled in ("false", "@bool/tracking_enabled"):
+            with self.subTest(enabled=enabled):
+                bad = VALID.replace(
+                    'android:exported="false"',
+                    f'android:enabled="{enabled}" android:exported="false"',
+                )
+                self.assertIn(
+                    "ActiveJourneyService must be enabled",
+                    validate_manifest(bad),
+                )
+
+    def test_explicitly_enabled_application_and_service_pass(self):
+        enabled = VALID.replace(
+            "<application ", '<application android:enabled="true" ',
+        ).replace(
+            'android:exported="false"',
+            'android:enabled="true" android:exported="false"',
+        )
+        self.assertEqual([], validate_manifest(enabled))
+
     def test_missing_or_extra_foreground_service_types_are_rejected(self):
         for value in ("dataSync", "location|dataSync", ""):
             with self.subTest(value=value):
