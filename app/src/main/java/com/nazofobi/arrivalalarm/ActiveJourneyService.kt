@@ -34,7 +34,9 @@ object ActiveJourneyPermissions {
 
     fun hasRequired(context: Context): Boolean {
         val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val hasProvider = runCatching { manager.getProviders(true).isNotEmpty() }.getOrDefault(false)
+        val hasProvider = runCatching {
+            ActiveJourneyLocationProviderSelection.choose(manager.getProviders(true)) != null
+        }.getOrDefault(false)
         return hasRuntimeGrants(context) && hasProvider
     }
 
@@ -197,11 +199,7 @@ class ActiveJourneyService : Service(), LocationListener {
 
     private fun enabledLocationProvider(): String? {
         val providers = runCatching { locationManager.getProviders(true) }.getOrDefault(emptyList())
-        return when {
-            LocationManager.GPS_PROVIDER in providers -> LocationManager.GPS_PROVIDER
-            LocationManager.NETWORK_PROVIDER in providers -> LocationManager.NETWORK_PROVIDER
-            else -> providers.firstOrNull()
-        }
+        return ActiveJourneyLocationProviderSelection.choose(providers)
     }
 
     private fun startLocationForeground(): Boolean {
