@@ -444,6 +444,11 @@ internal class ProductionRealtimeStationOverlay(
         overlay: GermanyRealtimeTripOverlay,
         departure: Departure,
     ): Boolean {
+        // Static feeds may reuse trip IDs across different routes. Do not let
+        // a matched overlay cancel or delay an unrelated station-board service.
+        if (departure.routeId != null && overlay.staticTrip.routeId != departure.routeId) {
+            return false
+        }
         if (!frequencyTrip(departure.tripId)) return true
 
         val expectedDate = departure.realtimeTripStartDate ?: return false
