@@ -46,6 +46,25 @@ class LocaleResourceContractTest(unittest.TestCase):
         self.assertTrue(any("invalid format" in e for e in validate(self.root)))
 
 
+    def test_invalid_java_string_format_flags_are_rejected(self):
+        # Confirmed against Java 21 String.format: these raise
+        # FormatFlagsConversionMismatchException for a String argument.
+        for token in ("%0s", "%05s", "% s", "%,s", "%(s", "%+s"):
+            with self.subTest(token=token):
+                with self.assertRaisesRegex(ValueError, "invalid string format flags"):
+                    placeholders(token)
+
+    def test_valid_java_string_padding_remains_allowed(self):
+        self.assertEqual({(1, "s"): 1}, dict(placeholders("%1$-10s")))
+        self.assertEqual({(1, "s"): 1}, dict(placeholders("%10s")))
+
+    def test_invalid_string_flags_in_matching_locales_are_still_rejected(self):
+        for locale in ("values", "values-de", "values-en"):
+            self.write(locale, '<string name="arrival">Stop %0s</string>')
+        self.assertTrue(
+            any("invalid format for arrival" in error for error in validate(self.root))
+        )
+
     def test_datetime_conversion_suffix_mismatch_is_rejected(self):
         # Both strings have a date/time argument, but H (hour) and M (minute)
         # cannot be substituted for one another by a translator.

@@ -48,8 +48,11 @@ def placeholders(value: str) -> Counter[tuple[int, str]]:
                 raise ValueError(f"unsupported date/time conversion %{conversion} at offset {start}")
         elif conversion not in VALID_CONVERSIONS:
             raise ValueError(f"unsupported format conversion %{conversion} at offset {start}")
-        if conversion.lower() == "s" and "+" in match.group(2):
-            raise ValueError(f"invalid format flag '+' for %{conversion} at offset {start}")
+        if conversion.lower() == "s":
+            # Java Formatter rejects numeric/sign/grouping flags for ordinary strings.
+            # Allow width, left alignment and reuse as normal for %s/%S.
+            if set(match.group(2)).intersection("+0 ,("):
+                raise ValueError(f"invalid string format flags for %{conversion} at offset {start}")
         cursor = match.end()
         if conversion in ("%", "n"):
             # Java Formatter accepts no reused argument for %% or %n.
