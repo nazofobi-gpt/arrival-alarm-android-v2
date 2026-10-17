@@ -72,6 +72,24 @@ class ArrivalProgressPersistenceSafetyInstrumentedTest {
         assertNull(store.load())
     }
 
+
+    @Test(expected = AssertionError::class)
+    fun fatalSharedPreferencesReadErrorMustNotBeSwallowed() {
+        val failingPreferences = object : android.content.SharedPreferences by prefs {
+            override fun contains(key: String?): Boolean =
+                throw AssertionError("fatal persistence read")
+        }
+        SharedPreferencesArrivalProgressStore(failingPreferences).load()
+    }
+
+    @Test fun recoverableSharedPreferencesReadErrorReturnsNoProgress() {
+        val failingPreferences = object : android.content.SharedPreferences by prefs {
+            override fun contains(key: String?): Boolean =
+                throw IllegalStateException("recoverable preferences read failure")
+        }
+        assertNull(SharedPreferencesArrivalProgressStore(failingPreferences).load())
+    }
+
     @Test fun validTerminalArrivalStillSurvivesProcessRecreation() {
         val arrived = ArrivalProgressState(
             routeId = "journey",
