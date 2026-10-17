@@ -119,7 +119,7 @@ class ActiveJourneyService : Service(), LocationListener {
     }
 
     override fun onLocationChanged(location: Location) {
-        if (!location.latitude.isFinite() || !location.longitude.isFinite()) return
+        if (!ArrivalLocationQuality.hasValidCoordinates(location.latitude, location.longitude)) return
         val destination = graph.controller.state.destination ?: return
         val distanceMeters = ArrivalProgressController.distanceMeters(
             GeoPoint(location.latitude, location.longitude),
