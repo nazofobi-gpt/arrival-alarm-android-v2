@@ -65,8 +65,8 @@ class GtfsArchiveMemberTest(unittest.TestCase):
     def test_oversized_csv_fields_fail_with_diagnostic_in_required_and_optional_tables(self):
         too_long = b"X" * (131072 + 1)
         cases = (
-            ("routes.txt", REQUIRED, b"route_id,route_type\\n" + too_long + b",3\\n"),
-            ("feed_info.txt", REQUIRED + ("feed_info.txt",), b"feed_publisher_name\\n" + too_long + b"\\n"),
+            ("routes.txt", REQUIRED, b"route_id,route_type\n" + too_long + b",3\n"),
+            ("feed_info.txt", REQUIRED + ("feed_info.txt",), b"feed_publisher_name\n" + too_long + b"\n"),
         )
         for optimized in (False, True):
             for member, entries, content in cases:
