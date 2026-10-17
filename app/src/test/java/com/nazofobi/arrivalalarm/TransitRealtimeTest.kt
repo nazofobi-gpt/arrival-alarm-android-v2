@@ -28,6 +28,25 @@ class TransitRealtimeTest {
         assertNull(snapshot.updates.single().platform)
     }
 
+    @Test fun malformedVbnHeaderTimestampDoesNotClaimFreshness() {
+        val invalid = listOf("\"2000000\"", "2000000.5", "2000000.0", "true", "null", "-1", "0")
+        for (raw in invalid) {
+            val json = """{"Header":{"Timestamp":$raw},"Entity":[]}"""
+            assertNull(
+                "Non-integral or invalid provider timestamp must be rejected: $raw",
+                VbnJsonRealtimeSource(loader = { json }).fetch(),
+            )
+        }
+    }
+
+    @Test fun validLongVbnHeaderTimestampRemainsSupported() {
+        val timestamp = Int.MAX_VALUE.toLong() + 42L
+        val json = """{"Header":{"Timestamp":$timestamp},"Entity":[]}"""
+        val snapshot = VbnJsonRealtimeSource(loader = { json }).fetch()
+        assertNotNull(snapshot)
+        assertEquals(timestamp, snapshot!!.fetchedAtEpochSeconds)
+    }
+
     @Test fun malformedVbnDelayNeverClaimsZeroMinuteRealtimeEvidence() {
         val invalid = listOf("\"not-a-delay\"", "true", "12.5", "2147483648", "null")
         for (raw in invalid) {

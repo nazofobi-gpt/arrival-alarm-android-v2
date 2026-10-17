@@ -48,7 +48,13 @@ class VbnJsonRealtimeSource(
 
     internal fun parse(json: String): RealtimeSnapshot? {
         val root = JSONObject(json)
-        val timestamp = root.optJSONObject("Header")?.optLong("Timestamp", -1L) ?: -1L
+        // optLong() accepts numeric strings and truncates fractional values.
+        // Neither is valid source-backed freshness evidence for this feed.
+        val timestamp = when (val value = root.optJSONObject("Header")?.opt("Timestamp")) {
+            is Int -> value.toLong()
+            is Long -> value
+            else -> return null
+        }
         if (timestamp <= 0L) return null
         val entities = root.optJSONArray("Entity") ?: return RealtimeSnapshot(timestamp, emptyList())
         val updates = buildList {
