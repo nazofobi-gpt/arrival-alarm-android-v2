@@ -82,6 +82,34 @@ class ProductionRealtimeStationOverlayTest {
     }
 
     @Test
+    fun reusedTripIdRealtimeDoesNotCancelAnotherRoute() {
+        val matched = GermanyRealtimeOverlayResult.Matched(
+            tripOverlays = listOf(
+                GermanyRealtimeTripOverlay(
+                    staticTrip = trip(),
+                    startDate = null,
+                    startTime = null,
+                    cancelled = true,
+                    scheduleRelationship = "CANCELED",
+                    stopUpdates = emptyList(),
+                    sourceTimestampEpochSeconds = 990L,
+                ),
+            ),
+            serviceAlerts = emptyList(),
+            freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+            ageSeconds = 10L,
+            provenance = provenance(),
+        )
+        val otherRoute = planned.copy(routeId = "R2", line = "RE 2")
+        val result = overlay(matched).enrich("A", listOf(otherRoute, planned))
+
+        assertEquals(StationRealtimeState.FRESH_MATCHED, result.realtimeState)
+        assertFalse(result.departures[0].cancelled)
+        assertEquals("1", result.departures[0].platform)
+        assertTrue(result.departures[1].cancelled)
+    }
+
+    @Test
     fun frequencyTripRealtimeFailsClosedWithoutExactInstanceIdentity() {
         val matched = GermanyRealtimeOverlayResult.Matched(
             tripOverlays = listOf(
