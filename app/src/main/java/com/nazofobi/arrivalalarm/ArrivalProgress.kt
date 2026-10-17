@@ -69,6 +69,7 @@ interface ArrivalProgressStateStore {
 
 class ArrivalProgressController(
     private val stateStore: ArrivalProgressStateStore? = null,
+    private val nowEpochMillis: () -> Long = { System.currentTimeMillis() },
 ) {
     var state: ArrivalProgressState = try {
         stateStore?.load() ?: ArrivalProgressState()
@@ -126,7 +127,7 @@ class ArrivalProgressController(
             !fix.accuracyMeters.isFinite() || fix.accuracyMeters < 0.0 ||
             fix.accuracyMeters > ArrivalLocationQuality.MAX_TRACKING_ACCURACY_METERS ||
             !fix.speedMps.isFinite() || fix.speedMps < 0.0 ||
-            fix.epochMillis < 0L
+            fix.epochMillis < 0L || isFarFutureFix(fix.epochMillis)
         ) {
             if (state.consecutiveInsideThreshold != 0 || state.consecutivePastTarget != 0) {
                 setState(state.copy(consecutiveInsideThreshold = 0, consecutivePastTarget = 0))
@@ -210,6 +211,13 @@ class ArrivalProgressController(
             .coerceIn(120.0, 320.0)
     }
 
+    private fun isFarFutureFix(epochMillis: Long): Boolean {
+        if (epochMillis <= 0L) return false // Preserve legacy timestamp-unavailable fixes.
+        val now = nowEpochMillis()
+        return now >= 0L && epochMillis > now &&
+            epochMillis - now > MAX_FUTURE_FIX_SKEW_MILLIS
+    }
+
     private fun setState(newState: ArrivalProgressState) {
         state = newState
         try {
@@ -222,6 +230,9 @@ class ArrivalProgressController(
     }
 
     companion object {
+        // Reject provider clock corruption before it can poison the GPS replay watermark.
+        const val MAX_FUTURE_FIX_SKEW_MILLIS = 30_000L
+
         fun distanceMeters(a: GeoPoint, b: GeoPoint): Double {
             val earthRadius = 6_371_000.0
             val lat1 = Math.toRadians(a.latitude)
