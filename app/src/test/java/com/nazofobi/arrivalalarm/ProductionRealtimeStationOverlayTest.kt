@@ -193,6 +193,63 @@ class ProductionRealtimeStationOverlayTest {
     }
 
     @Test
+    fun invalidStationRealtimeTimestampsKeepScheduledBoard() {
+        val template = GermanyRealtimeMatchedStopUpdate(
+            stopSequence = 1,
+            scheduledStopId = "A",
+            realtimeStopId = "A",
+            assignedStopId = null,
+            platformCode = null,
+            arrivalDelaySeconds = null,
+            departureDelaySeconds = null,
+            arrivalTimeEpochSeconds = null,
+            departureTimeEpochSeconds = null,
+            scheduleRelationship = "SCHEDULED",
+            pickupType = null,
+            dropOffType = null,
+            stopHeadsign = null,
+        )
+
+        fun projectedDeparture(absoluteSeconds: Long?, delaySeconds: Int?): Long? {
+            val matched = GermanyRealtimeOverlayResult.Matched(
+                tripOverlays = listOf(
+                    GermanyRealtimeTripOverlay(
+                        staticTrip = trip(),
+                        startDate = null,
+                        startTime = null,
+                        cancelled = false,
+                        scheduleRelationship = "SCHEDULED",
+                        stopUpdates = listOf(
+                            template.copy(
+                                departureTimeEpochSeconds = absoluteSeconds,
+                                departureDelaySeconds = delaySeconds,
+                            ),
+                        ),
+                        sourceTimestampEpochSeconds = 990L,
+                    ),
+                ),
+                serviceAlerts = emptyList(),
+                freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+                ageSeconds = 10L,
+                provenance = provenance(),
+            )
+            return overlay(matched).enrich("A", listOf(planned))
+                .departures.single().realtimeEpochSeconds
+        }
+
+        // An explicit malformed absolute time must not be replaced by a delay.
+        assertNull(projectedDeparture(0L, 120))
+        assertNull(projectedDeparture(-1L, null))
+        assertNull(projectedDeparture(Long.MAX_VALUE, null))
+        assertNull(projectedDeparture(null, -1_200))
+
+        // Valid positive estimates and early-running services remain supported.
+        assertEquals(1_030L, projectedDeparture(1_030L, -1_200))
+        assertEquals(1_120L, projectedDeparture(null, 120))
+        assertEquals(880L, projectedDeparture(null, -120))
+    }
+
+    @Test
     fun frequencyTripRealtimeFailsClosedWithoutExactInstanceIdentity() {
         val matched = GermanyRealtimeOverlayResult.Matched(
             tripOverlays = listOf(
