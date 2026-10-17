@@ -84,7 +84,9 @@ class JourneyController(
             update(state.copy(error = "Geçerli başlangıç ve hedef gerekli"))
             return
         }
-        update(state.copy(phase = JourneyPhase.ARMED, error = null))
+        // An earlier arrival distance is not evidence for the newly armed alarm.
+        val distance = if (state.phase == JourneyPhase.ARRIVED) null else state.distanceMeters
+        update(state.copy(phase = JourneyPhase.ARMED, distanceMeters = distance, error = null))
     }
 
     fun cancelAlarm() {

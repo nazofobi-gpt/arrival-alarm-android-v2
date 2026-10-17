@@ -203,6 +203,41 @@ class JourneyControllerTest {
         assertNull(controller.state.error)
     }
 
+    @Test fun rearmingAfterArrivalClearsStaleDistanceAndPersistsReset() {
+        var persisted: JourneyUiState? = null
+        val store = object : JourneyStateStore {
+            override fun load(): JourneyUiState? = persisted
+            override fun save(state: JourneyUiState) { persisted = state }
+        }
+        val controller = JourneyController(stateStore = store)
+        controller.selectStart(GeoPoint(53.083, 8.813))
+        controller.selectDestination(GeoPoint(53.1, 8.9))
+        controller.arm()
+        controller.onDistanceChanged(100.0)
+        assertEquals(JourneyPhase.ARRIVED, controller.state.phase)
+        assertEquals(100.0, persisted?.distanceMeters)
+
+        controller.arm()
+        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+        assertNull(controller.state.distanceMeters)
+        assertNull(persisted?.distanceMeters)
+
+        controller.onDistanceChanged(500.0)
+        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+        assertEquals(500.0, persisted?.distanceMeters)
+    }
+
+    @Test fun armingAlreadyArmedJourneyRetainsFreshDistance() {
+        val controller = JourneyController()
+        controller.selectStart(GeoPoint(53.083, 8.813))
+        controller.selectDestination(GeoPoint(53.1, 8.9))
+        controller.arm()
+        controller.onDistanceChanged(500.0)
+        controller.arm()
+        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+        assertEquals(500.0, controller.state.distanceMeters)
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun invalidRadiusCannotCreateAlwaysArrivingController() {
         JourneyController(arrivalRadiusMeters = Double.POSITIVE_INFINITY)
