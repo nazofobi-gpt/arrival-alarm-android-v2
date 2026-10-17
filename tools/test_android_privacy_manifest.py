@@ -6,6 +6,7 @@ from check_android_privacy_manifest import validate_manifest
 
 VALID = """<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -26,7 +27,7 @@ class AndroidManifestPrivacyPolicyTest(unittest.TestCase):
 
     def test_each_required_permission_is_checked(self):
         for permission in (
-            "ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION",
+            "INTERNET", "ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION",
             "FOREGROUND_SERVICE", "FOREGROUND_SERVICE_LOCATION",
             "POST_NOTIFICATIONS",
         ):
