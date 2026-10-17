@@ -297,4 +297,29 @@ class GuidanceReliabilityTest {
         assertEquals(instruction.key, controller.state.lastSpokenKey)
     }
 
+
+    @Test fun restoredAlreadySpokenPendingIsClearedWithoutReplay() {
+        val instruction = GuidanceUtterance("stop:lo", "Sıradaki durak Lohne", "tr-TR")
+        var saved = GuidanceReliabilityState(
+            lastSpokenKey = instruction.key,
+            pending = instruction,
+            pendingSinceEpochMillis = 100_000L,
+        )
+        val store = object : GuidanceStateStore {
+            override fun load(): GuidanceReliabilityState = saved
+            override fun save(state: GuidanceReliabilityState) { saved = state }
+        }
+        val speaker = RecordingSpeaker()
+        val controller = GuidanceReliabilityController(speaker, store, nowEpochMillis = { 100_100L })
+
+        controller.onPermissions(GuidancePermissionSnapshot(true, true, true))
+        assertTrue(speaker.spoken.isEmpty())
+        assertEquals(instruction.key, controller.state.lastSpokenKey)
+        assertNull(controller.state.pending)
+        assertNull(controller.state.pendingSinceEpochMillis)
+
+        val recreated = GuidanceReliabilityController(speaker, store, nowEpochMillis = { 100_200L })
+        assertFalse(recreated.retryPending())
+        assertTrue(speaker.spoken.isEmpty())
+    }
 }
