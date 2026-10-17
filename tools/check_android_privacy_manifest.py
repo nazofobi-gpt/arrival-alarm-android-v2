@@ -13,6 +13,7 @@ import xml.etree.ElementTree as ET
 
 ANDROID = "{http://schemas.android.com/apk/res/android}"
 REQUIRED_PERMISSIONS = {
+    "android.permission.INTERNET",
     "android.permission.ACCESS_COARSE_LOCATION",
     "android.permission.ACCESS_FINE_LOCATION",
     "android.permission.FOREGROUND_SERVICE",
