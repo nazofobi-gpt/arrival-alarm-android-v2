@@ -39,6 +39,12 @@ class LocaleResourceContractTest(unittest.TestCase):
         self.write("values-de", '<string name="arrival">In %2$s Min. zu %1$s</string>')
         self.assertTrue(any("format arguments differ" in e for e in validate(self.root)))
 
+    def test_string_plus_flag_is_invalid_even_when_types_match(self):
+        # Java Formatter throws FormatFlagsConversionMismatchException for %+s.
+        # The translation gate must reject it instead of ignoring the flag.
+        self.write("values-de", '<string name="arrival">Stop %+s in %2$d min</string>')
+        self.assertTrue(any("invalid format" in e for e in validate(self.root)))
+
 
     def test_datetime_conversion_suffix_mismatch_is_rejected(self):
         # Both strings have a date/time argument, but H (hour) and M (minute)
