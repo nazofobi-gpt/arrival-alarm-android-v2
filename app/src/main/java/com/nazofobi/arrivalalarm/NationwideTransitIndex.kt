@@ -9,6 +9,7 @@ import java.io.InputStream
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLConnection
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.Locale
@@ -66,8 +67,17 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
     fun importStops(url: String, onCount: (Int) -> Unit) = importFeed(url, onCount)
 
     fun importFeed(url: String, onCount: (Int) -> Unit) {
+        importFeedWithConnection(url, onCount, URL(url).openConnection())
+    }
+
+    /** Injected URLConnection is used only for deterministic HTTP/SQLite acceptance tests. */
+    internal fun importFeedWithConnection(
+        url: String,
+        onCount: (Int) -> Unit,
+        connection: URLConnection,
+    ) {
         val db = writableDatabase
-        val connection = URL(url).openConnection().apply {
+        connection.apply {
             connectTimeout = 15_000
             readTimeout = 60_000
         }
@@ -90,7 +100,10 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             if (status == HttpURLConnection.HTTP_NOT_MODIFIED) {
                 http.disconnect()
                 // HTTP 304 does not change the usable feed or fetch timestamp.
-                if (validators.isNotEmpty() && isReady()) return
+                if (validators.isNotEmpty() && isReady()) {
+                    onCount(stopCount())
+                    return
+                }
                 error("GTFS beklenmeyen HTTP 304")
             }
             if (status !in 200..299) {
