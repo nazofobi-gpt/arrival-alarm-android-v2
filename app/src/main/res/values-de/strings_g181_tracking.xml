@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tracking_notification_degraded">Standort nicht verfügbar oder ungenau; Alarm aktiv, warte auf neue Ortung</string>
+    <string name="tracking_notification_acquiring">Standort wird aktualisiert</string>
+    <string name="tracking_notification_distance">Noch etwa %1$d m bis zum Ziel</string>
+    <string name="tracking_notification_title">Ankunftsalarm aktiv</string>
+    <string name="tracking_notification_arrived_title">Ziel erreicht</string>
+    <string name="tracking_notification_arrived_text">Ankunftsalarm abgeschlossen.</string>
+</resources>
