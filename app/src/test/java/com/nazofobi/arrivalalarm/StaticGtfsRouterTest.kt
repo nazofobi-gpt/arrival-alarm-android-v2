@@ -89,6 +89,33 @@ class StaticGtfsRouterTest {
         assertEquals(at("10:15:00") + 30_000L, journey.arrivalEpochMillis)
     }
 
+    @Test fun nextServiceDayBoardsAfterMidnightFromPriorEvening() {
+        val tomorrow = GtfsServiceDate(2026, 10, 3)
+        val data = FakeData(
+            candidates = mapOf("A" to listOf(candidate("NEXT", "R1", "S", 1, "00:10:00"))),
+            times = mapOf(
+                "NEXT" to listOf(
+                    st("NEXT", 1, "A", "00:10:00"),
+                    st("NEXT", 2, "B", "00:25:00"),
+                ),
+            ),
+        )
+        val result = StaticGtfsRouter(data, zone).route(
+            origins = listOf(StaticRouterAccess("A")),
+            destinations = listOf(StaticRouterAccess("B")),
+            serviceDate = tomorrow,
+            departureEpochMillis = at("23:50:00"),
+        )
+
+        val journey = (result as StaticRouterResult.Journeys).journeys.single()
+        assertEquals("NEXT", journey.legs.single().tripId)
+        assertEquals(
+            GtfsServiceTime.parse("00:25:00").resolve(tomorrow, zone).epochMillis,
+            journey.arrivalEpochMillis,
+        )
+        assertTrue(data.candidateQueryCount > 0)
+    }
+
     @Test fun implicitSameStopTransferWorksWithoutTransfersFile() {
         val data = baseTransferData()
         val result = StaticGtfsRouter(data, zone, implicitTransferSeconds = 120).route(

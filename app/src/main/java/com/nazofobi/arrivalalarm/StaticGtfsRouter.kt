@@ -798,7 +798,10 @@ class StaticGtfsRouter(
     private fun serviceSeconds(epochMillis: Long, serviceDate: GtfsServiceDate): Int? {
         val anchor = GtfsServiceTime.parse("00:00:00").resolve(serviceDate, agencyTimeZone).epochMillis
         val deltaMillis = epochMillis - anchor
-        if (deltaMillis < 0L) return null
+        // A route can start before the next civil service-day anchor (e.g. 23:50
+        // today, boarding a 00:10 trip tomorrow). Query that date from its first
+        // second rather than suppressing valid after-midnight service.
+        if (deltaMillis < 0L) return 0
         val seconds = deltaMillis / 1_000L + if (deltaMillis % 1_000L == 0L) 0L else 1L
         return seconds.takeIf { it <= Int.MAX_VALUE }?.toInt()
     }
