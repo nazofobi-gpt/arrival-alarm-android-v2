@@ -110,6 +110,57 @@ class ProductionRealtimeStationOverlayTest {
     }
 
     @Test
+    fun skippedStopIsUnavailableOnlyAtThatStation() {
+        val skipped = GermanyRealtimeMatchedStopUpdate(
+            stopSequence = 1,
+            scheduledStopId = "A",
+            realtimeStopId = "A",
+            assignedStopId = null,
+            platformCode = null,
+            arrivalDelaySeconds = null,
+            departureDelaySeconds = 90,
+            arrivalTimeEpochSeconds = null,
+            departureTimeEpochSeconds = 1_140L,
+            scheduleRelationship = "SKIPPED",
+            pickupType = null,
+            dropOffType = null,
+            stopHeadsign = null,
+        )
+        val next = skipped.copy(
+            stopSequence = 2,
+            scheduledStopId = "B",
+            realtimeStopId = "B",
+            departureDelaySeconds = 30,
+            departureTimeEpochSeconds = 1_030L,
+            scheduleRelationship = "SCHEDULED",
+        )
+        val matched = GermanyRealtimeOverlayResult.Matched(
+            tripOverlays = listOf(
+                GermanyRealtimeTripOverlay(
+                    staticTrip = trip(),
+                    startDate = null,
+                    startTime = null,
+                    cancelled = false,
+                    scheduleRelationship = "SCHEDULED",
+                    stopUpdates = listOf(skipped, next),
+                    sourceTimestampEpochSeconds = 990L,
+                ),
+            ),
+            serviceAlerts = emptyList(),
+            freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+            ageSeconds = 10L,
+            provenance = provenance(),
+        )
+
+        val stationA = overlay(matched).enrich("A", listOf(planned))
+        val stationB = overlay(matched).enrich("B", listOf(planned))
+        assertTrue(stationA.departures.single().cancelled)
+        assertNull(stationA.departures.single().realtimeEpochSeconds)
+        assertFalse(stationB.departures.single().cancelled)
+        assertEquals(1_030L, stationB.departures.single().realtimeEpochSeconds)
+    }
+
+    @Test
     fun frequencyTripRealtimeFailsClosedWithoutExactInstanceIdentity() {
         val matched = GermanyRealtimeOverlayResult.Matched(
             tripOverlays = listOf(

@@ -364,12 +364,17 @@ internal class ProductionRealtimeStationOverlay(
                 ?: return@map departure
             val update = trip.stopUpdates.firstOrNull { it.scheduledStopId == stopId }
             matchedAny = true
+            // SKIPPED is stop-specific; do not offer boarding here or project
+            // a predicted departure. Other stops of this trip remain available.
+            val skippedAtStop = update?.scheduleRelationship == "SKIPPED"
             departure.copy(
-                realtimeEpochSeconds = update?.departureTimeEpochSeconds
-                    ?: update?.departureDelaySeconds?.let {
-                        departure.scheduledEpochSeconds + it
-                    },
-                cancelled = trip.cancelled,
+                realtimeEpochSeconds = if (skippedAtStop) null else {
+                    update?.departureTimeEpochSeconds
+                        ?: update?.departureDelaySeconds?.let {
+                            departure.scheduledEpochSeconds + it
+                        }
+                },
+                cancelled = trip.cancelled || skippedAtStop,
                 platform = update?.platformCode ?: departure.platform,
             )
         }
