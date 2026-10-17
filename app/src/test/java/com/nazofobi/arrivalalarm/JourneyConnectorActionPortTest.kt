@@ -261,4 +261,38 @@ class JourneyConnectorActionPortTest {
         assertEquals(1, cancelled)
     }
 
+
+    @Test fun rejectedConnectorCoordinatesKeepExistingSelectedTripAndVersion() {
+        val controller = JourneyController()
+        val route = RouteOption(
+            id = "lo-re9",
+            origin = MapPoint(52.66, 8.23, "Lohne"),
+            destination = MapPoint(53.08, 8.81, "Bremen Hbf"),
+            line = "RE 9",
+            direction = "Bremen Hbf",
+            departure = "08:00",
+            arrival = "08:45",
+            walkingMinutes = 0,
+            transfers = 0,
+        )
+        val port = JourneyConnectorActionPort(
+            controller = controller,
+            routeResolver = { id -> route.takeIf { it.id == id } },
+            nowEpochSeconds = { 80_000L },
+        )
+        assertTrue(port.setOrigin(route.origin).applied)
+        assertTrue(port.setDestination(route.destination).applied)
+        assertTrue(port.selectJourney(route.id).applied)
+        val before = port.readSnapshot()
+
+        assertFalse(port.setOrigin(MapPoint(Double.NaN, 8.23, "Invalid")).applied)
+        assertFalse(port.setDestination(MapPoint(95.0, 8.81, "Invalid")).applied)
+
+        val after = port.readSnapshot()
+        assertEquals(before.stateVersion, after.stateVersion)
+        assertEquals(before.activeTrip, after.activeTrip)
+        assertEquals(before.journeyPhase, after.journeyPhase)
+        assertEquals(GeoPoint(route.origin.latitude, route.origin.longitude), controller.state.start)
+        assertEquals(GeoPoint(route.destination.latitude, route.destination.longitude), controller.state.destination)
+    }
 }
