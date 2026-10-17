@@ -176,7 +176,16 @@ internal class ProductionRealtimeJourneyOverlay(
         plannedIso: String?,
         delaySeconds: Int?,
     ): String? {
-        epochSeconds?.let { return iso(it * 1_000L) }
+        epochSeconds?.let { seconds ->
+            // Invalid provider epochs must never overflow into plausible-looking
+            // historical or future stop times.
+            val millis = try {
+                Math.multiplyExact(seconds, 1_000L)
+            } catch (_: ArithmeticException) {
+                return null
+            }
+            return iso(millis)
+        }
         if (plannedIso == null || delaySeconds == null) return null
         val plannedMillis = parseIsoMillis(plannedIso) ?: return null
         return iso(plannedMillis + delaySeconds * 1_000L)
