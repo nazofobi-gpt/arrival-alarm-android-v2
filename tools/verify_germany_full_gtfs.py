@@ -30,6 +30,8 @@ def inspect(zf, member):
             return {"rows": sum(1 for _ in reader), "header": header}
     except UnicodeDecodeError:
         raise SystemExit(f"invalid UTF-8 in GTFS table {member}") from None
+    except csv.Error:
+        raise SystemExit(f"invalid CSV in GTFS table {member}") from None
     except StopIteration:
         raise SystemExit(f"empty GTFS table {member}: missing CSV header") from None
 
