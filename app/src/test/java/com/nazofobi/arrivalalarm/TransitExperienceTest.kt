@@ -166,6 +166,17 @@ class TransitExperienceTest {
         assertTrue(persistedFavorites.isEmpty())
     }
 
+    @Test fun duplicateRestoredRecentsDoNotDisplaceDistinctJourneyHistory() {
+        val store = TransitRecentsStore(
+            maxItems = 3,
+            recentTripIds = listOf("trip-a", "trip-a", "trip-b", "trip-c"),
+        )
+        assertEquals(listOf("trip-a", "trip-b", "trip-c"), store.recents())
+
+        store.recordTrip("trip-b")
+        assertEquals(listOf("trip-b", "trip-a", "trip-c"), store.recents())
+    }
+
     @Test fun favoritesAndRecentsCanSeedAndPublishPersistentState() {
         var savedFavorites = emptyList<String>()
         var savedRecents = emptyList<String>()

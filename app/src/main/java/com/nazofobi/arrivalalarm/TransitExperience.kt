@@ -72,7 +72,7 @@ class TransitRecentsStore(
 ) {
     private val favorites = linkedSetOf<String>().apply { addAll(favoriteIds) }
     private val recents = ArrayDeque<String>().apply {
-        recentTripIds.take(maxItems.coerceAtLeast(0)).forEach { addLast(it) }
+        recentTripIds.distinct().take(maxItems.coerceAtLeast(0)).forEach { addLast(it) }
     }
 
     fun isFavorite(stopId: String): Boolean = stopId in favorites
