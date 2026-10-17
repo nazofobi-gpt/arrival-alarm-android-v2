@@ -27,7 +27,19 @@ CASES = {
 }
 
 def member_map(zf):
-    return {n.rsplit("/", 1)[-1].lower(): n for n in zf.namelist() if not n.endswith("/")}
+    consumed_tables = {
+        "stops.txt", "routes.txt", "trips.txt", "stop_times.txt",
+        "calendar.txt", "calendar_dates.txt", "feed_info.txt",
+    }
+    names = {}
+    for member in zf.namelist():
+        if member.endswith("/"):
+            continue
+        name = member.rsplit("/", 1)[-1].lower()
+        if name in consumed_tables and name in names:
+            raise SystemExit(f"duplicate GTFS table {name}: {names[name]} and {member}")
+        names[name] = member
+    return names
 
 def rows(zf, member):
     raw = zf.open(member)

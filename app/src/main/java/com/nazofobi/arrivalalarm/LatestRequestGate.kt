@@ -9,11 +9,18 @@ import java.util.concurrent.atomic.AtomicLong
 internal class LatestRequestGate {
     private val generation = AtomicLong(0L)
 
-    fun begin(): Long = generation.incrementAndGet()
+    @Synchronized fun begin(): Long = generation.incrementAndGet()
 
-    fun invalidate() {
+    @Synchronized fun invalidate() {
         generation.incrementAndGet()
     }
 
     fun isCurrent(token: Long): Boolean = token == generation.get()
+
+    /** Runs the callback atomically against a simultaneous selection change. */
+    @Synchronized fun commitIfCurrent(token: Long, update: () -> Unit): Boolean {
+        if (!isCurrent(token)) return false
+        update()
+        return true
+    }
 }
