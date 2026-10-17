@@ -13,6 +13,17 @@ class SearchMapPlannerTest {
         assertTrue(planner.search("Bremen").any { it.label.contains("Bremen") })
     }
 
+    @Test fun nonPositiveSearchAndNearbyLimitsReturnEmptyWithoutThrowing() {
+        val center = MapPoint(52.5250, 13.3695, "Berlin")
+        for (limit in listOf(0, -1, Int.MIN_VALUE)) {
+            assertTrue("search limit=$limit", planner.search("Berlin", limit).isEmpty())
+            assertTrue("nearby limit=$limit", planner.nearby(center, limit).isEmpty())
+            assertTrue("markers limit=$limit", planner.mapMarkers(center, limit).isEmpty())
+        }
+        assertTrue(planner.search("Berlin", 1).isNotEmpty())
+        assertTrue(planner.nearby(center, 1).isNotEmpty())
+    }
+
     @Test fun nearestStopsAreRankedAndExposeBearing() {
         val near = planner.nearby(MapPoint(52.5250, 13.3695, "current"), 2)
         assertEquals("Berlin Hauptbahnhof", near.first().stop.name)
