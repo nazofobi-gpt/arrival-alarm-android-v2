@@ -43,6 +43,25 @@ class GtfsArchiveMemberTest(unittest.TestCase):
             self.assertFalse(report.exists(), "Unverified feed must not create a success report")
             return result, report
 
+    def test_duplicate_columns_in_required_and_optional_tables_fail_closed(self):
+        cases = (
+            ("routes.txt", REQUIRED, b"route_id,route_id,route_type\nR,WRONG,3\n"),
+            (
+                "feed_info.txt",
+                REQUIRED + ("feed_info.txt",),
+                b"feed_publisher_name,feed_publisher_name\nAgency,Wrong\n",
+            ),
+        )
+        for optimized in (False, True):
+            for member, entries, content in cases:
+                with self.subTest(member=member, optimized=optimized):
+                    result, _ = self.run_archive(
+                        entries, {member: content}, optimized=optimized,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn(f"duplicate GTFS column {member}: ", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+
     def test_missing_required_columns_fail_closed_in_normal_and_optimized_python(self):
         valid = {
             "stops.txt": b"stop_id,stop_name,stop_lat,stop_lon\n1,Test,52.0,8.0\n",

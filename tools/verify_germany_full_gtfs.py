@@ -22,6 +22,11 @@ def inspect(zf, member):
             header = next(reader)
             if not any(column.strip() for column in header):
                 raise SystemExit(f"empty GTFS table {member}: missing CSV header")
+            seen = set()
+            for column in header:
+                if column in seen:
+                    raise SystemExit(f"duplicate GTFS column {member}: {column}")
+                seen.add(column)
             return {"rows": sum(1 for _ in reader), "header": header}
     except UnicodeDecodeError:
         raise SystemExit(f"invalid UTF-8 in GTFS table {member}") from None
