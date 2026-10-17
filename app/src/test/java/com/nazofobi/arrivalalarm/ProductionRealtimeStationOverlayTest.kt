@@ -110,6 +110,34 @@ class ProductionRealtimeStationOverlayTest {
     }
 
     @Test
+    fun missingBoardRouteIdDoesNotInheritRealtimeFromAnotherService() {
+        val matched = GermanyRealtimeOverlayResult.Matched(
+            tripOverlays = listOf(
+                GermanyRealtimeTripOverlay(
+                    staticTrip = trip(),
+                    startDate = null,
+                    startTime = null,
+                    cancelled = true,
+                    scheduleRelationship = "CANCELED",
+                    stopUpdates = emptyList(),
+                    sourceTimestampEpochSeconds = 990L,
+                ),
+            ),
+            serviceAlerts = emptyList(),
+            freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+            ageSeconds = 10L,
+            provenance = provenance(),
+        )
+        val unknownRoute = planned.copy(routeId = null)
+        val result = overlay(matched).enrich("A", listOf(unknownRoute, planned))
+
+        assertFalse(result.departures[0].cancelled)
+        assertNull(result.departures[0].realtimeEpochSeconds)
+        assertEquals("1", result.departures[0].platform)
+        assertTrue(result.departures[1].cancelled)
+    }
+
+    @Test
     fun skippedStopIsUnavailableOnlyAtThatStation() {
         val skipped = GermanyRealtimeMatchedStopUpdate(
             stopSequence = 1,
