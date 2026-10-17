@@ -95,4 +95,22 @@ class SettingsLocationReadinessPolicyTest {
             )
         )
     }
+
+    @Test(expected = AssertionError::class)
+    fun fatalLocationToggleErrorMustReachCaller() {
+        isDeviceLocationEnabledForTracking(
+            sdkInt = 36,
+            locationEnabled = { throw AssertionError("fatal location toggle") },
+            enabledProviders = { listOf(LocationManager.GPS_PROVIDER) },
+        )
+    }
+
+    @Test(expected = AssertionError::class)
+    fun fatalLegacyProviderErrorMustReachCaller() {
+        isDeviceLocationEnabledForTracking(
+            sdkInt = 27,
+            locationEnabled = { false },
+            enabledProviders = { throw AssertionError("fatal provider query") },
+        )
+    }
 }
