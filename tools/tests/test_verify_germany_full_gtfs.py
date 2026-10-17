@@ -62,6 +62,22 @@ class GtfsArchiveMemberTest(unittest.TestCase):
                     self.assertIn(f"duplicate GTFS column {member}: ", result.stderr)
                     self.assertNotIn("Traceback", result.stderr)
 
+    def test_oversized_csv_fields_fail_with_diagnostic_in_required_and_optional_tables(self):
+        too_long = b"X" * (131072 + 1)
+        cases = (
+            ("routes.txt", REQUIRED, b"route_id,route_type\\n" + too_long + b",3\\n"),
+            ("feed_info.txt", REQUIRED + ("feed_info.txt",), b"feed_publisher_name\\n" + too_long + b"\\n"),
+        )
+        for optimized in (False, True):
+            for member, entries, content in cases:
+                with self.subTest(member=member, optimized=optimized):
+                    result, _ = self.run_archive(
+                        entries, {member: content}, optimized=optimized,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn(f"invalid CSV in GTFS table {member}", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+
     def test_missing_required_columns_fail_closed_in_normal_and_optimized_python(self):
         valid = {
             "stops.txt": b"stop_id,stop_name,stop_lat,stop_lon\n1,Test,52.0,8.0\n",
