@@ -462,7 +462,8 @@ internal class ProductionRealtimeStationOverlay(
     ): Boolean {
         // Static feeds may reuse trip IDs across different routes. Do not let
         // a matched overlay cancel or delay an unrelated station-board service.
-        if (departure.routeId != null && overlay.staticTrip.routeId != departure.routeId) {
+        // A missing board route ID cannot prove which reused trip this is.
+        if (departure.routeId == null || overlay.staticTrip.routeId != departure.routeId) {
             return false
         }
         if (!frequencyTrip(departure.tripId)) return true
