@@ -39,6 +39,28 @@ class AndroidManifestPrivacyPolicyTest(unittest.TestCase):
                     any("missing required permission" in e for e in validate_manifest(bad))
                 )
 
+    def test_required_permissions_must_remain_available_on_api36(self):
+        for permission in ("INTERNET", "ACCESS_FINE_LOCATION", "FOREGROUND_SERVICE_LOCATION"):
+            for max_sdk in ("35", "invalid"):
+                with self.subTest(permission=permission, max_sdk=max_sdk):
+                    original = f'android:name="android.permission.{permission}" />'
+                    limited = original.replace(
+                        " />", f' android:maxSdkVersion="{max_sdk}" />'
+                    )
+                    errors = validate_manifest(VALID.replace(original, limited))
+                    self.assertIn(
+                        f"required permission unavailable on API 36: android.permission.{permission}",
+                        errors,
+                    )
+
+        original = 'android:name="android.permission.INTERNET" />'
+        allowed = original.replace(" />", ' android:maxSdkVersion="36" />')
+        self.assertEqual([], validate_manifest(VALID.replace(original, allowed)))
+        duplicate = VALID.replace(original, original.replace(
+            " />", ' android:maxSdkVersion="35" />'
+        ) + "\n    <uses-permission " + original)
+        self.assertEqual([], validate_manifest(duplicate))
+
     def test_background_location_is_rejected(self):
         bad = VALID.replace(
             "<application",
