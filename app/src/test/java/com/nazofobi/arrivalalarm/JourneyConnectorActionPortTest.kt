@@ -261,4 +261,54 @@ class JourneyConnectorActionPortTest {
         assertEquals(1, cancelled)
     }
 
+
+    @Test fun invalidOriginDoesNotClearSelectedTripOrReportSuccess() {
+        val route = RouteOption(
+            id = "route-a",
+            origin = MapPoint(52.66, 8.23, "Lohne"),
+            destination = MapPoint(53.08, 8.81, "Bremen"),
+            line = "RE 9", direction = "Bremen",
+            departure = "10:00", arrival = "11:00", walkingMinutes = 0, transfers = 0,
+        )
+        val port = JourneyConnectorActionPort(
+            controller = JourneyController(),
+            routeResolver = { id -> route.takeIf { it.id == id } },
+            nowEpochSeconds = { 100_000L },
+        )
+        assertTrue(port.setOrigin(route.origin).applied)
+        assertTrue(port.setDestination(route.destination).applied)
+        assertTrue(port.selectJourney(route.id).applied)
+        val before = port.readSnapshot()
+
+        assertFalse(port.setOrigin(MapPoint(Double.NaN, 8.2, "Invalid")).applied)
+        val after = port.readSnapshot()
+        assertEquals(before.stateVersion, after.stateVersion)
+        assertEquals(before.journeyPhase, after.journeyPhase)
+        assertEquals(before.activeTrip, after.activeTrip)
+    }
+
+    @Test fun invalidDestinationDoesNotClearSelectedTripOrReportSuccess() {
+        val route = RouteOption(
+            id = "route-b",
+            origin = MapPoint(52.66, 8.23, "Lohne"),
+            destination = MapPoint(53.08, 8.81, "Bremen"),
+            line = "RE 9", direction = "Bremen",
+            departure = "10:00", arrival = "11:00", walkingMinutes = 0, transfers = 0,
+        )
+        val port = JourneyConnectorActionPort(
+            controller = JourneyController(),
+            routeResolver = { id -> route.takeIf { it.id == id } },
+            nowEpochSeconds = { 100_000L },
+        )
+        assertTrue(port.setOrigin(route.origin).applied)
+        assertTrue(port.setDestination(route.destination).applied)
+        assertTrue(port.selectJourney(route.id).applied)
+        val before = port.readSnapshot()
+
+        assertFalse(port.setDestination(MapPoint(53.08, 181.0, "Invalid")).applied)
+        val after = port.readSnapshot()
+        assertEquals(before.stateVersion, after.stateVersion)
+        assertEquals(before.journeyPhase, after.journeyPhase)
+        assertEquals(before.activeTrip, after.activeTrip)
+    }
 }
