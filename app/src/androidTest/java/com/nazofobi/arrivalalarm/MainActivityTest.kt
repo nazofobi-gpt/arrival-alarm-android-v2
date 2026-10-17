@@ -328,6 +328,26 @@ class MainActivityTest {
             .assertIsNotSelected()
     }
 
+    @Test fun bottomNavigationExposesLocalizedLabelsAndSelection() {
+        val destinations = listOf(
+            "nav-home" to R.string.nav_home,
+            "nav-search" to R.string.nav_search,
+            "nav-journey" to R.string.nav_journey,
+            "nav-departures" to R.string.nav_departures,
+            "nav-settings" to R.string.nav_settings,
+        )
+
+        destinations.forEach { (tag, labelRes) ->
+            rule.onNodeWithTag(tag)
+                .assertIsDisplayed()
+                .performClick()
+            rule.waitForIdle()
+            rule.onNodeWithTag(tag)
+                .assertIsSelected()
+                .assertTextContains(rule.activity.getString(labelRes), substring = true)
+        }
+    }
+
     @Test fun primaryScreensAreSeparatedByBottomNavigation() {
         rule.onNodeWithTag("home-overview").assertIsDisplayed()
         assertTrue(rule.onAllNodesWithTag("settings-readiness-panel").fetchSemanticsNodes().isEmpty())
