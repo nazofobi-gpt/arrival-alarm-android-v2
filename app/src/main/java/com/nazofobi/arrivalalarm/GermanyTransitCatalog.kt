@@ -90,7 +90,23 @@ class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
         ) return emptyList()
         return snapshot.trips.filter { it.providerId == providerId && it.routeId == routeId }
     }
-    fun routesServing(originStopId:String,destinationStopId:String):List<CatalogRoute> = snapshot.routes.filter { route -> val a=route.stopIds.indexOf(originStopId); val b=route.stopIds.indexOf(destinationStopId); a>=0 && b>a }
+    /**
+     * GTFS stop IDs are provider-local. A route must match the selected origin
+     * and destination in the same provider, not just two coincidentally equal IDs.
+     * Cross-provider travel requires an explicit transfer graph, which this
+     * direct-route catalog does not implement.
+     */
+    fun routesServing(originStop: CatalogStop, destinationStop: CatalogStop): List<CatalogRoute> {
+        if (originStop.providerId.isBlank() || originStop.providerId != destinationStop.providerId ||
+            originStop.id.isBlank() || destinationStop.id.isBlank()
+        ) return emptyList()
+        return snapshot.routes.filter { route ->
+            if (route.providerId != originStop.providerId) return@filter false
+            val boarding = route.stopIds.indexOf(originStop.id)
+            val alighting = route.stopIds.indexOf(destinationStop.id)
+            boarding >= 0 && alighting > boarding
+        }
+    }
 
     fun nearestStops(latitude:Double,longitude:Double,limit:Int=5):List<NearbyStop> {
         // Bad GPS/provider coordinates must not crash distance rounding or reach map UI.
