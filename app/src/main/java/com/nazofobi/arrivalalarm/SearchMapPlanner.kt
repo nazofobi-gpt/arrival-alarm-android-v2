@@ -53,7 +53,7 @@ class SearchMapPlanner(
 ) {
     fun search(query: String, limit: Int = 20): List<SearchResult> {
         val q = query.trim()
-        if (q.isEmpty()) return emptyList()
+        if (q.isEmpty() || limit <= 0) return emptyList()
         val stops = catalog.searchStops(q, limit).map(SearchResult::Stop)
         val routes = catalog.searchRoutes(q, limit).map(SearchResult::Route)
         val trips = catalog.searchTrips(q, limit).map { (trip, route) -> SearchResult.Trip(trip, route) }
@@ -61,7 +61,7 @@ class SearchMapPlanner(
     }
 
     fun nearby(point: MapPoint, limit: Int = 5): List<NearbyCandidate> =
-        catalog.nearestStops(point.latitude, point.longitude, limit).map {
+        if (limit <= 0) emptyList() else catalog.nearestStops(point.latitude, point.longitude, limit).map {
             NearbyCandidate(it.stop, it.distanceMeters, bearing(point.latitude, point.longitude, it.stop.latitude, it.stop.longitude))
         }
 
