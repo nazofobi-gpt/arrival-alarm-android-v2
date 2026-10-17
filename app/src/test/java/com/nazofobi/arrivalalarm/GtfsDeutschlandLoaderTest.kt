@@ -28,10 +28,10 @@ class GtfsDeutschlandLoaderTest {
 
     @Test fun missingCoreTablesFailClosedInsteadOfPublishingEmptySuccessfulSnapshot() {
         val required = listOf(
-            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\\ns1,Lohne,52.66,8.23\\n",
-            "routes.txt" to "route_id,route_short_name\\nr1,RE\\n",
-            "trips.txt" to "route_id,trip_id\\nr1,t1\\n",
-            "stop_times.txt" to "trip_id,stop_id,stop_sequence\\nt1,s1,1\\n",
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,stop_id,stop_sequence\nt1,s1,1\n",
         )
         for ((missing, _) in required) {
             val partial = required.filterNot { it.first == missing }
@@ -45,11 +45,11 @@ class GtfsDeutschlandLoaderTest {
 
     @Test fun duplicateCoreZipMembersDoNotSilentlyOverwriteEarlierFeedData() {
         val zip = zipOf(
-            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\\ns1,Lohne,52.66,8.23\\n",
-            "nested/stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\\ns1,Wrong,52.66,8.23\\n",
-            "routes.txt" to "route_id,route_short_name\\nr1,RE\\n",
-            "trips.txt" to "route_id,trip_id\\nr1,t1\\n",
-            "stop_times.txt" to "trip_id,stop_id,stop_sequence\\nt1,s1,1\\n",
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\n",
+            "nested/stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Wrong,52.66,8.23\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,stop_id,stop_sequence\nt1,s1,1\n",
         )
         val failure = runCatching {
             GtfsDeutschlandLoader.parse(zip, "duplicate", "2026-10-17")
