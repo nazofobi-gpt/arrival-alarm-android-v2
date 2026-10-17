@@ -18,7 +18,14 @@ class ArrivalUiPreferences(context: Context) {
         prefs.edit().putString(KEY_THEME_MODE, mode.name).apply()
     }
 
+    fun loadDirectOnlyRoutes(): Boolean = prefs.getBoolean(KEY_DIRECT_ONLY_ROUTES, false)
+
+    fun saveDirectOnlyRoutes(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_DIRECT_ONLY_ROUTES, enabled).apply()
+    }
+
     companion object {
         const val KEY_THEME_MODE = "theme_mode"
+        const val KEY_DIRECT_ONLY_ROUTES = "direct_only_routes"
     }
 }
