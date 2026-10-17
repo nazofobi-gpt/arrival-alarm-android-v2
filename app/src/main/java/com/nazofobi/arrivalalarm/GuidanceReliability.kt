@@ -139,6 +139,10 @@ class GuidanceReliabilityController(
 
     fun retryPending(): Boolean {
         val pending = state.pending ?: return false
+        if (pending.key == state.lastSpokenKey) {
+            update(state.copy(pending = null, pendingSinceEpochMillis = null))
+            return false
+        }
         val queuedAt = state.pendingSinceEpochMillis
         val now = nowEpochMillis()
         if (queuedAt == null || queuedAt <= 0L || now < queuedAt ||
