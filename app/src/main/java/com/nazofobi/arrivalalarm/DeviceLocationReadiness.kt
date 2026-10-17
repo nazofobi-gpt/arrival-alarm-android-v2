@@ -19,10 +19,12 @@ internal fun isDeviceLocationEnabledForTracking(
     sdkInt: Int,
     locationEnabled: () -> Boolean,
     enabledProviders: () -> Collection<String>,
-): Boolean = runCatching {
+): Boolean = try {
     if (sdkInt >= Build.VERSION_CODES.P) locationEnabled()
     else hasEnabledDeviceLocationProvider(enabledProviders())
-}.getOrDefault(false)
+} catch (_: RuntimeException) {
+    false
+}
 
 internal fun isDeviceLocationEnabledForTracking(manager: LocationManager): Boolean {
     // Keep the API-28 call inside an explicit Android-version guard so minSdk-23 lint
