@@ -21,6 +21,13 @@ VALID = """<?xml version="1.0" encoding="utf-8"?>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.nazofobi.arrivalalarm"
+                      android:host="oauth" android:path="/callback" />
+            </intent-filter>
         </activity>
     </application>
 </manifest>
@@ -148,6 +155,67 @@ class AndroidManifestPrivacyPolicyTest(unittest.TestCase):
             'android:name="com.nazofobi.arrivalalarm.MainActivity"',
         )
         self.assertEqual([], validate_manifest(valid))
+
+    def test_launcher_requires_main_and_launcher_in_same_filter(self):
+        for original in (
+            "android.intent.action.MAIN",
+            "android.intent.category.LAUNCHER",
+        ):
+            with self.subTest(removed=original):
+                bad = VALID.replace(original, original + "_REMOVED")
+                self.assertIn(
+                    "MainActivity must declare MAIN/LAUNCHER filter",
+                    validate_manifest(bad),
+                )
+        split = VALID.replace(
+            '<category android:name="android.intent.category.LAUNCHER" />',
+            '</intent-filter><intent-filter>'
+            '<category android:name="android.intent.category.LAUNCHER" />',
+        )
+        self.assertIn(
+            "MainActivity must declare MAIN/LAUNCHER filter",
+            validate_manifest(split),
+        )
+
+    def test_launcher_filter_cannot_require_uri_data(self):
+        bad = VALID.replace(
+            '<action android:name="android.intent.action.MAIN" />',
+            '<action android:name="android.intent.action.MAIN" />'
+            '<data android:scheme="unintended" />',
+        )
+        self.assertIn("MainActivity must declare MAIN/LAUNCHER filter", validate_manifest(bad))
+
+    def test_oauth_filter_requires_action_and_categories_together(self):
+        for original in (
+            "android.intent.action.VIEW",
+            "android.intent.category.DEFAULT",
+            "android.intent.category.BROWSABLE",
+        ):
+            with self.subTest(removed=original):
+                bad = VALID.replace(original, original + "_REMOVED")
+                self.assertIn(
+                    "MainActivity must accept the OAuth redirect URI",
+                    validate_manifest(bad),
+                )
+        split = VALID.replace(
+            '<category android:name="android.intent.category.BROWSABLE" />',
+            '</intent-filter><intent-filter>'
+            '<category android:name="android.intent.category.BROWSABLE" />',
+        )
+        self.assertIn("MainActivity must accept the OAuth redirect URI", validate_manifest(split))
+
+    def test_oauth_filter_requires_exact_redirect_coordinates(self):
+        for original, replacement in (
+            ('android:scheme="com.nazofobi.arrivalalarm"', 'android:scheme="other.app"'),
+            ('android:host="oauth"', 'android:host="other"'),
+            ('android:path="/callback"', 'android:path="/unexpected"'),
+        ):
+            with self.subTest(modified=original):
+                bad = VALID.replace(original, replacement)
+                self.assertIn(
+                    "MainActivity must accept the OAuth redirect URI",
+                    validate_manifest(bad),
+                )
 
     def test_missing_or_extra_foreground_service_types_are_rejected(self):
         for value in ("dataSync", "location|dataSync", ""):
