@@ -94,6 +94,13 @@ class TransitRecentsStore(
 
     fun recents(): List<String> = recents.toList()
 
+    /** Clear local trip history without changing the user's saved favorite stops. */
+    fun clearRecents() {
+        if (recents.isEmpty()) return
+        recents.clear()
+        publish()
+    }
+
     private fun publish() {
         try {
             onChanged?.invoke(favorites(), recents())
