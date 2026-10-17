@@ -171,7 +171,7 @@ class GtfsConditionalRevalidationInstrumentedTest {
         }
         override fun getInputStream(): InputStream {
             streamReads++
-            assertFalse("304 must never expose a feed stream", status == HTTP_NOT_MODIFIED)
+            assertFalse("304 must never expose a feed stream", status == HttpURLConnection.HTTP_NOT_MODIFIED)
             return ByteArrayInputStream(bytes)
         }
     }
