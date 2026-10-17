@@ -68,10 +68,16 @@ def validate_manifest(source: str) -> list[str]:
     if app.get(ANDROID + "usesCleartextTraffic") != "false":
         errors.append("android:usesCleartextTraffic must explicitly be false")
 
+    # A foreign package with the same class basename is not this app's service.
+    expected_service_names = {
+        ".ActiveJourneyService",
+        "ActiveJourneyService",
+        "com.nazofobi.arrivalalarm.ActiveJourneyService",
+    }
     services = [
         component
         for component in app.findall("service")
-        if (component.get(ANDROID + "name") or "").split(".")[-1] == "ActiveJourneyService"
+        if component.get(ANDROID + "name") in expected_service_names
     ]
     if len(services) != 1:
         errors.append("exactly one ActiveJourneyService must be declared")
