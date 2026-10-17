@@ -96,6 +96,22 @@ class AndroidManifestPrivacyPolicyTest(unittest.TestCase):
         self.assertIn("exactly one ActiveJourneyService must be declared",
                       validate_manifest(bad))
 
+    def test_foreign_package_service_cannot_satisfy_tracking_declaration(self):
+        for name in (
+            "com.other.ActiveJourneyService",
+            "com.nazofobi.arrivalalarm.other.ActiveJourneyService",
+        ):
+            with self.subTest(name=name):
+                bad = VALID.replace('android:name=".ActiveJourneyService"',
+                                    f'android:name="{name}"')
+                self.assertIn("exactly one ActiveJourneyService must be declared",
+                              validate_manifest(bad))
+
+    def test_valid_fully_qualified_tracking_service_remains_supported(self):
+        valid = VALID.replace('android:name=".ActiveJourneyService"',
+                              'android:name="com.nazofobi.arrivalalarm.ActiveJourneyService"')
+        self.assertEqual([], validate_manifest(valid))
+
     def test_duplicate_tracking_service_is_rejected(self):
         service = """<service android:name=".ActiveJourneyService"
                  android:exported="false"
