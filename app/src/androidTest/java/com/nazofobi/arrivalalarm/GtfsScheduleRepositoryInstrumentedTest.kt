@@ -65,6 +65,25 @@ class GtfsScheduleRepositoryInstrumentedTest {
         assertTrue(repo.calendar("S")!!.monday)
         assertEquals(1, repo.calendarException("S", "20261003")?.exceptionType)
 
+        // A nonpositive caller limit must yield no results, never one surprising row.
+        for (badLimit in listOf(0, -1)) {
+            assertTrue(repo.childStops("A", limit = badLimit).isEmpty())
+            assertTrue(repo.routesMatching("AG", 2, limit = badLimit).isEmpty())
+            assertTrue(repo.tripsForRouteDirection("R", 0, limit = badLimit).isEmpty())
+            assertTrue(repo.stopTimesForTrip("T", limit = badLimit).isEmpty())
+            assertTrue(repo.candidateTripsAtStop("A", limit = badLimit).isEmpty())
+            assertTrue(repo.candidateTripsAtStop(
+                stopId = "A",
+                serviceDate = GtfsServiceDate(2026, 10, 3),
+                earliestBoardSeconds = 0,
+                limit = badLimit,
+            ).isEmpty())
+            assertTrue(repo.tripsInBlock("BLOCK-1", "S", limit = badLimit).isEmpty())
+            assertTrue(repo.linkedTransfersFromTrip("T", limit = badLimit).isEmpty())
+            assertTrue(repo.transfersFromStop("A", limit = badLimit).isEmpty())
+            assertTrue(repo.shapePoints("SH", limit = badLimit).isEmpty())
+        }
+
         assertNull(repo.stop("missing"))
         assertNull(repo.trip("missing"))
         assertTrue(repo.tripsForRouteDirection("missing", 0).isEmpty())
@@ -120,6 +139,8 @@ class GtfsScheduleRepositoryInstrumentedTest {
         assertEquals(listOf("25:00:00", "27:00:00"), rows.map { it.startTime })
         assertEquals(listOf(1, 0), rows.map { it.exactTimes })
         assertEquals(1, repo.frequenciesForTrip("F", limit = 1).size)
+        assertTrue(repo.frequenciesForTrip("F", limit = 0).isEmpty())
+        assertTrue(repo.frequenciesForTrip("F", limit = -1).isEmpty())
         assertTrue(repo.frequenciesForTrip("missing").isEmpty())
         assertEquals(
             listOf("F"),
