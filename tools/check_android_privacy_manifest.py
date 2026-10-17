@@ -43,6 +43,20 @@ def validate_manifest(source: str) -> list[str]:
     missing = sorted(REQUIRED_PERMISSIONS - set(permissions))
     for name in missing:
         errors.append(f"missing required permission: {name}")
+
+    # A declared permission may be disabled on the target API by maxSdkVersion.
+    def available_on_api_36(element: ET.Element) -> bool:
+        max_sdk = element.get(ANDROID + "maxSdkVersion")
+        return max_sdk is None or (max_sdk.isdecimal() and int(max_sdk) >= 36)
+
+    for name in sorted(REQUIRED_PERMISSIONS.intersection(permissions)):
+        declarations = [
+            element for element in root
+            if element.tag in {"uses-permission", "uses-permission-sdk-23"}
+            and element.get(ANDROID + "name") == name
+        ]
+        if not any(available_on_api_36(element) for element in declarations):
+            errors.append(f"required permission unavailable on API 36: {name}")
     for name in sorted(FORBIDDEN_PERMISSIONS.intersection(permissions)):
         errors.append(f"unnecessary background permission: {name}")
 
