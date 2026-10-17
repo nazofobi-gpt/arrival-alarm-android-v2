@@ -92,7 +92,7 @@ private fun RouteOption.forOfflineCache(): RouteOption =
     // Legacy JSON stores actual stop times/platforms but omits RouteRealtimeInfo.
     // The planned fields remain as the authoritative scheduled-only fallback.
     if (realtime == null && stops.none {
-            it.plannedArrival != null || it.plannedDeparture != null || it.plannedPlatform != null
+            it.arrival != null || it.departure != null || it.platform != null
         }
     ) {
         this
