@@ -101,6 +101,34 @@ class JourneyControllerTest {
         assertNull(c.state.distanceMeters)
     }
 
+    @Test fun restoredArrivalRequiresMeasuredProximityWithinConfiguredRadius() {
+        val start = GeoPoint(53.083, 8.813)
+        val destination = GeoPoint(53.1, 8.9)
+        var distance: Double? = null
+        val store = object : JourneyStateStore {
+            override fun load(): JourneyUiState = JourneyUiState(
+                phase = JourneyPhase.ARRIVED,
+                start = start,
+                destination = destination,
+                distanceMeters = distance,
+            )
+            override fun save(state: JourneyUiState) = Unit
+        }
+
+        for (invalid in listOf<Double?>(null, 250.01, 1_000.0)) {
+            distance = invalid
+            assertEquals(
+                JourneyPhase.EMPTY,
+                JourneyController(arrivalRadiusMeters = 250.0, stateStore = store).state.phase,
+            )
+        }
+
+        distance = 250.0
+        val restored = JourneyController(arrivalRadiusMeters = 250.0, stateStore = store).state
+        assertEquals(JourneyPhase.ARRIVED, restored.phase)
+        assertEquals(250.0, restored.distanceMeters ?: -1.0, 0.0)
+    }
+
     @Test fun corruptedPersistedArmedJourneyFailsClosedOnRestart() {
         val store = object : JourneyStateStore {
             override fun load() = JourneyUiState(
