@@ -110,6 +110,38 @@ class ProductionRealtimeStationOverlayTest {
     }
 
     @Test
+    fun unknownScheduledRouteIdentityNeverAcceptsSameTripIdRealtime() {
+        val matched = GermanyRealtimeOverlayResult.Matched(
+            tripOverlays = listOf(
+                GermanyRealtimeTripOverlay(
+                    staticTrip = trip(),
+                    startDate = null,
+                    startTime = null,
+                    cancelled = true,
+                    scheduleRelationship = "CANCELED",
+                    stopUpdates = emptyList(),
+                    sourceTimestampEpochSeconds = 990L,
+                ),
+            ),
+            serviceAlerts = emptyList(),
+            freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+            ageSeconds = 10L,
+            provenance = provenance(),
+        )
+
+        listOf<String?>(null, "", " ", "R2").forEach { routeId ->
+            val unknown = planned.copy(routeId = routeId)
+            val result = overlay(matched).enrich("A", listOf(unknown))
+            assertEquals(StationRealtimeState.FRESH_NO_MATCH, result.realtimeState)
+            assertEquals(listOf(unknown), result.departures)
+        }
+
+        val verified = overlay(matched).enrich("A", listOf(planned))
+        assertEquals(StationRealtimeState.FRESH_MATCHED, verified.realtimeState)
+        assertTrue(verified.departures.single().cancelled)
+    }
+
+    @Test
     fun skippedStopIsUnavailableOnlyAtThatStation() {
         val skipped = GermanyRealtimeMatchedStopUpdate(
             stopSequence = 1,
