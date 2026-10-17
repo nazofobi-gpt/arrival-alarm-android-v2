@@ -21,6 +21,7 @@ internal interface StaticRouteOptionData {
     fun trip(tripId: String): GtfsScheduleTrip?
     fun stop(stopId: String): GtfsScheduleStop?
     fun stopTimesForTrip(tripId: String, limit: Int): List<GtfsScheduleStopTime>
+    fun shapePoints(shapeId: String, limit: Int): List<GtfsScheduleShapePoint> = emptyList()
 }
 
 private class RepositoryStaticRouteOptionData(
@@ -31,6 +32,8 @@ private class RepositoryStaticRouteOptionData(
     override fun stop(stopId: String) = repository.stop(stopId)
     override fun stopTimesForTrip(tripId: String, limit: Int) =
         repository.stopTimesForTrip(tripId, limit)
+    override fun shapePoints(shapeId: String, limit: Int) =
+        repository.shapePoints(shapeId, limit)
 }
 
 internal class StaticRouteOptionMapper(
@@ -58,8 +61,9 @@ internal class StaticRouteOptionMapper(
             ?.let { data.trip(it.tripId)?.headsign }
             ?.takeIf { it.isNotBlank() }
             ?: destination.label
-        val routeStops = journey.legs
-            .flatMap { leg -> stopsForLeg(leg, serviceDate) }
+        val mappedLegs = journey.legs.map { leg -> mappedLeg(leg, serviceDate) }
+        val routeStops = mappedLegs
+            .flatMap { it.stops }
             .fold(mutableListOf<RouteStop>()) { acc, next ->
                 val previous = acc.lastOrNull()
                 if (previous != null && previous.id != null && previous.id == next.id) {
@@ -94,24 +98,31 @@ internal class StaticRouteOptionMapper(
             stops = routeStops,
             refreshToken = null,
             sourceUpdatedAtEpochSeconds = sourceUpdatedAtEpochSeconds,
+            shapePolylines = mappedLegs.map { it.polyline }.filter { it.size >= 2 },
         )
     }
 
-    private fun stopsForLeg(
+    private data class MappedLeg(
+        val stops: List<RouteStop>,
+        val polyline: List<MapPoint> = emptyList(),
+    )
+
+    private fun mappedLeg(
         leg: StaticTransitLeg,
         serviceDate: GtfsServiceDate,
-    ): List<RouteStop> {
+    ): MappedLeg {
         val stopTimes = data.stopTimesForTrip(leg.tripId, maxStopTimesPerTrip)
-        val pair = bestStopRange(stopTimes, leg, serviceDate) ?: return listOfNotNull(
-            endpoint(leg.fromStopId, departureMillis = leg.departureEpochMillis),
-            endpoint(leg.toStopId, arrivalMillis = leg.arrivalEpochMillis),
+        val pair = bestStopRange(stopTimes, leg, serviceDate) ?: return MappedLeg(
+            stops = listOfNotNull(
+                endpoint(leg.fromStopId, departureMillis = leg.departureEpochMillis),
+                endpoint(leg.toStopId, arrivalMillis = leg.arrivalEpochMillis),
+            ),
         )
         val (fromIndex, toIndex, shiftMillis) = pair
         // A circular journey may revisit one stop hundreds of times. Reuse
         // stop metadata within this leg instead of repeating repository reads.
-        // containsKey also caches absent stops (null), unlike getOrPut.
         val stopsById = HashMap<String, GtfsScheduleStop?>()
-        return stopTimes.subList(fromIndex, toIndex + 1).map { stopTime ->
+        val stops = stopTimes.subList(fromIndex, toIndex + 1).map { stopTime ->
             val stop = if (stopsById.containsKey(stopTime.stopId)) {
                 stopsById[stopTime.stopId]
             } else {
@@ -127,6 +138,19 @@ internal class StaticRouteOptionMapper(
                 plannedPlatform = stop?.platformCode,
             )
         }
+
+        // Only the actual boarded/alighted GTFS shape segment is eligible for
+        // a map line. Unknown shape_id or distance evidence stays empty.
+        val polyline = data.trip(leg.tripId)?.shapeId
+            ?.takeIf { it.isNotBlank() }
+            ?.let { shapeId ->
+                clipGtfsShapePolyline(
+                    shape = data.shapePoints(shapeId, 2_048),
+                    boardingDistance = stopTimes[fromIndex].shapeDistanceTraveled,
+                    alightingDistance = stopTimes[toIndex].shapeDistanceTraveled,
+                )
+            }.orEmpty()
+        return MappedLeg(stops, polyline)
     }
 
     private fun bestStopRange(
