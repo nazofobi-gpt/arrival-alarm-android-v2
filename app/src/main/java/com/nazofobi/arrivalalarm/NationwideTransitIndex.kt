@@ -381,7 +381,10 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             val name = r.value(h, "stop_name")
             val lat = r.value(h, "stop_lat").toDoubleOrNull()
             val lon = r.value(h, "stop_lon").toDoubleOrNull()
-            if (id.isBlank() || name.isBlank() || lat == null || lon == null) return@forEach
+            if (id.isBlank() || name.isBlank() || lat == null || lon == null ||
+                !lat.isFinite() || lat !in -90.0..90.0 ||
+                !lon.isFinite() || lon !in -180.0..180.0
+            ) return@forEach
             stmt.bindValues(
                 id, name, lat, lon,
                 r.nullValue(h, "parent_station"),
