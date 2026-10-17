@@ -208,6 +208,95 @@ class ProductionRealtimeStationOverlayTest {
     }
 
     @Test
+    fun tripScopedStationAlertDoesNotLeakAcrossReusedTripIdRoutesOrUnknownDirections() {
+        val trip = GermanyRealtimeTripSelector(
+            tripId = "T1",
+            routeId = "R1",
+            directionId = null,
+            startTime = null,
+            startDate = null,
+            scheduleRelationship = null,
+            validity = GermanyRealtimeTripSelectorValidity.VALID_ID_BASED,
+        )
+        val selector = GermanyRealtimeAlertSelector(
+            agencyId = null,
+            routeId = null,
+            routeType = null,
+            directionId = null,
+            stopId = "A",
+            trip = trip,
+            validity = GermanyRealtimeAlertSelectorValidity.VALID,
+        )
+
+        assertTrue(overlay(alertResult(selector.copy(trip = trip.copy(routeId = "R2"))))
+            .enrich("A", listOf(planned)).alerts.isEmpty())
+        assertTrue(overlay(alertResult(selector.copy(routeId = "R2")))
+            .enrich("A", listOf(planned)).alerts.isEmpty())
+        assertTrue(overlay(alertResult(selector.copy(directionId = 1)))
+            .enrich("A", listOf(planned)).alerts.isEmpty())
+        assertTrue(overlay(alertResult(selector.copy(trip = trip.copy(directionId = 1))))
+            .enrich("A", listOf(planned)).alerts.isEmpty())
+
+        val matched = overlay(alertResult(selector)).enrich("A", listOf(planned))
+        assertEquals(listOf("scoped-alert"), matched.alerts.map { it.id })
+    }
+
+    @Test
+    fun tripScopedStationAlertUsesExactFrequencyInstanceWhenSupplied() {
+        val trip = GermanyRealtimeTripSelector(
+            tripId = "T1",
+            routeId = "R1",
+            directionId = null,
+            startTime = "08:00:00",
+            startDate = "20261004",
+            scheduleRelationship = null,
+            validity = GermanyRealtimeTripSelectorValidity.VALID_ID_BASED,
+        )
+        val selector = GermanyRealtimeAlertSelector(
+            agencyId = null,
+            routeId = null,
+            routeType = null,
+            directionId = null,
+            stopId = "A",
+            trip = trip,
+            validity = GermanyRealtimeAlertSelectorValidity.VALID,
+        )
+        val selected = planned.copy(
+            realtimeTripStartDate = "20261004",
+            realtimeTripStartTime = "08:00:00",
+        )
+        assertTrue(overlay(alertResult(selector))
+            .enrich("A", listOf(planned)).alerts.isEmpty())
+        assertTrue(overlay(alertResult(selector))
+            .enrich("A", listOf(selected.copy(realtimeTripStartDate = "20261005"))).alerts.isEmpty())
+        assertTrue(overlay(alertResult(selector))
+            .enrich("A", listOf(selected.copy(realtimeTripStartTime = "08:10:00"))).alerts.isEmpty())
+        assertEquals(
+            listOf("scoped-alert"),
+            overlay(alertResult(selector)).enrich("A", listOf(selected)).alerts.map { it.id },
+        )
+    }
+
+    private fun alertResult(selector: GermanyRealtimeAlertSelector) =
+        GermanyRealtimeOverlayResult.Matched(
+            tripOverlays = emptyList(),
+            serviceAlerts = listOf(
+                GermanyRealtimeAlert(
+                    entityId = "scoped-alert",
+                    cause = null,
+                    effect = "SIGNIFICANT_DELAYS",
+                    header = "Scoped disruption",
+                    description = null,
+                    selectors = listOf(selector),
+                    activePeriods = emptyList(),
+                ),
+            ),
+            freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+            ageSeconds = 10L,
+            provenance = provenance(),
+        )
+
+    @Test
     fun routeAndStopAlertSelectorDoesNotLeakToAnotherStopOnSameRoute() {
         val matched = GermanyRealtimeOverlayResult.Matched(
             tripOverlays = emptyList(),
