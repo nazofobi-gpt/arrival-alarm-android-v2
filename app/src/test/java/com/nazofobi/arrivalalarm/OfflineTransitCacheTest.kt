@@ -7,6 +7,59 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class OfflineTransitCacheTest {
+    @Test fun legacyActualOnlyStopsAreSanitizedWithoutScheduledBaselines() {
+        val origin = MapPoint(52.665, 8.237, "Lohne")
+        val destination = MapPoint(53.083, 8.813, "Bremen")
+        val legacyRoute = RouteOption(
+            id = "legacy-actual-only",
+            origin = origin,
+            destination = destination,
+            line = "RE 9",
+            direction = "Bremen",
+            departure = "10:00",
+            arrival = "10:45",
+            walkingMinutes = 0,
+            transfers = 0,
+            stops = listOf(RouteStop(
+                id = "S1",
+                name = "Lohne",
+                arrival = "2026-10-17T10:04:00+02:00",
+                departure = "2026-10-17T10:05:00+02:00",
+                platform = "7",
+            )),
+        )
+        val store = object : TransitCacheBackingStore {
+            override fun load() = listOf(
+                CachedTransitPlan("legacy", listOf(legacyRoute), emptyList(), 900L),
+            )
+            override fun save(plans: List<CachedTransitPlan>) = Unit
+        }
+        val restored = OfflineTransitCache(backingStore = store)
+            .routeOptions("legacy").single().stops.single()
+
+        // No trusted scheduled fields exist: never replay stale observed data.
+        assertNull(restored.arrival)
+        assertNull(restored.departure)
+        assertNull(restored.platform)
+    }
+
+    @Test fun scheduledOnlyStopsRemainAvailableOffline() {
+        val origin = MapPoint(52.665, 8.237, "Lohne")
+        val destination = MapPoint(53.083, 8.813, "Bremen")
+        val planned = RouteStop(
+            id = "S1", name = "Lohne",
+            plannedDeparture = "2026-10-17T10:00:00+02:00",
+            plannedPlatform = "2",
+        )
+        val route = RouteOption(
+            "scheduled", origin, destination, "RE 9", "Bremen", "10:00", "10:45",
+            0, 0, stops = listOf(planned),
+        )
+        val cache = OfflineTransitCache()
+        cache.put(CachedTransitPlan("scheduled", listOf(route), emptyList(), 900L))
+        assertEquals(planned, cache.routeOptions("scheduled").single().stops.single())
+    }
+
     @Test fun offlineSnapshotStripsRealtimeAndKeepsRoute() {
         val origin = MapPoint(53.08, 8.81, "Bremen")
         val destination = MapPoint(53.10, 8.85, "Ziel")
