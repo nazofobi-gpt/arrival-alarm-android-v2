@@ -37,6 +37,7 @@ class StaleRouteCallbackUiInstrumentedTest {
         } else {
             prefs.edit().remove("onboarding_complete").commit()
         }
+        context.getSharedPreferences("journey_state", Context.MODE_PRIVATE).edit().clear().commit()
         ArrivalAlarmRuntimeGraph.resetForTests()
     }
 
