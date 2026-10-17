@@ -2040,3 +2040,18 @@ A development lane may report progress, but it may not declare the application �
 `Foundations → visual/search/realtime regressions → discovery/planner → active journey → alarm → offline/accessibility/performance/policy/diagnostics → master requirement closure → pre-user-test completeness → exact RC → physical field acceptance → frozen release packaging → staged Play rollout → post-release operations.`
 
 This plan is deliberately evidence-driven. The priority is not to maximize the number of implemented features; it is to produce a reliable, coherent, testable Android product whose accepted release behavior matches what is shipped.
+
+
+---
+
+## Appendix F — Visual-first UI reference and specification workflow (2026-10-17)
+
+**User decision:** For Varış V2 and future application/software UI design work, use the **visual reference → detailed Markdown UI specification → implementation from both sources → visual/functionality acceptance** chain. Keep the original source visuals with the versioned spec. This is a default design workflow, not a license to change product feature scope or production data contracts.
+
+**Visual reference identity:** `H003-UI-VISUAL-REFERENCE-001` v1.0, `VARIS_UI_MASTER_VISUAL_SPEC_V1.md`, Drive ID `1wYFFkxx2CfxsHrnJcPZmN1t6B-7KVBNy` in `/ChatGPT/Arrival Alarm UI/`. Complete package with the three source reference images: `VARIS_UI_REFERANS_PAKETI_V1.zip`, Drive ID `1UUYbq3KYsCa9_vR7bigDEiYc17-b7QHB`. Source imagery includes BahnPlus light/dark 8-screen boards and the Arrival 8-screen product board; image and spec are paired inputs.
+
+**Execution gate:** Before producing a new UI implementation slice: (1) read the current product/feature contract and baseline; (2) generate or select a screen/mockup visual; (3) update the versioned screen-level text design contract (exact labels, typography, colors, spacing, component tree, navigation, state/errors, adaptive/a11y); (4) implement in state-driven Compose with real data, no production fixtures; (5) verify light/dark, TR/DE/EN, 200% text, TalkBack, minimum 48dp, edge-to-edge and screenshot visual difference; (6) retain exact source/commit/test evidence. Refer to the separate .md spec for screen details instead of duplicating thousands of lines in this completion plan.
+
+**Scope guard:** Arrival reference art contains AI Yardım/Screen Assist mockups. These are **VISUAL_REFERENCE_ONLY** and do not override the current H-003 exclusion of integrated in-app AI/Screen Assist. Preserve current matte Material 3 theme decisions and true transit/GPS/alarm/TTS/Bluetooth/permission behavior. Where screenshot props conflict with real ETA/vehicle state, verified runtime state prevails.
+
+**Provenance and propagation:** New explicit user request dated 2026-10-17; persistent user UI workflow key `UI-VISUAL-FIRST-SPEC-DRIVEN-001` in canonical `hafıza/Aktif Hafıza`. Canonical L0 idea-ledger incorporation is pending independent verification; do not claim L0→L5 reconciliation or increase `IDEA_BASELINE_REV` on this append alone.
