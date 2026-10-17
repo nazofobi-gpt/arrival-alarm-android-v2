@@ -49,6 +49,8 @@ data class GtfsTripDetail(
 )
 
 enum class GtfsTripDetailFailure {
+    INDEX_NOT_READY,
+    DATA_READ_FAILED,
     TRIP_NOT_FOUND,
     TRIP_CHANGED,
     SERVICE_INACTIVE,
