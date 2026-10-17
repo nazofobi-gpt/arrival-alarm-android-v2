@@ -98,9 +98,12 @@ internal class ProductionRealtimeJourneyOverlay(
         option: RouteOption,
         overlay: GermanyRealtimeOverlayResult.Matched,
     ): RouteOption {
-        val tripOverlays = overlay.tripOverlays.filter {
-            it.staticTrip.id in option.tripIds && !frequencyTrip(it.staticTrip.id)
-        }
+        // Provider updates are unordered. A transfer stop belongs to the
+        // arriving leg first and the departing leg last in the selected journey.
+        val legOrder = option.tripIds.withIndex().associate { it.value to it.index }
+        val tripOverlays = overlay.tripOverlays
+            .filter { it.staticTrip.id in legOrder && !frequencyTrip(it.staticTrip.id) }
+            .sortedBy { legOrder[it.staticTrip.id] }
         if (tripOverlays.isEmpty()) {
             return option.copy(
                 realtime = RouteRealtimeInfo(
@@ -173,7 +176,10 @@ internal class ProductionRealtimeJourneyOverlay(
         plannedIso: String?,
         delaySeconds: Int?,
     ): String? {
-        epochSeconds?.let { return iso(it * 1_000L) }
+        // A GTFS-RT Unix timestamp must be positive and safe to convert to millis.
+        // Otherwise use the scheduled time plus delay instead of a bogus date.
+        epochSeconds?.takeIf { it > 0L && it <= Long.MAX_VALUE / 1_000L }
+            ?.let { return iso(it * 1_000L) }
         if (plannedIso == null || delaySeconds == null) return null
         val plannedMillis = parseIsoMillis(plannedIso) ?: return null
         return iso(plannedMillis + delaySeconds * 1_000L)

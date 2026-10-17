@@ -271,4 +271,14 @@ class JourneyControllerTest {
         JourneyController(arrivalRadiusMeters = Double.POSITIVE_INFINITY)
     }
 
+
+    @Test(expected = AssertionError::class)
+    fun fatalJourneyStateLoadErrorIsNotSilentlyConvertedIntoEmptyJourney() {
+        val store = object : JourneyStateStore {
+            override fun load(): JourneyUiState? = throw AssertionError("fatal storage failure")
+            override fun save(state: JourneyUiState) = Unit
+        }
+        JourneyController(stateStore = store)
+    }
+
 }

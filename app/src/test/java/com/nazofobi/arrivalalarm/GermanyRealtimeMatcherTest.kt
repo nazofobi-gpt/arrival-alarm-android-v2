@@ -67,6 +67,57 @@ class GermanyRealtimeMatcherTest {
     }
 
     @Test
+    fun sequencedStopRejectsConflictingStopIdButPreservesDeclaredReassignment() {
+        val trip = trip("T1", "R1", "S", direction = 0)
+        val data = FakeRealtimeStaticData(
+            trips = mapOf("T1" to trip),
+            routes = mapOf("R1" to route("R1", "agency", 3)),
+            stops = mapOf(
+                "scheduled-stop" to stop("scheduled-stop", "1"),
+                "other-stop" to stop("other-stop", "9"),
+            ),
+            stopTimes = mapOf(
+                "T1" to listOf(
+                    st("T1", 1, "origin", "08:00:00"),
+                    st("T1", 2, "scheduled-stop", "08:10:00"),
+                ),
+            ),
+        )
+        val realtimeStop = GermanyRealtimeStopUpdate(
+            stopSequence = 2,
+            stopId = "other-stop",
+            arrivalDelaySeconds = null,
+            departureDelaySeconds = 120,
+            arrivalTimeEpochSeconds = null,
+            departureTimeEpochSeconds = 1_800_000_120L,
+        )
+        val tripUpdate = update(tripId = "T1", routeId = "R1", directionId = 0)
+            .copy(stops = listOf(realtimeStop))
+        fun matchedStops(changed: GermanyRealtimeStopUpdate) =
+            (matcher(data).match(
+                snapshot(tripUpdates = listOf(tripUpdate.copy(stops = listOf(changed)))),
+                1_800_000_010L,
+            ) as GermanyRealtimeOverlayResult.Matched).tripOverlays.single().stopUpdates
+
+        // A sequence is not permission to apply another stop's delay or platform.
+        assertTrue(matchedStops(realtimeStop).isEmpty())
+        assertEquals("scheduled-stop", matchedStops(
+            realtimeStop.copy(stopId = "scheduled-stop"),
+        ).single().scheduledStopId)
+        assertEquals("scheduled-stop", matchedStops(
+            realtimeStop.copy(stopId = null),
+        ).single().scheduledStopId)
+
+        // A declared stop reassignment remains valid for the same sequence.
+        val assigned = matchedStops(
+            realtimeStop.copy(assignedStopId = "other-stop"),
+        ).single()
+        assertEquals("scheduled-stop", assigned.scheduledStopId)
+        assertEquals("other-stop", assigned.assignedStopId)
+        assertEquals("9", assigned.platformCode)
+    }
+
+    @Test
     fun frequencyTripRequiresCompleteInstanceIdentityAndValidHeadwayInstance() {
         val trip = trip("F1", "R1", "S", direction = 0)
         val data = FakeRealtimeStaticData(

@@ -67,6 +67,9 @@ def validate_manifest(source: str) -> list[str]:
         errors.append("android:allowBackup must explicitly be false")
     if app.get(ANDROID + "usesCleartextTraffic") != "false":
         errors.append("android:usesCleartextTraffic must explicitly be false")
+    # Disabled application components cannot run the location foreground service.
+    if app.get(ANDROID + "enabled") not in (None, "true"):
+        errors.append("application must be enabled for tracking")
 
     # A foreign package with the same class basename is not this app's service.
     expected_service_names = {
@@ -85,6 +88,8 @@ def validate_manifest(source: str) -> list[str]:
         service = services[0]
         if service.get(ANDROID + "exported") != "false":
             errors.append("ActiveJourneyService must not be exported")
+        if service.get(ANDROID + "enabled") not in (None, "true"):
+            errors.append("ActiveJourneyService must be enabled")
         types = {
             part.strip()
             for part in (service.get(ANDROID + "foregroundServiceType") or "").split("|")
@@ -92,6 +97,26 @@ def validate_manifest(source: str) -> list[str]:
         }
         if types != {"location"}:
             errors.append("ActiveJourneyService must declare only the location FGS type")
+
+    # A disabled/non-exported launcher prevents users from opening the app and
+    # completing the OAuth callback even though tracking service checks pass.
+    expected_activity_names = {
+        ".MainActivity",
+        "MainActivity",
+        "com.nazofobi.arrivalalarm.MainActivity",
+    }
+    activities = [
+        component for component in app.findall("activity")
+        if component.get(ANDROID + "name") in expected_activity_names
+    ]
+    if len(activities) != 1:
+        errors.append("exactly one MainActivity must be declared")
+    else:
+        activity = activities[0]
+        if activity.get(ANDROID + "enabled") not in (None, "true"):
+            errors.append("MainActivity must be enabled")
+        if activity.get(ANDROID + "exported") != "true":
+            errors.append("MainActivity must be exported for launcher and OAuth callbacks")
 
     return errors
 

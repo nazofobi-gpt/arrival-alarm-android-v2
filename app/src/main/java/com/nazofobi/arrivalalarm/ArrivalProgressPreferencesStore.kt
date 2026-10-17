@@ -5,51 +5,56 @@ import android.content.SharedPreferences
 class SharedPreferencesArrivalProgressStore(
     private val preferences: SharedPreferences,
 ) : ArrivalProgressStateStore {
-    override fun load(): ArrivalProgressState? = runCatching {
-        // Preferences can contain legacy, corrupted, or wrong-typed values. Never
-        // allow those values to crash process recreation or seed phantom progress.
-        if (!preferences.contains(KEY_ROUTE_ID)) return@runCatching null
-        val routeId = preferences.getString(KEY_ROUTE_ID, null)
-            ?.takeIf { it.isNotBlank() } ?: return@runCatching null
-        val phaseName = preferences.getString(KEY_PHASE, ArrivalAlertPhase.IDLE.name)
-            ?: return@runCatching null
-        val phase = enumValues<ArrivalAlertPhase>().firstOrNull { it.name == phaseName }
-            ?: return@runCatching null
-        val armed = preferences.getBoolean(KEY_ARMED, false)
-        // Legacy states have no identity; the controller must rearm fresh.
-        val routeFingerprint = preferences.getString(KEY_ROUTE_FINGERPRINT, null)
-        val lastIndex = preferences.getInt(KEY_LAST_INDEX, 0)
-        val progress = preferences.getFloat(KEY_PROGRESS, 0f).toDouble()
-        val distance = preferences.getFloat(KEY_DISTANCE, Float.NaN)
-            .takeUnless { it.isNaN() }?.toDouble()
-        val threshold = preferences.getFloat(KEY_THRESHOLD, Float.NaN)
-            .takeUnless { it.isNaN() }?.toDouble()
-        val insideCount = preferences.getInt(KEY_INSIDE_COUNT, 0)
-        val pastCount = preferences.getInt(KEY_PAST_COUNT, 0)
-        val eventCount = preferences.getInt(KEY_EVENT_COUNT, 0)
+    override fun load(): ArrivalProgressState? {
+        return try {
+            // Preferences can contain legacy, corrupted, or wrong-typed values. Never
+            // allow those values to crash process recreation or seed phantom progress.
+            if (!preferences.contains(KEY_ROUTE_ID)) return null
+            val routeId = preferences.getString(KEY_ROUTE_ID, null)
+                ?.takeIf { it.isNotBlank() } ?: return null
+            val phaseName = preferences.getString(KEY_PHASE, ArrivalAlertPhase.IDLE.name)
+                ?: return null
+            val phase = enumValues<ArrivalAlertPhase>().firstOrNull { it.name == phaseName }
+                ?: return null
+            val armed = preferences.getBoolean(KEY_ARMED, false)
+            // Legacy states have no identity; the controller must rearm fresh.
+            val routeFingerprint = preferences.getString(KEY_ROUTE_FINGERPRINT, null)
+            val lastIndex = preferences.getInt(KEY_LAST_INDEX, 0)
+            val progress = preferences.getFloat(KEY_PROGRESS, 0f).toDouble()
+            val distance = preferences.getFloat(KEY_DISTANCE, Float.NaN)
+                .takeUnless { it.isNaN() }?.toDouble()
+            val threshold = preferences.getFloat(KEY_THRESHOLD, Float.NaN)
+                .takeUnless { it.isNaN() }?.toDouble()
+            val insideCount = preferences.getInt(KEY_INSIDE_COUNT, 0)
+            val pastCount = preferences.getInt(KEY_PAST_COUNT, 0)
+            val eventCount = preferences.getInt(KEY_EVENT_COUNT, 0)
 
-        if (lastIndex < 0 || !progress.isFinite() || progress !in 0.0..1.0 ||
-            (distance != null && (!distance.isFinite() || distance < 0.0)) ||
-            (threshold != null && (!threshold.isFinite() || threshold <= 0.0)) ||
-            insideCount < 0 || pastCount < 0 || eventCount < 0 ||
-            (armed && phase == ArrivalAlertPhase.IDLE) ||
-            (!armed && phase != ArrivalAlertPhase.IDLE)
-        ) return@runCatching null
+            if (lastIndex < 0 || !progress.isFinite() || progress !in 0.0..1.0 ||
+                (distance != null && (!distance.isFinite() || distance < 0.0)) ||
+                (threshold != null && (!threshold.isFinite() || threshold <= 0.0)) ||
+                insideCount < 0 || pastCount < 0 || eventCount < 0 ||
+                (armed && phase == ArrivalAlertPhase.IDLE) ||
+                (!armed && phase != ArrivalAlertPhase.IDLE)
+            ) return null
 
-        ArrivalProgressState(
-            routeId = routeId,
-            armed = armed,
-            phase = phase,
-            lastMatchedStopIndex = lastIndex,
-            progressFraction = progress,
-            distanceToTargetMeters = distance,
-            adaptiveThresholdMeters = threshold,
-            consecutiveInsideThreshold = insideCount,
-            consecutivePastTarget = pastCount,
-            arrivalEventCount = eventCount,
-            routeFingerprint = routeFingerprint,
-        )
-    }.getOrNull()
+            ArrivalProgressState(
+                routeId = routeId,
+                armed = armed,
+                phase = phase,
+                lastMatchedStopIndex = lastIndex,
+                progressFraction = progress,
+                distanceToTargetMeters = distance,
+                adaptiveThresholdMeters = threshold,
+                consecutiveInsideThreshold = insideCount,
+                consecutivePastTarget = pastCount,
+                arrivalEventCount = eventCount,
+                routeFingerprint = routeFingerprint,
+            )
+        } catch (_: RuntimeException) {
+            // Wrong-typed preferences are recoverable; fatal JVM errors must surface.
+            null
+        }
+    }
 
     override fun save(state: ArrivalProgressState) {
         preferences.edit()

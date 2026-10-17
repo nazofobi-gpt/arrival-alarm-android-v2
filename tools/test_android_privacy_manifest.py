@@ -16,6 +16,12 @@ VALID = """<?xml version="1.0" encoding="utf-8"?>
         <service android:name=".ActiveJourneyService"
                  android:exported="false"
                  android:foregroundServiceType="location" />
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>
 """
@@ -73,6 +79,75 @@ class AndroidManifestPrivacyPolicyTest(unittest.TestCase):
     def test_exported_tracking_service_is_rejected(self):
         bad = VALID.replace('android:exported="false"', 'android:exported="true"')
         self.assertTrue(any("must not be exported" in e for e in validate_manifest(bad)))
+
+    def test_disabled_application_cannot_pass_tracking_manifest_gate(self):
+        for enabled in ("false", "@bool/tracking_enabled"):
+            with self.subTest(enabled=enabled):
+                bad = VALID.replace(
+                    "<application ",
+                    f'<application android:enabled="{enabled}" ',
+                )
+                self.assertIn(
+                    "application must be enabled for tracking",
+                    validate_manifest(bad),
+                )
+
+    def test_disabled_tracking_service_cannot_pass_manifest_gate(self):
+        for enabled in ("false", "@bool/tracking_enabled"):
+            with self.subTest(enabled=enabled):
+                bad = VALID.replace(
+                    'android:exported="false"',
+                    f'android:enabled="{enabled}" android:exported="false"',
+                )
+                self.assertIn(
+                    "ActiveJourneyService must be enabled",
+                    validate_manifest(bad),
+                )
+
+    def test_explicitly_enabled_application_and_service_pass(self):
+        enabled = VALID.replace(
+            "<application ", '<application android:enabled="true" ',
+        ).replace(
+            'android:exported="false"',
+            'android:enabled="true" android:exported="false"',
+        )
+        self.assertEqual([], validate_manifest(enabled))
+
+    def test_disabled_main_activity_cannot_pass_manifest_gate(self):
+        for enabled in ("false", "@bool/main_activity_enabled"):
+            with self.subTest(enabled=enabled):
+                bad = VALID.replace(
+                    'android:name=".MainActivity" android:exported="true"',
+                    f'android:name=".MainActivity" android:exported="true" '
+                    f'android:enabled="{enabled}"',
+                )
+                self.assertIn("MainActivity must be enabled", validate_manifest(bad))
+
+    def test_unexported_main_activity_cannot_pass_manifest_gate(self):
+        for replacement in ('android:exported="false"', ''):
+            with self.subTest(exported=replacement):
+                bad = VALID.replace(
+                    'android:name=".MainActivity" android:exported="true"',
+                    f'android:name=".MainActivity" {replacement}',
+                )
+                self.assertIn(
+                    "MainActivity must be exported for launcher and OAuth callbacks",
+                    validate_manifest(bad),
+                )
+
+    def test_missing_or_duplicate_main_activity_fails_closed(self):
+        missing = VALID.replace('android:name=".MainActivity"', 'android:name=".OtherActivity"')
+        self.assertIn("exactly one MainActivity must be declared", validate_manifest(missing))
+        activity = '<activity android:name=".MainActivity" android:exported="true" />'
+        duplicate = VALID.replace("</application>", activity + "\n    </application>")
+        self.assertIn("exactly one MainActivity must be declared", validate_manifest(duplicate))
+
+    def test_fully_qualified_main_activity_is_supported(self):
+        valid = VALID.replace(
+            'android:name=".MainActivity"',
+            'android:name="com.nazofobi.arrivalalarm.MainActivity"',
+        )
+        self.assertEqual([], validate_manifest(valid))
 
     def test_missing_or_extra_foreground_service_types_are_rejected(self):
         for value in ("dataSync", "location|dataSync", ""):

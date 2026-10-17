@@ -77,13 +77,7 @@ data class SettingsReadinessState(
                 Build.VERSION.SDK_INT < 31 || granted(Manifest.permission.BLUETOOTH_CONNECT)
             val locationManager =
                 context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-            val locationServicesAvailable = runCatching {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    locationManager.isLocationEnabled
-                } else {
-                    hasEnabledDeviceLocationProvider(locationManager.getProviders(true))
-                }
-            }.getOrDefault(false)
+            val locationServicesAvailable = isDeviceLocationEnabledForTracking(locationManager)
 
             return SettingsReadinessState(
                 themeMode = themeMode,
@@ -101,14 +95,6 @@ data class SettingsReadinessState(
         }
     }
 }
-
-/**
- * Passive location callbacks do not make location services usable for tracking.
- * On Android P+, the system-wide location toggle is the source of truth.
- */
-internal fun hasEnabledDeviceLocationProvider(enabledProviders: Collection<String>): Boolean =
-    LocationManager.GPS_PROVIDER in enabledProviders ||
-        LocationManager.NETWORK_PROVIDER in enabledProviders
 
 @Composable
 fun SettingsReadinessPanel(
