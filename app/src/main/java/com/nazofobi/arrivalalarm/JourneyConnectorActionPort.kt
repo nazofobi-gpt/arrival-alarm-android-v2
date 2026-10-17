@@ -54,6 +54,9 @@ class JourneyConnectorActionPort(
     @Synchronized
     override fun setOrigin(point: MapPoint): ConnectorActionOutcome {
         controller.selectStart(GeoPoint(point.latitude, point.longitude))
+        if (controller.state.phase != JourneyPhase.START_SELECTED || controller.state.error != null) {
+            return ConnectorActionOutcome(false, controller.state.error ?: "Başlangıç güncellenemedi")
+        }
         origin = point.toConnectorStop()
         destination = null
         selectedRoute = null
@@ -68,7 +71,7 @@ class JourneyConnectorActionPort(
             return ConnectorActionOutcome(false, "Önce başlangıç seçilmeli")
         }
         controller.selectDestination(GeoPoint(point.latitude, point.longitude))
-        if (controller.state.phase != JourneyPhase.DESTINATION_SELECTED) {
+        if (controller.state.phase != JourneyPhase.DESTINATION_SELECTED || controller.state.error != null) {
             return ConnectorActionOutcome(false, controller.state.error ?: "Varış güncellenemedi")
         }
         destination = point.toConnectorStop()
