@@ -196,6 +196,26 @@ class OfflineTransitCacheTest {
         assertFalse(cache.snapshot("legacy")!!.departures.single().cancelled)
     }
 
+    @Test fun duplicateRestoredKeysRetainLatestVersionAndOtherValidJourney() {
+        val first = CachedTransitPlan("first", emptyList(), emptyList(), 10L)
+        val duplicateOld = CachedTransitPlan("same", emptyList(), emptyList(), 20L)
+        val duplicateNew = CachedTransitPlan("same", emptyList(), emptyList(), 30L)
+        val backing = object : TransitCacheBackingStore {
+            override fun load() = listOf(first, duplicateOld, duplicateNew)
+            override fun save(plans: List<CachedTransitPlan>) = Unit
+        }
+
+        val cache = OfflineTransitCache(maxEntries = 2, backingStore = backing)
+        assertEquals(10L, cache.get("first")?.savedAtEpochSeconds)
+        assertEquals(30L, cache.get("same")?.savedAtEpochSeconds)
+
+        // The restored sequence must retain the original eviction order.
+        cache.put(CachedTransitPlan("new", emptyList(), emptyList(), 40L))
+        assertNull(cache.get("first"))
+        assertEquals(30L, cache.get("same")?.savedAtEpochSeconds)
+        assertEquals(40L, cache.get("new")?.savedAtEpochSeconds)
+    }
+
     @Test fun backingStoreIsLoadedAndPublishedOnMutation() {
         val origin = MapPoint(52.665, 8.237, "Lohne")
         val destination = MapPoint(53.083, 8.813, "Bremen")
