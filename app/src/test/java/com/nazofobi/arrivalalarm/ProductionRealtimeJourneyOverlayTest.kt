@@ -75,6 +75,79 @@ class ProductionRealtimeJourneyOverlayTest {
     }
 
     @Test
+    fun reversedProviderOrderUsesSelectedLegOrderAtTransferStop() {
+        val selected = option().copy(
+            tripIds = listOf("T1", "T2"),
+            transfers = 1,
+            stops = listOf(
+                option().stops.first(),
+                RouteStop(
+                    id = "B",
+                    name = "Transfer",
+                    plannedArrival = "2026-10-04T08:15:00+02:00",
+                    plannedDeparture = "2026-10-04T08:17:00+02:00",
+                    plannedPlatform = "1",
+                ),
+                RouteStop(
+                    id = "C",
+                    name = "Destination",
+                    plannedArrival = "2026-10-04T08:45:00+02:00",
+                    plannedPlatform = "3",
+                ),
+            ),
+        )
+
+        fun transferUpdate(arrival: String, departure: String, platform: String) =
+            GermanyRealtimeMatchedStopUpdate(
+                stopSequence = 2,
+                scheduledStopId = "B",
+                realtimeStopId = "B",
+                assignedStopId = null,
+                platformCode = platform,
+                arrivalDelaySeconds = null,
+                departureDelaySeconds = null,
+                arrivalTimeEpochSeconds = at(arrival) / 1_000L,
+                departureTimeEpochSeconds = at(departure) / 1_000L,
+                scheduleRelationship = "SCHEDULED",
+                pickupType = null,
+                dropOffType = null,
+                stopHeadsign = null,
+            )
+
+        fun tripOverlay(id: String, stop: GermanyRealtimeMatchedStopUpdate) =
+            GermanyRealtimeTripOverlay(
+                staticTrip = trip(id),
+                startDate = "20261004",
+                startTime = null,
+                cancelled = false,
+                scheduleRelationship = "SCHEDULED",
+                stopUpdates = listOf(stop),
+                sourceTimestampEpochSeconds = at("07:59:00") / 1_000L,
+            )
+
+        // GTFS-RT contains the departing T2 update before the arriving T1.
+        // Arrival must still come from T1 and departure from T2.
+        val reversedFeed = GermanyRealtimeOverlayResult.Matched(
+            tripOverlays = listOf(
+                tripOverlay("T2", transferUpdate("08:09:00", "08:19:00", "4")),
+                tripOverlay("T1", transferUpdate("08:16:00", "08:39:00", "2")),
+            ),
+            serviceAlerts = emptyList(),
+            freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+            ageSeconds = 30,
+            provenance = provenance(),
+        )
+
+        val result = overlay(reversedFeed).enrich(listOf(selected)).single()
+        val transfer = result.stops[1]
+
+        assertEquals("2026-10-04T08:16:00+02:00", transfer.arrival)
+        assertEquals("2026-10-04T08:19:00+02:00", transfer.departure)
+        assertEquals("4", transfer.platform)
+        assertEquals(listOf("T1", "T2"), result.realtime?.matchedTripIds)
+    }
+
+    @Test
     fun frequencyTripRealtimeFailsClosedWithoutRouteInstanceIdentity() {
         val matched = GermanyRealtimeOverlayResult.Matched(
             tripOverlays = listOf(
