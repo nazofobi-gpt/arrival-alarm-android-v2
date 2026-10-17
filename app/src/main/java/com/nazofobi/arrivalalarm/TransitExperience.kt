@@ -95,6 +95,11 @@ class TransitRecentsStore(
     fun recents(): List<String> = recents.toList()
 
     private fun publish() {
-        onChanged?.invoke(favorites(), recents())
+        try {
+            onChanged?.invoke(favorites(), recents())
+        } catch (_: RuntimeException) {
+            // Persistence failures must not undo the current-session favorite
+            // or recent-trip choice. A later change may retry the full snapshot.
+        }
     }
 }
