@@ -423,9 +423,20 @@ internal class ProductionRealtimeStationOverlay(
         val tripSelector = selector.trip
         if (tripSelector != null) {
             val tripId = tripSelector.tripId ?: return false
+            // The board has no numeric direction ID; never broaden directed alerts.
+            if (selector.directionId != null || tripSelector.directionId != null ||
+                tripSelector.validity == GermanyRealtimeTripSelectorValidity.UNMATCHABLE_INCOMPLETE
+            ) return false
+            val startSeconds = tripSelector.startTime?.let(::serviceTimeSeconds)
+            if (tripSelector.startTime != null && startSeconds == null) return false
             return planned.any { departure ->
                 departure.tripId == tripId &&
-                    (selector.routeId == null || departure.routeId == selector.routeId)
+                    (selector.routeId == null || departure.routeId == selector.routeId) &&
+                    (tripSelector.routeId == null || departure.routeId == tripSelector.routeId) &&
+                    (tripSelector.startDate == null ||
+                        departure.realtimeTripStartDate == tripSelector.startDate) &&
+                    (startSeconds == null ||
+                        departure.realtimeTripStartTime?.let(::serviceTimeSeconds) == startSeconds)
             }
         }
 
