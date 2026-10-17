@@ -249,5 +249,20 @@ class LocaleResourceContractTest(unittest.TestCase):
         )
 
 
+    def test_java_formatter_line_separator_rejects_width_precision_and_flags(self):
+        for token in ("%5n", "%.2n", "%-5n", "%1$5n"):
+            with self.subTest(token=token):
+                with self.assertRaisesRegex(ValueError, "invalid width, precision or flags for %n"):
+                    placeholders(token)
+
+    def test_invalid_newline_width_is_rejected_even_when_locales_match(self):
+        for locale in ("values", "values-de", "values-en"):
+            self.write(locale, '<string name="arrival">Next stop%5n</string>')
+        self.assertTrue(any("invalid format for arrival" in error for error in validate(self.root)))
+
+    def test_indexed_newline_without_width_remains_valid(self):
+        self.assertEqual({}, placeholders("%1$n%n"))
+
+
 if __name__ == "__main__":
     unittest.main()
