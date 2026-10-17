@@ -24,9 +24,21 @@ internal fun isDeviceLocationEnabledForTracking(
     else hasEnabledDeviceLocationProvider(enabledProviders())
 }.getOrDefault(false)
 
-internal fun isDeviceLocationEnabledForTracking(manager: LocationManager): Boolean =
-    isDeviceLocationEnabledForTracking(
-        sdkInt = Build.VERSION.SDK_INT,
-        locationEnabled = { manager.isLocationEnabled },
-        enabledProviders = { manager.getProviders(true) },
-    )
+internal fun isDeviceLocationEnabledForTracking(manager: LocationManager): Boolean {
+    // Keep the API-28 call inside an explicit Android-version guard so minSdk-23 lint
+    // can prove it is never evaluated on older devices.
+    val sdkInt = Build.VERSION.SDK_INT
+    return if (sdkInt >= Build.VERSION_CODES.P) {
+        isDeviceLocationEnabledForTracking(
+            sdkInt = sdkInt,
+            locationEnabled = { manager.isLocationEnabled },
+            enabledProviders = { emptyList() },
+        )
+    } else {
+        isDeviceLocationEnabledForTracking(
+            sdkInt = sdkInt,
+            locationEnabled = { false },
+            enabledProviders = { manager.getProviders(true) },
+        )
+    }
+}
