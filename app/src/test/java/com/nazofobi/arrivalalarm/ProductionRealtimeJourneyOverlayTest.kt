@@ -194,6 +194,49 @@ class ProductionRealtimeJourneyOverlayTest {
     }
 
     @Test
+    fun overflowingProviderEpochDoesNotFabricateArrivalTime() {
+        for (invalidEpoch in listOf(Long.MAX_VALUE, Long.MIN_VALUE)) {
+            val result = GermanyRealtimeOverlayResult.Matched(
+                tripOverlays = listOf(
+                    GermanyRealtimeTripOverlay(
+                        staticTrip = trip("T1"),
+                        startDate = "20261004",
+                        startTime = "08:00:00",
+                        cancelled = false,
+                        scheduleRelationship = "SCHEDULED",
+                        stopUpdates = listOf(
+                            GermanyRealtimeMatchedStopUpdate(
+                                stopSequence = 2,
+                                scheduledStopId = "B",
+                                realtimeStopId = "B",
+                                assignedStopId = null,
+                                platformCode = null,
+                                arrivalDelaySeconds = null,
+                                departureDelaySeconds = null,
+                                arrivalTimeEpochSeconds = invalidEpoch,
+                                departureTimeEpochSeconds = null,
+                                scheduleRelationship = "SCHEDULED",
+                                pickupType = null,
+                                dropOffType = null,
+                                stopHeadsign = null,
+                            ),
+                        ),
+                        sourceTimestampEpochSeconds = at("07:59:00") / 1_000L,
+                    ),
+                ),
+                serviceAlerts = emptyList(),
+                freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+                ageSeconds = 30,
+                provenance = provenance(),
+            )
+            val route = overlay(result).enrich(listOf(option())).single()
+            assertEquals(RouteRealtimeState.FRESH_MATCHED, route.realtime?.state)
+            assertNull("Overflowing epoch $invalidEpoch cannot create an arrival", route.stops.last().arrival)
+            assertEquals("2026-10-04T08:30:00+02:00", route.stops.last().plannedArrival)
+        }
+    }
+
+    @Test
     fun staleOverlayPreservesStaticTruthWithoutApplyingRealtimeDeltas() {
         val matched = GermanyRealtimeOverlayResult.Matched(
             tripOverlays = listOf(
