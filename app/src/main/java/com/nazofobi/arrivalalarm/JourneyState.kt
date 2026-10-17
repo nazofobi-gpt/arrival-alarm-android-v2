@@ -39,8 +39,14 @@ class JourneyController(
             when (saved.phase) {
             JourneyPhase.EMPTY -> saved.start == null && saved.destination == null
             JourneyPhase.START_SELECTED -> saved.start?.isValidCoordinate() == true && saved.destination == null
-            JourneyPhase.DESTINATION_SELECTED, JourneyPhase.ARMED, JourneyPhase.ARRIVED ->
+            JourneyPhase.DESTINATION_SELECTED, JourneyPhase.ARMED ->
                 saved.start?.isValidCoordinate() == true && saved.destination?.isValidCoordinate() == true
+            JourneyPhase.ARRIVED ->
+                // A restored arrival must have measured proximity, not just valid coordinates.
+                saved.start?.isValidCoordinate() == true &&
+                    saved.destination?.isValidCoordinate() == true &&
+                    saved.distanceMeters != null &&
+                    saved.distanceMeters <= arrivalRadiusMeters
         }
     } ?: JourneyUiState()
         private set
