@@ -51,6 +51,11 @@ class SearchMapPlanner(
     private val catalog: GermanyTransitCatalog,
     private val geocoder: GeocodeProvider = EmptyGeocodeProvider(),
 ) {
+    private companion object {
+        // This direct-stop helper does not calculate arbitrary long walking access legs.
+        const val MAX_DIRECT_STOP_SNAP_METERS = 2_000
+    }
+
     fun search(query: String, limit: Int = 20): List<SearchResult> {
         val q = query.trim()
         if (q.isEmpty() || limit <= 0) return emptyList()
@@ -75,9 +80,13 @@ class SearchMapPlanner(
     fun arbitraryPoint(latitude: Double, longitude: Double, label: String = "Harita noktası") = MapPoint(latitude, longitude, label)
 
     fun routeOptions(origin: MapPoint, destination: MapPoint): List<RouteOption> {
-        val originStop = catalog.nearestStops(origin.latitude, origin.longitude, 1).firstOrNull()?.stop ?: return emptyList()
-        val destinationStop = catalog.nearestStops(destination.latitude, destination.longitude, 1).firstOrNull()?.stop ?: return emptyList()
-        return catalog.routesServing(originStop, destinationStop).flatMap { route ->
+        val originNearby = catalog.nearestStops(origin.latitude, origin.longitude, 1).firstOrNull() ?: return emptyList()
+        val destinationNearby = catalog.nearestStops(destination.latitude, destination.longitude, 1).firstOrNull() ?: return emptyList()
+        // A nationwide nearest stop can be hundreds of kilometres away from a map pin.
+        if (originNearby.distanceMeters > MAX_DIRECT_STOP_SNAP_METERS ||
+            destinationNearby.distanceMeters > MAX_DIRECT_STOP_SNAP_METERS
+        ) return emptyList()
+        return catalog.routesServing(originNearby.stop, destinationNearby.stop).flatMap { route ->
             val trips = catalog.tripsForRoute(route.providerId, route.id).ifEmpty { listOf(CatalogTrip("static-${route.id}", route.providerId, route.id, "Planlı")) }
             trips.take(3).mapIndexed { index, trip ->
                 RouteOption(
