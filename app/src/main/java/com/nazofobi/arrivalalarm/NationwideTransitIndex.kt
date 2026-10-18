@@ -96,7 +96,13 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             validators.forEach { (name, value) -> setRequestProperty(name, value) }
         }
         if (http != null) {
-            val status = http.responseCode
+            val status = try {
+                http.responseCode
+            } catch (failure: java.io.IOException) {
+                // A failed response header read must not leave the feed connection open.
+                http.disconnect()
+                throw failure
+            }
             if (status == HttpURLConnection.HTTP_NOT_MODIFIED) {
                 http.disconnect()
                 // HTTP 304 does not change the usable feed or fetch timestamp.
