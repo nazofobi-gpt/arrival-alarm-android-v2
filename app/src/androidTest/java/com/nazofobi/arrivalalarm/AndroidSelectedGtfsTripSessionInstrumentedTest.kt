@@ -83,6 +83,52 @@ class AndroidSelectedGtfsTripSessionInstrumentedTest {
         }
     }
 
+    @Test fun explicitRoleConfirmationRejectsProhibitedBoardingAndStaleCoordinates() = runBlocking {
+        seedSchedule()
+        val roles = TripStopRoles(10, 30, 20)
+        AndroidSelectedGtfsTripSession(context).use { session ->
+            assertEquals(selection, session.confirmRoles(identity, roles))
+            assertEquals(selection, (session.restore() as GtfsSelectionRestore.Verified).selection)
+            assertEquals(null, session.confirmRoles(identity, TripStopRoles(30, 10, 20)))
+            assertFalse(session.confirm(selection.copy(boarding = GtfsSelectedStopRef(10, "wrong-stop"))))
+            NationwideTransitIndex(context).use { index ->
+                index.writableDatabase.execSQL(
+                    "UPDATE stop_times SET pickup_type=1 WHERE trip_id='T' AND stop_sequence=10"
+                )
+            }
+            assertEquals(null, session.confirmRoles(identity, roles))
+            assertFalse(session.confirm(selection))
+            assertEquals(
+                GtfsSelectionRestoreProblem.INVALID_STOP_ROLES,
+                (session.restore() as GtfsSelectionRestore.Rejected).reason,
+            )
+            NationwideTransitIndex(context).use { index ->
+                index.writableDatabase.execSQL(
+                    "UPDATE stop_times SET pickup_type=NULL WHERE trip_id='T' AND stop_sequence=10"
+                )
+                index.writableDatabase.execSQL(
+                    "UPDATE stop_times SET drop_off_type=2 WHERE trip_id='T' AND stop_sequence=30"
+                )
+            }
+            assertEquals(null, session.confirmRoles(identity, roles))
+            assertFalse(session.confirm(selection))
+            NationwideTransitIndex(context).use { index ->
+                index.writableDatabase.execSQL(
+                    "UPDATE stop_times SET drop_off_type=NULL WHERE trip_id='T' AND stop_sequence=30"
+                )
+                index.writableDatabase.execSQL(
+                    "UPDATE stops SET lat=95.0 WHERE id='A'"
+                )
+            }
+            assertEquals(null, session.confirmRoles(identity, roles))
+            assertFalse(session.confirm(selection))
+            assertEquals(
+                GtfsSelectionRestoreProblem.STATIC_TRUTH_CHANGED,
+                (session.restore() as GtfsSelectionRestore.Rejected).reason,
+            )
+        }
+    }
+
     @Test fun absentOfflineIndexCannotConfirmAProvisionalTrip() = runBlocking {
         AndroidSelectedGtfsTripSession(context).use { session ->
             assertFalse(session.confirm(selection))
