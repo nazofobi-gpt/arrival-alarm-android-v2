@@ -18,6 +18,11 @@ object ArrivalLocationQuality {
     const val MAX_TRACKING_ACCURACY_METERS = 150.0
     const val MAX_FIX_AGE_MILLIS = 30_000L
 
+    /** Reject malformed GPS coordinates before distance calculations can wrap around Earth. */
+    fun hasValidCoordinates(latitude: Double, longitude: Double): Boolean =
+        latitude.isFinite() && latitude in -90.0..90.0 &&
+            longitude.isFinite() && longitude in -180.0..180.0
+
     fun isUsableForTracking(evidence: ArrivalLocationEvidence): Boolean {
         val accuracy = evidence.horizontalAccuracyMeters ?: return false
         val age = evidence.ageMillis ?: return false

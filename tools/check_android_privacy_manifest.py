@@ -98,6 +98,26 @@ def validate_manifest(source: str) -> list[str]:
         if types != {"location"}:
             errors.append("ActiveJourneyService must declare only the location FGS type")
 
+    # A disabled/non-exported launcher prevents users from opening the app and
+    # completing the OAuth callback even though tracking service checks pass.
+    expected_activity_names = {
+        ".MainActivity",
+        "MainActivity",
+        "com.nazofobi.arrivalalarm.MainActivity",
+    }
+    activities = [
+        component for component in app.findall("activity")
+        if component.get(ANDROID + "name") in expected_activity_names
+    ]
+    if len(activities) != 1:
+        errors.append("exactly one MainActivity must be declared")
+    else:
+        activity = activities[0]
+        if activity.get(ANDROID + "enabled") not in (None, "true"):
+            errors.append("MainActivity must be enabled")
+        if activity.get(ANDROID + "exported") != "true":
+            errors.append("MainActivity must be exported for launcher and OAuth callbacks")
+
     return errors
 
 

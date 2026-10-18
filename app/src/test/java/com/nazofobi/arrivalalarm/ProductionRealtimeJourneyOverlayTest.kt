@@ -148,6 +148,56 @@ class ProductionRealtimeJourneyOverlayTest {
     }
 
     @Test
+    fun invalidAbsoluteRealtimeEpochsUseScheduledDelayInsteadOfBogusDates() {
+        for (invalidEpoch in listOf(0L, -1L, Long.MIN_VALUE, Long.MAX_VALUE)) {
+            val matched = GermanyRealtimeOverlayResult.Matched(
+                tripOverlays = listOf(
+                    GermanyRealtimeTripOverlay(
+                        staticTrip = trip("T1"),
+                        startDate = "20261004",
+                        startTime = "08:00:00",
+                        cancelled = false,
+                        scheduleRelationship = "SCHEDULED",
+                        stopUpdates = listOf(
+                            GermanyRealtimeMatchedStopUpdate(
+                                stopSequence = 2,
+                                scheduledStopId = "B",
+                                realtimeStopId = "B",
+                                assignedStopId = null,
+                                platformCode = null,
+                                arrivalDelaySeconds = 90,
+                                departureDelaySeconds = null,
+                                arrivalTimeEpochSeconds = invalidEpoch,
+                                departureTimeEpochSeconds = null,
+                                scheduleRelationship = "SCHEDULED",
+                                pickupType = null,
+                                dropOffType = null,
+                                stopHeadsign = null,
+                            ),
+                        ),
+                        sourceTimestampEpochSeconds = at("07:59:00") / 1_000L,
+                    ),
+                ),
+                serviceAlerts = emptyList(),
+                freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+                ageSeconds = 30,
+                provenance = provenance(),
+            )
+
+            val result = overlay(matched).enrich(listOf(option())).single()
+            assertEquals(
+                "epoch=$invalidEpoch",
+                "2026-10-04T08:31:30+02:00",
+                result.stops.last().arrival,
+            )
+            assertEquals(
+                "2026-10-04T08:30:00+02:00",
+                result.stops.last().plannedArrival,
+            )
+        }
+    }
+
+    @Test
     fun frequencyTripRealtimeFailsClosedWithoutRouteInstanceIdentity() {
         val matched = GermanyRealtimeOverlayResult.Matched(
             tripOverlays = listOf(

@@ -9,6 +9,7 @@ import java.io.InputStream
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLConnection
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.Locale
@@ -25,6 +26,9 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         private const val COUNT_KEY = "stop_count"
         private const val VERSION_KEY = "source_version"
         private const val SCHEMA_KEY = "schema_version"
+        private const val SOURCE_URL_KEY = "source_url"
+        private const val HTTP_ETAG_KEY = "http_etag"
+        private const val HTTP_LAST_MODIFIED_KEY = "http_last_modified"
         private const val REQUIRED_STOP_COUNT = 10_000
     }
 
@@ -63,25 +67,55 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
     fun importStops(url: String, onCount: (Int) -> Unit) = importFeed(url, onCount)
 
     fun importFeed(url: String, onCount: (Int) -> Unit) {
+        importFeedWithConnection(url, onCount, URL(url).openConnection())
+    }
+
+    /** Injected URLConnection is used only for deterministic HTTP/SQLite acceptance tests. */
+    internal fun importFeedWithConnection(
+        url: String,
+        onCount: (Int) -> Unit,
+        connection: URLConnection,
+    ) {
         val db = writableDatabase
-        val connection = URL(url).openConnection().apply {
+        connection.apply {
             connectTimeout = 15_000
             readTimeout = 60_000
         }
         val http = connection as? HttpURLConnection
+        // Revalidate only an already usable snapshot fetched from this exact URL.
+        val validators = gtfsConditionalHeaders(
+            ready = isReady(),
+            sameSource = metadata(SOURCE_URL_KEY) == url,
+            etag = metadata(HTTP_ETAG_KEY),
+            lastModified = metadata(HTTP_LAST_MODIFIED_KEY),
+        )
         http?.apply {
             requestMethod = "GET"
             instanceFollowRedirects = true
             setRequestProperty("User-Agent", "ArrivalAlarmAndroid/0.1")
+            validators.forEach { (name, value) -> setRequestProperty(name, value) }
         }
-        if (http != null && http.responseCode !in 200..299) {
-            val code = http.responseCode
-            http.disconnect()
-            error("GTFS indirme HTTP $code")
+        if (http != null) {
+            val status = http.responseCode
+            if (status == HttpURLConnection.HTTP_NOT_MODIFIED) {
+                http.disconnect()
+                // HTTP 304 does not change the usable feed or fetch timestamp.
+                if (validators.isNotEmpty() && isReady()) {
+                    onCount(stopCount())
+                    return
+                }
+                error("GTFS beklenmeyen HTTP 304")
+            }
+            if (status !in 200..299) {
+                http.disconnect()
+                error("GTFS indirme HTTP $status")
+            }
         }
 
-        val sourceVersion = http?.getHeaderField("ETag")
-            ?: http?.getHeaderField("Last-Modified")
+        val responseEtag = http?.getHeaderField("ETag")?.takeIf { it.isNotBlank() }
+        val responseLastModified = http?.getHeaderField("Last-Modified")?.takeIf { it.isNotBlank() }
+        val sourceVersion = responseEtag
+            ?: responseLastModified
             ?: connection.lastModified.takeIf { it > 0L }?.toString()
             ?: connection.url.toString()
         val counts = linkedMapOf<String, Int>()
@@ -141,6 +175,9 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             putMetadata(db, FETCHED_KEY, (System.currentTimeMillis() / 1000).toString())
             putMetadata(db, COUNT_KEY, stops.toString())
             putMetadata(db, VERSION_KEY, sourceVersion)
+            putMetadata(db, SOURCE_URL_KEY, url)
+            putMetadata(db, HTTP_ETAG_KEY, responseEtag.orEmpty())
+            putMetadata(db, HTTP_LAST_MODIFIED_KEY, responseLastModified.orEmpty())
             putMetadata(db, SCHEMA_KEY, "4")
             counts.forEach { (file, count) -> putMetadata(db, "count_$file", count.toString()) }
             db.setTransactionSuccessful()
@@ -381,7 +418,10 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             val name = r.value(h, "stop_name")
             val lat = r.value(h, "stop_lat").toDoubleOrNull()
             val lon = r.value(h, "stop_lon").toDoubleOrNull()
-            if (id.isBlank() || name.isBlank() || lat == null || lon == null) return@forEach
+            if (id.isBlank() || name.isBlank() || lat == null || lon == null ||
+                !lat.isFinite() || lat !in -90.0..90.0 ||
+                !lon.isFinite() || lon !in -180.0..180.0
+            ) return@forEach
             stmt.bindValues(
                 id, name, lat, lon,
                 r.nullValue(h, "parent_station"),
@@ -766,4 +806,18 @@ internal fun escapeTransitLikePrefix(text: String): String = buildString {
         append(character)
     }
     append('%')
+}
+
+/** Conditional validators are valid only for the ready snapshot from this source. */
+internal fun gtfsConditionalHeaders(
+    ready: Boolean,
+    sameSource: Boolean,
+    etag: String?,
+    lastModified: String?,
+): Map<String, String> {
+    if (!ready || !sameSource) return emptyMap()
+    return buildMap {
+        etag?.takeIf(String::isNotBlank)?.let { put("If-None-Match", it) }
+        lastModified?.takeIf(String::isNotBlank)?.let { put("If-Modified-Since", it) }
+    }
 }

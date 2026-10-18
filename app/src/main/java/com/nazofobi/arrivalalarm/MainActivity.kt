@@ -122,6 +122,7 @@ fun ArrivalAlarmApp(
     onOAuthCallbackConsumed: () -> Unit = {},
     themeMode: ArrivalThemeMode = ArrivalThemeMode.SYSTEM,
     onThemeModeChange: (ArrivalThemeMode) -> Unit = {},
+    transitOverride: ArrivalTransitClient? = null,
 ) {
     val context = LocalContext.current.applicationContext
     val graph = remember(context) { ArrivalAlarmRuntimeGraph.get(context) }
@@ -132,7 +133,9 @@ fun ArrivalAlarmApp(
     val connectorSessionStore = graph.connectorSessionStore
     val connectorBaseUrl = BuildConfig.CONNECTOR_BASE_URL.trim().trimEnd('/')
     val coroutineScope = rememberCoroutineScope()
-    val transit = remember { NationwideTransitGateway(context) }
+    val transit: ArrivalTransitClient = remember(context, transitOverride) {
+        transitOverride ?: NationwideTransitGateway(context)
+    }
     val currentLocation = remember { AndroidCurrentLocation(context) }
     val appPreferences = remember(context) {
         context.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
@@ -210,6 +213,10 @@ fun ArrivalAlarmApp(
     var routeStatus by remember { mutableStateOf<String?>(null) }
     var routeOffline by remember { mutableStateOf(false) }
     var routeBusy by remember { mutableStateOf(false) }
+    // In-flight responses must not overwrite a newer journey or station selection.
+    val routeRequestGate = remember { LatestRequestGate() }
+    val nearbyRequestGate = remember { LatestRequestGate() }
+    val stationRequestGate = remember { LatestRequestGate() }
     var stationDepartures by remember { mutableStateOf(emptyList<Departure>()) }
     var stationAlerts by remember { mutableStateOf(emptyList<ServiceAlert>()) }
     var stationSource by remember { mutableStateOf<String?>(null) }
@@ -300,34 +307,44 @@ fun ArrivalAlarmApp(
     }
 
     fun loadNearby(point: MapPoint) {
+        val token = nearbyRequestGate.begin()
         nearbyMessage = null
-        transit.nearbyStopsResolved(point.latitude, point.longitude) { resolution ->
-            when (resolution) {
-                is NationwideLookupResolution.Results -> {
-                    nearby = resolution.values
-                    nearbySource = resolution.sourceLabel
-                    nearbyMessage = null
-                }
-                is NationwideLookupResolution.Stale -> {
-                    nearby = resolution.values
-                    nearbySource = resolution.sourceLabel
-                    nearbyMessage = context.getString(R.string.lookup_stale_results)
-                }
-                is NationwideLookupResolution.NoResult -> {
-                    nearby = emptyList()
-                    nearbySource = resolution.sourceLabel
-                    nearbyMessage = null
-                }
-                is NationwideLookupResolution.ProviderUnavailable -> {
-                    nearby = emptyList()
-                    nearbySource = resolution.sourceLabel
-                    nearbyMessage = context.getString(R.string.lookup_provider_unavailable)
+        transit.nearbyStopsResolved(point.latitude, point.longitude) callback@{ resolution ->
+            nearbyRequestGate.commitIfCurrent(token) {
+                when (resolution) {
+                    is NationwideLookupResolution.Results -> {
+                        nearby = resolution.values
+                        nearbySource = resolution.sourceLabel
+                        nearbyMessage = null
+                    }
+                    is NationwideLookupResolution.Stale -> {
+                        nearby = resolution.values
+                        nearbySource = resolution.sourceLabel
+                        nearbyMessage = context.getString(R.string.lookup_stale_results)
+                    }
+                    is NationwideLookupResolution.NoResult -> {
+                        nearby = emptyList()
+                        nearbySource = resolution.sourceLabel
+                        nearbyMessage = null
+                    }
+                    is NationwideLookupResolution.ProviderUnavailable -> {
+                        nearby = emptyList()
+                        nearbySource = resolution.sourceLabel
+                        nearbyMessage = context.getString(R.string.lookup_provider_unavailable)
+                    }
                 }
             }
         }
     }
 
     fun setOrigin(point: MapPoint) {
+        // Changing origin cancels any pending route and station responses.
+        routeRequestGate.invalidate()
+        stationRequestGate.invalidate()
+        nearbyRequestGate.invalidate()
+        routeBusy = false
+        nearby = emptyList()
+        nearbySource = null
         origin = point
         destination = null
         destinationStopId = null
@@ -354,34 +371,38 @@ fun ArrivalAlarmApp(
         "${a.latitude},${a.longitude}->${b.latitude},${b.longitude}"
 
     fun loadRoutes(a: MapPoint, b: MapPoint) {
+        val token = routeRequestGate.begin()
         routeBusy = true
         routeStatus = context.getString(R.string.route_calculating)
         val key = routeKey(a, b)
-        transit.journeyOptions(a, b) { options, status ->
-            routeBusy = false
-            if (options.isNotEmpty()) {
-                routeOffline = false
-                routeOptions = options
-                if (selectedRouteId !in options.map { it.id }) {
-                    selectedRouteId = null
+        transit.journeyOptions(a, b) callback@{ options, status ->
+            routeRequestGate.commitIfCurrent(token) {
+                routeBusy = false
+                if (options.isNotEmpty()) {
+                    routeOffline = false
+                    routeOptions = options
+                    if (selectedRouteId !in options.map { it.id }) {
+                        selectedRouteId = null
+                    }
+                    graph.routeRegistry.replace(options)
+                    routeStatus = status
+                    routeCache.put(CachedTransitPlan(key, options, emptyList(), System.currentTimeMillis() / 1000))
+                } else {
+                    val cached = routeCache.routeOptions(key)
+                    routeOffline = cached.isNotEmpty()
+                    routeOptions = cached
+                    if (selectedRouteId !in cached.map { it.id }) {
+                        selectedRouteId = null
+                    }
+                    graph.routeRegistry.replace(cached)
+                    routeStatus = if (cached.isNotEmpty()) context.getString(R.string.route_offline_fallback) else status
                 }
-                graph.routeRegistry.replace(options)
-                routeStatus = status
-                routeCache.put(CachedTransitPlan(key, options, emptyList(), System.currentTimeMillis() / 1000))
-            } else {
-                val cached = routeCache.routeOptions(key)
-                routeOffline = cached.isNotEmpty()
-                routeOptions = cached
-                if (selectedRouteId !in cached.map { it.id }) {
-                    selectedRouteId = null
-                }
-                graph.routeRegistry.replace(cached)
-                routeStatus = if (cached.isNotEmpty()) context.getString(R.string.route_offline_fallback) else status
             }
         }
     }
 
     fun loadStationDepartures(stop: CatalogStop) {
+        val token = stationRequestGate.begin()
         stationLoading = true
         stationResolved = false
         stationDepartures = emptyList()
@@ -389,19 +410,21 @@ fun ArrivalAlarmApp(
         stationSource = null
         stationRealtimeState = null
         stationStatus = null
-        transit.stationDepartures(stop) { snapshot ->
-            stationLoading = false
-            if (snapshot.error == null) {
-                stationResolved = true
-                stationDepartures = snapshot.departures
-                stationAlerts = snapshot.alerts
-                stationSource = snapshot.sourceLabel
-                stationRealtimeState = snapshot.realtimeState
-                stationStatus = null
-            } else {
-                stationResolved = false
-                stationRealtimeState = null
-                stationStatus = context.getString(R.string.departures_live_unavailable)
+        transit.stationDepartures(stop) callback@{ snapshot ->
+            stationRequestGate.commitIfCurrent(token) {
+                stationLoading = false
+                if (snapshot.error == null) {
+                    stationResolved = true
+                    stationDepartures = snapshot.departures
+                    stationAlerts = snapshot.alerts
+                    stationSource = snapshot.sourceLabel
+                    stationRealtimeState = snapshot.realtimeState
+                    stationStatus = null
+                } else {
+                    stationResolved = false
+                    stationRealtimeState = null
+                    stationStatus = context.getString(R.string.departures_live_unavailable)
+                }
             }
         }
     }
@@ -418,6 +441,10 @@ fun ArrivalAlarmApp(
             routeStatus = localizedDomainMessage(context, outcome.message)
             return false
         }
+        // Invalidate responses before the new selection changes visible state.
+        routeRequestGate.invalidate()
+        stationRequestGate.invalidate()
+        routeBusy = false
         destination = point
         destinationStopId = stopId
         departureBoardStop = null
