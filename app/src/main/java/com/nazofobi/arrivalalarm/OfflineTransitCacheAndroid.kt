@@ -160,13 +160,16 @@ private fun JSONObject.toDeparture(): Departure? {
     // JSON getters silently coerce missing, malformed or fractional times to epoch zero.
     // Keep offline departures only when a positive whole-second timestamp is proven.
     val scheduled = strictPositiveEpochSecondsOrNull("scheduledEpochSeconds") ?: return null
+    // A coerced string such as "true" must never create an unverified cancellation.
+    // Missing legacy fields retain the previous non-cancelled default.
+    val cancelled = if (!has("cancelled")) false else opt("cancelled") as? Boolean ?: return null
     return Departure(
         tripId = tripId,
         line = optString("line"),
         direction = optString("direction"),
         scheduledEpochSeconds = scheduled,
         realtimeEpochSeconds = strictPositiveEpochSecondsOrNull("realtimeEpochSeconds"),
-        cancelled = optBoolean("cancelled", false),
+        cancelled = cancelled,
         platform = optNullableString("platform"),
         routeId = optNullableString("routeId"),
     )
