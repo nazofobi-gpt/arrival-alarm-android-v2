@@ -322,6 +322,10 @@ class NationwideTransitGateway(
         longitude: Double,
         limit: Int = 8,
     ): NationwideLookupResolution<NearbyStop> {
+        // Invalid coordinates must not be sent to an external nearby provider.
+        if (!validTransitJourneyCoordinates(latitude, longitude)) {
+            return NationwideLookupResolution.NoResult()
+        }
         val local = if (store.isReady()) store.nearestCanonicalStations(latitude, longitude, limit) else emptyList()
         if (local.isNotEmpty()) {
             return NationwideLookupResolution.Results(
@@ -521,6 +525,10 @@ class NationwideTransitGateway(
         destination: MapPoint,
         limit: Int = 3,
     ): NationwideJourneyResolution {
+        // Fail closed before both the local SQLite lookup and live HTTP fallback.
+        if (!validTransitJourneyCoordinates(origin.latitude, origin.longitude) ||
+            !validTransitJourneyCoordinates(destination.latitude, destination.longitude)
+        ) return NationwideJourneyResolution.NoRoute(LocalStaticJourneyOutcome.NoPath)
         val localOutcome = runCatching {
             staticJourneyPlanner.plan(origin, destination, limit)
         }.getOrDefault(LocalStaticJourneyOutcome.Unavailable)
