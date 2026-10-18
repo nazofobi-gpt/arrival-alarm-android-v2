@@ -276,4 +276,55 @@ class OfflineTransitCachePersistenceInstrumentedTest {
         }
     }
 
+
+    @Test
+    fun malformedStoredTripIdsRejectRouteWithoutInventingTripIdentity() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val store = SharedPreferencesTransitCacheStore(context)
+        try {
+            prefs.edit().clear().commit()
+            val route = RouteOption(
+                id = "trip-id-validation",
+                origin = MapPoint(52.665, 8.237, "Lohne"),
+                destination = MapPoint(53.083, 8.813, "Bremen"),
+                line = "RE",
+                direction = "Bremen",
+                departure = "10:00",
+                arrival = "11:00",
+                walkingMinutes = 0,
+                transfers = 0,
+                tripIds = listOf("trip-valid"),
+            )
+            store.save(listOf(CachedTransitPlan("trip-id-test", listOf(route), emptyList(), 100L)))
+            val original = requireNotNull(prefs.getString("plans_json", null))
+            fun restoreWith(value: Any?, remove: Boolean = false): List<RouteOption> {
+                val plans = org.json.JSONArray(original)
+                val storedRoute = plans.getJSONObject(0)
+                    .getJSONArray("routeOptions").getJSONObject(0)
+                if (remove) storedRoute.remove("tripIds") else storedRoute.put("tripIds", value)
+                prefs.edit().putString("plans_json", plans.toString()).commit()
+                return store.load().single().routeOptions
+            }
+            val invalid = listOf(
+                org.json.JSONArray().put(123),
+                org.json.JSONArray().put(true),
+                org.json.JSONArray().put(org.json.JSONObject.NULL),
+                org.json.JSONArray().put("trip-valid").put(false),
+                org.json.JSONArray().put(""),
+                "trip-valid",
+                org.json.JSONObject().put("tripId", "trip-valid"),
+            )
+            invalid.forEach { value ->
+                assertTrue("Malformed tripIds must reject the whole route: $value",
+                    restoreWith(value).isEmpty())
+            }
+            assertEquals(listOf("trip-valid"),
+                restoreWith(org.json.JSONArray().put("trip-valid")).single().tripIds)
+            assertEquals(emptyList<String>(), restoreWith(null, remove = true).single().tripIds)
+            assertEquals(emptyList<String>(), restoreWith(org.json.JSONObject.NULL).single().tripIds)
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
 }

@@ -76,6 +76,10 @@ private fun JSONObject.toRouteOption(): RouteOption? {
     // org.json optInt coerces malformed stored values, masking bad route metadata.
     val walkingMinutes = nonNegativeStoredIntOrNull("walkingMinutes") ?: return null
     val transfers = nonNegativeStoredIntOrNull("transfers") ?: return null
+    val tripIds = when {
+        !has("tripIds") || isNull("tripIds") -> emptyList()
+        else -> optJSONArray("tripIds")?.toStrictTripIdsOrNull() ?: return null
+    }
     return RouteOption(
         id = id,
         origin = origin,
@@ -86,7 +90,7 @@ private fun JSONObject.toRouteOption(): RouteOption? {
         arrival = optString("arrival"),
         walkingMinutes = walkingMinutes,
         transfers = transfers,
-        tripIds = optJSONArray("tripIds").toStrings(),
+        tripIds = tripIds,
         stops = stops,
         refreshToken = optNullableString("refreshToken"),
         sourceUpdatedAtEpochSeconds = optNullableLong("sourceUpdatedAtEpochSeconds"),
@@ -181,11 +185,15 @@ private fun JSONArray?.toDepartures(): List<Departure> = buildList {
     for (index in 0 until array.length()) array.optJSONObject(index)?.toDeparture()?.let(::add)
 }
 
-private fun JSONArray?.toStrings(): List<String> = buildList {
-    val array = this@toStrings ?: return@buildList
-    for (index in 0 until array.length()) {
-        array.optString(index).takeIf { it.isNotBlank() }?.let(::add)
+/** Never coerce numbers, booleans or nulls into an offline trip identity. */
+private fun JSONArray.toStrictTripIdsOrNull(): List<String>? {
+    val ids = ArrayList<String>(length())
+    for (index in 0 until length()) {
+        val id = opt(index) as? String ?: return null
+        if (id.isBlank()) return null
+        ids.add(id)
     }
+    return ids
 }
 
 private fun JSONObject.putNullable(key: String, value: Any?): JSONObject =
