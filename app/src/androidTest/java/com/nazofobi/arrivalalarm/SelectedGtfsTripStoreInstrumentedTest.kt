@@ -124,7 +124,7 @@ class SelectedGtfsTripStoreInstrumentedTest {
         val original = requireNotNull(preferences.getString(SelectedGtfsTripStore.KEY, null))
         assertTrue(
             preferences.edit()
-                .putString(SelectedGtfsTripStore.KEY, original.replace("\"version\":1", "\"version\":\"1\""))
+                .putString(SelectedGtfsTripStore.KEY, original.replace("\"version\":2", "\"version\":\"2\""))
                 .commit()
         )
         assertRejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT, store().restore())
