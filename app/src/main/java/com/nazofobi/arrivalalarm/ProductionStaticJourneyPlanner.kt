@@ -9,6 +9,11 @@ import java.util.TimeZone
 import kotlin.math.abs
 import kotlin.math.ceil
 
+/** Reject untrusted GPS/map coordinates before either local nearest-stop or live routing. */
+internal fun validTransitJourneyCoordinates(latitude: Double, longitude: Double): Boolean =
+    latitude.isFinite() && longitude.isFinite() &&
+        latitude in -90.0..90.0 && longitude in -180.0..180.0
+
 sealed interface LocalStaticJourneyOutcome {
     data class Results(val options: List<RouteOption>) : LocalStaticJourneyOutcome
     data object SameOrigin : LocalStaticJourneyOutcome
@@ -286,6 +291,9 @@ class ProductionStaticJourneyPlanner(
         destination: MapPoint,
         limit: Int = 3,
     ): LocalStaticJourneyOutcome {
+        if (!validTransitJourneyCoordinates(origin.latitude, origin.longitude) ||
+            !validTransitJourneyCoordinates(destination.latitude, destination.longitude)
+        ) return LocalStaticJourneyOutcome.NoPath
         if (!index.isReady()) return LocalStaticJourneyOutcome.Unavailable
         val boundedLimit = limit.coerceIn(1, 6)
         val originNearby = index.nearest(

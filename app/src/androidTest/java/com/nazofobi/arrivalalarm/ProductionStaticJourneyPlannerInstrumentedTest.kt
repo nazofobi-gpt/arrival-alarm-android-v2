@@ -65,6 +65,59 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
     }
 
     @Test
+    fun invalidCoordinatesNeverReachStaticGraphOrLiveJourneyAndNearbyProviders() {
+        seedReadyGraph(includeTrip = true)
+        val from = MapPoint(52.665, 8.237, "Lohne")
+        val to = MapPoint(52.700, 8.400, "Achim")
+        val invalid = listOf(
+            MapPoint(Double.NaN, 8.237, "NaN latitude"),
+            MapPoint(52.665, Double.NaN, "NaN longitude"),
+            MapPoint(Double.POSITIVE_INFINITY, 8.237, "infinite latitude"),
+            MapPoint(52.665, Double.NEGATIVE_INFINITY, "infinite longitude"),
+            MapPoint(91.0, 8.237, "latitude over max"),
+            MapPoint(-91.0, 8.237, "latitude below min"),
+            MapPoint(52.665, 181.0, "longitude over max"),
+            MapPoint(52.665, -181.0, "longitude below min"),
+        )
+        var liveCalls = 0
+        val gateway = NationwideTransitGateway(
+            context = context,
+            nowMillis = { at("07:55:00") },
+            liveJourneyLoader = { _, _, _ ->
+                liveCalls++
+                error("Invalid coordinates reached live routing")
+            },
+            realtimeFetch = ::realtimeUnavailable,
+        )
+        val index = NationwideTransitIndex(context)
+        try {
+            val planner = ProductionStaticJourneyPlanner(
+                index = index, nowMillis = { at("07:55:00") },
+            )
+            assertTrue(planner.plan(from, to) is LocalStaticJourneyOutcome.Results)
+            assertTrue(gateway.resolveJourneyOptions(from, to) is NationwideJourneyResolution.Results)
+            for (point in invalid) {
+                assertEquals(LocalStaticJourneyOutcome.NoPath, planner.plan(point, to))
+                assertEquals(LocalStaticJourneyOutcome.NoPath, planner.plan(from, point))
+                assertTrue(
+                    gateway.resolveJourneyOptions(point, to) is NationwideJourneyResolution.NoRoute
+                )
+                assertTrue(
+                    gateway.resolveJourneyOptions(from, point) is NationwideJourneyResolution.NoRoute
+                )
+                assertTrue(
+                    gateway.resolveNearbyStops(point.latitude, point.longitude) is
+                        NationwideLookupResolution.NoResult
+                )
+            }
+            assertEquals(0, liveCalls)
+        } finally {
+            index.close()
+            gateway.close()
+        }
+    }
+
+    @Test
     fun localLookupRemainsUsableWhenEnrichmentProviderIsOffline() {
         seedReadyGraph(includeTrip = true)
         var providerCalls = 0
