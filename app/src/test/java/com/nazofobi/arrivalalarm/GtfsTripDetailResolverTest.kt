@@ -73,6 +73,35 @@ class GtfsTripDetailResolverTest {
     }
 
     @Test
+    fun invalidProviderStopNamesAndCoordinatesNeverBecomeConfirmedTripDetails() {
+        val source = FakeSource()
+        val resolver = GtfsTripDetailResolver(source)
+        val identity = GtfsTripInstanceIdentity.scheduled(trip, serviceDate)
+        assertTrue(resolver.resolve(identity) is GtfsTripDetailResult.Available)
+        val validStop = requireNotNull(source.stops["B"])
+        val malformed = listOf(
+            validStop.copy(name = "  "),
+            validStop.copy(latitude = Double.NaN),
+            validStop.copy(longitude = Double.NaN),
+            validStop.copy(latitude = Double.POSITIVE_INFINITY),
+            validStop.copy(longitude = Double.NEGATIVE_INFINITY),
+            validStop.copy(latitude = 90.001),
+            validStop.copy(latitude = -90.001),
+            validStop.copy(longitude = 180.001),
+            validStop.copy(longitude = -180.001),
+        )
+        malformed.forEach { badStop ->
+            source.stops = source.stops + ("B" to badStop)
+            assertEquals(
+                GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.MISSING_STOP_METADATA),
+                resolver.resolve(identity),
+            )
+        }
+        source.stops = source.stops + ("B" to validStop)
+        assertTrue(resolver.resolve(identity) is GtfsTripDetailResult.Available)
+    }
+
+    @Test
     fun rejectsFrequencyTemplateAndPotentiallyTruncatedSequence() {
         val source = FakeSource()
         val identity = GtfsTripInstanceIdentity.scheduled(trip, serviceDate)
