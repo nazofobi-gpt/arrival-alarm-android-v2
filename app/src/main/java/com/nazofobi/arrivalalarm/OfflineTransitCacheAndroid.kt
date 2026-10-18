@@ -41,11 +41,16 @@ private fun CachedTransitPlan.toJson(): JSONObject = JSONObject()
 
 private fun JSONObject.toCachedTransitPlan(): CachedTransitPlan? {
     val key = optString("key").takeIf { it.isNotBlank() } ?: return null
+    // A missing legacy timestamp means unknown age. Supplied corrupt timestamps
+    // must not be coerced into a falsely fresh persisted snapshot.
+    val savedAt = if (has("savedAtEpochSeconds")) {
+        strictNonNegativeEpochSecondsOrNull("savedAtEpochSeconds") ?: return null
+    } else 0L
     return CachedTransitPlan(
         key = key,
         routeOptions = optJSONArray("routeOptions").toRouteOptions(),
         departures = optJSONArray("departures").toDepartures(),
-        savedAtEpochSeconds = optLong("savedAtEpochSeconds", 0L),
+        savedAtEpochSeconds = savedAt,
     )
 }
 
@@ -89,7 +94,7 @@ private fun JSONObject.toRouteOption(): RouteOption? {
         tripIds = optJSONArray("tripIds").toStrings(),
         stops = stops,
         refreshToken = optNullableString("refreshToken"),
-        sourceUpdatedAtEpochSeconds = optNullableLong("sourceUpdatedAtEpochSeconds"),
+        sourceUpdatedAtEpochSeconds = strictNonNegativeEpochSecondsOrNull("sourceUpdatedAtEpochSeconds"),
     )
 }
 
@@ -201,9 +206,12 @@ private fun JSONObject.optNullableString(key: String): String? =
     if (!has(key) || isNull(key)) null else optString(key).takeIf { it.isNotBlank() }
 
 /** Reject JSON coercions that could turn corrupt realtime times into false live departures. */
-private fun JSONObject.strictPositiveEpochSecondsOrNull(key: String): Long? =
+private fun JSONObject.strictNonNegativeEpochSecondsOrNull(key: String): Long? =
     (opt(key) as? Number)?.toString()?.toLongOrNull()
-        ?.takeIf { it > 0L && it <= Long.MAX_VALUE / 1_000L }
+        ?.takeIf { it >= 0L && it <= Long.MAX_VALUE / 1_000L }
+
+private fun JSONObject.strictPositiveEpochSecondsOrNull(key: String): Long? =
+    strictNonNegativeEpochSecondsOrNull(key)?.takeIf { it > 0L }
 
 private fun JSONObject.optNullableLong(key: String): Long? =
     if (!has(key) || isNull(key)) null else optLong(key)
