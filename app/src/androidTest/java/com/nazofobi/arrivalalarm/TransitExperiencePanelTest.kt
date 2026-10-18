@@ -1,10 +1,12 @@
 package com.nazofobi.arrivalalarm
 
+import android.content.Context
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -48,4 +50,38 @@ class TransitExperiencePanelTest {
             assertEquals("route-re9", selectedRouteId)
         }
     }
+    @Test
+    fun clearRecentTripsRemovesOnlyTripHistoryAndUpdatesPanel() {
+        val prefs = InstrumentationRegistry.getInstrumentation().targetContext
+            .getSharedPreferences("transit_experience", Context.MODE_PRIVATE)
+        val previousFavorites = prefs.getStringSet("favorite_stop_ids", emptySet()).orEmpty().toSet()
+        prefs.edit().remove("recent_trip_ids").commit()
+
+        rule.setContent {
+            MaterialTheme {
+                TransitExperiencePanel(
+                    stopId = "stop-test-history",
+                    stopName = "Lohne",
+                    lineName = "RE 18",
+                    direction = "Osnabrück",
+                    departures = listOf(
+                        Departure("trip-history", "RE 18", "Osnabrück", 2_000L),
+                    ),
+                    alerts = emptyList(),
+                    isOfflineCache = false,
+                    nowEpochSeconds = 1_000L,
+                )
+            }
+        }
+
+        rule.onNodeWithTag("recent-trips-clear").assertDoesNotExist()
+        rule.onNodeWithTag("departure-0").performClick()
+        rule.onNodeWithTag("recent-trips-clear").assertExists().performClick()
+        rule.onNodeWithTag("recent-trips-clear").assertDoesNotExist()
+        rule.runOnIdle {
+            assertEquals("", prefs.getString("recent_trip_ids", ""))
+            assertEquals(previousFavorites, prefs.getStringSet("favorite_stop_ids", emptySet()).orEmpty().toSet())
+        }
+    }
+
 }

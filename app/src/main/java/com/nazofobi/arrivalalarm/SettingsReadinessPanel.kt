@@ -77,8 +77,7 @@ data class SettingsReadinessState(
                 Build.VERSION.SDK_INT < 31 || granted(Manifest.permission.BLUETOOTH_CONNECT)
             val locationManager =
                 context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-            val locationServicesAvailable =
-                runCatching { locationManager.getProviders(true).isNotEmpty() }.getOrDefault(false)
+            val locationServicesAvailable = isDeviceLocationEnabledForTracking(locationManager)
 
             return SettingsReadinessState(
                 themeMode = themeMode,

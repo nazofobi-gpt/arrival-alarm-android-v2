@@ -9,23 +9,29 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 internal object NearbyStationCanonicalizer {
+    private data class GroupKey(val kind: String, val providerId: String?, val value: String)
+
     fun canonicalize(
         latitude: Double,
         longitude: Double,
         candidates: List<NearbyStop>,
         limit: Int,
     ): List<NearbyStop> {
-        val parentIds = candidates.mapNotNull {
-            it.stop.parentStationId?.trim()?.takeIf(String::isNotEmpty)
+        if (limit <= 0) return emptyList()
+        // GTFS stop IDs are scoped to the feed/provider, not globally unique.
+        val parentIds = candidates.mapNotNull { candidate ->
+            val stop = candidate.stop
+            stop.parentStationId?.trim()?.takeIf(String::isNotEmpty)?.let { stop.providerId to it }
         }.toSet()
 
         return candidates
             .groupBy { candidate ->
                 val stop = candidate.stop
+                val parentId = stop.parentStationId?.trim()?.takeIf(String::isNotEmpty)
                 when {
-                    stop.parentStationId?.isNotBlank() == true -> "parent:" + stop.parentStationId
-                    stop.id in parentIds -> "parent:" + stop.id
-                    else -> fallbackKey(stop)
+                    parentId != null -> GroupKey("parent", stop.providerId, parentId)
+                    (stop.providerId to stop.id) in parentIds -> GroupKey("parent", stop.providerId, stop.id)
+                    else -> GroupKey("fallback", stop.providerId, fallbackKey(stop))
                 }
             }
             .values

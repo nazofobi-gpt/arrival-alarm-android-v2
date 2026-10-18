@@ -21,6 +21,101 @@ class StaticGtfsRouterTest {
         assertEquals(120_000L, journey.arrivalEpochMillis - journey.legs.single().arrivalEpochMillis)
     }
 
+    @Test fun duplicateAccessStopsUseShortestWalkForBoardingAndEgress() {
+        val data = FakeData(
+            candidates = mapOf("A" to listOf(candidate("SHORT", "R1", "S", 1, "10:01:00"))),
+            times = mapOf(
+                "SHORT" to listOf(
+                    st("SHORT", 1, "A", "10:01:00"),
+                    st("SHORT", 2, "B", "10:15:00"),
+                ),
+            ),
+        )
+        val result = StaticGtfsRouter(data, zone).route(
+            origins = listOf(StaticRouterAccess("A", 600), StaticRouterAccess("A", 60)),
+            destinations = listOf(StaticRouterAccess("B", 300), StaticRouterAccess("B", 30)),
+            serviceDate = date,
+            departureEpochMillis = at("09:55:00"),
+        )
+        val journey = (result as StaticRouterResult.Journeys).journeys.single()
+        assertEquals("SHORT", journey.legs.single().tripId)
+        assertEquals(60, journey.access.walkSeconds)
+        assertEquals(30, journey.egress.walkSeconds)
+        assertEquals(30_000L, journey.arrivalEpochMillis - journey.legs.single().arrivalEpochMillis)
+    }
+
+    @Test fun nearbyStopAfterSixteenDistantCandidatesIsStillRoutable() {
+        val data = FakeData(
+            candidates = mapOf("A" to listOf(candidate("NEAR", "R1", "S", 1, "10:01:00"))),
+            times = mapOf(
+                "NEAR" to listOf(
+                    st("NEAR", 1, "A", "10:01:00"),
+                    st("NEAR", 2, "B", "10:15:00"),
+                ),
+            ),
+        )
+        val distant = (1..16).map { StaticRouterAccess("DISTANT-$it", 900) }
+        val result = StaticGtfsRouter(data, zone).route(
+            origins = distant + StaticRouterAccess("A", 60),
+            destinations = listOf(StaticRouterAccess("B", 0)),
+            serviceDate = date,
+            departureEpochMillis = at("09:55:00"),
+        )
+        val journey = (result as StaticRouterResult.Journeys).journeys.single()
+        assertEquals("NEAR", journey.legs.single().tripId)
+        assertEquals("A", journey.access.stopId)
+    }
+
+    @Test fun nearbyDestinationAfterSixteenDistantCandidatesIsStillRoutable() {
+        val data = FakeData(
+            candidates = mapOf("A" to listOf(candidate("NEAR-EGRESS", "R1", "S", 1, "10:01:00"))),
+            times = mapOf(
+                "NEAR-EGRESS" to listOf(
+                    st("NEAR-EGRESS", 1, "A", "10:01:00"),
+                    st("NEAR-EGRESS", 2, "B", "10:15:00"),
+                ),
+            ),
+        )
+        val distant = (1..16).map { StaticRouterAccess("DISTANT-EGRESS-$it", 900) }
+        val result = StaticGtfsRouter(data, zone).route(
+            origins = listOf(StaticRouterAccess("A", 0)),
+            destinations = distant + StaticRouterAccess("B", 30),
+            serviceDate = date,
+            departureEpochMillis = at("09:55:00"),
+        )
+        val journey = (result as StaticRouterResult.Journeys).journeys.single()
+        assertEquals("B", journey.egress.stopId)
+        assertEquals(30, journey.egress.walkSeconds)
+        assertEquals(at("10:15:00") + 30_000L, journey.arrivalEpochMillis)
+    }
+
+    @Test fun nextServiceDayBoardsAfterMidnightFromPriorEvening() {
+        val tomorrow = GtfsServiceDate(2026, 10, 3)
+        val data = FakeData(
+            candidates = mapOf("A" to listOf(candidate("NEXT", "R1", "S", 1, "00:10:00"))),
+            times = mapOf(
+                "NEXT" to listOf(
+                    st("NEXT", 1, "A", "00:10:00"),
+                    st("NEXT", 2, "B", "00:25:00"),
+                ),
+            ),
+        )
+        val result = StaticGtfsRouter(data, zone).route(
+            origins = listOf(StaticRouterAccess("A")),
+            destinations = listOf(StaticRouterAccess("B")),
+            serviceDate = tomorrow,
+            departureEpochMillis = at("23:50:00"),
+        )
+
+        val journey = (result as StaticRouterResult.Journeys).journeys.single()
+        assertEquals("NEXT", journey.legs.single().tripId)
+        assertEquals(
+            GtfsServiceTime.parse("00:25:00").resolve(tomorrow, zone).epochMillis,
+            journey.arrivalEpochMillis,
+        )
+        assertTrue(data.candidateQueryCount > 0)
+    }
+
     @Test fun implicitSameStopTransferWorksWithoutTransfersFile() {
         val data = baseTransferData()
         val result = StaticGtfsRouter(data, zone, implicitTransferSeconds = 120).route(
