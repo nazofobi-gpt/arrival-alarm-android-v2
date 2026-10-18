@@ -184,6 +184,52 @@ class OfflineTransitCachePersistenceInstrumentedTest {
             prefs.edit().clear().commit()
         }
     }
+    @Test
+    fun malformedCachedRealtimeEpochsFallBackToScheduledWithoutDroppingTrip() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val cases: List<Pair<String, Any?>> = listOf(
+            "missing" to null,
+            "null" to org.json.JSONObject.NULL,
+            "string" to "1700000300",
+            "boolean" to true,
+            "fraction" to 1_700_000_300.25,
+            "zero" to 0L,
+            "negative" to -1L,
+            "overflow" to (Long.MAX_VALUE / 1_000L + 1L),
+            "valid" to 1_700_000_300L,
+        )
+        val departures = org.json.JSONArray()
+        cases.forEach { (tripId, realtime) ->
+            val item = org.json.JSONObject()
+                .put("tripId", tripId)
+                .put("line", "RE")
+                .put("direction", "Bremen")
+                .put("scheduledEpochSeconds", 1_700_000_000L)
+            if (realtime != null) item.put("realtimeEpochSeconds", realtime)
+            departures.put(item)
+        }
+        val plan = org.json.JSONObject()
+            .put("key", "offline-realtime")
+            .put("savedAtEpochSeconds", 100L)
+            .put("routeOptions", org.json.JSONArray())
+            .put("departures", departures)
+        prefs.edit().clear().putString(
+            "plans_json", org.json.JSONArray().put(plan).toString()
+        ).commit()
+        try {
+            val restored = SharedPreferencesTransitCacheStore(context).load().single().departures
+            assertEquals(cases.map { it.first }, restored.map { it.tripId })
+            restored.forEachIndexed { index, departure ->
+                assertEquals(1_700_000_000L, departure.scheduledEpochSeconds)
+                val expected: Long? = if (cases[index].first == "valid") 1_700_000_300L else null
+                assertEquals(expected, departure.realtimeEpochSeconds)
+            }
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
 
     @Test
     fun corruptOfflineRouteWalkAndTransferCountsAreRejected() {
@@ -229,4 +275,5 @@ class OfflineTransitCachePersistenceInstrumentedTest {
             prefs.edit().clear().commit()
         }
     }
+
 }
