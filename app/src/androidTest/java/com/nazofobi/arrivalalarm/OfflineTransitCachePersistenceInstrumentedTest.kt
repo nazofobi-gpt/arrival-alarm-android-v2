@@ -185,6 +185,50 @@ class OfflineTransitCachePersistenceInstrumentedTest {
         }
     }
     @Test
+    fun cachedDepartureCancellationRequiresActualJsonBoolean() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val cases: List<Pair<String, Any?>> = listOf(
+            "cancelled" to true,
+            "not-cancelled" to false,
+            "legacy-missing" to null,
+            "text-true" to "true",
+            "text-false" to "false",
+            "number-one" to 1,
+            "number-zero" to 0,
+            "explicit-null" to org.json.JSONObject.NULL,
+            "object" to org.json.JSONObject().put("value", true),
+            "array" to org.json.JSONArray().put(true),
+        )
+        val departures = org.json.JSONArray()
+        cases.forEach { (tripId, flag) ->
+            val item = org.json.JSONObject()
+                .put("tripId", tripId)
+                .put("line", "RE")
+                .put("direction", "Bremen")
+                .put("scheduledEpochSeconds", 1_700_000_000L)
+            if (flag != null) item.put("cancelled", flag)
+            departures.put(item)
+        }
+        val plan = org.json.JSONObject()
+            .put("key", "offline-cancellation-validation")
+            .put("savedAtEpochSeconds", 100L)
+            .put("routeOptions", org.json.JSONArray())
+            .put("departures", departures)
+        assertTrue(prefs.edit().clear().putString(
+            "plans_json", org.json.JSONArray().put(plan).toString()
+        ).commit())
+        try {
+            val restored = SharedPreferencesTransitCacheStore(context).load().single().departures
+            assertEquals(listOf("cancelled", "not-cancelled", "legacy-missing"),
+                restored.map { it.tripId })
+            assertEquals(listOf(true, false, false), restored.map { it.cancelled })
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
+    @Test
     fun malformedCachedRealtimeEpochsFallBackToScheduledWithoutDroppingTrip() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
