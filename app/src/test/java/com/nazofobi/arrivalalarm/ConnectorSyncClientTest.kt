@@ -1,5 +1,9 @@
 package com.nazofobi.arrivalalarm
 
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
+import org.junit.Assert.assertFalse
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
