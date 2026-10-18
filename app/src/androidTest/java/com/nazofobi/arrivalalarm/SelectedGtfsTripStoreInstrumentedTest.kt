@@ -123,9 +123,12 @@ class SelectedGtfsTripStoreInstrumentedTest {
     @Test fun wrongTypedOrCorruptedSnapshotRejectsWithoutPartialRecovery() {
         assertTrue(store().save(selected))
         val original = requireNotNull(preferences.getString(SelectedGtfsTripStore.KEY, null))
+        val wrongTypedVersion = JSONObject(original).apply {
+            put("version", getInt("version").toString())
+        }
         assertTrue(
             preferences.edit()
-                .putString(SelectedGtfsTripStore.KEY, original.replace("\"version\":2", "\"version\":\"2\""))
+                .putString(SelectedGtfsTripStore.KEY, wrongTypedVersion.toString())
                 .commit()
         )
         assertRejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT, store().restore())
