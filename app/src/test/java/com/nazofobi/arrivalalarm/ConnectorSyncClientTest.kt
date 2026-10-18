@@ -1,11 +1,7 @@
 package com.nazofobi.arrivalalarm
 
-import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.SocketTimeoutException
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -145,6 +141,34 @@ class ConnectorSyncClientTest {
         )
     }
 
+    @Test fun consentMustBeANativeJsonBooleanNotAStringOrNumber() {
+        for (value in listOf(JSONObject.quote("true"), JSONObject.quote("TRUE"), "1", JSONObject.quote("1"), "null")) {
+            val port = FakePort()
+            val pending = pendingCommand().replace(
+                "\"user_confirmed\": true",
+                "\"user_confirmed\": $value",
+            )
+            val transport = FakeTransport(pending)
+            val client = ConnectorSyncClient(
+                processor = ConnectorCommandProcessor(port),
+                transport = transport,
+                nowEpochSeconds = { 1_000 },
+            )
+
+            val result = client.syncOnce()
+
+            assertEquals("consent=$value", 1, result.processedCommands)
+            assertEquals("consent=$value", 0, result.appliedCommands)
+            assertEquals("consent=$value", 0, port.writes)
+            assertEquals("consent=$value", 7L, result.snapshotStateVersionAfter)
+            assertEquals("consent=$value", 1, transport.receipts.size)
+            assertTrue(
+                "consent=$value",
+                JSONObject(transport.receipts.single()).getString("status") != "APPLIED",
+            )
+        }
+    }
+
     @Test fun httpTransportRejectsCleartextGatewayConfiguration() {
         val error = runCatching {
             HttpConnectorGatewayTransport(
@@ -155,7 +179,6 @@ class ConnectorSyncClientTest {
 
         assertTrue(error is IllegalArgumentException)
     }
-
     @Test fun httpGatewayRejectsEmbeddedSecretsAndInvalidUrisWithoutEchoingThem() {
         val riskyUrls = listOf(
             "https://user:private-secret@gateway.invalid/base",

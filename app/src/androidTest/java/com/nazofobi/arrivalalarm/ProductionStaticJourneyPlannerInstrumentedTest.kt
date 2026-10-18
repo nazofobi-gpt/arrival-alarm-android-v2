@@ -449,6 +449,41 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
     }
 
     @Test
+    fun lateSaturdayNightUsesSundayStaticJourneyWhenLiveProviderIsUnavailable() {
+        seedReadyGraph(includeTrip = true)
+        val saturdayNight = GtfsServiceTime.parse("23:55:00")
+            .resolve(GtfsServiceDate(2026, 10, 3), zone).epochMillis
+        var liveCalls = 0
+        val gateway = NationwideTransitGateway(
+            context = context,
+            nowMillis = { saturdayNight },
+            liveJourneyLoader = { _, _, _ ->
+                liveCalls += 1
+                throw IOException("provider offline")
+            },
+            realtimeFetch = ::realtimeUnavailable,
+        )
+        try {
+            val resolution = gateway.resolveJourneyOptions(
+                origin = MapPoint(52.665, 8.237, "Lohne"),
+                destination = MapPoint(52.700, 8.400, "Achim"),
+                limit = 1,
+            )
+            assertTrue(resolution is NationwideJourneyResolution.Results)
+            resolution as NationwideJourneyResolution.Results
+            assertEquals(NationwideJourneySource.LOCAL_STATIC, resolution.source)
+            assertEquals(0, liveCalls)
+            assertEquals(listOf("T1"), resolution.options.single().tripIds)
+            assertEquals(
+                "2026-10-04T08:00:00+02:00",
+                resolution.options.single().stops.first().plannedDeparture,
+            )
+        } finally {
+            gateway.close()
+        }
+    }
+
+    @Test
     fun overlappingNearestWindowsDoNotCreateFalseSameOrigin() {
         seedReadyGraph(includeTrip = true)
         val index = NationwideTransitIndex(context)

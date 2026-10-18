@@ -9,10 +9,16 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -44,6 +50,10 @@ fun RouteJourneyPanel(
     mode: RouteJourneyMode = RouteJourneyMode.RESULTS,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val preferences = remember(context) { ArrivalUiPreferences(context) }
+    var directOnly by rememberSaveable { mutableStateOf(preferences.loadDirectOnlyRoutes()) }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -118,7 +128,20 @@ fun RouteJourneyPanel(
                     }
                 }
 
-                routeOptions.take(3).forEachIndexed { index, option ->
+                val visibleOptions = RouteResultsFilter(directOnly).apply(routeOptions)
+                FilterChip(
+                    selected = directOnly,
+                    onClick = {
+                        directOnly = !directOnly
+                        preferences.saveDirectOnlyRoutes(directOnly)
+                    },
+                    label = { Text(stringResource(R.string.route_direct_only_filter)) },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("route-direct-only-filter"),
+                )
+
+                visibleOptions.take(6).forEachIndexed { index, option ->
                     RouteOptionCard(
                         option = option,
                         selected = selectedRouteId == option.id,
@@ -128,9 +151,13 @@ fun RouteJourneyPanel(
                     )
                 }
 
-                if (!routeBusy && routeOptions.isEmpty()) {
+                if (!routeBusy && visibleOptions.isEmpty()) {
                     Text(
-                        text = routeStatus ?: stringResource(R.string.route_not_found),
+                        text = if (directOnly && routeOptions.isNotEmpty()) {
+                            stringResource(R.string.route_direct_only_empty)
+                        } else {
+                            routeStatus ?: stringResource(R.string.route_not_found)
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.testTag("route-results-empty"),
@@ -318,8 +345,23 @@ private fun JourneyDetailCard(option: RouteOption) {
                     testTag = "journey-stop-destination",
                 )
             } else {
-                val visibleStops = option.stops.take(16)
-                visibleStops.forEachIndexed { index, stop ->
+                val expandedStops = remember(option.id) { mutableStateOf(false) }
+                val visibleStopIndices = journeyStopPreviewIndices(option.stops.size, expandedStops.value)
+                visibleStopIndices.forEachIndexed { visibleIndex, stopIndex ->
+                    if (visibleIndex > 0) {
+                        val hiddenCount = stopIndex - visibleStopIndices[visibleIndex - 1] - 1
+                        if (hiddenCount > 0) {
+                            Text(
+                                text = stringResource(R.string.journey_stops_hidden_count, hiddenCount),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.testTag("journey-stops-hidden"),
+                            )
+                            HorizontalDivider()
+                        }
+                    }
+                    val index = stopIndex
+                    val stop = option.stops[stopIndex]
                     val actual = stop.departure ?: stop.arrival
                     val planned = stop.plannedDeparture ?: stop.plannedArrival
                     val displayTime = routeClock(actual ?: planned)
@@ -371,8 +413,25 @@ private fun JourneyDetailCard(option: RouteOption) {
                             )
                         }
                     }
-                    if (index != visibleStops.lastIndex) {
+                    if (visibleIndex != visibleStopIndices.lastIndex) {
                         HorizontalDivider()
+                    }
+                }
+                if (option.stops.size > COLLAPSED_JOURNEY_STOP_LIMIT) {
+                    OutlinedButton(
+                        onClick = { expandedStops.value = !expandedStops.value },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("journey-stops-toggle"),
+                    ) {
+                        Text(
+                            if (expandedStops.value) {
+                                stringResource(R.string.journey_show_fewer_stops)
+                            } else {
+                                stringResource(R.string.journey_show_all_stops_count, option.stops.size)
+                            },
+                        )
                     }
                 }
             }

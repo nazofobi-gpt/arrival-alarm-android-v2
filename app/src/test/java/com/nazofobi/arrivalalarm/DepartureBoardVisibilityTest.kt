@@ -28,11 +28,22 @@ class DepartureBoardVisibilityTest {
     }
 
     @Test
-    fun noDestinationAndUnresolvedCoordinateFailClosed() {
-        assertFalse(
+    fun selectedStopShowsBoardWithoutDestinationOrRoute() {
+        assertTrue(
             shouldDisplayDepartureBoard(
                 hasDestination = false,
                 hasSelectedStop = true,
+                hasRouteOptions = false,
+            ),
+        )
+    }
+
+    @Test
+    fun absentStopAndUnresolvedCoordinateFailClosed() {
+        assertFalse(
+            shouldDisplayDepartureBoard(
+                hasDestination = false,
+                hasSelectedStop = false,
                 hasRouteOptions = true,
             ),
         )

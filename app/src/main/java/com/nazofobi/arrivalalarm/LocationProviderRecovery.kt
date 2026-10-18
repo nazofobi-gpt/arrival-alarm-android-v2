@@ -11,10 +11,11 @@ internal object LocationProviderRecovery {
     fun decide(
         journeyPhase: JourneyPhase,
         locationRegistered: Boolean,
+        registeredProviderEnabled: Boolean,
         hasRuntimeGrants: Boolean,
     ): Decision = when {
         journeyPhase != JourneyPhase.ARMED || !hasRuntimeGrants -> Decision.STOP
-        locationRegistered -> Decision.KEEP
+        locationRegistered && registeredProviderEnabled -> Decision.KEEP
         else -> Decision.RETRY
     }
 }
