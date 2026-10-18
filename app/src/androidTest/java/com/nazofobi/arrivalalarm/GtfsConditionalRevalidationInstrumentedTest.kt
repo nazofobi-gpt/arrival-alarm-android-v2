@@ -114,6 +114,50 @@ class GtfsConditionalRevalidationInstrumentedTest {
         }
     }
 
+    @Test fun failedHttp200RefreshRollsBackReadyScheduleAndValidators() {
+        context.deleteDatabase("nationwide_transit.db")
+        val index = NationwideTransitIndex(context)
+        try {
+            index.importFeedWithConnection(
+                sourceUrl,
+                {},
+                FakeGtfsHttpConnection(
+                    URL(sourceUrl), HttpURLConnection.HTTP_OK, validFeed(),
+                    etag = "\"known-good\"",
+                ),
+            )
+            val before = snapshot(index)
+            assertTrue(before.ready)
+
+            // This refresh inserts 10,000 replacement stops but lacks a valid
+            // schedule graph. Every intermediate SQLite change must roll back.
+            val invalid = FakeGtfsHttpConnection(
+                URL(sourceUrl), HttpURLConnection.HTTP_OK, incompleteRefreshFeed(),
+                etag = "\"untrusted-replacement\"",
+            )
+            val error = runCatching {
+                index.importFeedWithConnection(sourceUrl, {}, invalid)
+            }.exceptionOrNull()
+            assertTrue("Missing schedule graph must reject the refresh", error is IllegalStateException)
+            assertEquals(1, invalid.streamReads)
+            assertEquals(before, snapshot(index))
+
+            // Failed HTTP 200 must not replace durable validators: the next 304
+            // still revalidates the last committed, known-good GTFS snapshot.
+            val unchanged = FakeGtfsHttpConnection(
+                URL(sourceUrl), HttpURLConnection.HTTP_NOT_MODIFIED, byteArrayOf(),
+            )
+            var cachedCount = -1
+            index.importFeedWithConnection(sourceUrl, { cachedCount = it }, unchanged)
+            assertEquals("\"known-good\"", unchanged.getRequestProperty("If-None-Match"))
+            assertEquals(10_000, cachedCount)
+            assertEquals(0, unchanged.streamReads)
+            assertEquals(before, snapshot(index))
+        } finally {
+            index.close()
+        }
+    }
+
     private fun snapshot(index: NationwideTransitIndex): Snapshot {
         val db = index.readableDatabase
         return Snapshot(
@@ -141,6 +185,20 @@ class GtfsConditionalRevalidationInstrumentedTest {
             assertTrue(cursor.moveToFirst())
             cursor.getInt(0)
         }
+
+    private fun incompleteRefreshFeed(): ByteArray = ByteArrayOutputStream().use { bytes ->
+        ZipOutputStream(bytes).use { zip ->
+            add(zip, "stops.txt", buildString {
+                appendLine("stop_id,stop_name,stop_lat,stop_lon")
+                appendLine("known-good,Untrusted Replacement,52.0,8.0")
+                for (i in 1 until 10_000) {
+                    appendLine("fixture-$i,Replacement Stop $i,52.0,8.0")
+                }
+            })
+            // Missing routes/trips/stop_times intentionally fails post-import acceptance.
+        }
+        bytes.toByteArray()
+    }
 
     private fun validFeed(): ByteArray = ByteArrayOutputStream().use { bytes ->
         ZipOutputStream(bytes).use { zip ->
