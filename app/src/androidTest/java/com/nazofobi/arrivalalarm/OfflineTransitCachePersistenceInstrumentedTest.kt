@@ -278,6 +278,40 @@ class OfflineTransitCachePersistenceInstrumentedTest {
 
 
     @Test
+    fun invalidOfflineSaveEpochDoesNotImpersonateAValidSnapshot() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val cases: List<Pair<String, Any?>> = listOf(
+            "missing" to null,
+            "null" to org.json.JSONObject.NULL,
+            "string" to "1700000000",
+            "boolean" to true,
+            "fractional" to 1_700_000_000.5,
+            "zero" to 0L,
+            "negative" to -1L,
+            "overflow" to Long.MAX_VALUE,
+            "valid" to 1_700_000_000L,
+        )
+        val plans = org.json.JSONArray()
+        cases.forEach { (key, epoch) ->
+            val plan = org.json.JSONObject()
+                .put("key", key)
+                .put("routeOptions", org.json.JSONArray())
+                .put("departures", org.json.JSONArray())
+            if (epoch != null) plan.put("savedAtEpochSeconds", epoch)
+            plans.put(plan)
+        }
+        assertTrue(prefs.edit().clear().putString("plans_json", plans.toString()).commit())
+        try {
+            val restored = SharedPreferencesTransitCacheStore(context).load()
+            assertEquals(listOf("valid"), restored.map { it.key })
+            assertEquals(1_700_000_000L, restored.single().savedAtEpochSeconds)
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
+    @Test
     fun malformedStoredTripIdsRejectRouteWithoutInventingTripIdentity() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
