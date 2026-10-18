@@ -445,4 +445,50 @@ class OfflineTransitCachePersistenceInstrumentedTest {
             prefs.edit().clear().commit()
         }
     }
+
+    @Test
+    fun corruptedCachedRouteSourceEpochIsRejectedWithoutJsonCoercion() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val store = SharedPreferencesTransitCacheStore(context)
+        try {
+            prefs.edit().clear().commit()
+            val route = RouteOption(
+                id = "timestamp-guard",
+                origin = MapPoint(52.665, 8.237, "Lohne"),
+                destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
+                line = "RE", direction = "Bremen", departure = "10:00", arrival = "11:00",
+                walkingMinutes = 0, transfers = 0, sourceUpdatedAtEpochSeconds = 1_700_000_000L,
+            )
+            store.save(listOf(CachedTransitPlan("timestamp", listOf(route), emptyList(), 100L)))
+            val original = requireNotNull(prefs.getString("plans_json", null))
+            fun restoredWith(value: Any?, remove: Boolean = false): List<RouteOption> {
+                val plans = org.json.JSONArray(original)
+                val savedRoute = plans.getJSONObject(0).getJSONArray("routeOptions").getJSONObject(0)
+                if (remove) savedRoute.remove("sourceUpdatedAtEpochSeconds")
+                else savedRoute.put("sourceUpdatedAtEpochSeconds", value)
+                assertTrue(prefs.edit().putString("plans_json", plans.toString()).commit())
+                return store.load().single().routeOptions
+            }
+            val invalid: List<Any> = listOf(
+                "1700000000", true, -1L, 1.5, Long.MAX_VALUE,
+                org.json.JSONObject().put("epoch", 1_700_000_000L),
+                org.json.JSONArray().put(1_700_000_000L),
+            )
+            invalid.forEach { value ->
+                assertTrue("Corrupt sourceUpdatedAtEpochSeconds=$value must reject route",
+                    restoredWith(value).isEmpty())
+            }
+            assertEquals(1_700_000_000L,
+                restoredWith(1_700_000_000L).single().sourceUpdatedAtEpochSeconds)
+            assertEquals(0L, restoredWith(0L).single().sourceUpdatedAtEpochSeconds)
+            assertEquals(null,
+                restoredWith(org.json.JSONObject.NULL).single().sourceUpdatedAtEpochSeconds)
+            assertEquals(null, restoredWith(null, remove = true)
+                .single().sourceUpdatedAtEpochSeconds)
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
 }

@@ -82,6 +82,11 @@ private fun JSONObject.toRouteOption(): RouteOption? {
         !has("tripIds") || isNull("tripIds") -> emptyList()
         else -> optJSONArray("tripIds")?.toStrictTripIdsOrNull() ?: return null
     }
+    // A malformed source timestamp must not impersonate verified live data.
+    val sourceUpdatedAt = when {
+        !has("sourceUpdatedAtEpochSeconds") || isNull("sourceUpdatedAtEpochSeconds") -> null
+        else -> strictNonNegativeEpochSecondsOrNull("sourceUpdatedAtEpochSeconds") ?: return null
+    }
     return RouteOption(
         id = id,
         origin = origin,
@@ -95,7 +100,7 @@ private fun JSONObject.toRouteOption(): RouteOption? {
         tripIds = tripIds,
         stops = stops,
         refreshToken = optNullableString("refreshToken"),
-        sourceUpdatedAtEpochSeconds = optNullableLong("sourceUpdatedAtEpochSeconds"),
+        sourceUpdatedAtEpochSeconds = sourceUpdatedAt,
     )
 }
 
@@ -219,8 +224,10 @@ private fun JSONObject.strictPositiveEpochSecondsOrNull(key: String): Long? =
     (opt(key) as? Number)?.toString()?.toLongOrNull()
         ?.takeIf { it > 0L && it <= Long.MAX_VALUE / 1_000L }
 
-private fun JSONObject.optNullableLong(key: String): Long? =
-    if (!has(key) || isNull(key)) null else optLong(key)
+/** Strictly numeric, whole and bounded persisted source epoch; zero means unknown age. */
+private fun JSONObject.strictNonNegativeEpochSecondsOrNull(key: String): Long? =
+    (opt(key) as? Number)?.toString()?.toLongOrNull()
+        ?.takeIf { it >= 0L && it <= Long.MAX_VALUE / 1_000L }
 
 private fun JSONObject.optNullableDouble(key: String): Double? =
     if (!has(key) || isNull(key)) null else optDouble(key).takeIf { it.isFinite() }
