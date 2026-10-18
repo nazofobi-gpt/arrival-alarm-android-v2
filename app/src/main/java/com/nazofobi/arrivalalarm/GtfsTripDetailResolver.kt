@@ -40,6 +40,12 @@ data class GtfsTripDetailStop(
     val wheelchairBoarding: Int?,
     val scheduledArrival: String?,
     val scheduledDeparture: String?,
+    // Missing provider coordinates are never treated as a valid boarding/alighting point.
+    // Defaults keep pre-existing diagnostic/test callers source-compatible.
+    val latitude: Double = Double.NaN,
+    val longitude: Double = Double.NaN,
+    val pickupType: Int? = null,
+    val dropOffType: Int? = null,
 )
 
 data class GtfsTripDetail(
@@ -173,6 +179,10 @@ class GtfsTripDetailResolver(private val source: GtfsTripDetailSource) {
                 wheelchairBoarding = stop.wheelchairBoarding,
                 scheduledArrival = time.arrivalTime,
                 scheduledDeparture = time.departureTime,
+                latitude = stop.latitude,
+                longitude = stop.longitude,
+                pickupType = time.pickupType,
+                dropOffType = time.dropOffType,
             )
         }
         return GtfsTripDetailResult.Available(GtfsTripDetail(identity, trip.headsign, stops))
