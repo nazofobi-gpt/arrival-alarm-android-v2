@@ -27,6 +27,9 @@ class TripInferenceUiTest {
                 .putBoolean("onboarding_complete", true)
                 .commit()
         }
+        // SharedPreferences reset alone cannot clear the process-scoped controller.
+        // Recreate the graph before recreating the Activity to isolate this test.
+        ArrivalAlarmRuntimeGraph.resetForTests()
         rule.activityRule.scenario.recreate()
         rule.waitForIdle()
     }

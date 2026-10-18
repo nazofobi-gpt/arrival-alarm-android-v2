@@ -77,8 +77,7 @@ data class SettingsReadinessState(
                 Build.VERSION.SDK_INT < 31 || granted(Manifest.permission.BLUETOOTH_CONNECT)
             val locationManager =
                 context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-            val locationServicesAvailable =
-                runCatching { locationManager.getProviders(true).isNotEmpty() }.getOrDefault(false)
+            val locationServicesAvailable = isDeviceLocationEnabledForTracking(locationManager)
 
             return SettingsReadinessState(
                 themeMode = themeMode,
@@ -106,6 +105,7 @@ fun SettingsReadinessPanel(
     onRequestJourneyPermissions: () -> Unit,
     onRequestGuidancePermissions: () -> Unit,
     onRefreshReadiness: () -> Unit,
+    onShareDiagnostics: () -> Unit,
     onOpenAppSettings: () -> Unit,
     onRetryData: () -> Unit,
     onConnectorAction: () -> Unit,
@@ -280,6 +280,20 @@ fun SettingsReadinessPanel(
             ) {
                 Text(stringResource(R.string.readiness_refresh))
             }
+            OutlinedButton(
+                onClick = onShareDiagnostics,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("readiness-share-diagnostics"),
+            ) {
+                Text(stringResource(R.string.readiness_share_diagnostics))
+            }
+            Text(
+                text = stringResource(R.string.readiness_share_diagnostics_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             OutlinedButton(
                 onClick = onOpenAppSettings,
                 modifier = Modifier

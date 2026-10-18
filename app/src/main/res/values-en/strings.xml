@@ -83,6 +83,8 @@
     <string name="nearby_child_stops_hide">Hide platforms/sub-stops</string>
     <string name="nearby_child_stop_format">%1$d. %2$s</string>
     <string name="route_calculating">Calculating route…</string>
+    <string name="route_direct_only_filter">Direct routes only</string>
+    <string name="route_direct_only_empty">No direct route is available. Turn off the filter to see connections.</string>
     <string name="route_results_title">Route results</string>
     <string name="route_points_format">%1$s → %2$s</string>
     <string name="route_offline_badge">Offline cache</string>
@@ -151,6 +153,7 @@
     <string name="departure_source_planned">scheduled</string>
     <string name="alternate_departures">Alternative departures: %1$d</string>
     <string name="recent_trips">Recent trips: %1$d</string>
+    <string name="recent_trips_clear">Clear recent trip history</string>
     <string name="source_gtfs_local">GTFS Deutschland local index</string>
     <string name="source_live_germany">Germany live search</string>
     <string name="min_two_chars">Enter at least 2 characters</string>
@@ -237,4 +240,9 @@
     <string name="departures_gtfsrt_unavailable">GTFS Deutschland local departures • GTFS-RT unavailable, scheduled times</string>
     <string name="lookup_stale_results">Cached provider results are stale • freshness could not be verified</string>
     <string name="lookup_provider_unavailable">Live search provider is unavailable • local data returned no result</string>
+    <string name="journey_stops_hidden_count">%1$d intermediate stops hidden</string>
+    <string name="journey_show_all_stops_count">Show all %1$d stops</string>
+    <string name="journey_show_fewer_stops">Show fewer stops</string>
+    <string name="readiness_share_diagnostics">Share diagnostics summary</string>
+    <string name="readiness_share_diagnostics_note">Only capability status is shared. Exact location, journey history, and access credentials are excluded.</string>
 </resources>

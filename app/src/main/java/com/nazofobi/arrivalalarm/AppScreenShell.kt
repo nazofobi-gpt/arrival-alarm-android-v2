@@ -2,6 +2,7 @@ package com.nazofobi.arrivalalarm
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -88,6 +89,7 @@ fun HomeOverviewPanel(
     onMapPointSelected: (MapPoint) -> Unit,
     onMapError: (String) -> Unit,
     onNearbyStopSelected: (NearbyStop) -> Unit,
+    onNearbyDeparturesSelected: (NearbyStop) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -222,22 +224,34 @@ fun HomeOverviewPanel(
                         )
                     }
                     nearby.take(4).forEachIndexed { index, candidate ->
-                        OutlinedButton(
-                            onClick = { onNearbyStopSelected(candidate) },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("home-nearby-$index"),
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Text(
-                                stringResource(
-                                    R.string.nearby_stop_format,
-                                    stringResource(R.string.select_destination),
-                                    if (candidate.stop.id in favoriteStopIds) {
-                                        "★ " + candidate.stop.name
-                                    } else {
-                                        candidate.stop.name
-                                    },
-                                    candidate.distanceMeters,
+                            OutlinedButton(
+                                onClick = { onNearbyStopSelected(candidate) },
+                                modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("home-nearby-$index"),
+                            ) {
+                                Text(
+                                    stringResource(
+                                        R.string.nearby_stop_format,
+                                        stringResource(R.string.select_destination),
+                                        if (candidate.stop.id in favoriteStopIds) {
+                                            "★ " + candidate.stop.name
+                                        } else {
+                                            candidate.stop.name
+                                        },
+                                        candidate.distanceMeters,
+                                    )
                                 )
-                            )
+                            }
+                            OutlinedButton(
+                                onClick = { onNearbyDeparturesSelected(candidate) },
+                                modifier = Modifier.heightIn(min = 48.dp)
+                                    .testTag("home-nearby-departures-$index"),
+                            ) {
+                                Text(stringResource(R.string.nav_departures))
+                            }
                         }
                     }
                 }

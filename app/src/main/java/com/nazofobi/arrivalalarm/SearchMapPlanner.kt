@@ -53,7 +53,7 @@ class SearchMapPlanner(
 ) {
     fun search(query: String, limit: Int = 20): List<SearchResult> {
         val q = query.trim()
-        if (q.isEmpty()) return emptyList()
+        if (q.isEmpty() || limit <= 0) return emptyList()
         val stops = catalog.searchStops(q, limit).map(SearchResult::Stop)
         val routes = catalog.searchRoutes(q, limit).map(SearchResult::Route)
         val trips = catalog.searchTrips(q, limit).map { (trip, route) -> SearchResult.Trip(trip, route) }
@@ -61,7 +61,7 @@ class SearchMapPlanner(
     }
 
     fun nearby(point: MapPoint, limit: Int = 5): List<NearbyCandidate> =
-        catalog.nearestStops(point.latitude, point.longitude, limit).map {
+        if (limit <= 0) emptyList() else catalog.nearestStops(point.latitude, point.longitude, limit).map {
             NearbyCandidate(it.stop, it.distanceMeters, bearing(point.latitude, point.longitude, it.stop.latitude, it.stop.longitude))
         }
 
@@ -77,8 +77,8 @@ class SearchMapPlanner(
     fun routeOptions(origin: MapPoint, destination: MapPoint): List<RouteOption> {
         val originStop = catalog.nearestStops(origin.latitude, origin.longitude, 1).firstOrNull()?.stop ?: return emptyList()
         val destinationStop = catalog.nearestStops(destination.latitude, destination.longitude, 1).firstOrNull()?.stop ?: return emptyList()
-        return catalog.routesServing(originStop.id, destinationStop.id).flatMap { route ->
-            val trips = catalog.tripsForRoute(route.id).ifEmpty { listOf(CatalogTrip("static-${route.id}", route.providerId, route.id, "Planlı")) }
+        return catalog.routesServing(originStop, destinationStop).flatMap { route ->
+            val trips = catalog.tripsForRoute(route.providerId, route.id).ifEmpty { listOf(CatalogTrip("static-${route.id}", route.providerId, route.id, "Planlı")) }
             trips.take(3).mapIndexed { index, trip ->
                 RouteOption(
                     id = "${route.id}:${trip.id}", origin = origin, destination = destination,

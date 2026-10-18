@@ -118,7 +118,7 @@ class NationwideTransitGateway(
     private val nowMillis: () -> Long = { System.currentTimeMillis() },
     private val liveJourneyLoader: ((MapPoint, MapPoint, Int) -> List<RouteOption>)? = null,
     private val realtimeFetch: (() -> GermanyRealtimeFetchResult)? = null,
-) {
+) : ArrivalTransitClient {
     private val appContext = context.applicationContext
     private val store = NationwideTransitIndex(appContext)
     private val staticJourneyPlanner = ProductionStaticJourneyPlanner(
@@ -155,10 +155,10 @@ class NationwideTransitGateway(
     private val io = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
 
-    fun currentState(): NationwideDataState =
+    override fun currentState(): NationwideDataState =
         if (store.isReady()) NationwideDataState.Ready(store.stopCount(), store.fetchedAt(), store.sourceVersion()) else NationwideDataState.Idle
 
-    fun ensureNationwideIndex(callback: (NationwideDataState) -> Unit) {
+    override fun ensureNationwideIndex(callback: (NationwideDataState) -> Unit) {
         if (store.isReady()) {
             callback(NationwideDataState.Ready(store.stopCount(), store.fetchedAt(), store.sourceVersion()))
             return
@@ -241,9 +241,9 @@ class NationwideTransitGateway(
         }
     }
 
-    fun searchLocationsResolved(
+    override fun searchLocationsResolved(
         query: String,
-        limit: Int = 20,
+        limit: Int,
         callback: (NationwideLookupResolution<TransitLocationResult>) -> Unit,
     ) {
         val q = query.trim()
@@ -305,10 +305,10 @@ class NationwideTransitGateway(
         }
     }
 
-    fun nearbyStopsResolved(
+    override fun nearbyStopsResolved(
         latitude: Double,
         longitude: Double,
-        limit: Int = 8,
+        limit: Int,
         callback: (NationwideLookupResolution<NearbyStop>) -> Unit,
     ) {
         io.execute {
@@ -401,9 +401,31 @@ class NationwideTransitGateway(
         )
     }
 
-    fun stationDepartures(
+    /**
+     * Resolve the exact scheduled service date/trip/route/direction from the installed GTFS
+     * graph. Missing data never falls back to a different route or a live API guess.
+     */
+    internal fun tripInstanceDetails(
+        identity: GtfsTripInstanceIdentity,
+        callback: (GtfsTripDetailResult) -> Unit,
+    ) {
+        io.execute {
+            val result = if (!store.isReady()) {
+                GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.INDEX_NOT_READY)
+            } else {
+                runCatching {
+                    GtfsTripDetailResolver(GtfsScheduleRepository(store)).resolve(identity)
+                }.getOrElse {
+                    GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.DATA_READ_FAILED)
+                }
+            }
+            main.post { callback(result) }
+        }
+    }
+
+    override fun stationDepartures(
         stop: CatalogStop,
-        limit: Int = 8,
+        limit: Int,
         callback: (StationDeparturesSnapshot) -> Unit,
     ) {
         io.execute {
@@ -465,10 +487,10 @@ class NationwideTransitGateway(
         }
     }
 
-    fun journeyOptions(
+    override fun journeyOptions(
         origin: MapPoint,
         destination: MapPoint,
-        limit: Int = 3,
+        limit: Int,
         callback: (List<RouteOption>, String) -> Unit,
     ) {
         io.execute {
@@ -561,7 +583,7 @@ class NationwideTransitGateway(
             null -> appContext.getString(R.string.source_gtfs_local)
         }
 
-    fun close() {
+    override fun close() {
         io.shutdownNow()
         store.close()
     }
