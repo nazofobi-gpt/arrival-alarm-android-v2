@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.io.ByteArrayInputStream
+import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -34,6 +35,35 @@ class GtfsHttpResponseStatusInstrumentedTest {
 
     @Test fun noContentMustNotBeImportedAsFullGtfsFeed() {
         assertRejectedWithoutReadingBody(HttpURLConnection.HTTP_NO_CONTENT)
+    }
+
+    @Test fun failedHttpStatusReadDisconnectsWithoutImporting() {
+        val connection = object : HttpURLConnection(URL(sourceUrl)) {
+            var disconnected = false
+            var streamReads = 0
+
+            override fun connect() = Unit
+            override fun disconnect() { disconnected = true }
+            override fun usingProxy(): Boolean = false
+            override fun getResponseCode(): Int = throw IOException("synthetic HTTP status failure")
+            override fun getInputStream(): InputStream {
+                streamReads++
+                return ByteArrayInputStream(byteArrayOf())
+            }
+        }
+        val index = NationwideTransitIndex(context)
+        try {
+            val failure = runCatching {
+                index.importFeedWithConnection(sourceUrl, {}, connection)
+            }.exceptionOrNull()
+            assertTrue("The original network failure must be preserved", failure is IOException)
+            assertEquals("synthetic HTTP status failure", failure?.message)
+            assertTrue("Failed HTTP connection must be disconnected", connection.disconnected)
+            assertEquals(0, connection.streamReads)
+            assertFalse(index.isReady())
+        } finally {
+            index.close()
+        }
     }
 
     private fun assertRejectedWithoutReadingBody(statusCode: Int) {
