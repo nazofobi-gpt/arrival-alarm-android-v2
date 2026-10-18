@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -124,7 +125,7 @@ class SelectedGtfsTripStoreInstrumentedTest {
         val original = requireNotNull(preferences.getString(SelectedGtfsTripStore.KEY, null))
         assertTrue(
             preferences.edit()
-                .putString(SelectedGtfsTripStore.KEY, original.replace("\"version\":1", "\"version\":\"1\""))
+                .putString(SelectedGtfsTripStore.KEY, original.replace("\"version\":2", "\"version\":\"2\""))
                 .commit()
         )
         assertRejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT, store().restore())
@@ -165,4 +166,67 @@ class SelectedGtfsTripStoreInstrumentedTest {
         assertEquals(7, result.selection.boarding.sequence)
         assertEquals("Lohne", result.selection.boarding.stopId)
     }
+
+    @Test fun timetableShiftWithSameTripIdentityFailsClosed() {
+        assertTrue(store().save(selected))
+        val unchanged = preferences.getString(SelectedGtfsTripStore.KEY, null)
+        val revised = detail().copy(
+            stops = listOf(
+                stop(2, "Lohne"),
+                stop(7, "Transfer").copy(scheduledArrival = "09:15:00"),
+                stop(13, "Achim"),
+            ),
+        )
+        assertRejected(
+            GtfsSelectionRestoreProblem.STATIC_TRUTH_CHANGED,
+            store { GtfsTripDetailResult.Available(revised) }.restore(),
+        )
+        assertEquals(unchanged, preferences.getString(SelectedGtfsTripStore.KEY, null))
+    }
+
+    @Test fun intermediateScheduleChangeOutsideExplicitRoleStopsAlsoFailsClosed() {
+        val original = detail().copy(
+            stops = listOf(stop(2, "Lohne"), stop(5, "Intermediate"),
+                stop(7, "Transfer"), stop(13, "Achim")),
+        )
+        val initial = store { GtfsTripDetailResult.Available(original) }
+        assertTrue(initial.save(selected))
+        val revised = original.copy(
+            stops = original.stops.map { stop ->
+                if (stop.stopSequence == 5) stop.copy(scheduledDeparture = "08:22:00") else stop
+            },
+        )
+        assertRejected(
+            GtfsSelectionRestoreProblem.STATIC_TRUTH_CHANGED,
+            store { GtfsTripDetailResult.Available(revised) }.restore(),
+        )
+    }
+
+
+    @Test fun oldSnapshotWithoutVerifiedScheduleRequiresNewSelection() {
+        assertTrue(store().save(selected))
+        val persisted = requireNotNull(preferences.getString(SelectedGtfsTripStore.KEY, null))
+        val old = JSONObject(persisted).apply {
+            put("version", 1)
+            remove("schedule_fingerprint")
+        }
+        assertTrue(preferences.edit().putString(SelectedGtfsTripStore.KEY, old.toString()).commit())
+        assertRejected(
+            GtfsSelectionRestoreProblem.LEGACY_SNAPSHOT_REQUIRES_RESELECTION,
+            store().restore(),
+        )
+    }
+
+    @Test fun invalidFingerprintNeverRestoresAnUnprovenTrip() {
+        assertTrue(store().save(selected))
+        val persisted = requireNotNull(preferences.getString(SelectedGtfsTripStore.KEY, null))
+        val corrupted = JSONObject(persisted).apply {
+            put("schedule_fingerprint", "invalid")
+        }
+        assertTrue(preferences.edit().putString(
+            SelectedGtfsTripStore.KEY, corrupted.toString(),
+        ).commit())
+        assertRejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT, store().restore())
+    }
+
 }
