@@ -106,7 +106,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
                 }
                 error("GTFS beklenmeyen HTTP 304")
             }
-            if (status !in 200..299) {
+            if (status != HttpURLConnection.HTTP_OK) {
                 http.disconnect()
                 error("GTFS indirme HTTP $status")
             }
