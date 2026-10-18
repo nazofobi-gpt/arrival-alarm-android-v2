@@ -141,13 +141,30 @@ class SearchMapPlannerTest {
                 CatalogRoute("loop", "vbb", "L", "Loop", listOf("destination", "origin", "middle", "destination")),
                 CatalogRoute("past-only", "vbb", "L", "Already passed", listOf("destination", "origin", "middle")),
             ),
-            trips = emptyList(),
+            trips = listOf(CatalogTrip("loop-trip", "vbb", "loop", "08:00")),
         )
         val options = SearchMapPlanner(GermanyTransitCatalog(snapshot)).routeOptions(
             MapPoint(origin.latitude, origin.longitude, "Loop Origin"),
             MapPoint(destination.latitude, destination.longitude, "Loop Destination"),
         )
-        assertEquals(listOf("loop:static-loop"), options.map { it.id })
+        assertEquals(listOf("loop:loop-trip"), options.map { it.id })
+    }
+
+    @Test fun routeWithNoRecordedTripsNeverInventsAScheduledDeparture() {
+        val from = CatalogStop("a", "vbb", "Berlin Origin", 52.5200, 13.4050)
+        val to = CatalogStop("b", "vbb", "Berlin Destination", 52.5300, 13.4150)
+        val snapshot = TestGermanyTransitFixtures.snapshot.copy(
+            stops = listOf(from, to),
+            routes = listOf(CatalogRoute("no-service", "vbb", "S", "Berlin Destination", listOf("a", "b"))),
+            trips = emptyList(),
+        )
+        val planner = SearchMapPlanner(GermanyTransitCatalog(snapshot))
+        assertTrue(
+            planner.routeOptions(
+                MapPoint(from.latitude, from.longitude, "Berlin Origin"),
+                MapPoint(to.latitude, to.longitude, "Berlin Destination"),
+            ).isEmpty()
+        )
     }
 
     @Test fun farAwayMapPinsCannotInventDirectRoutes() {
