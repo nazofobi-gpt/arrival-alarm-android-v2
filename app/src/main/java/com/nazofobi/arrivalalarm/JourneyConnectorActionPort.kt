@@ -53,7 +53,15 @@ class JourneyConnectorActionPort(
 
     @Synchronized
     override fun setOrigin(point: MapPoint): ConnectorActionOutcome {
-        controller.selectStart(GeoPoint(point.latitude, point.longitude))
+        val expected = GeoPoint(point.latitude, point.longitude)
+        controller.selectStart(expected)
+        // The domain controller can reject invalid coordinates without changing
+        // the previous selection. Do not publish rejected connector metadata.
+        if (controller.state.phase != JourneyPhase.START_SELECTED ||
+            controller.state.start != expected || controller.state.error != null
+        ) {
+            return ConnectorActionOutcome(false, controller.state.error ?: "Başlangıç güncellenemedi")
+        }
         origin = point.toConnectorStop()
         destination = null
         selectedRoute = null
@@ -67,8 +75,13 @@ class JourneyConnectorActionPort(
         if (controller.state.start == null) {
             return ConnectorActionOutcome(false, "Önce başlangıç seçilmeli")
         }
-        controller.selectDestination(GeoPoint(point.latitude, point.longitude))
-        if (controller.state.phase != JourneyPhase.DESTINATION_SELECTED) {
+        val expected = GeoPoint(point.latitude, point.longitude)
+        controller.selectDestination(expected)
+        // A rejected destination can leave the old DESTINATION_SELECTED phase
+        // intact. Verify that this request actually became authoritative.
+        if (controller.state.phase != JourneyPhase.DESTINATION_SELECTED ||
+            controller.state.destination != expected || controller.state.error != null
+        ) {
             return ConnectorActionOutcome(false, controller.state.error ?: "Varış güncellenemedi")
         }
         destination = point.toConnectorStop()

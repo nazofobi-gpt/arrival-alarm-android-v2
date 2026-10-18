@@ -9,7 +9,13 @@ class SharedPreferencesTransitCacheStore(context: Context) : TransitCacheBacking
         .getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
 
     override fun load(): List<CachedTransitPlan> {
-        val raw = prefs.getString("plans_json", null) ?: return emptyList()
+        // Legacy/foreign preferences may contain a non-string value at this key.
+        // A broken offline cache must not prevent the main app from starting.
+        val raw = try {
+            prefs.getString("plans_json", null)
+        } catch (_: ClassCastException) {
+            null
+        } ?: return emptyList()
         return runCatching {
             val array = JSONArray(raw)
             buildList {
@@ -62,6 +68,11 @@ private fun JSONObject.toRouteOption(): RouteOption? {
     val origin = optJSONObject("origin")?.toMapPoint() ?: return null
     val destination = optJSONObject("destination")?.toMapPoint() ?: return null
     val id = optString("id").takeIf { it.isNotBlank() } ?: return null
+    val stopsJson = optJSONArray("stops")
+    if (has("stops") && !isNull("stops") && stopsJson == null) return null
+    val stops = stopsJson.toRouteStops()
+    // A silently dropped stop changes the ordered itinerary and may hide the alarm target.
+    if (stopsJson != null && stops.size != stopsJson.length()) return null
     return RouteOption(
         id = id,
         origin = origin,
@@ -73,7 +84,7 @@ private fun JSONObject.toRouteOption(): RouteOption? {
         walkingMinutes = optInt("walkingMinutes", 0),
         transfers = optInt("transfers", 0),
         tripIds = optJSONArray("tripIds").toStrings(),
-        stops = optJSONArray("stops").toRouteStops(),
+        stops = stops,
         refreshToken = optNullableString("refreshToken"),
         sourceUpdatedAtEpochSeconds = optNullableLong("sourceUpdatedAtEpochSeconds"),
     )
@@ -87,7 +98,9 @@ private fun MapPoint.toJson(): JSONObject = JSONObject()
 private fun JSONObject.toMapPoint(): MapPoint? {
     val latitude = optDouble("latitude", Double.NaN)
     val longitude = optDouble("longitude", Double.NaN)
-    if (!latitude.isFinite() || !longitude.isFinite()) return null
+    if (!latitude.isFinite() || latitude !in -90.0..90.0 ||
+        !longitude.isFinite() || longitude !in -180.0..180.0
+    ) return null
     return MapPoint(latitude, longitude, optString("label"))
 }
 
@@ -105,6 +118,10 @@ private fun RouteStop.toJson(): JSONObject = JSONObject()
 
 private fun JSONObject.toRouteStop(): RouteStop? {
     val name = optString("name").takeIf { it.isNotBlank() } ?: return null
+    // Optional coordinates may be absent, but supplied invalid values cannot be trusted.
+    if (hasInvalidCoordinate("latitude", -90.0, 90.0) ||
+        hasInvalidCoordinate("longitude", -180.0, 180.0)
+    ) return null
     return RouteStop(
         id = optNullableString("id"),
         name = name,
@@ -131,11 +148,17 @@ private fun Departure.toJson(): JSONObject = JSONObject()
 
 private fun JSONObject.toDeparture(): Departure? {
     val tripId = optString("tripId").takeIf { it.isNotBlank() } ?: return null
+    // JSON getters silently coerce missing, malformed or fractional times to epoch zero.
+    // Keep offline departures only when a positive whole-second timestamp is proven.
+    val scheduled = (opt("scheduledEpochSeconds") as? Number)
+        ?.toString()?.toLongOrNull()
+        ?.takeIf { it > 0L && it <= Long.MAX_VALUE / 1_000L }
+        ?: return null
     return Departure(
         tripId = tripId,
         line = optString("line"),
         direction = optString("direction"),
-        scheduledEpochSeconds = optLong("scheduledEpochSeconds", 0L),
+        scheduledEpochSeconds = scheduled,
         realtimeEpochSeconds = optNullableLong("realtimeEpochSeconds"),
         cancelled = optBoolean("cancelled", false),
         platform = optNullableString("platform"),
@@ -176,3 +199,9 @@ private fun JSONObject.optNullableLong(key: String): Long? =
 
 private fun JSONObject.optNullableDouble(key: String): Double? =
     if (!has(key) || isNull(key)) null else optDouble(key).takeIf { it.isFinite() }
+
+private fun JSONObject.hasInvalidCoordinate(key: String, min: Double, max: Double): Boolean {
+    if (!has(key) || isNull(key)) return false
+    val value = optDouble(key, Double.NaN)
+    return !value.isFinite() || value !in min..max
+}

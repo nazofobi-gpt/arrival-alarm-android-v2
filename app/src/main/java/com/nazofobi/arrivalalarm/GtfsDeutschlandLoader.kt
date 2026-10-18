@@ -13,6 +13,7 @@ import java.util.zip.ZipInputStream
 /** Loads the nationwide DELFI GTFS feed instead of relying on demo fixtures. */
 object GtfsDeutschlandLoader {
     const val FEED_URL = "https://download.gtfs.de/germany/free/latest.zip"
+    private val requiredCoreFiles = setOf("stops.txt", "routes.txt", "trips.txt", "stop_times.txt")
 
     fun download(url: String = FEED_URL): CatalogSnapshot {
         val connection = URL(url).openConnection() as HttpURLConnection
@@ -39,7 +40,8 @@ object GtfsDeutschlandLoader {
             while (true) {
                 val entry = zip.nextEntry ?: break
                 val name = entry.name.substringAfterLast('/')
-                if (name in setOf("stops.txt", "routes.txt", "trips.txt", "stop_times.txt")) {
+                if (name in requiredCoreFiles) {
+                    require(name !in files) { "Duplicate GTFS core member: $name" }
                     val entryBytes = ByteArrayOutputStream()
                     val buffer = ByteArray(16 * 1024)
                     while (true) {
@@ -51,6 +53,9 @@ object GtfsDeutschlandLoader {
                 }
                 zip.closeEntry()
             }
+        }
+        require(files.keys.containsAll(requiredCoreFiles)) {
+            "Missing GTFS core members: ${(requiredCoreFiles - files.keys).sorted().joinToString(", ")}"
         }
         val provider = TransitProvider("delfi","DELFI / GTFS Deutschland","Germany",FEED_URL,"Creative Commons 4.0",sourceVersion,fetchedAt,true,"https://realtime.gtfs.de/realtime-free.pb")
         val stops = files["stops.txt"].orEmpty().mapNotNull { row ->
