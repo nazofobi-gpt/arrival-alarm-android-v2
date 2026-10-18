@@ -123,9 +123,12 @@ class SelectedGtfsTripStoreInstrumentedTest {
     @Test fun wrongTypedOrCorruptedSnapshotRejectsWithoutPartialRecovery() {
         assertTrue(store().save(selected))
         val original = requireNotNull(preferences.getString(SelectedGtfsTripStore.KEY, null))
+        val wrongTypedVersion = JSONObject(original).apply {
+            put("version", getInt("version").toString())
+        }
         assertTrue(
             preferences.edit()
-                .putString(SelectedGtfsTripStore.KEY, original.replace("\"version\":2", "\"version\":\"2\""))
+                .putString(SelectedGtfsTripStore.KEY, wrongTypedVersion.toString())
                 .commit()
         )
         assertRejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT, store().restore())
@@ -227,6 +230,40 @@ class SelectedGtfsTripStoreInstrumentedTest {
             SelectedGtfsTripStore.KEY, corrupted.toString(),
         ).commit())
         assertRejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT, store().restore())
+    }
+
+
+    @Test fun changedPlatformOrAccessibilityMetadataCannotRestoreOldSelection() {
+        assertTrue(store().save(selected))
+        val persisted = preferences.getString(SelectedGtfsTripStore.KEY, null)
+        val updatedPlatform = detail().copy(stops = detail().stops.map { stop ->
+            if (stop.stopSequence == 13) stop.copy(platformCode = "Gleis 4") else stop
+        })
+        assertRejected(
+            GtfsSelectionRestoreProblem.STATIC_TRUTH_CHANGED,
+            store { GtfsTripDetailResult.Available(updatedPlatform) }.restore(),
+        )
+        val updatedAccessibility = detail().copy(stops = detail().stops.map { stop ->
+            if (stop.stopSequence == 2) stop.copy(wheelchairBoarding = 2) else stop
+        })
+        assertRejected(
+            GtfsSelectionRestoreProblem.STATIC_TRUTH_CHANGED,
+            store { GtfsTripDetailResult.Available(updatedAccessibility) }.restore(),
+        )
+        assertEquals(persisted, preferences.getString(SelectedGtfsTripStore.KEY, null))
+    }
+
+    @Test fun versionTwoSnapshotWithoutStopMetadataRequiresReselection() {
+        assertTrue(store().save(selected))
+        val persisted = requireNotNull(preferences.getString(SelectedGtfsTripStore.KEY, null))
+        val legacy = JSONObject(persisted).apply { put("version", 2) }
+        assertTrue(
+            preferences.edit().putString(SelectedGtfsTripStore.KEY, legacy.toString()).commit()
+        )
+        assertRejected(
+            GtfsSelectionRestoreProblem.LEGACY_SNAPSHOT_REQUIRES_RESELECTION,
+            store().restore(),
+        )
     }
 
 }
