@@ -87,7 +87,8 @@ class SearchMapPlanner(
             destinationNearby.distanceMeters > MAX_DIRECT_STOP_SNAP_METERS
         ) return emptyList()
         return catalog.routesServing(originNearby.stop, destinationNearby.stop).flatMap { route ->
-            val trips = catalog.tripsForRoute(route.providerId, route.id).ifEmpty { listOf(CatalogTrip("static-${route.id}", route.providerId, route.id, "Planlı")) }
+            // A route shape is not a scheduled journey: never synthesize trip IDs or departures.
+            val trips = catalog.tripsForRoute(route.providerId, route.id)
             trips.take(3).mapIndexed { index, trip ->
                 RouteOption(
                     id = "${route.id}:${trip.id}", origin = origin, destination = destination,
