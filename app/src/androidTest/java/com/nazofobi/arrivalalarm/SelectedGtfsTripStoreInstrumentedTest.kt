@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -199,6 +200,33 @@ class SelectedGtfsTripStoreInstrumentedTest {
             GtfsSelectionRestoreProblem.STATIC_TRUTH_CHANGED,
             store { GtfsTripDetailResult.Available(revised) }.restore(),
         )
+    }
+
+
+    @Test fun oldSnapshotWithoutVerifiedScheduleRequiresNewSelection() {
+        assertTrue(store().save(selected))
+        val persisted = requireNotNull(preferences.getString(SelectedGtfsTripStore.KEY, null))
+        val old = JSONObject(persisted).apply {
+            put("version", 1)
+            remove("schedule_fingerprint")
+        }
+        assertTrue(preferences.edit().putString(SelectedGtfsTripStore.KEY, old.toString()).commit())
+        assertRejected(
+            GtfsSelectionRestoreProblem.LEGACY_SNAPSHOT_REQUIRES_RESELECTION,
+            store().restore(),
+        )
+    }
+
+    @Test fun invalidFingerprintNeverRestoresAnUnprovenTrip() {
+        assertTrue(store().save(selected))
+        val persisted = requireNotNull(preferences.getString(SelectedGtfsTripStore.KEY, null))
+        val corrupted = JSONObject(persisted).apply {
+            put("schedule_fingerprint", "invalid")
+        }
+        assertTrue(preferences.edit().putString(
+            SelectedGtfsTripStore.KEY, corrupted.toString(),
+        ).commit())
+        assertRejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT, store().restore())
     }
 
 }
