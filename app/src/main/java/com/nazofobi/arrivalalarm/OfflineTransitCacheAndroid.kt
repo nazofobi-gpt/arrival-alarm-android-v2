@@ -148,11 +148,17 @@ private fun Departure.toJson(): JSONObject = JSONObject()
 
 private fun JSONObject.toDeparture(): Departure? {
     val tripId = optString("tripId").takeIf { it.isNotBlank() } ?: return null
+    // JSON getters silently coerce missing, malformed or fractional times to epoch zero.
+    // Keep offline departures only when a positive whole-second timestamp is proven.
+    val scheduled = (opt("scheduledEpochSeconds") as? Number)
+        ?.toString()?.toLongOrNull()
+        ?.takeIf { it > 0L && it <= Long.MAX_VALUE / 1_000L }
+        ?: return null
     return Departure(
         tripId = tripId,
         line = optString("line"),
         direction = optString("direction"),
-        scheduledEpochSeconds = optLong("scheduledEpochSeconds", 0L),
+        scheduledEpochSeconds = scheduled,
         realtimeEpochSeconds = optNullableLong("realtimeEpochSeconds"),
         cancelled = optBoolean("cancelled", false),
         platform = optNullableString("platform"),
