@@ -21,7 +21,7 @@ enum class GtfsSelectionRestoreProblem {
 }
 
 sealed interface GtfsSelectionRestore {
-    data object Empty : GtfsSelectionRestore
+    object Empty : GtfsSelectionRestore
     data class Verified(val selection: GtfsSelectedTrip, val detail: GtfsTripDetail) : GtfsSelectionRestore
     data class Rejected(val reason: GtfsSelectionRestoreProblem) : GtfsSelectionRestore
 }
@@ -115,7 +115,8 @@ class SelectedGtfsTripStore(
         put("stop_id", ref.stopId)
     }
 
-    private fun decode(raw: String): GtfsSelectedTrip? = try {
+    private fun decode(raw: String): GtfsSelectedTrip? {
+        return try {
         val json = JSONObject(raw)
         if (json.intStrict("version") != VERSION) return null
         val direction = when (val value = json.opt("direction_id")) {
@@ -136,13 +137,15 @@ class SelectedGtfsTripStore(
             ref(json.optJSONObject("destination")) ?: return null,
             ref(json.optJSONObject("alarm")) ?: return null,
         )
-    } catch (_: RuntimeException) {
-        null
+        } catch (_: RuntimeException) {
+            null
+        }
     }
 
     private fun ref(value: JSONObject?): GtfsSelectedStopRef? {
-        val sequence = value?.intStrict("sequence") ?: return null
-        val id = value.stringStrict("stop_id") ?: return null
+        val data = value ?: return null
+        val sequence = data.intStrict("sequence") ?: return null
+        val id = data.stringStrict("stop_id") ?: return null
         return GtfsSelectedStopRef(sequence, id)
     }
 
