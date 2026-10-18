@@ -103,7 +103,8 @@ class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
         return snapshot.routes.filter { route ->
             if (route.providerId != originStop.providerId) return@filter false
             val boarding = route.stopIds.indexOf(originStop.id)
-            val alighting = route.stopIds.indexOf(destinationStop.id)
+            // A loop may revisit the alighting stop after boarding.
+            val alighting = route.stopIds.lastIndexOf(destinationStop.id)
             boarding >= 0 && alighting > boarding
         }
     }
