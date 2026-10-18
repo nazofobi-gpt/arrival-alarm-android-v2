@@ -11,12 +11,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
@@ -204,9 +201,6 @@ fun HomeOverviewPanel(
                                         ),
                                         style = MaterialTheme.typography.bodyMedium,
                                     )
-                                },
-                                leadingContent = {
-                                    Icon(Icons.Default.Place, contentDescription = null)
                                 },
                                 colors = ListItemDefaults.colors(
                                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
