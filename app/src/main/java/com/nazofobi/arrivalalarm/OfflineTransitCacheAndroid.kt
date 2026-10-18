@@ -150,16 +150,13 @@ private fun JSONObject.toDeparture(): Departure? {
     val tripId = optString("tripId").takeIf { it.isNotBlank() } ?: return null
     // JSON getters silently coerce missing, malformed or fractional times to epoch zero.
     // Keep offline departures only when a positive whole-second timestamp is proven.
-    val scheduled = (opt("scheduledEpochSeconds") as? Number)
-        ?.toString()?.toLongOrNull()
-        ?.takeIf { it > 0L && it <= Long.MAX_VALUE / 1_000L }
-        ?: return null
+    val scheduled = strictPositiveEpochSecondsOrNull("scheduledEpochSeconds") ?: return null
     return Departure(
         tripId = tripId,
         line = optString("line"),
         direction = optString("direction"),
         scheduledEpochSeconds = scheduled,
-        realtimeEpochSeconds = optNullableLong("realtimeEpochSeconds"),
+        realtimeEpochSeconds = strictPositiveEpochSecondsOrNull("realtimeEpochSeconds"),
         cancelled = optBoolean("cancelled", false),
         platform = optNullableString("platform"),
         routeId = optNullableString("routeId"),
@@ -193,6 +190,11 @@ private fun JSONObject.putNullable(key: String, value: Any?): JSONObject =
 
 private fun JSONObject.optNullableString(key: String): String? =
     if (!has(key) || isNull(key)) null else optString(key).takeIf { it.isNotBlank() }
+
+/** Reject JSON coercions that could turn corrupt realtime times into false live departures. */
+private fun JSONObject.strictPositiveEpochSecondsOrNull(key: String): Long? =
+    (opt(key) as? Number)?.toString()?.toLongOrNull()
+        ?.takeIf { it > 0L && it <= Long.MAX_VALUE / 1_000L }
 
 private fun JSONObject.optNullableLong(key: String): Long? =
     if (!has(key) || isNull(key)) null else optLong(key)
