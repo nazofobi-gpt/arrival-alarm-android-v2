@@ -150,6 +150,26 @@ class SearchMapPlannerTest {
         assertEquals(listOf("loop:static-loop"), options.map { it.id })
     }
 
+    @Test fun farAwayMapPinsCannotInventDirectRoutes() {
+        val boarding = CatalogStop("berlin-a", "vbb", "Berlin A", 52.5200, 13.4050)
+        val arrival = CatalogStop("berlin-b", "vbb", "Berlin B", 52.5300, 13.4150)
+        val snapshot = TestGermanyTransitFixtures.snapshot.copy(
+            stops = listOf(boarding, arrival),
+            routes = listOf(CatalogRoute("local", "vbb", "S", "Berlin B", listOf("berlin-a", "berlin-b"))),
+            trips = listOf(CatalogTrip("local-trip", "vbb", "local", "09:00")),
+        )
+        val scoped = SearchMapPlanner(GermanyTransitCatalog(snapshot))
+        val from = MapPoint(boarding.latitude, boarding.longitude, "Berlin A")
+        val to = MapPoint(arrival.latitude, arrival.longitude, "Berlin B")
+        assertEquals(listOf("local:local-trip"), scoped.routeOptions(from, to).map { it.id })
+        // Nearby manual coordinates still resolve to the selected stop.
+        assertEquals(1, scoped.routeOptions(MapPoint(52.522, 13.405, "near boarding"), to).size)
+        val distant = MapPoint(48.1400, 11.5800, "München")
+        assertTrue(scoped.routeOptions(distant, to).isEmpty())
+        assertTrue(scoped.routeOptions(from, distant).isEmpty())
+        assertTrue(scoped.routeOptions(MapPoint(52.5500, 13.4050, "too far"), to).isEmpty())
+    }
+
     @Test fun geocoderIsProviderSwappable() {
         val custom = SearchMapPlanner(GermanyTransitCatalog(TestGermanyTransitFixtures.snapshot), object : GeocodeProvider {
             override fun search(query: String) = listOf(MapPoint(50.0, 8.0, "POI:$query"))
