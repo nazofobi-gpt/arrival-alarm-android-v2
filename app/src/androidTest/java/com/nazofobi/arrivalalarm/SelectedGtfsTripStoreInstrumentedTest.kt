@@ -165,4 +165,40 @@ class SelectedGtfsTripStoreInstrumentedTest {
         assertEquals(7, result.selection.boarding.sequence)
         assertEquals("Lohne", result.selection.boarding.stopId)
     }
+
+    @Test fun timetableShiftWithSameTripIdentityFailsClosed() {
+        assertTrue(store().save(selected))
+        val unchanged = preferences.getString(SelectedGtfsTripStore.KEY, null)
+        val revised = detail().copy(
+            stops = listOf(
+                stop(2, "Lohne"),
+                stop(7, "Transfer").copy(scheduledArrival = "09:15:00"),
+                stop(13, "Achim"),
+            ),
+        )
+        assertRejected(
+            GtfsSelectionRestoreProblem.STATIC_TRUTH_CHANGED,
+            store { GtfsTripDetailResult.Available(revised) }.restore(),
+        )
+        assertEquals(unchanged, preferences.getString(SelectedGtfsTripStore.KEY, null))
+    }
+
+    @Test fun intermediateScheduleChangeOutsideExplicitRoleStopsAlsoFailsClosed() {
+        val original = detail().copy(
+            stops = listOf(stop(2, "Lohne"), stop(5, "Intermediate"),
+                stop(7, "Transfer"), stop(13, "Achim")),
+        )
+        val initial = store { GtfsTripDetailResult.Available(original) }
+        assertTrue(initial.save(selected))
+        val revised = original.copy(
+            stops = original.stops.map { stop ->
+                if (stop.stopSequence == 5) stop.copy(scheduledDeparture = "08:22:00") else stop
+            },
+        )
+        assertRejected(
+            GtfsSelectionRestoreProblem.STATIC_TRUTH_CHANGED,
+            store { GtfsTripDetailResult.Available(revised) }.restore(),
+        )
+    }
+
 }
