@@ -132,6 +132,24 @@ class SearchMapPlannerTest {
         )
     }
 
+    @Test fun loopRouteAcceptsLaterAlightingOccurrenceButNotEarlierOnly() {
+        val origin = CatalogStop("origin", "vbb", "Loop Origin", 52.5200, 13.4050)
+        val destination = CatalogStop("destination", "vbb", "Loop Destination", 52.5300, 13.4150)
+        val snapshot = TestGermanyTransitFixtures.snapshot.copy(
+            stops = listOf(origin, destination),
+            routes = listOf(
+                CatalogRoute("loop", "vbb", "L", "Loop", listOf("destination", "origin", "middle", "destination")),
+                CatalogRoute("past-only", "vbb", "L", "Already passed", listOf("destination", "origin", "middle")),
+            ),
+            trips = emptyList(),
+        )
+        val options = SearchMapPlanner(GermanyTransitCatalog(snapshot)).routeOptions(
+            MapPoint(origin.latitude, origin.longitude, "Loop Origin"),
+            MapPoint(destination.latitude, destination.longitude, "Loop Destination"),
+        )
+        assertEquals(listOf("loop:static-loop"), options.map { it.id })
+    }
+
     @Test fun geocoderIsProviderSwappable() {
         val custom = SearchMapPlanner(GermanyTransitCatalog(TestGermanyTransitFixtures.snapshot), object : GeocodeProvider {
             override fun search(query: String) = listOf(MapPoint(50.0, 8.0, "POI:$query"))
