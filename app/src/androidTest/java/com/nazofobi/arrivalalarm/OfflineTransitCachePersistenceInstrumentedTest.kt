@@ -143,4 +143,45 @@ class OfflineTransitCachePersistenceInstrumentedTest {
             assertTrue(OfflineTransitCache(backingStore = store).routeOptions(key).isEmpty())
         }
     }
+
+    @Test
+    fun invalidCachedScheduledEpochsAreRejectedWithoutLosingValidDeparture() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val departures = org.json.JSONArray()
+        val cases: List<Pair<String, Any?>> = listOf(
+            "missing" to null,
+            "null" to org.json.JSONObject.NULL,
+            "string" to "1700000000",
+            "boolean" to true,
+            "fraction" to 1_700_000_000.5,
+            "zero" to 0L,
+            "negative" to -1L,
+            "overflow" to (Long.MAX_VALUE / 1_000L + 1L),
+            "valid" to 1_700_000_000L,
+        )
+        cases.forEach { (id, timestamp) ->
+            val departure = org.json.JSONObject()
+                .put("tripId", id)
+                .put("line", "RE")
+                .put("direction", "Bremen")
+            if (timestamp != null) departure.put("scheduledEpochSeconds", timestamp)
+            departures.put(departure)
+        }
+        val cached = org.json.JSONObject()
+            .put("key", "offline-departures")
+            .put("savedAtEpochSeconds", 100L)
+            .put("routeOptions", org.json.JSONArray())
+            .put("departures", departures)
+        prefs.edit().clear().putString(
+            "plans_json", org.json.JSONArray().put(cached).toString()
+        ).commit()
+        try {
+            val loaded = SharedPreferencesTransitCacheStore(context).load().single()
+            assertEquals(listOf("valid"), loaded.departures.map { it.tripId })
+            assertEquals(1_700_000_000L, loaded.departures.single().scheduledEpochSeconds)
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
 }
