@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.charset.MalformedInputException
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import org.junit.After
@@ -68,6 +69,40 @@ class NationwideTransitRollbackInstrumentedTest {
         index.close()
         valid.delete()
         invalid.delete()
+    }
+
+    @Test
+    fun malformedUtf8RefreshPreservesKnownGoodSqliteSnapshot() {
+        context.deleteDatabase("nationwide_transit.db")
+        val valid = File(context.cacheDir, "g185-utf8-valid.zip")
+        val malformed = File(context.cacheDir, "g185-utf8-malformed.zip")
+        writeValid(valid)
+        ZipOutputStream(FileOutputStream(malformed)).use { zip ->
+            zip.putNextEntry(ZipEntry("stops.txt"))
+            zip.write("stop_id,stop_name,stop_lat,stop_lon\nbroken,".toByteArray(Charsets.UTF_8))
+            zip.write(byteArrayOf(0xC3.toByte(), 0x28))
+            zip.write(",52.0,8.0\n".toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+        }
+
+        val index = NationwideTransitIndex(context)
+        try {
+            index.importFeed(valid.toURI().toURL().toString()) { }
+            val db = index.readableDatabase
+            val before = snapshot(index, db)
+            assertTrue(before.ready)
+            try {
+                index.importFeed(malformed.toURI().toURL().toString()) { }
+                fail("Malformed UTF-8 must abort GTFS refresh")
+            } catch (_: MalformedInputException) {
+                // Decoder failure inside importFeed must abort the active SQLite transaction.
+            }
+            assertEquals(before, snapshot(index, db))
+        } finally {
+            index.close()
+            valid.delete()
+            malformed.delete()
+        }
     }
 
     private fun snapshot(index: NationwideTransitIndex, db: SQLiteDatabase) = Snapshot(

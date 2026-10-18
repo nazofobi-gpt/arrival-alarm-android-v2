@@ -48,6 +48,12 @@ class NationwideTransitSearchInstrumentedTest {
         assertEquals(listOf("known-good"), index.search("Known Good Bahnhof", 5).map { it.id })
         assertEquals(listOf("known-good"), index.search("known good bahn", 5).map { it.id })
 
+        // Negative SQLite LIMIT means "unbounded": public search must reject it.
+        assertTrue(index.search("Fixture Stop", -1).isEmpty())
+        assertTrue(index.search("Fixture Stop", 0).isEmpty())
+        assertEquals(3, index.search("Fixture Stop", 3).size)
+        assertEquals(100, index.search("Fixture Stop", Int.MAX_VALUE).size)
+
         val lineResults = index.searchRouteAndTripLocations("R1", 6)
         assertTrue(
             lineResults.any {
@@ -69,6 +75,44 @@ class NationwideTransitSearchInstrumentedTest {
         assertTrue(feed.delete())
     }
 
+    @Test fun invalidStopCoordinatesNeverEnterTheSearchIndex() {
+        context.deleteDatabase("nationwide_transit.db")
+        val feed = File(context.cacheDir, "g185-invalid-geo.zip")
+        writeFeed(
+            feed,
+            extraStops = """
+                invalid-nan,NaN Station,NaN,8.0
+                invalid-infinity,Infinite Station,52.0,Infinity
+                invalid-lat,Outside Latitude,91.0,8.0
+                invalid-lon,Outside Longitude,52.0,181.0
+                valid-boundary,Boundary Station,-90.0,180.0
+            """.trimIndent() + "\n",
+        )
+        val index = NationwideTransitIndex(context)
+        try {
+            index.importFeed(feed.toURI().toURL().toString()) { }
+            val db = index.readableDatabase
+            assertEquals(10_001, scalarInt(db, "SELECT COUNT(*) FROM stops"))
+            assertEquals(10_001, scalarInt(db, "SELECT COUNT(*) FROM stop_search"))
+            for (invalidId in listOf(
+                "invalid-nan", "invalid-infinity", "invalid-lat", "invalid-lon",
+            )) {
+                assertEquals(
+                    invalidId,
+                    0,
+                    scalarInt(db, "SELECT COUNT(*) FROM stops WHERE id = ?", arrayOf(invalidId)),
+                )
+            }
+            assertEquals(
+                1,
+                scalarInt(db, "SELECT COUNT(*) FROM stops WHERE id = ?", arrayOf("valid-boundary")),
+            )
+        } finally {
+            index.close()
+            feed.delete()
+        }
+    }
+
     private fun scalarInt(
         db: android.database.sqlite.SQLiteDatabase,
         sql: String,
@@ -78,12 +122,13 @@ class NationwideTransitSearchInstrumentedTest {
         cursor.getInt(0)
     }
 
-    private fun writeFeed(file: File) {
+    private fun writeFeed(file: File, extraStops: String = "") {
         ZipOutputStream(FileOutputStream(file)).use { zip ->
             put(zip, "stops.txt", buildString {
                 appendLine("stop_id,stop_name,stop_lat,stop_lon")
                 appendLine("known-good,Known Good Bahnhof,52.0,8.0")
                 for (i in 1 until 10_000) appendLine("fixture-$i,Fixture Stop $i,52.0,8.0")
+                append(extraStops)
             })
             put(zip, "routes.txt", "route_id,route_short_name,route_long_name,route_type\nroute-1,R1,Fixture Route,3\n")
             put(zip, "trips.txt", "route_id,service_id,trip_id,trip_headsign\nroute-1,service-1,trip-1,Known Good Bahnhof\n")

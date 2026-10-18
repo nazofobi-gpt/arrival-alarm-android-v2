@@ -165,8 +165,13 @@ class StaticGtfsRouter(
         serviceDate: GtfsServiceDate,
         departureEpochMillis: Long,
     ): StaticRouterResult {
-        val from = origins.distinctBy { it.stopId }.take(16)
-        val to = destinations.distinctBy { it.stopId }.take(16)
+        // A stop may be supplied by multiple access/egress strategies. Preserve the
+        // shortest feasible walk rather than whichever duplicate arrived first.
+        // Rank before the bounded selection so a nearby stop is not dropped merely
+        // because more distant candidates came earlier in the input list.
+        val walkOrder = compareBy<StaticRouterAccess> { it.walkSeconds }.thenBy { it.stopId }
+        val from = origins.sortedWith(walkOrder).distinctBy { it.stopId }.take(16)
+        val to = destinations.sortedWith(walkOrder).distinctBy { it.stopId }.take(16)
         if (from.isEmpty() || to.isEmpty()) return StaticRouterResult.NoPath
         // Nearby access/egress windows commonly overlap at adjacent stations. A shared
         // candidate must not hide a valid journey between two different stops.
@@ -793,7 +798,10 @@ class StaticGtfsRouter(
     private fun serviceSeconds(epochMillis: Long, serviceDate: GtfsServiceDate): Int? {
         val anchor = GtfsServiceTime.parse("00:00:00").resolve(serviceDate, agencyTimeZone).epochMillis
         val deltaMillis = epochMillis - anchor
-        if (deltaMillis < 0L) return null
+        // A route can start before the next civil service-day anchor (e.g. 23:50
+        // today, boarding a 00:10 trip tomorrow). Query that date from its first
+        // second rather than suppressing valid after-midnight service.
+        if (deltaMillis < 0L) return 0
         val seconds = deltaMillis / 1_000L + if (deltaMillis % 1_000L == 0L) 0L else 1L
         return seconds.takeIf { it <= Int.MAX_VALUE }?.toInt()
     }

@@ -107,8 +107,16 @@ internal class StaticRouteOptionMapper(
             endpoint(leg.toStopId, arrivalMillis = leg.arrivalEpochMillis),
         )
         val (fromIndex, toIndex, shiftMillis) = pair
+        // A circular journey may revisit one stop hundreds of times. Reuse
+        // stop metadata within this leg instead of repeating repository reads.
+        // containsKey also caches absent stops (null), unlike getOrPut.
+        val stopsById = HashMap<String, GtfsScheduleStop?>()
         return stopTimes.subList(fromIndex, toIndex + 1).map { stopTime ->
-            val stop = data.stop(stopTime.stopId)
+            val stop = if (stopsById.containsKey(stopTime.stopId)) {
+                stopsById[stopTime.stopId]
+            } else {
+                data.stop(stopTime.stopId).also { stopsById[stopTime.stopId] = it }
+            }
             RouteStop(
                 id = stopTime.stopId,
                 name = stop?.name ?: stopTime.stopId,
@@ -126,33 +134,63 @@ internal class StaticRouteOptionMapper(
         leg: StaticTransitLeg,
         serviceDate: GtfsServiceDate,
     ): Triple<Int, Int, Long>? {
+        // Scan backwards so the lookup contains only destination stops after the
+        // boarding index. A time-ordered map avoids the quadratic search on long
+        // loop routes that revisit the same boarding and alighting stops.
+        val laterArrivals = java.util.TreeMap<Long, Int>()
+        val routedDuration = leg.arrivalEpochMillis - leg.departureEpochMillis
         var best: Triple<Int, Int, Long>? = null
         var bestDelta = Long.MAX_VALUE
-        for (fromIndex in stopTimes.indices) {
-            val from = stopTimes[fromIndex]
-            if (from.stopId != leg.fromStopId) continue
-            val scheduledDeparture = epoch(
-                from.departureTime ?: from.arrivalTime,
-                serviceDate,
-            ) ?: continue
-            for (toIndex in (fromIndex + 1) until stopTimes.size) {
-                val to = stopTimes[toIndex]
-                if (to.stopId != leg.toStopId) continue
-                val scheduledArrival = epoch(
-                    to.arrivalTime ?: to.departureTime,
+        var bestFromIndex = Int.MAX_VALUE
+        var bestToIndex = Int.MAX_VALUE
+
+        for (index in stopTimes.indices.reversed()) {
+            val stopTime = stopTimes[index]
+            if (stopTime.stopId == leg.fromStopId) {
+                val scheduledDeparture = epoch(
+                    stopTime.departureTime ?: stopTime.arrivalTime,
                     serviceDate,
-                ) ?: continue
-                val scheduledDuration = scheduledArrival - scheduledDeparture
-                val routedDuration = leg.arrivalEpochMillis - leg.departureEpochMillis
-                val delta = abs(scheduledDuration - routedDuration)
-                if (delta < bestDelta) {
-                    bestDelta = delta
-                    best = Triple(
-                        fromIndex,
-                        toIndex,
-                        leg.departureEpochMillis - scheduledDeparture,
+                )
+                if (scheduledDeparture != null && laterArrivals.isNotEmpty()) {
+                    val expectedArrival = scheduledDeparture + routedDuration
+                    // The closest arrival must be the floor or ceiling of the
+                    // expected time, regardless of the original GTFS row ordering.
+                    val neighbors = listOfNotNull(
+                        laterArrivals.floorEntry(expectedArrival),
+                        laterArrivals.ceilingEntry(expectedArrival),
                     )
+                    for (entry in neighbors) {
+                        val toIndex = entry.value
+                        val delta = abs(entry.key - expectedArrival)
+                        // Preserve the old deterministic tie-break: earliest
+                        // boarding row, followed by earliest alighting row.
+                        if (
+                            delta < bestDelta ||
+                            (delta == bestDelta && (
+                                index < bestFromIndex ||
+                                (index == bestFromIndex && toIndex < bestToIndex)
+                            ))
+                        ) {
+                            bestDelta = delta
+                            bestFromIndex = index
+                            bestToIndex = toIndex
+                            best = Triple(
+                                index,
+                                toIndex,
+                                leg.departureEpochMillis - scheduledDeparture,
+                            )
+                        }
+                    }
                 }
+            }
+
+            // Insert after evaluating this row: boarding and alighting at the
+            // same sequence position is invalid, even when both stop IDs match.
+            if (stopTime.stopId == leg.toStopId) {
+                epoch(
+                    stopTime.arrivalTime ?: stopTime.departureTime,
+                    serviceDate,
+                )?.let { arrival -> laterArrivals[arrival] = index }
             }
         }
         return best
@@ -204,6 +242,23 @@ internal class StaticRouteOptionMapper(
             compact.substring(offsetStart + 3)
     }
 }
+
+/** Calendar-day candidates for service selection; use civil days, not fixed 24-hour offsets
+ * (which would drift across Europe/Berlin daylight-saving transitions).
+ * Yesterday retains GTFS 24+ hour trips; tomorrow captures departures after midnight.
+ */
+internal fun staticRoutingServiceDates(epochMillis: Long, timeZone: TimeZone): List<GtfsServiceDate> =
+    (-1..1).map { offset ->
+        val calendar = GregorianCalendar(timeZone).apply {
+            timeInMillis = epochMillis
+            add(Calendar.DAY_OF_MONTH, offset)
+        }
+        GtfsServiceDate(
+            year = calendar.get(Calendar.YEAR),
+            month = calendar.get(Calendar.MONTH) + 1,
+            day = calendar.get(Calendar.DAY_OF_MONTH),
+        )
+    }
 
 class ProductionStaticJourneyPlanner(
     private val index: NationwideTransitIndex,
@@ -316,20 +371,5 @@ class ProductionStaticJourneyPlanner(
         ceil(distanceMeters.coerceAtLeast(0) / walkingMetersPerSecond).toInt()
 
     private fun serviceDates(epochMillis: Long): List<GtfsServiceDate> =
-        listOf(
-            serviceDate(epochMillis, dayOffset = -1),
-            serviceDate(epochMillis),
-        )
-
-    private fun serviceDate(epochMillis: Long, dayOffset: Int = 0): GtfsServiceDate {
-        val calendar = GregorianCalendar(timeZone).apply {
-            timeInMillis = epochMillis
-            add(Calendar.DAY_OF_MONTH, dayOffset)
-        }
-        return GtfsServiceDate(
-            year = calendar.get(Calendar.YEAR),
-            month = calendar.get(Calendar.MONTH) + 1,
-            day = calendar.get(Calendar.DAY_OF_MONTH),
-        )
-    }
+        staticRoutingServiceDates(epochMillis, timeZone)
 }

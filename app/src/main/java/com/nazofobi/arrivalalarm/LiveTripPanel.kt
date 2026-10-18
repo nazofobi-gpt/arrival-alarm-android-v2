@@ -34,12 +34,25 @@ fun LiveTripPanel(
     nowEpochSeconds: Long,
     modifier: Modifier = Modifier,
 ) {
-    val progress = RouteStopProgressTracker().resolve(selectedRoute.stops, nowEpochSeconds)
+    val trustedRealtime = isTrustedRealtimeForJourney(
+        state = selectedRoute.realtime?.state,
+        routeOffline = routeOffline,
+        cancelledTripIds = selectedRoute.realtime?.cancelledTripIds.orEmpty(),
+    )
+    val progress = RouteStopProgressTracker().resolve(
+        stops = selectedRoute.stops,
+        nowEpochSeconds = nowEpochSeconds,
+        trustRealtime = trustedRealtime,
+    )
     val target = selectedRoute.stops.lastOrNull()
     val targetLabel = target?.name ?: selectedRoute.destination.label
-    val targetTime = routeStopClock(
+    val targetTimeSource = if (trustedRealtime) {
         target?.arrival ?: target?.plannedArrival ?: selectedRoute.arrival
-    )
+    } else {
+        target?.plannedArrival ?: target?.plannedDeparture
+            ?: selectedRoute.arrival.takeIf { target == null }
+    }
+    val targetTime = routeStopClock(targetTimeSource)
 
     Card(
         modifier = modifier
@@ -118,7 +131,7 @@ fun LiveTripPanel(
                     value = progress.current.name,
                     tag = "live-trip-current",
                 )
-                progress.resolvedByProviderTime && (progress.previous != null || progress.next != null) ->
+                progress.resolvedByProviderTime && progress.previous != null && progress.next != null ->
                     Text(
                         text = stringResource(R.string.live_trip_between_stops),
                         style = MaterialTheme.typography.bodyMedium,
@@ -223,8 +236,11 @@ private fun routeStopClock(value: String?): String? {
     val time = raw.substringAfter('T', raw)
     val candidate = time.take(5)
     return candidate.takeIf {
-        candidate.length == 5 && candidate[2] == ':' &&
-            candidate.take(2).toIntOrNull() != null &&
-            candidate.drop(3).toIntOrNull() != null
+        if (candidate.length != 5 || candidate[2] != ':') return@takeIf false
+        val hour = candidate.take(2).toIntOrNull() ?: return@takeIf false
+        val minute = candidate.drop(3).toIntOrNull() ?: return@takeIf false
+        // GTFS clock-only service times may extend past midnight. Invalid minutes
+        // or implausible 48+ hour values must not appear as a destination ETA.
+        hour in 0..47 && minute in 0..59
     }
 }
