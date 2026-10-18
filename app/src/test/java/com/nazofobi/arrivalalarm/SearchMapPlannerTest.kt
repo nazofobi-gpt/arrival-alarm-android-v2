@@ -13,6 +13,45 @@ class SearchMapPlannerTest {
         assertTrue(planner.search("Bremen").any { it.label.contains("Bremen") })
     }
 
+    @Test fun searchRetainsSameNamedStopsByProviderScopedStopId() {
+        val a = CatalogStop("shared", "vbb", "Central Station", 52.5200, 13.4050)
+        val b = CatalogStop("shared", "mvv", "Central Station", 48.1400, 11.5800)
+        val c = CatalogStop("platform", "vbb", "Central Station", 52.5210, 13.4060)
+        val snapshot = TestGermanyTransitFixtures.snapshot.copy(
+            stops = listOf(a, b, c, a),
+            routes = emptyList(),
+            trips = emptyList(),
+        )
+        val results = SearchMapPlanner(GermanyTransitCatalog(snapshot))
+            .search("Central", 10).filterIsInstance<SearchResult.Stop>()
+        assertEquals(listOf(a, b, c), results.map { it.value })
+        assertEquals(2, SearchMapPlanner(GermanyTransitCatalog(snapshot))
+            .search("Central", 2).size)
+    }
+
+    @Test fun searchRetainsSameLabelRoutesAndTripsWithDifferentIdentities() {
+        val berlin = CatalogRoute("route-1", "vbb", "S1", "Central", emptyList())
+        val munich = CatalogRoute("route-1", "mvv", "S1", "Central", emptyList())
+        val berlinFirst = CatalogTrip("trip-1", "vbb", "route-1", "08:00")
+        val berlinSecond = CatalogTrip("trip-2", "vbb", "route-1", "08:00")
+        val munichTrip = CatalogTrip("trip-1", "mvv", "route-1", "08:00")
+        val snapshot = TestGermanyTransitFixtures.snapshot.copy(
+            stops = emptyList(),
+            routes = listOf(berlin, munich, berlin),
+            trips = listOf(berlinFirst, berlinSecond, munichTrip, berlinFirst),
+        )
+        val results = SearchMapPlanner(GermanyTransitCatalog(snapshot)).search("S1", 10)
+        val routes = results.filterIsInstance<SearchResult.Route>()
+        val trips = results.filterIsInstance<SearchResult.Trip>()
+        assertEquals(listOf(berlin, munich), routes.map { it.value })
+        assertEquals(
+            listOf(berlinFirst, berlinSecond, munichTrip),
+            trips.map { it.value },
+        )
+        assertEquals(5, results.size)
+        assertEquals(2, results.map { it.label }.distinct().size)
+    }
+
     @Test fun nonPositiveSearchAndNearbyLimitsReturnEmptyWithoutThrowing() {
         val center = MapPoint(52.5250, 13.3695, "Berlin")
         for (limit in listOf(0, -1, Int.MIN_VALUE)) {
