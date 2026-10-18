@@ -66,6 +66,41 @@ class GtfsHttpResponseStatusInstrumentedTest {
         }
     }
 
+    @Test fun failedHttpFeedHeaderReadDisconnectsWithoutImporting() {
+        for (failingHeader in listOf("ETag", "Last-Modified")) {
+            val connection = object : HttpURLConnection(URL(sourceUrl)) {
+                var disconnected = false
+                var streamReads = 0
+
+                override fun connect() = Unit
+                override fun disconnect() { disconnected = true }
+                override fun usingProxy(): Boolean = false
+                override fun getResponseCode(): Int = HTTP_OK
+                override fun getHeaderField(name: String?): String? {
+                    if (name == failingHeader) throw IOException("synthetic $failingHeader header failure")
+                    return null
+                }
+                override fun getInputStream(): InputStream {
+                    streamReads++
+                    return ByteArrayInputStream(byteArrayOf())
+                }
+            }
+            val index = NationwideTransitIndex(context)
+            try {
+                val failure = runCatching {
+                    index.importFeedWithConnection(sourceUrl, {}, connection)
+                }.exceptionOrNull()
+                assertTrue("Header failure must preserve original IOException", failure is IOException)
+                assertEquals("synthetic $failingHeader header failure", failure?.message)
+                assertTrue("Failed $failingHeader read must disconnect", connection.disconnected)
+                assertEquals("Do not read an unverified feed body", 0, connection.streamReads)
+                assertFalse(index.isReady())
+            } finally {
+                index.close()
+            }
+        }
+    }
+
     private fun assertRejectedWithoutReadingBody(statusCode: Int) {
         val connection = object : HttpURLConnection(URL(sourceUrl)) {
             var streamReads = 0
