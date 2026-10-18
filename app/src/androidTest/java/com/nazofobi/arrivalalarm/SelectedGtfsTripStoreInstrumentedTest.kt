@@ -253,6 +253,44 @@ class SelectedGtfsTripStoreInstrumentedTest {
         assertEquals(persisted, preferences.getString(SelectedGtfsTripStore.KEY, null))
     }
 
+    @Test fun changingStopCoordinatesOrPickupRestrictionsInvalidatesStoredTrip() {
+        assertTrue(store().save(selected))
+        val before = requireNotNull(preferences.getString(SelectedGtfsTripStore.KEY, null))
+        val changedCoordinates = detail().copy(stops = detail().stops.map {
+            if (it.stopSequence == 2) it.copy(latitude = 52.665, longitude = 8.237) else it
+        })
+        assertRejected(
+            GtfsSelectionRestoreProblem.STATIC_TRUTH_CHANGED,
+            store { GtfsTripDetailResult.Available(changedCoordinates) }.restore(),
+        )
+        val changedPickup = detail().copy(stops = detail().stops.map {
+            if (it.stopSequence == 2) it.copy(pickupType = 1) else it
+        })
+        assertRejected(
+            GtfsSelectionRestoreProblem.INVALID_STOP_ROLES,
+            store { GtfsTripDetailResult.Available(changedPickup) }.restore(),
+        )
+        val changedDropOff = detail().copy(stops = detail().stops.map {
+            if (it.stopSequence == 13) it.copy(dropOffType = 2) else it
+        })
+        assertRejected(
+            GtfsSelectionRestoreProblem.INVALID_STOP_ROLES,
+            store { GtfsTripDetailResult.Available(changedDropOff) }.restore(),
+        )
+        assertEquals(before, preferences.getString(SelectedGtfsTripStore.KEY, null))
+    }
+
+    @Test fun versionThreeSnapshotWithoutStopAccessRulesRequiresReselection() {
+        assertTrue(store().save(selected))
+        val persisted = requireNotNull(preferences.getString(SelectedGtfsTripStore.KEY, null))
+        val legacy = JSONObject(persisted).apply { put("version", 3) }
+        assertTrue(preferences.edit().putString(SelectedGtfsTripStore.KEY, legacy.toString()).commit())
+        assertRejected(
+            GtfsSelectionRestoreProblem.LEGACY_SNAPSHOT_REQUIRES_RESELECTION,
+            store().restore(),
+        )
+    }
+
     @Test fun versionTwoSnapshotWithoutStopMetadataRequiresReselection() {
         assertTrue(store().save(selected))
         val persisted = requireNotNull(preferences.getString(SelectedGtfsTripStore.KEY, null))
