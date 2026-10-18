@@ -41,11 +41,13 @@ private fun CachedTransitPlan.toJson(): JSONObject = JSONObject()
 
 private fun JSONObject.toCachedTransitPlan(): CachedTransitPlan? {
     val key = optString("key").takeIf { it.isNotBlank() } ?: return null
+    // A malformed or missing save time cannot be used to establish cache freshness.
+    val savedAt = strictPositiveEpochSecondsOrNull("savedAtEpochSeconds") ?: return null
     return CachedTransitPlan(
         key = key,
         routeOptions = optJSONArray("routeOptions").toRouteOptions(),
         departures = optJSONArray("departures").toDepartures(),
-        savedAtEpochSeconds = optLong("savedAtEpochSeconds", 0L),
+        savedAtEpochSeconds = savedAt,
     )
 }
 
