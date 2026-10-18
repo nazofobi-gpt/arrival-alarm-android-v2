@@ -81,6 +81,57 @@ class SearchMapPlannerTest {
         assertFalse(journeys.any { it.id.contains("munich-trip") })
     }
 
+    @Test fun providerLocalStopIdCollisionsNeverSelectOtherRegionsRoutes() {
+        val berlinFrom = CatalogStop("shared-from", "vbb", "Berlin Origin", 52.5200, 13.4050)
+        val berlinTo = CatalogStop("shared-to", "vbb", "Berlin Destination", 52.5220, 13.4090)
+        val munichFrom = CatalogStop("shared-from", "mvv", "Munich Origin", 48.1400, 11.5800)
+        val munichTo = CatalogStop("shared-to", "mvv", "Munich Destination", 48.1420, 11.5840)
+        val snapshot = TestGermanyTransitFixtures.snapshot.copy(
+            stops = listOf(berlinFrom, berlinTo, munichFrom, munichTo),
+            routes = listOf(
+                CatalogRoute("common", "mvv", "U", "Munich Destination", listOf("shared-from", "shared-to")),
+                CatalogRoute("common", "vbb", "S", "Berlin Destination", listOf("shared-from", "shared-to")),
+            ),
+            trips = listOf(
+                CatalogTrip("munich-trip", "mvv", "common", "09:00"),
+                CatalogTrip("berlin-trip", "vbb", "common", "08:00"),
+            ),
+        )
+        val scoped = SearchMapPlanner(GermanyTransitCatalog(snapshot))
+        val berlin = scoped.routeOptions(
+            MapPoint(berlinFrom.latitude, berlinFrom.longitude, "Berlin Origin"),
+            MapPoint(berlinTo.latitude, berlinTo.longitude, "Berlin Destination"),
+        )
+        val munich = scoped.routeOptions(
+            MapPoint(munichFrom.latitude, munichFrom.longitude, "Munich Origin"),
+            MapPoint(munichTo.latitude, munichTo.longitude, "Munich Destination"),
+        )
+        assertEquals(listOf("common:berlin-trip"), berlin.map { it.id })
+        assertEquals(listOf("common:munich-trip"), munich.map { it.id })
+        assertEquals("S", berlin.single().line)
+        assertEquals("U", munich.single().line)
+    }
+
+    @Test fun crossProviderEndpointsDoNotInventDirectRouteFromMatchingIds() {
+        val berlinFrom = CatalogStop("from", "vbb", "Berlin Origin", 52.5200, 13.4050)
+        val munichTo = CatalogStop("to", "mvv", "Munich Destination", 48.1400, 11.5800)
+        val misleadingRoute = CatalogRoute(
+            "vbb-phantom", "vbb", "RE", "Munich Destination", listOf("from", "to"),
+        )
+        val snapshot = TestGermanyTransitFixtures.snapshot.copy(
+            stops = listOf(berlinFrom, munichTo),
+            routes = listOf(misleadingRoute),
+            trips = listOf(CatalogTrip("phantom-trip", "vbb", "vbb-phantom", "12:00")),
+        )
+        val scoped = SearchMapPlanner(GermanyTransitCatalog(snapshot))
+        assertTrue(
+            scoped.routeOptions(
+                MapPoint(berlinFrom.latitude, berlinFrom.longitude, "Berlin Origin"),
+                MapPoint(munichTo.latitude, munichTo.longitude, "Munich Destination"),
+            ).isEmpty(),
+        )
+    }
+
     @Test fun geocoderIsProviderSwappable() {
         val custom = SearchMapPlanner(GermanyTransitCatalog(TestGermanyTransitFixtures.snapshot), object : GeocodeProvider {
             override fun search(query: String) = listOf(MapPoint(50.0, 8.0, "POI:$query"))
