@@ -251,4 +251,6 @@
     <string name="journey_stops_hidden_count">%1$d ara durak gizlendi</string>
     <string name="journey_show_all_stops_count">Tüm %1$d durağı göster</string>
     <string name="journey_show_fewer_stops">Daha az durak göster</string>
+    <string name="readiness_share_diagnostics">Tanı özetini paylaş</string>
+    <string name="readiness_share_diagnostics_note">Yalnız durum bilgileri paylaşılır. Konum, yolculuk geçmişi ve erişim anahtarları eklenmez.</string>
 </resources>

@@ -243,4 +243,6 @@
     <string name="journey_stops_hidden_count">%1$d intermediate stops hidden</string>
     <string name="journey_show_all_stops_count">Show all %1$d stops</string>
     <string name="journey_show_fewer_stops">Show fewer stops</string>
+    <string name="readiness_share_diagnostics">Share diagnostics summary</string>
+    <string name="readiness_share_diagnostics_note">Only capability status is shared. Exact location, journey history, and access credentials are excluded.</string>
 </resources>

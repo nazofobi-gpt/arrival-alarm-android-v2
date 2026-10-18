@@ -243,4 +243,6 @@
     <string name="journey_stops_hidden_count">%1$d Zwischenhalte ausgeblendet</string>
     <string name="journey_show_all_stops_count">Alle %1$d Halte anzeigen</string>
     <string name="journey_show_fewer_stops">Weniger Halte anzeigen</string>
+    <string name="readiness_share_diagnostics">Diagnoseübersicht teilen</string>
+    <string name="readiness_share_diagnostics_note">Nur Statusangaben werden geteilt. Genaue Standorte, Fahrtenverlauf und Zugangsdaten bleiben ausgeschlossen.</string>
 </resources>
