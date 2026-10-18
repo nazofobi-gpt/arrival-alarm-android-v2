@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import android.content.SharedPreferences
+import org.json.JSONException
 import org.json.JSONObject
 
 /** Stop sequence is required: the same GTFS stop_id may occur twice on a loop. */
@@ -137,7 +138,12 @@ class SelectedGtfsTripStore(
             ref(json.optJSONObject("destination")) ?: return null,
             ref(json.optJSONObject("alarm")) ?: return null,
         )
+        } catch (_: JSONException) {
+            // Android's org.json.JSONException is a checked Exception, not a RuntimeException.
+            // Corrupted persisted JSON must produce an explicit rejected state.
+            null
         } catch (_: RuntimeException) {
+            // Invalid GTFS dates and identity validation reject only this snapshot.
             null
         }
     }
