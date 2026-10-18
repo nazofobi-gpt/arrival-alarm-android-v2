@@ -3,6 +3,7 @@ package com.nazofobi.arrivalalarm
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -10,26 +11,21 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -53,16 +49,16 @@ fun ArrivalBottomNavigation(
     data class Item(
         val screen: ArrivalAppScreen,
         val label: String,
-        val icon: ImageVector,
+        val glyph: String,
         val tag: String,
     )
 
     val items = listOf(
-        Item(ArrivalAppScreen.HOME, stringResource(R.string.nav_home), Icons.Default.Home, "nav-home"),
-        Item(ArrivalAppScreen.SEARCH, stringResource(R.string.nav_search), Icons.Default.Search, "nav-search"),
-        Item(ArrivalAppScreen.JOURNEY, stringResource(R.string.nav_journey), Icons.Default.List, "nav-journey"),
-        Item(ArrivalAppScreen.DEPARTURES, stringResource(R.string.nav_departures), Icons.Default.Place, "nav-departures"),
-        Item(ArrivalAppScreen.SETTINGS, stringResource(R.string.nav_settings), Icons.Default.Settings, "nav-settings"),
+        Item(ArrivalAppScreen.HOME, stringResource(R.string.nav_home), "⌂", "nav-home"),
+        Item(ArrivalAppScreen.SEARCH, stringResource(R.string.nav_search), "⌕", "nav-search"),
+        Item(ArrivalAppScreen.JOURNEY, stringResource(R.string.nav_journey), "↔", "nav-journey"),
+        Item(ArrivalAppScreen.DEPARTURES, stringResource(R.string.nav_departures), "◷", "nav-departures"),
+        Item(ArrivalAppScreen.SETTINGS, stringResource(R.string.nav_settings), "⚙", "nav-settings"),
     )
 
     NavigationBar(modifier = Modifier.testTag("bottom-navigation")) {
@@ -77,7 +73,7 @@ fun ArrivalBottomNavigation(
             NavigationBarItem(
                 selected = selected,
                 onClick = { onSelect(item.screen) },
-                icon = { Icon(imageVector = item.icon, contentDescription = null) },
+                icon = { Text(item.glyph) },
                 label = { Text(item.label, maxLines = 1) },
                 modifier = Modifier.testTag(item.tag),
             )
@@ -100,6 +96,7 @@ fun HomeOverviewPanel(
     onMapPointSelected: (MapPoint) -> Unit,
     onMapError: (String) -> Unit,
     onNearbyStopSelected: (NearbyStop) -> Unit,
+    onNearbyDeparturesSelected: (NearbyStop) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -188,34 +185,46 @@ fun HomeOverviewPanel(
                         )
                     }
                     nearby.take(4).forEachIndexed { index, candidate ->
-                        ListItem(
-                            headlineContent = {
-                                Text(
-                                    stringResource(
-                                        R.string.nearby_stop_format,
-                                        stringResource(R.string.select_destination),
-                                        if (candidate.stop.id in favoriteStopIds) {
-                                            "★ " + candidate.stop.name
-                                        } else {
-                                            candidate.stop.name
-                                        },
-                                        candidate.distanceMeters,
-                                    ),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                            },
-                            leadingContent = {
-                                Icon(Icons.Default.Place, contentDescription = null)
-                            },
-                            colors = ListItemDefaults.colors(
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp)
-                                .clickable(role = Role.Button) { onNearbyStopSelected(candidate) }
-                                .testTag("home-nearby-$index"),
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            ListItem(
+                                headlineContent = {
+                                    Text(
+                                        stringResource(
+                                            R.string.nearby_stop_format,
+                                            stringResource(R.string.select_destination),
+                                            if (candidate.stop.id in favoriteStopIds) {
+                                                "★ " + candidate.stop.name
+                                            } else {
+                                                candidate.stop.name
+                                            },
+                                            candidate.distanceMeters,
+                                        ),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                },
+                                leadingContent = {
+                                    Icon(Icons.Default.Place, contentDescription = null)
+                                },
+                                colors = ListItemDefaults.colors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                                    .clickable(role = Role.Button) { onNearbyStopSelected(candidate) }
+                                    .testTag("home-nearby-$index"),
+                            )
+                            OutlinedButton(
+                                onClick = { onNearbyDeparturesSelected(candidate) },
+                                modifier = Modifier.heightIn(min = 48.dp)
+                                    .testTag("home-nearby-departures-$index"),
+                            ) {
+                                Text(stringResource(R.string.nav_departures))
+                            }
+                        }
                     }
                 }
             }

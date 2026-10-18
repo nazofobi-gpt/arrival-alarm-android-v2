@@ -20,8 +20,10 @@ data class Departure(
     val realtimeTripStartDate: String? = null,
     val realtimeTripStartTime: String? = null,
 ) {
-    val effectiveEpochSeconds: Long get() = realtimeEpochSeconds ?: scheduledEpochSeconds
-    val isRealtime: Boolean get() = realtimeEpochSeconds != null
+    // A non-positive provider timestamp is malformed/unavailable, not a real
+    // departure in 1970. Preserve the known scheduled departure instead.
+    val effectiveEpochSeconds: Long get() = realtimeEpochSeconds?.takeIf { it > 0L } ?: scheduledEpochSeconds
+    val isRealtime: Boolean get() = realtimeEpochSeconds?.let { it > 0L } == true
 }
 
 data class ServiceAlert(val id: String, val title: String, val detail: String)
@@ -50,10 +52,15 @@ class TransitExperienceEngine(private val capabilities: TransitProviderCapabilit
     fun vehicles(values: List<LiveVehicle>): List<LiveVehicle> = if (capabilities.liveVehiclePositions) values else emptyList()
 
     fun alternateDepartures(values: List<Departure>, selectedTripId: String, nowEpochSeconds: Long): List<Departure> =
-        departureBoard(values, nowEpochSeconds).filterNot { it.tripId == selectedTripId }
+        departureBoard(values.filterNot { it.tripId == selectedTripId }, nowEpochSeconds)
 
-    fun walkingTransferMinutes(baseMinutes: Int, preference: AccessibilityPreference): Int =
-        (baseMinutes + if (preference.stepFreeOnly && capabilities.accessibility) preference.extraTransferMinutes else 0).coerceAtLeast(0)
+    fun walkingTransferMinutes(baseMinutes: Int, preference: AccessibilityPreference): Int {
+        val penalty = if (preference.stepFreeOnly && capabilities.accessibility) {
+            preference.extraTransferMinutes.coerceAtLeast(0).toLong()
+        } else 0L
+        // Saturate before converting: Int overflow must not turn a long transfer into 0 minutes.
+        return (baseMinutes.toLong() + penalty).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
+    }
 }
 
 /** Small deterministic store contract: Android persistence can replace this without changing UX semantics. */
@@ -65,7 +72,7 @@ class TransitRecentsStore(
 ) {
     private val favorites = linkedSetOf<String>().apply { addAll(favoriteIds) }
     private val recents = ArrayDeque<String>().apply {
-        recentTripIds.take(maxItems.coerceAtLeast(0)).forEach { addLast(it) }
+        recentTripIds.distinct().take(maxItems.coerceAtLeast(0)).forEach { addLast(it) }
     }
 
     fun isFavorite(stopId: String): Boolean = stopId in favorites
@@ -87,7 +94,19 @@ class TransitRecentsStore(
 
     fun recents(): List<String> = recents.toList()
 
+    /** Clear local trip history without changing the user's saved favorite stops. */
+    fun clearRecents() {
+        if (recents.isEmpty()) return
+        recents.clear()
+        publish()
+    }
+
     private fun publish() {
-        onChanged?.invoke(favorites(), recents())
+        try {
+            onChanged?.invoke(favorites(), recents())
+        } catch (_: RuntimeException) {
+            // Persistence failures must not undo the current-session favorite
+            // or recent-trip choice. A later change may retry the full snapshot.
+        }
     }
 }

@@ -46,4 +46,234 @@ class OfflineTransitCachePersistenceInstrumentedTest {
         assertEquals(listOf("Lohne", "Bremen Hbf"), restored.single().stops.map { it.name })
         assertTrue(restored.single().tripIds.contains("trip-re9"))
     }
+
+    @Test
+    fun outOfRangeCachedRouteCoordinatesAreRejectedOnRestore() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+            .edit().clear().commit()
+        val store = SharedPreferencesTransitCacheStore(context)
+        val validRoute = RouteOption(
+            id = "valid-route",
+            origin = MapPoint(53.083, 8.813, "Bremen"),
+            destination = MapPoint(52.665, 8.237, "Lohne"),
+            line = "RE",
+            direction = "Lohne",
+            departure = "10:00",
+            arrival = "11:00",
+            walkingMinutes = 0,
+            transfers = 0,
+            tripIds = emptyList(),
+            stops = emptyList(),
+        )
+        OfflineTransitCache(backingStore = store).put(
+            CachedTransitPlan("valid", listOf(validRoute), emptyList(), 100L)
+        )
+        assertEquals(1, OfflineTransitCache(backingStore = store).routeOptions("valid").size)
+
+        val invalidRoutes = listOf(
+            "invalid-latitude" to validRoute.copy(origin = MapPoint(91.0, 8.813, "Invalid")),
+            "invalid-longitude" to validRoute.copy(destination = MapPoint(52.665, 181.0, "Invalid")),
+        )
+        invalidRoutes.forEach { (key, route) ->
+            OfflineTransitCache(backingStore = store).put(
+                CachedTransitPlan(key, listOf(route), emptyList(), 100L)
+            )
+            assertTrue(OfflineTransitCache(backingStore = store).routeOptions(key).isEmpty())
+        }
+    }
+
+
+    @Test
+    fun wrongTypedLegacyCacheIsIgnoredAndCanBeReplaced() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        prefs.edit().clear().putLong("plans_json", 123L).commit()
+        try {
+            val store = SharedPreferencesTransitCacheStore(context)
+            assertTrue(store.load().isEmpty())
+            val cache = OfflineTransitCache(backingStore = store)
+            cache.put(CachedTransitPlan("recovered", emptyList(), emptyList(), 1_000L))
+            assertEquals("recovered", store.load().single().key)
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
+    @Test
+    fun corruptedCachedStopDoesNotSilentlyShortenJourney() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+            .edit().clear().commit()
+        val store = SharedPreferencesTransitCacheStore(context)
+        val route = RouteOption(
+            id = "ordered-stops",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
+            line = "RE",
+            direction = "Bremen",
+            departure = "10:00",
+            arrival = "11:00",
+            walkingMinutes = 0,
+            transfers = 0,
+            stops = listOf(
+                RouteStop(id = "start", name = "Lohne", latitude = 52.665, longitude = 8.237),
+                RouteStop(id = "end", name = "Bremen Hbf", latitude = 53.083, longitude = 8.813),
+            ),
+        )
+        OfflineTransitCache(backingStore = store).put(
+            CachedTransitPlan("valid-stops", listOf(route), emptyList(), 100L)
+        )
+        assertEquals(2, OfflineTransitCache(backingStore = store)
+            .routeOptions("valid-stops").single().stops.size)
+
+        val invalidStops = listOf(
+            route.stops[1].copy(latitude = 91.0),
+            route.stops[1].copy(longitude = 181.0),
+            route.stops[1].copy(name = ""),
+        )
+        invalidStops.forEachIndexed { index, invalidStop ->
+            val key = "invalid-stop-$index"
+            OfflineTransitCache(backingStore = store).put(
+                CachedTransitPlan(
+                    key, listOf(route.copy(stops = listOf(route.stops[0], invalidStop))),
+                    emptyList(), 100L,
+                )
+            )
+            assertTrue(OfflineTransitCache(backingStore = store).routeOptions(key).isEmpty())
+        }
+    }
+
+    @Test
+    fun invalidCachedScheduledEpochsAreRejectedWithoutLosingValidDeparture() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val departures = org.json.JSONArray()
+        val cases: List<Pair<String, Any?>> = listOf(
+            "missing" to null,
+            "null" to org.json.JSONObject.NULL,
+            "string" to "1700000000",
+            "boolean" to true,
+            "fraction" to 1_700_000_000.5,
+            "zero" to 0L,
+            "negative" to -1L,
+            "overflow" to (Long.MAX_VALUE / 1_000L + 1L),
+            "valid" to 1_700_000_000L,
+        )
+        cases.forEach { (id, timestamp) ->
+            val departure = org.json.JSONObject()
+                .put("tripId", id)
+                .put("line", "RE")
+                .put("direction", "Bremen")
+            if (timestamp != null) departure.put("scheduledEpochSeconds", timestamp)
+            departures.put(departure)
+        }
+        val cached = org.json.JSONObject()
+            .put("key", "offline-departures")
+            .put("savedAtEpochSeconds", 100L)
+            .put("routeOptions", org.json.JSONArray())
+            .put("departures", departures)
+        prefs.edit().clear().putString(
+            "plans_json", org.json.JSONArray().put(cached).toString()
+        ).commit()
+        try {
+            val loaded = SharedPreferencesTransitCacheStore(context).load().single()
+            assertEquals(listOf("valid"), loaded.departures.map { it.tripId })
+            assertEquals(1_700_000_000L, loaded.departures.single().scheduledEpochSeconds)
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+    @Test
+    fun malformedCachedRealtimeEpochsFallBackToScheduledWithoutDroppingTrip() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val cases: List<Pair<String, Any?>> = listOf(
+            "missing" to null,
+            "null" to org.json.JSONObject.NULL,
+            "string" to "1700000300",
+            "boolean" to true,
+            "fraction" to 1_700_000_300.25,
+            "zero" to 0L,
+            "negative" to -1L,
+            "overflow" to (Long.MAX_VALUE / 1_000L + 1L),
+            "valid" to 1_700_000_300L,
+        )
+        val departures = org.json.JSONArray()
+        cases.forEach { (tripId, realtime) ->
+            val item = org.json.JSONObject()
+                .put("tripId", tripId)
+                .put("line", "RE")
+                .put("direction", "Bremen")
+                .put("scheduledEpochSeconds", 1_700_000_000L)
+            if (realtime != null) item.put("realtimeEpochSeconds", realtime)
+            departures.put(item)
+        }
+        val plan = org.json.JSONObject()
+            .put("key", "offline-realtime")
+            .put("savedAtEpochSeconds", 100L)
+            .put("routeOptions", org.json.JSONArray())
+            .put("departures", departures)
+        prefs.edit().clear().putString(
+            "plans_json", org.json.JSONArray().put(plan).toString()
+        ).commit()
+        try {
+            val restored = SharedPreferencesTransitCacheStore(context).load().single().departures
+            assertEquals(cases.map { it.first }, restored.map { it.tripId })
+            restored.forEachIndexed { index, departure ->
+                assertEquals(1_700_000_000L, departure.scheduledEpochSeconds)
+                val expected: Long? = if (cases[index].first == "valid") 1_700_000_300L else null
+                assertEquals(expected, departure.realtimeEpochSeconds)
+            }
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
+
+    @Test
+    fun corruptOfflineRouteWalkAndTransferCountsAreRejected() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        prefs.edit().clear().commit()
+        val store = SharedPreferencesTransitCacheStore(context)
+        val route = RouteOption(
+            id = "counts-route",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen"),
+            line = "RE",
+            direction = "Bremen",
+            departure = "10:00",
+            arrival = "10:30",
+            walkingMinutes = 3,
+            transfers = 1,
+        )
+        try {
+            store.save(listOf(CachedTransitPlan("counts", listOf(route), emptyList(), 100L)))
+            val original = requireNotNull(prefs.getString("plans_json", null))
+            fun restoreWith(field: String, value: Any?): List<RouteOption> {
+                val copy = org.json.JSONArray(original)
+                val saved = copy.getJSONObject(0).getJSONArray("routeOptions").getJSONObject(0)
+                if (value == null) saved.remove(field) else saved.put(field, value)
+                prefs.edit().putString("plans_json", copy.toString()).commit()
+                return store.load().single().routeOptions
+            }
+            for (field in listOf("walkingMinutes", "transfers")) {
+                for (invalid in listOf(
+                    -1, Int.MIN_VALUE, "3", true, 1.5, Int.MAX_VALUE.toLong() + 1L,
+                    org.json.JSONObject.NULL,
+                )) {
+                    assertTrue("Invalid $field=$invalid must be rejected", restoreWith(field, invalid).isEmpty())
+                }
+                // Missing legacy values retain the historical safe zero default.
+                assertEquals(0, if (field == "walkingMinutes") restoreWith(field, null).single().walkingMinutes
+                    else restoreWith(field, null).single().transfers)
+                assertEquals(1, restoreWith(field, 0).size)
+                assertEquals(1, restoreWith(field, 3).size)
+            }
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
 }

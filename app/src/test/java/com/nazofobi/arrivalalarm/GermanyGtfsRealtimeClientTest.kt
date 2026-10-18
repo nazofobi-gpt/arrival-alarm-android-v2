@@ -524,4 +524,37 @@ class GermanyGtfsRealtimeClientTest {
             (result as GermanyRealtimeFetchResult.Unavailable).reason,
         )
     }
+    @Test
+    fun networkErrorNeverLeaksProviderUrlOrCredentials() {
+        val sensitive = "https://feeds.example.invalid/realtime.pb?token=secret-token&lat=52.1"
+        val result = GermanyGtfsRealtimeClient(
+            loader = { throw IOException(sensitive) },
+        ).fetch() as GermanyRealtimeFetchResult.Unavailable
+
+        assertEquals(GermanyRealtimeUnavailableReason.NETWORK, result.reason)
+        assertEquals("realtime_network_error", result.detail)
+    }
+
+    @Test
+    fun unexpectedLoaderFailureDoesNotExposeUntrustedExceptionText() {
+        val sensitive = "provider data with token=secret-token and journey coordinates"
+        val result = GermanyGtfsRealtimeClient(
+            loader = { throw IllegalStateException(sensitive) },
+        ).fetch() as GermanyRealtimeFetchResult.Unavailable
+
+        assertEquals(GermanyRealtimeUnavailableReason.NETWORK, result.reason)
+        assertEquals("realtime_unexpected_error", result.detail)
+    }
+
+    @Test
+    fun malformedProtobufReportsStableRedactedParseError() {
+        // A header advertises a 5-byte payload, but only one byte follows.
+        val malformed = byteArrayOf(0x0A, 0x05, 0x01)
+        val result = GermanyGtfsRealtimeClient(
+            loader = { malformed },
+        ).fetch() as GermanyRealtimeFetchResult.Unavailable
+
+        assertEquals(GermanyRealtimeUnavailableReason.PARSE, result.reason)
+        assertEquals("realtime_invalid_protobuf", result.detail)
+    }
 }
