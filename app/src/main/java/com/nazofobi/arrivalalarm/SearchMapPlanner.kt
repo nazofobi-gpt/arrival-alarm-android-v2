@@ -66,7 +66,7 @@ class SearchMapPlanner(
     }
 
     fun nearby(point: MapPoint, limit: Int = 5): List<NearbyCandidate> =
-        if (limit <= 0) emptyList() else catalog.nearestStops(point.latitude, point.longitude, limit).map {
+        if (limit <= 0 || !hasValidCoordinates(point)) emptyList() else catalog.nearestStops(point.latitude, point.longitude, limit).map {
             NearbyCandidate(it.stop, it.distanceMeters, bearing(point.latitude, point.longitude, it.stop.latitude, it.stop.longitude))
         }
 
@@ -80,6 +80,8 @@ class SearchMapPlanner(
     fun arbitraryPoint(latitude: Double, longitude: Double, label: String = "Harita noktası") = MapPoint(latitude, longitude, label)
 
     fun routeOptions(origin: MapPoint, destination: MapPoint): List<RouteOption> {
+        // NaN comparisons can bypass distance bounds and fabricate a nearby stop.
+        if (!hasValidCoordinates(origin) || !hasValidCoordinates(destination)) return emptyList()
         val originNearby = catalog.nearestStops(origin.latitude, origin.longitude, 1).firstOrNull() ?: return emptyList()
         val destinationNearby = catalog.nearestStops(destination.latitude, destination.longitude, 1).firstOrNull() ?: return emptyList()
         // A nationwide nearest stop can be hundreds of kilometres away from a map pin.
@@ -99,6 +101,10 @@ class SearchMapPlanner(
             }
         }
     }
+
+    private fun hasValidCoordinates(point: MapPoint): Boolean =
+        point.latitude.isFinite() && point.longitude.isFinite() &&
+            point.latitude in -90.0..90.0 && point.longitude in -180.0..180.0
 
     private fun bearing(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Int {
         val p1 = Math.toRadians(lat1); val p2 = Math.toRadians(lat2); val dl = Math.toRadians(lon2 - lon1)

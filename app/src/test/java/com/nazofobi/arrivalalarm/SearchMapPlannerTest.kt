@@ -167,6 +167,29 @@ class SearchMapPlannerTest {
         )
     }
 
+    @Test fun invalidMapPointCoordinatesNeverSnapToNearbyStopsOrRoutes() {
+        val from = MapPoint(53.0834, 8.8137, "Bremen Hbf")
+        val to = MapPoint(53.0531, 8.7866, "Flughafen Bremen")
+        assertTrue(planner.routeOptions(from, to).isNotEmpty())
+        assertTrue(planner.nearby(from, 1).isNotEmpty())
+        val invalidPoints = listOf(
+            MapPoint(Double.NaN, 8.8137, "invalid latitude"),
+            MapPoint(53.0834, Double.NaN, "invalid longitude"),
+            MapPoint(Double.POSITIVE_INFINITY, 8.8137, "infinite latitude"),
+            MapPoint(53.0834, Double.NEGATIVE_INFINITY, "infinite longitude"),
+            MapPoint(91.0, 8.8137, "too far north"),
+            MapPoint(-91.0, 8.8137, "too far south"),
+            MapPoint(53.0834, 181.0, "too far east"),
+            MapPoint(53.0834, -181.0, "too far west"),
+        )
+        invalidPoints.forEach { point ->
+            assertTrue("Invalid origin ${point.label}", planner.routeOptions(point, to).isEmpty())
+            assertTrue("Invalid destination ${point.label}", planner.routeOptions(from, point).isEmpty())
+            assertTrue("Invalid nearby point ${point.label}", planner.nearby(point).isEmpty())
+            assertTrue("Invalid marker center ${point.label}", planner.mapMarkers(point).isEmpty())
+        }
+    }
+
     @Test fun farAwayMapPinsCannotInventDirectRoutes() {
         val boarding = CatalogStop("berlin-a", "vbb", "Berlin A", 52.5200, 13.4050)
         val arrival = CatalogStop("berlin-b", "vbb", "Berlin B", 52.5300, 13.4150)
