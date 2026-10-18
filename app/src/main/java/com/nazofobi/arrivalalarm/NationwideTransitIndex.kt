@@ -118,12 +118,20 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             }
         }
 
-        val responseEtag = http?.getHeaderField("ETag")?.takeIf { it.isNotBlank() }
-        val responseLastModified = http?.getHeaderField("Last-Modified")?.takeIf { it.isNotBlank() }
-        val sourceVersion = responseEtag
-            ?: responseLastModified
-            ?: connection.lastModified.takeIf { it > 0L }?.toString()
-            ?: connection.url.toString()
+        // Reading feed headers can also fail after HTTP 200, before the import
+        // transaction begins. Disconnect instead of leaking the network socket.
+        val (responseEtag, responseLastModified, sourceVersion) = try {
+            val etag = http?.getHeaderField("ETag")?.takeIf { it.isNotBlank() }
+            val lastModified = http?.getHeaderField("Last-Modified")?.takeIf { it.isNotBlank() }
+            val version = etag
+                ?: lastModified
+                ?: connection.lastModified.takeIf { it > 0L }?.toString()
+                ?: connection.url.toString()
+            Triple(etag, lastModified, version)
+        } catch (failure: java.io.IOException) {
+            http?.disconnect()
+            throw failure
+        }
         val counts = linkedMapOf<String, Int>()
         val seenGtfsTables = hashSetOf<String>()
 
