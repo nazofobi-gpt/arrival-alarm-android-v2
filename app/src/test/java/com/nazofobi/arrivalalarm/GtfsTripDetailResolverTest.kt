@@ -102,6 +102,21 @@ class GtfsTripDetailResolverTest {
     }
 
     @Test
+    fun rejectedStopIdentityMismatchCannotLabelWrongPhysicalStation() {
+        val source = FakeSource()
+        val identity = GtfsTripInstanceIdentity.scheduled(trip, serviceDate)
+        val originallyValid = requireNotNull(source.stops["B"])
+        // A source returning a different stop than requested must fail closed.
+        source.stops = source.stops + ("B" to originallyValid.copy(id = "WRONG-STOP"))
+        assertEquals(
+            GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.MISSING_STOP_METADATA),
+            GtfsTripDetailResolver(source).resolve(identity),
+        )
+        source.stops = source.stops + ("B" to originallyValid)
+        assertTrue(GtfsTripDetailResolver(source).resolve(identity) is GtfsTripDetailResult.Available)
+    }
+
+    @Test
     fun rejectsFrequencyTemplateAndPotentiallyTruncatedSequence() {
         val source = FakeSource()
         val identity = GtfsTripInstanceIdentity.scheduled(trip, serviceDate)
