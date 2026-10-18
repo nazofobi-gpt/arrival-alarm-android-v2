@@ -145,6 +145,46 @@ class OfflineTransitCachePersistenceInstrumentedTest {
     }
 
     @Test
+    fun cachedDepartureTripIdMustBeJsonStringWithoutCoercion() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val cases: List<Pair<String, Any?>> = listOf(
+            "missing" to null,
+            "null" to org.json.JSONObject.NULL,
+            "number" to 123,
+            "boolean" to true,
+            "array" to org.json.JSONArray().put("trip-good"),
+            "object" to org.json.JSONObject().put("id", "trip-good"),
+            "blank" to "  ",
+            "valid" to "trip-good",
+        )
+        val departures = org.json.JSONArray()
+        cases.forEach { (label, tripId) ->
+            val departure = org.json.JSONObject()
+                .put("line", label)
+                .put("direction", "Bremen")
+                .put("scheduledEpochSeconds", 1_700_000_000L)
+            if (tripId != null) departure.put("tripId", tripId)
+            departures.put(departure)
+        }
+        val plan = org.json.JSONObject()
+            .put("key", "offline-trip-id-typing")
+            .put("savedAtEpochSeconds", 100L)
+            .put("routeOptions", org.json.JSONArray())
+            .put("departures", departures)
+        assertTrue(prefs.edit().clear().putString(
+            "plans_json", org.json.JSONArray().put(plan).toString()
+        ).commit())
+        try {
+            val restored = SharedPreferencesTransitCacheStore(context).load().single().departures
+            assertEquals(listOf("trip-good"), restored.map { it.tripId })
+            assertEquals(listOf("valid"), restored.map { it.line })
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
+    @Test
     fun invalidCachedScheduledEpochsAreRejectedWithoutLosingValidDeparture() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)

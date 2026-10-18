@@ -156,7 +156,8 @@ private fun Departure.toJson(): JSONObject = JSONObject()
     .putNullable("routeId", routeId)
 
 private fun JSONObject.toDeparture(): Departure? {
-    val tripId = optString("tripId").takeIf { it.isNotBlank() } ?: return null
+    // A coerced numeric/boolean JSON value is not an authoritative GTFS trip identity.
+    val tripId = (opt("tripId") as? String)?.takeIf { it.isNotBlank() } ?: return null
     // JSON getters silently coerce missing, malformed or fractional times to epoch zero.
     // Keep offline departures only when a positive whole-second timestamp is proven.
     val scheduled = strictPositiveEpochSecondsOrNull("scheduledEpochSeconds") ?: return null
