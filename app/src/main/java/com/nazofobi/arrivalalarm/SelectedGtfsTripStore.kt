@@ -59,10 +59,10 @@ class SelectedGtfsTripStore(
         } catch (_: RuntimeException) {
             return GtfsSelectionRestore.Rejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT)
         } ?: return GtfsSelectionRestore.Rejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT)
-        // Version 1 did not retain stop times, so a previous departure cannot
-        // be trusted after a GTFS update; require an explicit new selection.
+        // V1 omitted the timetable and V2 omitted physical stop metadata.
+        // Neither can prove the confirmed platform/accessibility context still matches.
         val version = try { JSONObject(raw).opt("version") as? Int } catch (_: JSONException) { null }
-        if (version == 1) {
+        if (version == 1 || version == 2) {
             return GtfsSelectionRestore.Rejected(
                 GtfsSelectionRestoreProblem.LEGACY_SNAPSHOT_REQUIRES_RESELECTION
             )
@@ -122,9 +122,9 @@ class SelectedGtfsTripStore(
     private data class SavedSnapshot(val selection: GtfsSelectedTrip, val fingerprint: String)
 
     /**
-     * Length-framed SHA-256 of every ordered GTFS stop's scheduled arrival/departure.
-     * Explicit nulls/lengths prevent concatenation ambiguity. Identity is validated
-     * separately against the authoritative current GTFS repository.
+     * Length-framed SHA-256 of every ordered GTFS stop's timetable and physical
+     * boarding/display metadata. Explicit nulls/lengths prevent concatenation
+     * ambiguity. Identity is separately verified against the current GTFS graph.
      */
     private fun scheduleFingerprint(detail: GtfsTripDetail): String {
         val hash = MessageDigest.getInstance("SHA-256")
@@ -144,6 +144,10 @@ class SelectedGtfsTripStore(
             part(stop.stopId)
             part(stop.scheduledArrival)
             part(stop.scheduledDeparture)
+            part(stop.name)
+            part(stop.parentStationId)
+            part(stop.platformCode)
+            part(stop.wheelchairBoarding?.toString())
         }
         val hex = "0123456789abcdef"
         return buildString {
@@ -223,7 +227,7 @@ class SelectedGtfsTripStore(
 
     companion object {
         internal const val KEY = "selected_gtfs_trip_v1"
-        private const val VERSION = 2
+        private const val VERSION = 3
         private val FINGERPRINT_REGEX = Regex("^[a-f0-9]{64}$")
     }
 }
