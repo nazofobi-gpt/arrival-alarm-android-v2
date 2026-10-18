@@ -42,6 +42,9 @@ data class RouteOption(
     val refreshToken: String? = null,
     val sourceUpdatedAtEpochSeconds: Long? = null,
     val realtime: RouteRealtimeInfo? = null,
+    // GTFS feed-backed, distance-clipped geometry for transit legs only.
+    // Empty means no supported geometry; it is not a straight-line fallback.
+    val shapePolylines: List<List<MapPoint>> = emptyList(),
 )
 
 interface GeocodeProvider { fun search(query: String): List<MapPoint> }
