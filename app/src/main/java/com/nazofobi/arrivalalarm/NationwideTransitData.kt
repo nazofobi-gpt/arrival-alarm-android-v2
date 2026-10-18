@@ -401,6 +401,28 @@ class NationwideTransitGateway(
         )
     }
 
+    /**
+     * Resolve the exact scheduled service date/trip/route/direction from the installed GTFS
+     * graph. Missing data never falls back to a different route or a live API guess.
+     */
+    internal fun tripInstanceDetails(
+        identity: GtfsTripInstanceIdentity,
+        callback: (GtfsTripDetailResult) -> Unit,
+    ) {
+        io.execute {
+            val result = if (!store.isReady()) {
+                GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.INDEX_NOT_READY)
+            } else {
+                runCatching {
+                    GtfsTripDetailResolver(GtfsScheduleRepository(store)).resolve(identity)
+                }.getOrElse {
+                    GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.DATA_READ_FAILED)
+                }
+            }
+            main.post { callback(result) }
+        }
+    }
+
     override fun stationDepartures(
         stop: CatalogStop,
         limit: Int,
