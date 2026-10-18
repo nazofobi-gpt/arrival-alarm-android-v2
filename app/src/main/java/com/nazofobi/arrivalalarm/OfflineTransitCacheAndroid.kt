@@ -73,6 +73,9 @@ private fun JSONObject.toRouteOption(): RouteOption? {
     val stops = stopsJson.toRouteStops()
     // A silently dropped stop changes the ordered itinerary and may hide the alarm target.
     if (stopsJson != null && stops.size != stopsJson.length()) return null
+    // org.json optInt coerces malformed stored values, masking bad route metadata.
+    val walkingMinutes = nonNegativeStoredIntOrNull("walkingMinutes") ?: return null
+    val transfers = nonNegativeStoredIntOrNull("transfers") ?: return null
     return RouteOption(
         id = id,
         origin = origin,
@@ -81,8 +84,8 @@ private fun JSONObject.toRouteOption(): RouteOption? {
         direction = optString("direction"),
         departure = optString("departure"),
         arrival = optString("arrival"),
-        walkingMinutes = optInt("walkingMinutes", 0),
-        transfers = optInt("transfers", 0),
+        walkingMinutes = walkingMinutes,
+        transfers = transfers,
         tripIds = optJSONArray("tripIds").toStrings(),
         stops = stops,
         refreshToken = optNullableString("refreshToken"),
@@ -190,6 +193,12 @@ private fun JSONArray?.toStrings(): List<String> = buildList {
 
 private fun JSONObject.putNullable(key: String, value: Any?): JSONObject =
     put(key, value ?: JSONObject.NULL)
+
+/** Missing legacy counts default to zero; supplied counts must be finite, whole and >= 0. */
+private fun JSONObject.nonNegativeStoredIntOrNull(key: String): Int? {
+    if (!has(key)) return 0
+    return (opt(key) as? Number)?.toString()?.toIntOrNull()?.takeIf { it >= 0 }
+}
 
 private fun JSONObject.optNullableString(key: String): String? =
     if (!has(key) || isNull(key)) null else optString(key).takeIf { it.isNotBlank() }
