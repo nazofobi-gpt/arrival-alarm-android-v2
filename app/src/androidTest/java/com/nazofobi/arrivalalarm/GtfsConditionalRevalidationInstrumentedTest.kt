@@ -79,6 +79,41 @@ class GtfsConditionalRevalidationInstrumentedTest {
         }
     }
 
+    @Test fun notModifiedAfterDatabaseReopenPreservesScheduleAndMetadata() {
+        context.deleteDatabase("nationwide_transit.db")
+        val first = NationwideTransitIndex(context)
+        val before = try {
+            first.importFeedWithConnection(
+                sourceUrl,
+                {},
+                FakeGtfsHttpConnection(
+                    URL(sourceUrl), HttpURLConnection.HTTP_OK, validFeed(),
+                    etag = "\"g185-restart\"",
+                ),
+            )
+            snapshot(first)
+        } finally {
+            first.close()
+        }
+
+        // A closed SQLite helper must not make a cached feed or its validators disappear.
+        val reopened = NationwideTransitIndex(context)
+        try {
+            assertEquals(before, snapshot(reopened))
+            val unchanged = FakeGtfsHttpConnection(
+                URL(sourceUrl), HttpURLConnection.HTTP_NOT_MODIFIED, byteArrayOf(),
+            )
+            var cachedCount = -1
+            reopened.importFeedWithConnection(sourceUrl, { cachedCount = it }, unchanged)
+            assertEquals("\"g185-restart\"", unchanged.getRequestProperty("If-None-Match"))
+            assertEquals(10_000, cachedCount)
+            assertEquals(0, unchanged.streamReads)
+            assertEquals(before, snapshot(reopened))
+        } finally {
+            reopened.close()
+        }
+    }
+
     private fun snapshot(index: NationwideTransitIndex): Snapshot {
         val db = index.readableDatabase
         return Snapshot(
