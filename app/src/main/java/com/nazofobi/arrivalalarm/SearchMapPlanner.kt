@@ -62,7 +62,15 @@ class SearchMapPlanner(
         val stops = catalog.searchStops(q, limit).map(SearchResult::Stop)
         val routes = catalog.searchRoutes(q, limit).map(SearchResult::Route)
         val trips = catalog.searchTrips(q, limit).map { (trip, route) -> SearchResult.Trip(trip, route) }
-        return (stops + routes + trips).distinctBy { it.label }.take(limit)
+        // Display labels are not identities: different providers (and distinct stops
+        // or trips within one provider) can legitimately share the same label.
+        return (stops + routes + trips).distinctBy { result ->
+            when (result) {
+                is SearchResult.Stop -> Triple("stop", result.value.providerId, result.value.id)
+                is SearchResult.Route -> Triple("route", result.value.providerId, result.value.id)
+                is SearchResult.Trip -> Triple("trip", result.value.providerId, result.value.id)
+            }
+        }.take(limit)
     }
 
     fun nearby(point: MapPoint, limit: Int = 5): List<NearbyCandidate> =
