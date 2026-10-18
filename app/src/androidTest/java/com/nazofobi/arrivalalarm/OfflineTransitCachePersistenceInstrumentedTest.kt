@@ -184,4 +184,49 @@ class OfflineTransitCachePersistenceInstrumentedTest {
             prefs.edit().clear().commit()
         }
     }
+
+    @Test
+    fun corruptOfflineRouteWalkAndTransferCountsAreRejected() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        prefs.edit().clear().commit()
+        val store = SharedPreferencesTransitCacheStore(context)
+        val route = RouteOption(
+            id = "counts-route",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen"),
+            line = "RE",
+            direction = "Bremen",
+            departure = "10:00",
+            arrival = "10:30",
+            walkingMinutes = 3,
+            transfers = 1,
+        )
+        try {
+            store.save(listOf(CachedTransitPlan("counts", listOf(route), emptyList(), 100L)))
+            val original = requireNotNull(prefs.getString("plans_json", null))
+            fun restoreWith(field: String, value: Any?): List<RouteOption> {
+                val copy = org.json.JSONArray(original)
+                val saved = copy.getJSONObject(0).getJSONArray("routeOptions").getJSONObject(0)
+                if (value == null) saved.remove(field) else saved.put(field, value)
+                prefs.edit().putString("plans_json", copy.toString()).commit()
+                return store.load().single().routeOptions
+            }
+            for (field in listOf("walkingMinutes", "transfers")) {
+                for (invalid in listOf(
+                    -1, Int.MIN_VALUE, "3", true, 1.5, Int.MAX_VALUE.toLong() + 1L,
+                    org.json.JSONObject.NULL,
+                )) {
+                    assertTrue("Invalid $field=$invalid must be rejected", restoreWith(field, invalid).isEmpty())
+                }
+                // Missing legacy values retain the historical safe zero default.
+                assertEquals(0, if (field == "walkingMinutes") restoreWith(field, null).single().walkingMinutes
+                    else restoreWith(field, null).single().transfers)
+                assertEquals(1, restoreWith(field, 0).size)
+                assertEquals(1, restoreWith(field, 3).size)
+            }
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
 }
