@@ -40,7 +40,8 @@ private fun CachedTransitPlan.toJson(): JSONObject = JSONObject()
     .put("departures", JSONArray().apply { departures.forEach { put(it.toJson()) } })
 
 private fun JSONObject.toCachedTransitPlan(): CachedTransitPlan? {
-    val key = optString("key").takeIf { it.isNotBlank() } ?: return null
+    // Never manufacture an offline cache key from a JSON number or boolean.
+    val key = (opt("key") as? String)?.takeIf { it.isNotBlank() } ?: return null
     // A malformed or missing save time cannot be used to establish cache freshness.
     val savedAt = strictPositiveEpochSecondsOrNull("savedAtEpochSeconds") ?: return null
     return CachedTransitPlan(
@@ -69,7 +70,8 @@ private fun RouteOption.toJson(): JSONObject = JSONObject()
 private fun JSONObject.toRouteOption(): RouteOption? {
     val origin = optJSONObject("origin")?.toMapPoint() ?: return null
     val destination = optJSONObject("destination")?.toMapPoint() ?: return null
-    val id = optString("id").takeIf { it.isNotBlank() } ?: return null
+    // Route identities must survive persistence without JSON primitive coercion.
+    val id = (opt("id") as? String)?.takeIf { it.isNotBlank() } ?: return null
     val stopsJson = optJSONArray("stops")
     if (has("stops") && !isNull("stops") && stopsJson == null) return null
     val stops = stopsJson.toRouteStops()
