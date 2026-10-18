@@ -3,6 +3,7 @@ package com.nazofobi.arrivalalarm
 import android.content.SharedPreferences
 import org.json.JSONException
 import org.json.JSONObject
+import java.security.MessageDigest
 
 /** Stop sequence is required: the same GTFS stop_id may occur twice on a loop. */
 data class GtfsSelectedStopRef(val sequence: Int, val stopId: String)
@@ -19,6 +20,7 @@ enum class GtfsSelectionRestoreProblem {
     INVALID_STOP_ROLES,
     TRIP_UNAVAILABLE,
     STATIC_TRUTH_CHANGED,
+    LEGACY_SNAPSHOT_REQUIRES_RESELECTION,
 }
 
 sealed interface GtfsSelectionRestore {
@@ -38,9 +40,13 @@ class SelectedGtfsTripStore(
     private val resolveTrip: (GtfsTripInstanceIdentity) -> GtfsTripDetailResult,
 ) {
     fun save(selection: GtfsSelectedTrip): Boolean {
-        if (validate(selection) !is GtfsSelectionRestore.Verified) return false
+        val verified = validate(selection) as? GtfsSelectionRestore.Verified ?: return false
         return try {
-            preferences.edit().putString(KEY, encode(selection).toString()).commit()
+            // Snapshot the exact static timetable validated when confirming the trip.
+            preferences.edit().putString(
+                KEY,
+                encode(selection, scheduleFingerprint(verified.detail)).toString(),
+            ).commit()
         } catch (_: RuntimeException) {
             false
         }
@@ -53,9 +59,23 @@ class SelectedGtfsTripStore(
         } catch (_: RuntimeException) {
             return GtfsSelectionRestore.Rejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT)
         } ?: return GtfsSelectionRestore.Rejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT)
-        val selection = decode(raw)
+        // Version 1 did not retain stop times, so a previous departure cannot
+        // be trusted after a GTFS update; require an explicit new selection.
+        val version = try { JSONObject(raw).opt("version") as? Int } catch (_: JSONException) { null }
+        if (version == 1) {
+            return GtfsSelectionRestore.Rejected(
+                GtfsSelectionRestoreProblem.LEGACY_SNAPSHOT_REQUIRES_RESELECTION
+            )
+        }
+        val saved = decode(raw)
             ?: return GtfsSelectionRestore.Rejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT)
-        return validate(selection)
+        val verification = validate(saved.selection)
+        if (verification !is GtfsSelectionRestore.Verified) return verification
+        return if (scheduleFingerprint(verification.detail) == saved.fingerprint) {
+            verification
+        } else {
+            GtfsSelectionRestore.Rejected(GtfsSelectionRestoreProblem.STATIC_TRUTH_CHANGED)
+        }
     }
 
     fun clear(): Boolean = try {
@@ -99,8 +119,45 @@ class SelectedGtfsTripStore(
         return GtfsSelectionRestore.Verified(selection, detail)
     }
 
-    private fun encode(value: GtfsSelectedTrip): JSONObject = JSONObject().apply {
+    private data class SavedSnapshot(val selection: GtfsSelectedTrip, val fingerprint: String)
+
+    /**
+     * Length-framed SHA-256 of every ordered GTFS stop's scheduled arrival/departure.
+     * Explicit nulls/lengths prevent concatenation ambiguity. Identity is validated
+     * separately against the authoritative current GTFS repository.
+     */
+    private fun scheduleFingerprint(detail: GtfsTripDetail): String {
+        val hash = MessageDigest.getInstance("SHA-256")
+        fun part(value: String?) {
+            val bytes = value?.toByteArray(Charsets.UTF_8)
+            val size = bytes?.size ?: -1
+            hash.update(byteArrayOf(
+                (size ushr 24).toByte(), (size ushr 16).toByte(),
+                (size ushr 8).toByte(), size.toByte(),
+            ))
+            if (bytes != null) hash.update(bytes)
+        }
+        part(detail.headsign)
+        part(detail.stops.size.toString())
+        for (stop in detail.stops) {
+            part(stop.stopSequence.toString())
+            part(stop.stopId)
+            part(stop.scheduledArrival)
+            part(stop.scheduledDeparture)
+        }
+        val hex = "0123456789abcdef"
+        return buildString {
+            for (byte in hash.digest()) {
+                val unsigned = byte.toInt() and 0xff
+                append(hex[unsigned ushr 4])
+                append(hex[unsigned and 0x0f])
+            }
+        }
+    }
+
+    private fun encode(value: GtfsSelectedTrip, fingerprint: String): JSONObject = JSONObject().apply {
         put("version", VERSION)
+        put("schedule_fingerprint", fingerprint)
         put("trip_id", value.identity.tripId)
         put("service_date", value.identity.serviceDate.toString())
         put("service_id", value.identity.serviceId)
@@ -116,10 +173,12 @@ class SelectedGtfsTripStore(
         put("stop_id", ref.stopId)
     }
 
-    private fun decode(raw: String): GtfsSelectedTrip? {
+    private fun decode(raw: String): SavedSnapshot? {
         return try {
         val json = JSONObject(raw)
         if (json.intStrict("version") != VERSION) return null
+        val fingerprint = json.stringStrict("schedule_fingerprint") ?: return null
+        if (!FINGERPRINT_REGEX.matches(fingerprint)) return null
         val direction = when (val value = json.opt("direction_id")) {
             JSONObject.NULL -> null
             is Int -> value
@@ -132,11 +191,14 @@ class SelectedGtfsTripStore(
             routeId = json.stringStrict("route_id") ?: return null,
             directionId = direction,
         )
-        GtfsSelectedTrip(
-            identity,
-            ref(json.optJSONObject("boarding")) ?: return null,
-            ref(json.optJSONObject("destination")) ?: return null,
-            ref(json.optJSONObject("alarm")) ?: return null,
+        SavedSnapshot(
+            GtfsSelectedTrip(
+                identity,
+                ref(json.optJSONObject("boarding")) ?: return null,
+                ref(json.optJSONObject("destination")) ?: return null,
+                ref(json.optJSONObject("alarm")) ?: return null,
+            ),
+            fingerprint,
         )
         } catch (_: JSONException) {
             // Android's org.json.JSONException is a checked Exception, not a RuntimeException.
@@ -161,6 +223,7 @@ class SelectedGtfsTripStore(
 
     companion object {
         internal const val KEY = "selected_gtfs_trip_v1"
-        private const val VERSION = 1
+        private const val VERSION = 2
+        private val FINGERPRINT_REGEX = Regex("^[a-f0-9]{64}$")
     }
 }
