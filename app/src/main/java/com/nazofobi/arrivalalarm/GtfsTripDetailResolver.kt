@@ -170,6 +170,12 @@ class GtfsTripDetailResolver(private val source: GtfsTripDetailSource) {
         for (time in stopTimes) {
             val stop = stopCache.getOrPut(time.stopId) { source.stop(time.stopId) }
                 ?: return unavailable(GtfsTripDetailFailure.MISSING_STOP_METADATA)
+            // A provider may expose a stop row with unusable metadata. Do not
+            // offer boarding or alarm targets whose physical location is unverified.
+            if (stop.name.isBlank() ||
+                !stop.latitude.isFinite() || !stop.longitude.isFinite() ||
+                stop.latitude !in -90.0..90.0 || stop.longitude !in -180.0..180.0
+            ) return unavailable(GtfsTripDetailFailure.MISSING_STOP_METADATA)
             stops += GtfsTripDetailStop(
                 stopSequence = time.stopSequence,
                 stopId = time.stopId,
