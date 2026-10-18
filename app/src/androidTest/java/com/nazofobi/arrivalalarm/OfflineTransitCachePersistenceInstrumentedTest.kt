@@ -145,6 +145,60 @@ class OfflineTransitCachePersistenceInstrumentedTest {
     }
 
     @Test
+    fun cachedPlanKeyAndRouteIdMustRemainRealJsonStrings() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val store = SharedPreferencesTransitCacheStore(context)
+        val route = RouteOption(
+            id = "valid-route",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen"),
+            line = "RE", direction = "Bremen",
+            departure = "10:00", arrival = "11:00",
+            walkingMinutes = 0, transfers = 0,
+        )
+        try {
+            store.save(listOf(CachedTransitPlan("valid-key", listOf(route), emptyList(), 100L)))
+            val saved = org.json.JSONArray(requireNotNull(prefs.getString("plans_json", null)))
+                .getJSONObject(0)
+            val invalidIds: List<Any?> = listOf(
+                null, org.json.JSONObject.NULL, 123, true,
+                org.json.JSONArray().put("valid-route"),
+                org.json.JSONObject().put("id", "valid-route"), "  ",
+            )
+            // A corrupt plan key must never be coerced into a routable cache entry.
+            val plans = org.json.JSONArray()
+            invalidIds.forEach { value ->
+                val item = org.json.JSONObject(saved.toString())
+                if (value == null) item.remove("key") else item.put("key", value)
+                plans.put(item)
+            }
+            plans.put(saved)
+            assertTrue(prefs.edit().putString("plans_json", plans.toString()).commit())
+            assertEquals(listOf("valid-key"), store.load().map { it.key })
+
+            // Invalid route identities cannot impersonate a real selected itinerary.
+            val validRoute = saved.getJSONArray("routeOptions").getJSONObject(0)
+            val routes = org.json.JSONArray()
+            invalidIds.forEach { value ->
+                val item = org.json.JSONObject(validRoute.toString())
+                if (value == null) item.remove("id") else item.put("id", value)
+                routes.put(item)
+            }
+            routes.put(validRoute)
+            val plan = org.json.JSONObject(saved.toString()).put("routeOptions", routes)
+            assertTrue(prefs.edit().putString(
+                "plans_json", org.json.JSONArray().put(plan).toString()
+            ).commit())
+            val restored = store.load().single()
+            assertEquals("valid-key", restored.key)
+            assertEquals(listOf("valid-route"), restored.routeOptions.map { it.id })
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
+    @Test
     fun cachedDepartureTripIdMustBeJsonStringWithoutCoercion() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
