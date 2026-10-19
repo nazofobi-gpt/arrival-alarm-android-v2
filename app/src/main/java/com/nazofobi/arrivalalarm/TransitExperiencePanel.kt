@@ -3,7 +3,6 @@ package com.nazofobi.arrivalalarm
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -43,6 +42,7 @@ fun TransitExperiencePanel(
     nowEpochSeconds: Long,
     providerCapabilities: TransitProviderCapabilities = TransitProviderCapabilities(),
     onSelectJourney: (String) -> Unit = {},
+    onSelectDeparture: ((Departure) -> Unit)? = null,
     statusMessage: String? = null,
     sourceLabel: String? = null,
     loading: Boolean = false,
@@ -68,7 +68,8 @@ fun TransitExperiencePanel(
         }
     }
     var favorite by remember(stopId) { mutableStateOf(store.isFavorite(stopId)) }
-    var selectedTrip by remember { mutableStateOf<String?>(null) }
+    var selectedDeparture by remember(stopId) { mutableStateOf<Departure?>(null) }
+    var recentTripCount by remember(store) { mutableStateOf(store.recents().size) }
     val board = engine.departureBoard(departures, nowEpochSeconds)
     val cancelled = upcomingCancelledDepartures(departures, nowEpochSeconds)
 
@@ -216,9 +217,11 @@ fun TransitExperiencePanel(
                     }
                     Button(
                         onClick = {
-                            selectedTrip = departure.tripId
+                            selectedDeparture = departure
                             store.recordTrip(departure.tripId)
-                            departure.routeId?.let(onSelectJourney)
+                            recentTripCount = store.recents().size
+                            if (onSelectDeparture != null) onSelectDeparture(departure)
+                            else departure.routeId?.let(onSelectJourney)
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -265,12 +268,34 @@ fun TransitExperiencePanel(
             }
         }
 
-        selectedTrip?.let { tripId ->
-            val alternatives = engine.alternateDepartures(departures, tripId, nowEpochSeconds)
-            Text(
-                stringResource(R.string.alternate_departures, alternatives.size),
-                modifier = Modifier.testTag("alternate-departures"),
-            )
+        selectedDeparture?.let { selected ->
+            if (board.any { it.sameScheduledInstanceAs(selected) }) {
+                val alternatives = engine.alternateDepartures(departures, selected, nowEpochSeconds)
+                Text(
+                    stringResource(R.string.alternate_departures, alternatives.size),
+                    modifier = Modifier.testTag("alternate-departures"),
+                )
+                alternatives.take(3).forEachIndexed { index, alternative ->
+                    OutlinedButton(
+                        onClick = {
+                            selectedDeparture = alternative
+                            store.recordTrip(alternative.tripId)
+                            recentTripCount = store.recents().size
+                            if (onSelectDeparture != null) onSelectDeparture(alternative)
+                            else alternative.routeId?.let(onSelectJourney)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("alternate-departure-$index"),
+                    ) {
+                        Text(
+                            "${alternative.line} → ${alternative.direction} • " +
+                                formatDepartureEpoch(alternative.effectiveEpochSeconds),
+                        )
+                    }
+                }
+            }
         }
 
         engine.alerts(alerts).forEachIndexed { index, alert ->
@@ -292,13 +317,30 @@ fun TransitExperiencePanel(
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Text(
-                stringResource(R.string.recent_trips, store.recents().size),
+                stringResource(R.string.recent_trips, recentTripCount),
                 modifier = Modifier.testTag("recent-trips"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (recentTripCount > 0) {
+                OutlinedButton(
+                    onClick = {
+                        store.clearRecents()
+                        recentTripCount = store.recents().size
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("recent-trips-clear"),
+                ) {
+                    Text(stringResource(R.string.recent_trips_clear))
+                }
+            }
         }
     }
 }

@@ -20,9 +20,20 @@ def inspect(zf, member):
             text = io.TextIOWrapper(raw, encoding="utf-8-sig", newline="")
             reader = csv.reader(text)
             header = next(reader)
+            if not any(column.strip() for column in header):
+                raise SystemExit(f"empty GTFS table {member}: missing CSV header")
+            seen = set()
+            for column in header:
+                if column in seen:
+                    raise SystemExit(f"duplicate GTFS column {member}: {column}")
+                seen.add(column)
             return {"rows": sum(1 for _ in reader), "header": header}
     except UnicodeDecodeError:
         raise SystemExit(f"invalid UTF-8 in GTFS table {member}") from None
+    except csv.Error:
+        raise SystemExit(f"invalid CSV in GTFS table {member}") from None
+    except StopIteration:
+        raise SystemExit(f"empty GTFS table {member}: missing CSV header") from None
 
 with zipfile.ZipFile(archive) as zf:
     # A ZIP can contain both stops.txt and nested/stops.txt (or a case alias).
@@ -48,18 +59,36 @@ with zipfile.ZipFile(archive) as zf:
         if name in names:
             report[name] = inspect(zf, names[name])
 
-assert report["stops.txt"]["rows"] >= 500_000
-assert report["routes.txt"]["rows"] >= 10_000
-assert report["trips.txt"]["rows"] >= 1_000_000
-assert report["stop_times.txt"]["rows"] > report["trips.txt"]["rows"]
-assert (
+# Require structural GTFS columns before counting a feed as valid.
+required_columns = {
+    "stops.txt": ("stop_id", "stop_name", "stop_lat", "stop_lon"),
+    "routes.txt": ("route_id", "route_type"),
+    "trips.txt": ("route_id", "service_id", "trip_id"),
+    "stop_times.txt": ("trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence"),
+}
+for table, columns in required_columns.items():
+    header = set(report[table]["header"])
+    for column in columns:
+        if column not in header:
+            raise SystemExit(f"{table} missing required GTFS column {column}")
+
+# Fail closed even when Python is launched with -O (which removes assert statements).
+for table, minimum in (
+    ("stops.txt", 500_000),
+    ("routes.txt", 10_000),
+    ("trips.txt", 1_000_000),
+):
+    rows = report[table]["rows"]
+    if rows < minimum:
+        raise SystemExit(f"{table} row count below minimum: {rows} < {minimum}")
+
+if report["stop_times.txt"]["rows"] <= report["trips.txt"]["rows"]:
+    raise SystemExit("stop_times.txt must contain more rows than trips.txt")
+if not (
     report.get("calendar.txt", {}).get("rows", 0) > 0
     or report.get("calendar_dates.txt", {}).get("rows", 0) > 0
-), "service calendar missing"
-
-stop_header = set(report["stops.txt"]["header"])
-for column in ("stop_id", "stop_name", "stop_lat", "stop_lon"):
-    assert column in stop_header, f"stops.txt missing {column}"
+):
+    raise SystemExit("service calendar missing")
 
 with open(report_path, "w", encoding="utf-8") as output:
     json.dump(report, output, ensure_ascii=False, indent=2)

@@ -14,8 +14,9 @@ internal fun upcomingCancelledDepartures(
     limit: Int = 3,
 ): List<Departure> = departures.asSequence()
     .filter { it.cancelled && it.scheduledEpochSeconds >= nowEpochSeconds }
-    // Providers can repeat the same scheduled cancellation: one board card per service.
-    .distinctBy { it.tripId to it.scheduledEpochSeconds }
+    // Trip IDs and scheduled times can collide across routes and feeds.
+    // Retain distinct visible services while deduplicating repeated updates.
+    .distinctBy { listOf(it.tripId, it.scheduledEpochSeconds, it.routeId, it.line, it.direction) }
     .sortedBy { it.scheduledEpochSeconds }
     .take(limit.coerceAtLeast(0))
     .toList()

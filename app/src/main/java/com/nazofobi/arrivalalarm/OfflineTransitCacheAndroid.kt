@@ -40,12 +40,23 @@ private fun CachedTransitPlan.toJson(): JSONObject = JSONObject()
     .put("departures", JSONArray().apply { departures.forEach { put(it.toJson()) } })
 
 private fun JSONObject.toCachedTransitPlan(): CachedTransitPlan? {
-    val key = optString("key").takeIf { it.isNotBlank() } ?: return null
+    // Never manufacture an offline cache key from a JSON number or boolean.
+    val key = (opt("key") as? String)?.takeIf { it.isNotBlank() } ?: return null
+    // A malformed or missing save time cannot be used to establish cache freshness.
+    val savedAt = strictPositiveEpochSecondsOrNull("savedAtEpochSeconds") ?: return null
+    // A present, wrong-typed collection is not a verified empty cache. Reject
+    // that entry rather than silently hiding its itinerary or departure board.
+    // Missing/null arrays remain supported for older cache records.
+    val routesJson = optJSONArray("routeOptions")
+    val departuresJson = optJSONArray("departures")
+    if ((has("routeOptions") && !isNull("routeOptions") && routesJson == null) ||
+        (has("departures") && !isNull("departures") && departuresJson == null)
+    ) return null
     return CachedTransitPlan(
         key = key,
-        routeOptions = optJSONArray("routeOptions").toRouteOptions(),
-        departures = optJSONArray("departures").toDepartures(),
-        savedAtEpochSeconds = optLong("savedAtEpochSeconds", 0L),
+        routeOptions = routesJson.toRouteOptions(),
+        departures = departuresJson.toDepartures(),
+        savedAtEpochSeconds = savedAt,
     )
 }
 
@@ -63,16 +74,44 @@ private fun RouteOption.toJson(): JSONObject = JSONObject()
     .put("stops", JSONArray().apply { stops.forEach { put(it.toJson()) } })
     .putNullable("refreshToken", refreshToken)
     .putNullable("sourceUpdatedAtEpochSeconds", sourceUpdatedAtEpochSeconds)
+    .putNullable("departureEpochMillis", departureEpochMillis)
+    .putNullable("arrivalEpochMillis", arrivalEpochMillis)
 
 private fun JSONObject.toRouteOption(): RouteOption? {
     val origin = optJSONObject("origin")?.toMapPoint() ?: return null
     val destination = optJSONObject("destination")?.toMapPoint() ?: return null
-    val id = optString("id").takeIf { it.isNotBlank() } ?: return null
+    // Route identities must survive persistence without JSON primitive coercion.
+    val id = (opt("id") as? String)?.takeIf { it.isNotBlank() } ?: return null
     val stopsJson = optJSONArray("stops")
     if (has("stops") && !isNull("stops") && stopsJson == null) return null
     val stops = stopsJson.toRouteStops()
     // A silently dropped stop changes the ordered itinerary and may hide the alarm target.
     if (stopsJson != null && stops.size != stopsJson.length()) return null
+    // org.json optInt coerces malformed stored values, masking bad route metadata.
+    val walkingMinutes = nonNegativeStoredIntOrNull("walkingMinutes") ?: return null
+    val transfers = nonNegativeStoredIntOrNull("transfers") ?: return null
+    val tripIds = when {
+        !has("tripIds") || isNull("tripIds") -> emptyList()
+        else -> optJSONArray("tripIds")?.toStrictTripIdsOrNull() ?: return null
+    }
+    // A malformed source timestamp must not impersonate verified live data.
+    val sourceUpdatedAt = when {
+        !has("sourceUpdatedAtEpochSeconds") || isNull("sourceUpdatedAtEpochSeconds") -> null
+        else -> strictNonNegativeEpochSecondsOrNull("sourceUpdatedAtEpochSeconds") ?: return null
+    }
+    // Legacy itineraries have no exact instants; malformed present values cannot be trusted.
+    val departureEpochMillis = when {
+        !has("departureEpochMillis") || isNull("departureEpochMillis") -> null
+        else -> strictPositiveStoredEpochMillisOrNull("departureEpochMillis") ?: return null
+    }
+    val arrivalEpochMillis = when {
+        !has("arrivalEpochMillis") || isNull("arrivalEpochMillis") -> null
+        else -> strictPositiveStoredEpochMillisOrNull("arrivalEpochMillis") ?: return null
+    }
+    // Reject impossible itinerary chronology rather than show a misleading duration.
+    if (departureEpochMillis != null && arrivalEpochMillis != null &&
+        arrivalEpochMillis < departureEpochMillis
+    ) return null
     return RouteOption(
         id = id,
         origin = origin,
@@ -81,12 +120,14 @@ private fun JSONObject.toRouteOption(): RouteOption? {
         direction = optString("direction"),
         departure = optString("departure"),
         arrival = optString("arrival"),
-        walkingMinutes = optInt("walkingMinutes", 0),
-        transfers = optInt("transfers", 0),
-        tripIds = optJSONArray("tripIds").toStrings(),
+        walkingMinutes = walkingMinutes,
+        transfers = transfers,
+        tripIds = tripIds,
         stops = stops,
         refreshToken = optNullableString("refreshToken"),
-        sourceUpdatedAtEpochSeconds = optNullableLong("sourceUpdatedAtEpochSeconds"),
+        sourceUpdatedAtEpochSeconds = sourceUpdatedAt,
+        departureEpochMillis = departureEpochMillis,
+        arrivalEpochMillis = arrivalEpochMillis,
     )
 }
 
@@ -96,11 +137,9 @@ private fun MapPoint.toJson(): JSONObject = JSONObject()
     .put("label", label)
 
 private fun JSONObject.toMapPoint(): MapPoint? {
-    val latitude = optDouble("latitude", Double.NaN)
-    val longitude = optDouble("longitude", Double.NaN)
-    if (!latitude.isFinite() || latitude !in -90.0..90.0 ||
-        !longitude.isFinite() || longitude !in -180.0..180.0
-    ) return null
+    // Saved coordinates must be JSON numbers; org.json otherwise coerces strings.
+    val latitude = strictStoredCoordinateOrNull("latitude", -90.0, 90.0) ?: return null
+    val longitude = strictStoredCoordinateOrNull("longitude", -180.0, 180.0) ?: return null
     return MapPoint(latitude, longitude, optString("label"))
 }
 
@@ -147,14 +186,21 @@ private fun Departure.toJson(): JSONObject = JSONObject()
     .putNullable("routeId", routeId)
 
 private fun JSONObject.toDeparture(): Departure? {
-    val tripId = optString("tripId").takeIf { it.isNotBlank() } ?: return null
+    // A coerced numeric/boolean JSON value is not an authoritative GTFS trip identity.
+    val tripId = (opt("tripId") as? String)?.takeIf { it.isNotBlank() } ?: return null
+    // JSON getters silently coerce missing, malformed or fractional times to epoch zero.
+    // Keep offline departures only when a positive whole-second timestamp is proven.
+    val scheduled = strictPositiveEpochSecondsOrNull("scheduledEpochSeconds") ?: return null
+    // A coerced string such as "true" must never create an unverified cancellation.
+    // Missing legacy fields retain the previous non-cancelled default.
+    val cancelled = if (!has("cancelled")) false else opt("cancelled") as? Boolean ?: return null
     return Departure(
         tripId = tripId,
         line = optString("line"),
         direction = optString("direction"),
-        scheduledEpochSeconds = optLong("scheduledEpochSeconds", 0L),
-        realtimeEpochSeconds = optNullableLong("realtimeEpochSeconds"),
-        cancelled = optBoolean("cancelled", false),
+        scheduledEpochSeconds = scheduled,
+        realtimeEpochSeconds = strictPositiveEpochSecondsOrNull("realtimeEpochSeconds"),
+        cancelled = cancelled,
         platform = optNullableString("platform"),
         routeId = optNullableString("routeId"),
     )
@@ -175,27 +221,52 @@ private fun JSONArray?.toDepartures(): List<Departure> = buildList {
     for (index in 0 until array.length()) array.optJSONObject(index)?.toDeparture()?.let(::add)
 }
 
-private fun JSONArray?.toStrings(): List<String> = buildList {
-    val array = this@toStrings ?: return@buildList
-    for (index in 0 until array.length()) {
-        array.optString(index).takeIf { it.isNotBlank() }?.let(::add)
+/** Never coerce numbers, booleans or nulls into an offline trip identity. */
+private fun JSONArray.toStrictTripIdsOrNull(): List<String>? {
+    val ids = ArrayList<String>(length())
+    for (index in 0 until length()) {
+        val id = opt(index) as? String ?: return null
+        if (id.isBlank()) return null
+        ids.add(id)
     }
+    return ids
 }
 
 private fun JSONObject.putNullable(key: String, value: Any?): JSONObject =
     put(key, value ?: JSONObject.NULL)
 
+/** Missing legacy counts default to zero; supplied counts must be finite, whole and >= 0. */
+private fun JSONObject.nonNegativeStoredIntOrNull(key: String): Int? {
+    if (!has(key)) return 0
+    return (opt(key) as? Number)?.toString()?.toIntOrNull()?.takeIf { it >= 0 }
+}
+
 private fun JSONObject.optNullableString(key: String): String? =
     if (!has(key) || isNull(key)) null else optString(key).takeIf { it.isNotBlank() }
 
-private fun JSONObject.optNullableLong(key: String): Long? =
-    if (!has(key) || isNull(key)) null else optLong(key)
+/** Reject JSON coercions that could turn corrupt realtime times into false live departures. */
+private fun JSONObject.strictPositiveEpochSecondsOrNull(key: String): Long? =
+    (opt(key) as? Number)?.toString()?.toLongOrNull()
+        ?.takeIf { it > 0L && it <= Long.MAX_VALUE / 1_000L }
+
+/** Strictly numeric, whole and bounded persisted source epoch; zero means unknown age. */
+private fun JSONObject.strictNonNegativeEpochSecondsOrNull(key: String): Long? =
+    (opt(key) as? Number)?.toString()?.toLongOrNull()
+        ?.takeIf { it >= 0L && it <= Long.MAX_VALUE / 1_000L }
+
+/** Exact positive numeric milliseconds, bounded to the supported calendar range through year 9999. */
+private fun JSONObject.strictPositiveStoredEpochMillisOrNull(key: String): Long? =
+    (opt(key) as? Number)?.toString()?.toLongOrNull()
+        ?.takeIf { it > 0L && it <= 253_402_300_799_999L }
 
 private fun JSONObject.optNullableDouble(key: String): Double? =
-    if (!has(key) || isNull(key)) null else optDouble(key).takeIf { it.isFinite() }
+    (opt(key) as? Number)?.toDouble()?.takeIf { it.isFinite() }
+
+/** Reject nonnumeric JSON coordinates rather than accepting org.json's conversions. */
+private fun JSONObject.strictStoredCoordinateOrNull(key: String, min: Double, max: Double): Double? =
+    (opt(key) as? Number)?.toDouble()?.takeIf { it.isFinite() && it in min..max }
 
 private fun JSONObject.hasInvalidCoordinate(key: String, min: Double, max: Double): Boolean {
     if (!has(key) || isNull(key)) return false
-    val value = optDouble(key, Double.NaN)
-    return !value.isFinite() || value !in min..max
+    return strictStoredCoordinateOrNull(key, min, max) == null
 }

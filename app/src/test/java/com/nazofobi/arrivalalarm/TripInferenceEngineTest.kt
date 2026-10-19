@@ -56,6 +56,71 @@ class TripInferenceEngineTest {
         assertTrue(result.requiresExplicitConfirmation)
     }
 
+    @Test fun locationAndHeadingAloneCannotAcceptTemporallyImpossibleTrip() {
+        val engine = TripInferenceEngine(TripInferenceSettings(enabled = true))
+        // At 15+ minutes from the expected departure, location/heading/motion
+        // still contribute up to 0.75 and used to exceed the 0.72 threshold.
+        val result = engine.infer(
+            observation(),
+            listOf(candidate("stale-trip", "Flughafen", 180.0, offsetSec = -3_600L)),
+        )
+
+        assertEquals(1, result.suggestions.size)
+        assertEquals(0.0, result.suggestions.single().timeScore, 0.0)
+        assertTrue(result.suggestions.single().confidence >= 0.72)
+        assertNull(result.accepted)
+        assertTrue(result.reason.contains("zaman"))
+        assertTrue(result.requiresExplicitConfirmation)
+    }
+
+    @Test fun departureWithPositiveTimeEvidenceRemainsEligible() {
+        val engine = TripInferenceEngine(TripInferenceSettings(enabled = true))
+        val result = engine.infer(
+            observation(),
+            listOf(candidate("nearby-trip", "Flughafen", 180.0, offsetSec = 120L)),
+        )
+        assertEquals("nearby-trip", result.accepted?.candidate?.routeId)
+        assertTrue(result.suggestions.single().timeScore > 0.0)
+    }
+
+    @Test fun duplicateProviderRowsCannotImpersonateAnAmbiguousSecondTrip() {
+        val engine = TripInferenceEngine(TripInferenceSettings(enabled = true, topK = 1))
+        val trip = candidate("route-6", "Flughafen", 180.0)
+        val result = engine.infer(observation(), listOf(trip, trip, trip))
+        assertEquals("route-6", result.accepted?.candidate?.routeId)
+        assertEquals(1, result.suggestions.size)
+        assertTrue(result.requiresExplicitConfirmation)
+    }
+
+    @Test fun deduplicationPreservesDistinctCompetingTripEvidence() {
+        val engine = TripInferenceEngine(TripInferenceSettings(enabled = true, topK = 1))
+        val trip = candidate("route-6", "Flughafen", 180.0)
+        val competitor = candidate("route-7", "Hafen", 180.0)
+        val result = engine.infer(observation(), listOf(trip, trip, competitor, competitor))
+        assertNull("Different trip choices must still trigger the ambiguity gate", result.accepted)
+        assertEquals(1, result.suggestions.size)
+        assertTrue(result.reason.contains("belirsiz"))
+        assertTrue(result.requiresExplicitConfirmation)
+    }
+
+    @Test fun zeroAmbiguityMarginStillRejectsExactlyTiedDistinctTrips() {
+        val engine = TripInferenceEngine(
+            TripInferenceSettings(enabled = true, ambiguityMargin = 0.0, topK = 1)
+        )
+        val selected = candidate("route-a", "Flughafen", 180.0)
+        val tied = candidate("route-b", "Neustadt", 180.0)
+        val ambiguous = engine.infer(observation(), listOf(selected, tied))
+        assertNull("Exactly tied distinct trips cannot pass a zero-margin gate", ambiguous.accepted)
+        assertEquals(1, ambiguous.suggestions.size)
+        assertTrue(ambiguous.reason.contains("belirsiz"))
+        assertTrue(ambiguous.requiresExplicitConfirmation)
+
+        val weaker = candidate("route-c", "Universität", 0.0, offsetSec = 600)
+        val distinct = engine.infer(observation(), listOf(selected, weaker))
+        assertEquals("route-a", distinct.accepted?.candidate?.routeId)
+        assertTrue(distinct.requiresExplicitConfirmation)
+    }
+
     @Test fun oppositeDirectionAmbiguityFailsClosed() {
         val engine = TripInferenceEngine(TripInferenceSettings(enabled = true, ambiguityMargin = 0.12))
         val result = engine.infer(
@@ -173,6 +238,47 @@ class TripInferenceEngineTest {
             assertNull("Invalid sensor evidence must not be accepted: $evidence", result.accepted)
             assertTrue("Invalid evidence must produce no suggestions", result.suggestions.isEmpty())
             assertTrue(result.requiresExplicitConfirmation)
+        }
+    }
+
+    @Test fun missingLineOrDirectionCannotBeSuggestedOrAccepted() {
+        val engine = TripInferenceEngine(TripInferenceSettings(enabled = true))
+        val valid = candidate("route-6", "Flughafen", 180.0)
+        val invalid = listOf(
+            valid.copy(line = ""),
+            valid.copy(line = "  "),
+            valid.copy(direction = ""),
+            valid.copy(direction = "\t"),
+        )
+        for (candidate in invalid) {
+            val alone = engine.infer(observation(), listOf(candidate))
+            assertNull("Incomplete trip identity cannot be accepted", alone.accepted)
+            assertTrue("Incomplete trip identity cannot be suggested", alone.suggestions.isEmpty())
+            assertTrue(alone.requiresExplicitConfirmation)
+
+            val mixed = engine.infer(observation(), listOf(candidate, valid))
+            assertEquals("route-6", mixed.accepted?.candidate?.routeId)
+            assertEquals(1, mixed.suggestions.size)
+        }
+        assertEquals("route-6", engine.infer(observation(), listOf(valid)).accepted?.candidate?.routeId)
+    }
+
+    @Test fun missingRouteIdentityCannotProduceConfidentTripOrAmbiguity() {
+        val engine = TripInferenceEngine(TripInferenceSettings(enabled = true))
+        for (missing in listOf("", " ", "\t")) {
+            val invalid = candidate("valid", "Flughafen", 180.0).copy(routeId = missing)
+            val alone = engine.infer(observation(), listOf(invalid))
+            assertNull("Missing route ID must not be accepted", alone.accepted)
+            assertTrue("Missing route ID must not be suggested", alone.suggestions.isEmpty())
+            assertTrue(alone.requiresExplicitConfirmation)
+
+            // Invalid provider rows must not tie with a valid candidate.
+            val mixed = engine.infer(
+                observation(),
+                listOf(invalid, candidate("valid", "Flughafen", 180.0)),
+            )
+            assertEquals("valid", mixed.accepted?.candidate?.routeId)
+            assertEquals(1, mixed.suggestions.size)
         }
     }
 
@@ -302,5 +408,35 @@ class TripInferenceEngineTest {
         assertEquals(1.0, metrics.precision, 0.0)
         assertEquals(0.4, metrics.coverage, 0.0)
         assertEquals(1.0, metrics.accuracy, 0.0)
+    }
+
+    @Test fun emptyPredictionsReportZeroPrecisionInsteadOfPerfectScore() {
+        val engine = TripInferenceEngine(TripInferenceSettings(enabled = true))
+        val fixtures = listOf(
+            LabeledInferenceFixture(
+                "true negative",
+                observation(),
+                listOf(candidate("closed", "Flughafen", 180.0, active = false)),
+                null,
+            ),
+            LabeledInferenceFixture(
+                "missed service",
+                observation(),
+                listOf(candidate("stale", "Flughafen", 180.0, offsetSec = -3600L)),
+                "stale",
+            ),
+        )
+        val metrics = TripInferenceEvaluator.evaluate(engine, fixtures)
+        assertEquals(2, metrics.total)
+        assertEquals(1, metrics.correct)
+        assertEquals(0, metrics.falsePositive)
+        assertEquals(1, metrics.falseNegative)
+        assertEquals(0.0, metrics.coverage, 0.0)
+        assertEquals(0.0, metrics.precision, 0.0)
+        assertEquals(0.5, metrics.accuracy, 0.0)
+
+        val empty = TripInferenceEvaluator.evaluate(engine, emptyList())
+        assertEquals(0.0, empty.precision, 0.0)
+        assertEquals(0.0, empty.coverage, 0.0)
     }
 }

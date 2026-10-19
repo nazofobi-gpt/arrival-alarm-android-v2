@@ -33,21 +33,36 @@ class JourneyController(
     }
 
     @Volatile
-    var state: JourneyUiState = runCatching { stateStore?.load() }.getOrNull()?.takeIf { saved ->
+    var state: JourneyUiState = (try {
+        stateStore?.load()
+    } catch (_: RuntimeException) {
+        // Corrupt/unavailable local state is recoverable; fatal JVM errors are not.
+        null
+    })?.takeIf { saved ->
         (saved.distanceMeters == null ||
             (saved.distanceMeters.isFinite() && saved.distanceMeters >= 0.0)) &&
             when (saved.phase) {
             JourneyPhase.EMPTY -> saved.start == null && saved.destination == null
             JourneyPhase.START_SELECTED -> saved.start?.isValidCoordinate() == true && saved.destination == null
-            JourneyPhase.DESTINATION_SELECTED, JourneyPhase.ARMED, JourneyPhase.ARRIVED ->
+            JourneyPhase.DESTINATION_SELECTED, JourneyPhase.ARMED ->
                 saved.start?.isValidCoordinate() == true && saved.destination?.isValidCoordinate() == true
+            JourneyPhase.ARRIVED ->
+                // A restored arrival must have measured proximity, not just valid coordinates.
+                saved.start?.isValidCoordinate() == true &&
+                    saved.destination?.isValidCoordinate() == true &&
+                    saved.distanceMeters != null &&
+                    saved.distanceMeters <= arrivalRadiusMeters
         }
     } ?: JourneyUiState()
         private set
 
     private fun update(newState: JourneyUiState) {
         state = newState
-        stateStore?.save(newState)
+        try {
+            stateStore?.save(newState)
+        } catch (_: RuntimeException) {
+            // Keep the current journey usable if local persistence becomes unavailable.
+        }
     }
 
     fun selectStart(point: GeoPoint) {
@@ -80,7 +95,9 @@ class JourneyController(
             update(state.copy(error = "Geçerli başlangıç ve hedef gerekli"))
             return
         }
-        update(state.copy(phase = JourneyPhase.ARMED, error = null))
+        // An earlier arrival distance is not evidence for the newly armed alarm.
+        val distance = if (state.phase == JourneyPhase.ARRIVED) null else state.distanceMeters
+        update(state.copy(phase = JourneyPhase.ARMED, distanceMeters = distance, error = null))
     }
 
     fun cancelAlarm() {

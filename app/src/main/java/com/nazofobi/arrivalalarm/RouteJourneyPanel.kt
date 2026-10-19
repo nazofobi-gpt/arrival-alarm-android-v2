@@ -201,7 +201,7 @@ private fun RouteOptionCard(
     selectTestTag: String,
     modifier: Modifier = Modifier,
 ) {
-    val duration = routeDurationMinutes(option.departure, option.arrival)
+    val duration = routeDurationMinutes(option)
     val hasRealtime = option.stops.any(::hasRealtimeDelta)
     val realtimeLabel = when {
         option.realtime?.cancelledTripIds?.isNotEmpty() == true ->
@@ -294,7 +294,7 @@ private fun RouteOptionCard(
 
 @Composable
 private fun JourneyDetailCard(option: RouteOption) {
-    val duration = routeDurationMinutes(option.departure, option.arrival)
+    val duration = routeDurationMinutes(option)
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface,
@@ -524,11 +524,36 @@ internal fun JourneyAlarmControls(
     }
 }
 
+/** Calendar-day-safe duration for scheduled trips; unknown dates fail closed. */
+internal fun routeDurationMinutes(option: RouteOption): Int? {
+    val departure = option.departureEpochMillis
+    val arrival = option.arrivalEpochMillis
+    if (departure != null || arrival != null) {
+        if (departure == null || arrival == null || arrival < departure) return null
+        val elapsedMillis = try {
+            Math.subtractExact(arrival, departure)
+        } catch (_: ArithmeticException) {
+            return null
+        }
+        val minutes = elapsedMillis / 60_000L
+        return minutes.takeIf { it <= Int.MAX_VALUE.toLong() }?.toInt()
+    }
+    return routeDurationMinutes(option.departure, option.arrival)
+}
+
 private fun routeDurationMinutes(departure: String, arrival: String): Int? {
     fun minutes(clock: String): Int? {
         val raw = clock.substringAfter('T', clock)
-        val hour = raw.take(2).toIntOrNull() ?: return null
-        val minute = raw.drop(3).take(2).toIntOrNull() ?: return null
+        // Undated labels must never masquerade as a multi-day schedule.
+        if (raw.length != 5 && raw.length != 8) return null
+        if (raw[2] != ':' || (raw.length == 8 && raw[5] != ':')) return null
+        val hour = raw.substring(0, 2).toIntOrNull() ?: return null
+        val minute = raw.substring(3, 5).toIntOrNull() ?: return null
+        if (hour !in 0..23 || minute !in 0..59) return null
+        if (raw.length == 8) {
+            val seconds = raw.substring(6, 8).toIntOrNull() ?: return null
+            if (seconds !in 0..59) return null
+        }
         return hour * 60 + minute
     }
     val start = minutes(departure) ?: return null
@@ -536,9 +561,21 @@ private fun routeDurationMinutes(departure: String, arrival: String): Int? {
     return if (end >= start) end - start else end + 24 * 60 - start
 }
 
-private fun routeClock(value: String?): String? {
+/** Invalid provider labels must not be displayed as a scheduled stop clock. */
+internal fun routeClock(value: String?): String? {
     val raw = value?.substringAfter('T', value)?.takeIf { it.isNotBlank() } ?: return null
-    return raw.take(5).takeIf { it.length >= 4 }
+    if (raw.length != 5 && raw.length != 8) return null
+    if (raw[2] != ':' || (raw.length == 8 && raw[5] != ':')) return null
+    if (!raw.substring(0, 2).all { it in '0'..'9' } ||
+        !raw.substring(3, 5).all { it in '0'..'9' }) return null
+    val minute = raw.substring(3, 5).toInt()
+    if (minute !in 0..59) return null
+    if (raw.length == 8) {
+        if (!raw.substring(6, 8).all { it in '0'..'9' }) return null
+        if (raw.substring(6, 8).toInt() !in 0..59) return null
+    }
+    // GTFS extended service-day hours (24+) are valid; do not silently wrap them.
+    return raw.substring(0, 5)
 }
 
 private fun hasRealtimeDelta(stop: RouteStop): Boolean =

@@ -7,6 +7,17 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ProductionStaticJourneyPlannerTest {
+    @Test
+    fun nonpositiveStaticJourneyLimitNeverSynthesizesARequestedOption() {
+        for (invalid in listOf(0, -1, Int.MIN_VALUE)) {
+            assertEquals(0, boundedStaticJourneyOptionLimit(invalid))
+        }
+        assertEquals(1, boundedStaticJourneyOptionLimit(1))
+        assertEquals(3, boundedStaticJourneyOptionLimit(3))
+        assertEquals(6, boundedStaticJourneyOptionLimit(6))
+        assertEquals(6, boundedStaticJourneyOptionLimit(Int.MAX_VALUE))
+    }
+
     private val zone = TimeZone.getTimeZone("Europe/Berlin")
     private val date = GtfsServiceDate(2026, 10, 4)
 
@@ -61,6 +72,8 @@ class ProductionStaticJourneyPlannerTest {
         assertEquals("Berlin", option.direction)
         assertEquals("08:00", option.departure)
         assertEquals("08:47", option.arrival)
+        assertEquals(journey.legs.first().departureEpochMillis, option.departureEpochMillis)
+        assertEquals(journey.arrivalEpochMillis, option.arrivalEpochMillis)
         assertEquals(3, option.walkingMinutes)
         assertEquals(1, option.transfers)
         assertEquals(listOf("T1", "T2"), option.tripIds)
@@ -217,6 +230,27 @@ class ProductionStaticJourneyPlannerTest {
         assertEquals(times.map { it.stopId }, option.stops.map { it.id })
         assertEquals("B", option.stops.last().name)
         assertEquals(mapOf("A" to 1, "B" to 1), data.stopLookupCounts)
+    }
+
+    @Test
+    fun routingDateCandidatesIncludeTomorrowAcrossDaylightSavingChange() {
+        val saturday = GtfsServiceDate(2026, 10, 24)
+        val beforeDst = GtfsServiceTime.parse("23:50:00").resolve(saturday, zone).epochMillis
+        assertEquals(
+            listOf(
+                GtfsServiceDate(2026, 10, 23),
+                saturday,
+                GtfsServiceDate(2026, 10, 25),
+            ),
+            staticRoutingServiceDates(beforeDst, zone),
+        )
+
+        val sunday = GtfsServiceDate(2026, 10, 25)
+        val afterDst = GtfsServiceTime.parse("23:50:00").resolve(sunday, zone).epochMillis
+        assertEquals(
+            listOf(saturday, sunday, GtfsServiceDate(2026, 10, 26)),
+            staticRoutingServiceDates(afterDst, zone),
+        )
     }
 
     private fun at(raw: String): Long =

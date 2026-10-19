@@ -9,6 +9,7 @@ import java.io.InputStream
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLConnection
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.Locale
@@ -25,6 +26,9 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         private const val COUNT_KEY = "stop_count"
         private const val VERSION_KEY = "source_version"
         private const val SCHEMA_KEY = "schema_version"
+        private const val SOURCE_URL_KEY = "source_url"
+        private const val HTTP_ETAG_KEY = "http_etag"
+        private const val HTTP_LAST_MODIFIED_KEY = "http_last_modified"
         private const val REQUIRED_STOP_COUNT = 10_000
     }
 
@@ -63,27 +67,71 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
     fun importStops(url: String, onCount: (Int) -> Unit) = importFeed(url, onCount)
 
     fun importFeed(url: String, onCount: (Int) -> Unit) {
+        importFeedWithConnection(url, onCount, URL(url).openConnection())
+    }
+
+    /** Injected URLConnection is used only for deterministic HTTP/SQLite acceptance tests. */
+    internal fun importFeedWithConnection(
+        url: String,
+        onCount: (Int) -> Unit,
+        connection: URLConnection,
+    ) {
         val db = writableDatabase
-        val connection = URL(url).openConnection().apply {
+        connection.apply {
             connectTimeout = 15_000
             readTimeout = 60_000
         }
         val http = connection as? HttpURLConnection
+        // Revalidate only an already usable snapshot fetched from this exact URL.
+        val validators = gtfsConditionalHeaders(
+            ready = isReady(),
+            sameSource = metadata(SOURCE_URL_KEY) == url,
+            etag = metadata(HTTP_ETAG_KEY),
+            lastModified = metadata(HTTP_LAST_MODIFIED_KEY),
+        )
         http?.apply {
             requestMethod = "GET"
             instanceFollowRedirects = true
             setRequestProperty("User-Agent", "ArrivalAlarmAndroid/0.1")
+            validators.forEach { (name, value) -> setRequestProperty(name, value) }
         }
-        if (http != null && http.responseCode !in 200..299) {
-            val code = http.responseCode
-            http.disconnect()
-            error("GTFS indirme HTTP $code")
+        if (http != null) {
+            val status = try {
+                http.responseCode
+            } catch (failure: java.io.IOException) {
+                // A failed response header read must not leave the feed connection open.
+                http.disconnect()
+                throw failure
+            }
+            if (status == HttpURLConnection.HTTP_NOT_MODIFIED) {
+                http.disconnect()
+                // HTTP 304 does not change the usable feed or fetch timestamp.
+                if (validators.isNotEmpty() && isReady()) {
+                    onCount(stopCount())
+                    return
+                }
+                error("GTFS beklenmeyen HTTP 304")
+            }
+            if (status != HttpURLConnection.HTTP_OK) {
+                http.disconnect()
+                error("GTFS indirme HTTP $status")
+            }
         }
 
-        val sourceVersion = http?.getHeaderField("ETag")
-            ?: http?.getHeaderField("Last-Modified")
-            ?: connection.lastModified.takeIf { it > 0L }?.toString()
-            ?: connection.url.toString()
+        // Reading feed headers can also fail after HTTP 200, before the import
+        // transaction begins. Disconnect instead of leaking the network socket.
+        val (responseEtag, responseLastModified, sourceVersion) = try {
+            val etag = http?.getHeaderField("ETag")?.takeIf { it.isNotBlank() }
+            val lastModified = http?.getHeaderField("Last-Modified")?.takeIf { it.isNotBlank() }
+            val version = etag
+                ?: lastModified
+                ?: connection.lastModified.takeIf { it > 0L }?.toString()
+                ?: connection.url.toString()
+            Triple(etag, lastModified, version)
+        } catch (failure: java.io.IOException) {
+            http?.disconnect()
+            throw failure
+        }
         val counts = linkedMapOf<String, Int>()
         val seenGtfsTables = hashSetOf<String>()
 
@@ -141,6 +189,9 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             putMetadata(db, FETCHED_KEY, (System.currentTimeMillis() / 1000).toString())
             putMetadata(db, COUNT_KEY, stops.toString())
             putMetadata(db, VERSION_KEY, sourceVersion)
+            putMetadata(db, SOURCE_URL_KEY, url)
+            putMetadata(db, HTTP_ETAG_KEY, responseEtag.orEmpty())
+            putMetadata(db, HTTP_LAST_MODIFIED_KEY, responseLastModified.orEmpty())
             putMetadata(db, SCHEMA_KEY, "4")
             counts.forEach { (file, count) -> putMetadata(db, "count_$file", count.toString()) }
             db.setTransactionSuccessful()
@@ -173,20 +224,20 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         query: String,
         limit: Int,
     ): List<TransitLocationResult> {
+        val (lineLimit, tripLimit) = boundedTransitResultSplit(limit)
+        val boundedLimit = lineLimit + tripLimit
         val q = query.trim()
-        if (q.length < 2 || limit <= 0) return emptyList()
-        val prefix = "$q%"
-        val lineLimit = (limit + 1) / 2
-        val tripLimit = limit - lineLimit
+        if (q.length < 2 || boundedLimit == 0) return emptyList()
+        val prefix = escapeTransitLikePrefix(q)
 
         val lines = readableDatabase.rawQuery(
             """
             SELECT route_id, COALESCE(short_name, ''), COALESCE(long_name, '')
             FROM routes
-            WHERE short_name LIKE ? COLLATE NOCASE
-               OR long_name LIKE ? COLLATE NOCASE
+            WHERE short_name LIKE ? ESCAPE '!' COLLATE NOCASE
+               OR long_name LIKE ? ESCAPE '!' COLLATE NOCASE
             ORDER BY
-                CASE WHEN short_name LIKE ? COLLATE NOCASE THEN 0 ELSE 1 END,
+                CASE WHEN short_name LIKE ? ESCAPE '!' COLLATE NOCASE THEN 0 ELSE 1 END,
                 short_name COLLATE NOCASE,
                 long_name COLLATE NOCASE,
                 route_id
@@ -224,15 +275,15 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             }
         }
 
-        if (tripLimit <= 0) return lines.take(limit)
+        if (tripLimit <= 0) return lines.take(boundedLimit)
 
         val trips = readableDatabase.rawQuery(
             """
             SELECT t.trip_id, COALESCE(r.short_name, ''), COALESCE(t.headsign, '')
             FROM trips t
             JOIN routes r ON r.route_id = t.route_id
-            WHERE t.headsign LIKE ? COLLATE NOCASE
-               OR t.trip_id LIKE ? COLLATE NOCASE
+            WHERE t.headsign LIKE ? ESCAPE '!' COLLATE NOCASE
+               OR t.trip_id LIKE ? ESCAPE '!' COLLATE NOCASE
             ORDER BY
                 t.headsign COLLATE NOCASE,
                 r.short_name COLLATE NOCASE,
@@ -268,7 +319,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             }
         }
 
-        return (lines + trips).take(limit)
+        return (lines + trips).take(boundedLimit)
     }
 
     fun nearest(latitude: Double, longitude: Double, limit: Int): List<NearbyStop> =
@@ -381,7 +432,10 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             val name = r.value(h, "stop_name")
             val lat = r.value(h, "stop_lat").toDoubleOrNull()
             val lon = r.value(h, "stop_lon").toDoubleOrNull()
-            if (id.isBlank() || name.isBlank() || lat == null || lon == null) return@forEach
+            if (id.isBlank() || name.isBlank() || lat == null || lon == null ||
+                !lat.isFinite() || lat !in -90.0..90.0 ||
+                !lon.isFinite() || lon !in -180.0..180.0
+            ) return@forEach
             stmt.bindValues(
                 id, name, lat, lon,
                 r.nullValue(h, "parent_station"),
@@ -663,7 +717,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
     }
 
     private fun rows(reader: BufferedReader): Pair<List<String>, Sequence<List<String>>> {
-        val header = parseCsvLine(reader.readLine() ?: error("GTFS dosyası boş"))
+        val header = parseGtfsCsvHeader(reader.readLine() ?: error("GTFS dosyası boş"))
         return header to generateSequence { reader.readLine() }.map(::parseCsvLine)
     }
 
@@ -743,3 +797,41 @@ internal fun strictGtfsUtf8Reader(input: InputStream): BufferedReader =
         ),
         128 * 1024,
     )
+
+
+// GTFS tables may begin with a UTF-8 BOM; it is a file marker, not part of column one.
+internal fun parseGtfsCsvHeader(line: String): List<String> =
+    parseCsvLine(line.removePrefix("\uFEFF"))
+
+
+// Keep both SQLite LIMIT clauses positive and bounded even for Int.MAX_VALUE requests.
+internal fun boundedTransitResultSplit(requestedLimit: Int): Pair<Int, Int> {
+    val boundedLimit = requestedLimit.coerceIn(0, 100)
+    val lineLimit = (boundedLimit + 1) / 2
+    return lineLimit to (boundedLimit - lineLimit)
+}
+
+    
+// Treat user-entered percent, underscore and escape characters as literal
+// GTFS names. Only the final % is a deliberate autocomplete wildcard.
+internal fun escapeTransitLikePrefix(text: String): String = buildString {
+    for (character in text) {
+        if (character == '!' || character == '%' || character == '_') append('!')
+        append(character)
+    }
+    append('%')
+}
+
+/** Conditional validators are valid only for the ready snapshot from this source. */
+internal fun gtfsConditionalHeaders(
+    ready: Boolean,
+    sameSource: Boolean,
+    etag: String?,
+    lastModified: String?,
+): Map<String, String> {
+    if (!ready || !sameSource) return emptyMap()
+    return buildMap {
+        etag?.takeIf(String::isNotBlank)?.let { put("If-None-Match", it) }
+        lastModified?.takeIf(String::isNotBlank)?.let { put("If-Modified-Since", it) }
+    }
+}

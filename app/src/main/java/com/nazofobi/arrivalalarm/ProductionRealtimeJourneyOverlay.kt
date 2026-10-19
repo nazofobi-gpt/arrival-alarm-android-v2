@@ -98,9 +98,12 @@ internal class ProductionRealtimeJourneyOverlay(
         option: RouteOption,
         overlay: GermanyRealtimeOverlayResult.Matched,
     ): RouteOption {
-        val tripOverlays = overlay.tripOverlays.filter {
-            it.staticTrip.id in option.tripIds && !frequencyTrip(it.staticTrip.id)
-        }
+        // Provider updates are unordered. A transfer stop belongs to the
+        // arriving leg first and the departing leg last in the selected journey.
+        val legOrder = option.tripIds.withIndex().associate { it.value to it.index }
+        val tripOverlays = overlay.tripOverlays
+            .filter { it.staticTrip.id in legOrder && !frequencyTrip(it.staticTrip.id) }
+            .sortedBy { legOrder[it.staticTrip.id] }
         if (tripOverlays.isEmpty()) {
             return option.copy(
                 realtime = RouteRealtimeInfo(
@@ -112,9 +115,24 @@ internal class ProductionRealtimeJourneyOverlay(
             )
         }
 
+        // A stop_id is not a stop visit: loop trips can visit it twice with
+        // different stop_sequence values. RouteStop has no sequence/leg binding,
+        // so an ambiguous update must not overwrite the static time/platform.
+        // Keep distinct arriving/departing leg updates at a single transfer stop.
+        val ambiguousStopIds = mutableSetOf<String>()
+        fun markRepeatedIds(ids: List<String>) {
+            ids.groupingBy { it }.eachCount().forEach { (id, count) ->
+                if (count > 1) ambiguousStopIds += id
+            }
+        }
+        markRepeatedIds(option.stops.mapNotNull { it.id })
+        tripOverlays.forEach { trip ->
+            markRepeatedIds(trip.stopUpdates.map { it.scheduledStopId })
+        }
+
         val updates = tripOverlays.flatMap { it.stopUpdates }
         val enrichedStops = option.stops.map { stop ->
-            val matching = stop.id?.let { stopId ->
+            val matching = stop.id?.takeUnless { it in ambiguousStopIds }?.let { stopId ->
                 updates.filter { it.scheduledStopId == stopId }
             }.orEmpty()
             if (matching.isEmpty()) {
@@ -173,7 +191,10 @@ internal class ProductionRealtimeJourneyOverlay(
         plannedIso: String?,
         delaySeconds: Int?,
     ): String? {
-        epochSeconds?.let { return iso(it * 1_000L) }
+        // A GTFS-RT Unix timestamp must be positive and safe to convert to millis.
+        // Otherwise use the scheduled time plus delay instead of a bogus date.
+        epochSeconds?.takeIf { it > 0L && it <= Long.MAX_VALUE / 1_000L }
+            ?.let { return iso(it * 1_000L) }
         if (plannedIso == null || delaySeconds == null) return null
         val plannedMillis = parseIsoMillis(plannedIso) ?: return null
         return iso(plannedMillis + delaySeconds * 1_000L)

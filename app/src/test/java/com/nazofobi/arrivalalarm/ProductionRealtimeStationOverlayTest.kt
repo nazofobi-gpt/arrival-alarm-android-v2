@@ -82,6 +82,237 @@ class ProductionRealtimeStationOverlayTest {
     }
 
     @Test
+    fun loopStopWithTwoVisitsDoesNotUseAnArbitraryRealtimeUpdate() {
+        fun update(sequence: Int, skipped: Boolean) = GermanyRealtimeMatchedStopUpdate(
+            stopSequence = sequence,
+            scheduledStopId = "A",
+            realtimeStopId = "A",
+            assignedStopId = null,
+            platformCode = if (skipped) "9" else "5",
+            arrivalDelaySeconds = null,
+            departureDelaySeconds = 120,
+            arrivalTimeEpochSeconds = null,
+            departureTimeEpochSeconds = null,
+            scheduleRelationship = if (skipped) "SKIPPED" else "SCHEDULED",
+            pickupType = null,
+            dropOffType = null,
+            stopHeadsign = null,
+        )
+
+        fun result(updates: List<GermanyRealtimeMatchedStopUpdate>, cancelled: Boolean) =
+            overlay(
+                GermanyRealtimeOverlayResult.Matched(
+                    tripOverlays = listOf(
+                        GermanyRealtimeTripOverlay(
+                            staticTrip = trip(),
+                            startDate = null,
+                            startTime = null,
+                            cancelled = cancelled,
+                            scheduleRelationship = if (cancelled) "CANCELED" else "SCHEDULED",
+                            stopUpdates = updates,
+                            sourceTimestampEpochSeconds = 990L,
+                        ),
+                    ),
+                    serviceAlerts = emptyList(),
+                    freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+                    ageSeconds = 10L,
+                    provenance = provenance(),
+                ),
+            ).enrich("A", listOf(planned))
+
+        val twoVisits = listOf(update(1, skipped = true), update(5, skipped = false))
+        for (ordered in listOf(twoVisits, twoVisits.reversed())) {
+            val ambiguous = result(ordered, cancelled = false)
+            assertEquals(StationRealtimeState.FRESH_NO_MATCH, ambiguous.realtimeState)
+            assertEquals(listOf(planned), ambiguous.departures)
+
+            // A trip-wide cancellation remains valid even without a known stop_sequence.
+            val globallyCancelled = result(ordered, cancelled = true)
+            assertEquals(StationRealtimeState.FRESH_MATCHED, globallyCancelled.realtimeState)
+            assertTrue(globallyCancelled.departures.single().cancelled)
+            assertEquals("1", globallyCancelled.departures.single().platform)
+            assertNull(globallyCancelled.departures.single().realtimeEpochSeconds)
+        }
+
+        // A sole matching station update is still safe with other stops in the trip.
+        val unambiguous = result(
+            listOf(update(1, skipped = false).copy(scheduledStopId = "B"), update(5, skipped = true)),
+            cancelled = false,
+        )
+        assertEquals(StationRealtimeState.FRESH_MATCHED, unambiguous.realtimeState)
+        assertTrue(unambiguous.departures.single().cancelled)
+        assertEquals("9", unambiguous.departures.single().platform)
+    }
+
+    @Test
+    fun reusedTripIdRealtimeDoesNotCancelAnotherRoute() {
+        val matched = GermanyRealtimeOverlayResult.Matched(
+            tripOverlays = listOf(
+                GermanyRealtimeTripOverlay(
+                    staticTrip = trip(),
+                    startDate = null,
+                    startTime = null,
+                    cancelled = true,
+                    scheduleRelationship = "CANCELED",
+                    stopUpdates = emptyList(),
+                    sourceTimestampEpochSeconds = 990L,
+                ),
+            ),
+            serviceAlerts = emptyList(),
+            freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+            ageSeconds = 10L,
+            provenance = provenance(),
+        )
+        val otherRoute = planned.copy(routeId = "R2", line = "RE 2")
+        val result = overlay(matched).enrich("A", listOf(otherRoute, planned))
+
+        assertEquals(StationRealtimeState.FRESH_MATCHED, result.realtimeState)
+        assertFalse(result.departures[0].cancelled)
+        assertEquals("1", result.departures[0].platform)
+        assertTrue(result.departures[1].cancelled)
+    }
+
+    @Test
+    fun unknownScheduledRouteIdentityNeverAcceptsSameTripIdRealtime() {
+        val matched = GermanyRealtimeOverlayResult.Matched(
+            tripOverlays = listOf(
+                GermanyRealtimeTripOverlay(
+                    staticTrip = trip(),
+                    startDate = null,
+                    startTime = null,
+                    cancelled = true,
+                    scheduleRelationship = "CANCELED",
+                    stopUpdates = emptyList(),
+                    sourceTimestampEpochSeconds = 990L,
+                ),
+            ),
+            serviceAlerts = emptyList(),
+            freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+            ageSeconds = 10L,
+            provenance = provenance(),
+        )
+
+        listOf<String?>(null, "", " ", "R2").forEach { routeId ->
+            val unknown = planned.copy(routeId = routeId)
+            val result = overlay(matched).enrich("A", listOf(unknown))
+            assertEquals(StationRealtimeState.FRESH_NO_MATCH, result.realtimeState)
+            assertEquals(listOf(unknown), result.departures)
+        }
+
+        val verified = overlay(matched).enrich("A", listOf(planned))
+        assertEquals(StationRealtimeState.FRESH_MATCHED, verified.realtimeState)
+        assertTrue(verified.departures.single().cancelled)
+    }
+
+    @Test
+    fun skippedStopIsUnavailableOnlyAtThatStation() {
+        val skipped = GermanyRealtimeMatchedStopUpdate(
+            stopSequence = 1,
+            scheduledStopId = "A",
+            realtimeStopId = "A",
+            assignedStopId = null,
+            platformCode = null,
+            arrivalDelaySeconds = null,
+            departureDelaySeconds = 90,
+            arrivalTimeEpochSeconds = null,
+            departureTimeEpochSeconds = 1_140L,
+            scheduleRelationship = "SKIPPED",
+            pickupType = null,
+            dropOffType = null,
+            stopHeadsign = null,
+        )
+        val next = skipped.copy(
+            stopSequence = 2,
+            scheduledStopId = "B",
+            realtimeStopId = "B",
+            departureDelaySeconds = 30,
+            departureTimeEpochSeconds = 1_030L,
+            scheduleRelationship = "SCHEDULED",
+        )
+        val matched = GermanyRealtimeOverlayResult.Matched(
+            tripOverlays = listOf(
+                GermanyRealtimeTripOverlay(
+                    staticTrip = trip(),
+                    startDate = null,
+                    startTime = null,
+                    cancelled = false,
+                    scheduleRelationship = "SCHEDULED",
+                    stopUpdates = listOf(skipped, next),
+                    sourceTimestampEpochSeconds = 990L,
+                ),
+            ),
+            serviceAlerts = emptyList(),
+            freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+            ageSeconds = 10L,
+            provenance = provenance(),
+        )
+
+        val stationA = overlay(matched).enrich("A", listOf(planned))
+        val stationB = overlay(matched).enrich("B", listOf(planned))
+        assertTrue(stationA.departures.single().cancelled)
+        assertNull(stationA.departures.single().realtimeEpochSeconds)
+        assertFalse(stationB.departures.single().cancelled)
+        assertEquals(1_030L, stationB.departures.single().realtimeEpochSeconds)
+    }
+
+    @Test
+    fun invalidStationRealtimeTimestampsKeepScheduledBoard() {
+        val template = GermanyRealtimeMatchedStopUpdate(
+            stopSequence = 1,
+            scheduledStopId = "A",
+            realtimeStopId = "A",
+            assignedStopId = null,
+            platformCode = null,
+            arrivalDelaySeconds = null,
+            departureDelaySeconds = null,
+            arrivalTimeEpochSeconds = null,
+            departureTimeEpochSeconds = null,
+            scheduleRelationship = "SCHEDULED",
+            pickupType = null,
+            dropOffType = null,
+            stopHeadsign = null,
+        )
+
+        fun projectedDeparture(absoluteSeconds: Long?, delaySeconds: Int?): Long? {
+            val matched = GermanyRealtimeOverlayResult.Matched(
+                tripOverlays = listOf(
+                    GermanyRealtimeTripOverlay(
+                        staticTrip = trip(),
+                        startDate = null,
+                        startTime = null,
+                        cancelled = false,
+                        scheduleRelationship = "SCHEDULED",
+                        stopUpdates = listOf(
+                            template.copy(
+                                departureTimeEpochSeconds = absoluteSeconds,
+                                departureDelaySeconds = delaySeconds,
+                            ),
+                        ),
+                        sourceTimestampEpochSeconds = 990L,
+                    ),
+                ),
+                serviceAlerts = emptyList(),
+                freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+                ageSeconds = 10L,
+                provenance = provenance(),
+            )
+            return overlay(matched).enrich("A", listOf(planned))
+                .departures.single().realtimeEpochSeconds
+        }
+
+        // An explicit malformed absolute time must not be replaced by a delay.
+        assertNull(projectedDeparture(0L, 120))
+        assertNull(projectedDeparture(-1L, null))
+        assertNull(projectedDeparture(Long.MAX_VALUE, null))
+        assertNull(projectedDeparture(null, -1_200))
+
+        // Valid positive estimates and early-running services remain supported.
+        assertEquals(1_030L, projectedDeparture(1_030L, -1_200))
+        assertEquals(1_120L, projectedDeparture(null, 120))
+        assertEquals(880L, projectedDeparture(null, -120))
+    }
+
+    @Test
     fun frequencyTripRealtimeFailsClosedWithoutExactInstanceIdentity() {
         val matched = GermanyRealtimeOverlayResult.Matched(
             tripOverlays = listOf(
@@ -178,6 +409,95 @@ class ProductionRealtimeStationOverlayTest {
         assertNull(result.departures[1].realtimeEpochSeconds)
         assertEquals("1", result.departures[1].platform)
     }
+
+    @Test
+    fun tripScopedStationAlertDoesNotLeakAcrossReusedTripIdRoutesOrUnknownDirections() {
+        val trip = GermanyRealtimeTripSelector(
+            tripId = "T1",
+            routeId = "R1",
+            directionId = null,
+            startTime = null,
+            startDate = null,
+            scheduleRelationship = null,
+            validity = GermanyRealtimeTripSelectorValidity.VALID_ID_BASED,
+        )
+        val selector = GermanyRealtimeAlertSelector(
+            agencyId = null,
+            routeId = null,
+            routeType = null,
+            directionId = null,
+            stopId = "A",
+            trip = trip,
+            validity = GermanyRealtimeAlertSelectorValidity.VALID,
+        )
+
+        assertTrue(overlay(alertResult(selector.copy(trip = trip.copy(routeId = "R2"))))
+            .enrich("A", listOf(planned)).alerts.isEmpty())
+        assertTrue(overlay(alertResult(selector.copy(routeId = "R2")))
+            .enrich("A", listOf(planned)).alerts.isEmpty())
+        assertTrue(overlay(alertResult(selector.copy(directionId = 1)))
+            .enrich("A", listOf(planned)).alerts.isEmpty())
+        assertTrue(overlay(alertResult(selector.copy(trip = trip.copy(directionId = 1))))
+            .enrich("A", listOf(planned)).alerts.isEmpty())
+
+        val matched = overlay(alertResult(selector)).enrich("A", listOf(planned))
+        assertEquals(listOf("scoped-alert"), matched.alerts.map { it.id })
+    }
+
+    @Test
+    fun tripScopedStationAlertUsesExactFrequencyInstanceWhenSupplied() {
+        val trip = GermanyRealtimeTripSelector(
+            tripId = "T1",
+            routeId = "R1",
+            directionId = null,
+            startTime = "08:00:00",
+            startDate = "20261004",
+            scheduleRelationship = null,
+            validity = GermanyRealtimeTripSelectorValidity.VALID_ID_BASED,
+        )
+        val selector = GermanyRealtimeAlertSelector(
+            agencyId = null,
+            routeId = null,
+            routeType = null,
+            directionId = null,
+            stopId = "A",
+            trip = trip,
+            validity = GermanyRealtimeAlertSelectorValidity.VALID,
+        )
+        val selected = planned.copy(
+            realtimeTripStartDate = "20261004",
+            realtimeTripStartTime = "08:00:00",
+        )
+        assertTrue(overlay(alertResult(selector))
+            .enrich("A", listOf(planned)).alerts.isEmpty())
+        assertTrue(overlay(alertResult(selector))
+            .enrich("A", listOf(selected.copy(realtimeTripStartDate = "20261005"))).alerts.isEmpty())
+        assertTrue(overlay(alertResult(selector))
+            .enrich("A", listOf(selected.copy(realtimeTripStartTime = "08:10:00"))).alerts.isEmpty())
+        assertEquals(
+            listOf("scoped-alert"),
+            overlay(alertResult(selector)).enrich("A", listOf(selected)).alerts.map { it.id },
+        )
+    }
+
+    private fun alertResult(selector: GermanyRealtimeAlertSelector) =
+        GermanyRealtimeOverlayResult.Matched(
+            tripOverlays = emptyList(),
+            serviceAlerts = listOf(
+                GermanyRealtimeAlert(
+                    entityId = "scoped-alert",
+                    cause = null,
+                    effect = "SIGNIFICANT_DELAYS",
+                    header = "Scoped disruption",
+                    description = null,
+                    selectors = listOf(selector),
+                    activePeriods = emptyList(),
+                ),
+            ),
+            freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+            ageSeconds = 10L,
+            provenance = provenance(),
+        )
 
     @Test
     fun routeAndStopAlertSelectorDoesNotLeakToAnotherStopOnSameRoute() {

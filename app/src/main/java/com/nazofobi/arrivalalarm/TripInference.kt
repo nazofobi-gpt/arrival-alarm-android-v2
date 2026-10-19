@@ -73,10 +73,19 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
             .asSequence()
             .filter {
                 it.serviceActive &&
+                    // A suggested journey must display a route, line and direction
+                    // the user can distinguish before explicitly confirming it.
+                    it.routeId.isNotBlank() &&
+                    it.line.isNotBlank() &&
+                    it.direction.isNotBlank() &&
                     validCoordinates(it.anchor) &&
                     validBearing(it.expectedBearingDegrees) &&
                     it.scheduledEpochSeconds > 0L
             }
+            // Exact duplicate upstream rows are not separate trip choices:
+            // counting them as runner-up candidates falsely triggers ambiguity.
+            // Distinct service times, directions and provider evidence remain separate.
+            .distinct()
             .map { score(observation, it) }
             .filter { it.confidence > 0.0 }
             .sortedByDescending { it.confidence }
@@ -90,8 +99,13 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
         if (best.confidence < settings.minimumConfidence) {
             return TripInferenceResult(scored, null, "Güven eşiği altında")
         }
+        // Distance, bearing and motion alone can contribute 0.75 confidence.
+        // Never accept a trip when its timetable provides zero time evidence.
+        if (best.timeScore <= 0.0) {
+            return TripInferenceResult(scored, null, "Sefer zamanı hareket kanıtıyla uyumsuz")
+        }
         val runnerUp = ranked.getOrNull(1)
-        if (runnerUp != null && best.confidence - runnerUp.confidence < settings.ambiguityMargin) {
+        if (runnerUp != null && best.confidence - runnerUp.confidence <= settings.ambiguityMargin) {
             return TripInferenceResult(scored, null, "Adaylar belirsiz; kullanıcıya otomatik öneri yok")
         }
         return TripInferenceResult(scored, best, "Aday bulundu; hedef/alarm yalnız kullanıcı onayıyla kurulabilir")
@@ -211,7 +225,9 @@ object TripInferenceEvaluator {
                 if (fixture.expectedRouteId != null) falseNegative++
             }
         }
-        val precision = if (suggestions == 0) 1.0 else truePositive.toDouble() / suggestions
+        // With no accepted predictions precision is undefined, not perfect.
+        // Report zero to avoid false-positive evaluation and readiness claims.
+        val precision = if (suggestions == 0) 0.0 else truePositive.toDouble() / suggestions
         return TripInferenceMetrics(
             total = fixtures.size,
             correct = correct,
