@@ -90,6 +90,75 @@ class AndroidSelectedGtfsTripSessionInstrumentedTest {
         }
     }
 
+
+    @Test fun previewIsSourceBoundAndDoesNotSilentlyCreateASelection() = runBlocking {
+        seedSchedule()
+        val sourceDeparture = Departure(
+            tripId = "T",
+            line = "RE1",
+            direction = "Achim",
+            scheduledEpochSeconds = 1_790_000_000L,
+            routeId = "R",
+            gtfsInstance = identity,
+            boardingStopSequence = 10,
+        )
+        AndroidSelectedGtfsTripSession(context).use { session ->
+            val available = session.preview(sourceDeparture)
+            assertTrue(available is DepartureTripPreview.Available)
+            val preview = available as DepartureTripPreview.Available
+            assertEquals(identity, preview.detail.identity)
+            assertEquals("A", preview.boarding.stopId)
+            assertEquals(10, preview.boarding.stopSequence)
+            // Preview is strictly informational; no persisted consent or alarm target.
+            assertEquals(GtfsSelectionRestore.Empty, session.restore())
+
+            assertEquals(
+                DepartureTripPreview.Reason.MISSING_SOURCE_IDENTITY,
+                (session.preview(sourceDeparture.copy(gtfsInstance = null))
+                    as DepartureTripPreview.Unavailable).reason,
+            )
+            assertEquals(
+                DepartureTripPreview.Reason.MISSING_SOURCE_IDENTITY,
+                (session.preview(sourceDeparture.copy(boardingStopSequence = null))
+                    as DepartureTripPreview.Unavailable).reason,
+            )
+            assertEquals(
+                DepartureTripPreview.Reason.SOURCE_MISMATCH,
+                (session.preview(sourceDeparture.copy(tripId = "DIFFERENT"))
+                    as DepartureTripPreview.Unavailable).reason,
+            )
+            assertEquals(
+                DepartureTripPreview.Reason.SOURCE_MISMATCH,
+                (session.preview(sourceDeparture.copy(routeId = "DIFFERENT"))
+                    as DepartureTripPreview.Unavailable).reason,
+            )
+            assertEquals(
+                DepartureTripPreview.Reason.BOARDING_UNAVAILABLE,
+                (session.preview(sourceDeparture.copy(boardingStopSequence = 999))
+                    as DepartureTripPreview.Unavailable).reason,
+            )
+            assertEquals(GtfsSelectionRestore.Empty, session.restore())
+        }
+    }
+
+    @Test fun previewRejectsUnavailableIndexAndClosedSession() = runBlocking {
+        val departure = Departure(
+            tripId = "T", line = "RE1", direction = "Achim",
+            scheduledEpochSeconds = 1_790_000_000L,
+            routeId = "R", gtfsInstance = identity, boardingStopSequence = 10,
+        )
+        val session = AndroidSelectedGtfsTripSession(context)
+        assertEquals(
+            DepartureTripPreview.Reason.INDEX_UNAVAILABLE,
+            (session.preview(departure) as DepartureTripPreview.Unavailable).reason,
+        )
+        session.close()
+        assertEquals(
+            DepartureTripPreview.Reason.SESSION_CLOSED,
+            (session.preview(departure) as DepartureTripPreview.Unavailable).reason,
+        )
+    }
+
     @Test fun closedSessionNeverReusesOpenSQLiteResources() = runBlocking {
         seedSchedule()
         val session = AndroidSelectedGtfsTripSession(context)
