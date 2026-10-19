@@ -345,4 +345,31 @@ class TransitExperienceTest {
         assertEquals(listOf("stop-a", "stop-b"), savedFavorites)
         assertEquals(listOf("new", "old-2"), savedRecents)
     }
+    @Test fun malformedScheduledEpochCannotBeMadeSelectableByRealtime() {
+        val engine = TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures = true))
+        val invalid = listOf(0L, -1L, Long.MIN_VALUE, Long.MAX_VALUE,
+            MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS + 1)
+        val departures = invalid.mapIndexed { index, epoch ->
+            Departure("invalid-$index", "RE", "Bremen", epoch, realtimeEpochSeconds = 1_200L)
+        } + Departure("valid", "RE", "Bremen", 1_300L)
+        assertEquals(
+            listOf("valid"),
+            engine.departureBoard(departures, now).map { it.tripId },
+        )
+    }
+
+    @Test fun outOfRangeRealtimeEpochFallsBackToVerifiedSchedule() {
+        val engine = TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures = true))
+        val samples = listOf(Long.MAX_VALUE, MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS + 1)
+            .mapIndexed { index, malformed ->
+                Departure("bad-live-$index", "RE", "Bremen", 1_200L, realtimeEpochSeconds = malformed)
+            }
+        val board = engine.departureBoard(samples, now)
+        assertEquals(listOf(1_200L, 1_200L), board.map { it.effectiveEpochSeconds })
+        assertTrue(board.none { it.isRealtime })
+        val validBoundary = Departure("boundary", "RE", "Bremen", 1_100L,
+            realtimeEpochSeconds = MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS)
+        assertTrue(engine.departureBoard(listOf(validBoundary), now).single().isRealtime)
+    }
+
 }

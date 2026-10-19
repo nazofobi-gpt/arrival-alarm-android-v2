@@ -109,4 +109,27 @@ class CancelledDepartureVisibilityTest {
         assertTrue(upcomingCancelledDepartures(source, 1_000L, limit = 0).isEmpty())
         assertTrue(upcomingCancelledDepartures(source, 1_000L, limit = -10).isEmpty())
     }
+    @Test fun invalidCancelledScheduleNeverAppearsEvenWithOldClock() {
+        val invalid = listOf(0L, -1L, Long.MIN_VALUE, Long.MAX_VALUE,
+            MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS + 1)
+        val samples = invalid.mapIndexed { index, epoch ->
+            cancelled("bad-$index", epoch, realtime = 1_500L)
+        } + cancelled("valid", 1_200L)
+        assertEquals(
+            listOf("valid"),
+            upcomingCancelledDepartures(samples, nowEpochSeconds = -100L)
+                .map { it.tripId },
+        )
+    }
+
+    @Test fun cancelledScheduleAtDisplayBoundaryRemainsVisible() {
+        val boundary = cancelled("boundary", MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS)
+        assertEquals(
+            listOf(boundary),
+            upcomingCancelledDepartures(
+                listOf(boundary), nowEpochSeconds = 1_000L,
+            ),
+        )
+    }
+
 }

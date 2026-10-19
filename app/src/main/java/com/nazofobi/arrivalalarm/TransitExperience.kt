@@ -8,6 +8,11 @@ data class TransitProviderCapabilities(
     val accessibility: Boolean = false
 )
 
+/** Keep provider clocks inside the finite, non-overflowing display range (UTC year 1..9999). */
+internal const val MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS = 253_402_300_799L
+internal fun Long.isDisplayableDepartureEpochSeconds(): Boolean =
+    this in 1L..MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS
+
 data class Departure(
     val tripId: String,
     val line: String,
@@ -25,8 +30,8 @@ data class Departure(
 ) {
     // A non-positive provider timestamp is malformed/unavailable, not a real
     // departure in 1970. Preserve the known scheduled departure instead.
-    val effectiveEpochSeconds: Long get() = realtimeEpochSeconds?.takeIf { it > 0L } ?: scheduledEpochSeconds
-    val isRealtime: Boolean get() = realtimeEpochSeconds?.let { it > 0L } == true
+    val effectiveEpochSeconds: Long get() = realtimeEpochSeconds?.takeIf { it.isDisplayableDepartureEpochSeconds() } ?: scheduledEpochSeconds
+    val isRealtime: Boolean get() = realtimeEpochSeconds?.isDisplayableDepartureEpochSeconds() == true
 }
 
 /** Identity is stable across realtime delay updates and distinguishes frequency instances. */
@@ -58,6 +63,8 @@ class TransitExperienceEngine(private val capabilities: TransitProviderCapabilit
         departures.asSequence()
             .map { if (capabilities.realtimeDepartures) it else it.copy(realtimeEpochSeconds = null) }
             .filterNot { it.cancelled }
+            // A valid realtime update cannot make an invalid scheduled identity selectable.
+            .filter { it.scheduledEpochSeconds.isDisplayableDepartureEpochSeconds() }
             .filter { it.effectiveEpochSeconds >= nowEpochSeconds }
             .sortedBy { it.effectiveEpochSeconds }
             // Identical provider rows must not consume distinct departure slots.
