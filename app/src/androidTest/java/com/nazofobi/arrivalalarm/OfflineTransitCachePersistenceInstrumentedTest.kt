@@ -545,4 +545,67 @@ class OfflineTransitCachePersistenceInstrumentedTest {
         }
     }
 
+
+    @Test
+    fun cachedAbsoluteRouteInstantsSurviveRecreationAndRejectMalformedPairs() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val store = SharedPreferencesTransitCacheStore(context)
+        prefs.edit().clear().commit()
+        try {
+            val departureMillis = 1_700_000_000_000L
+            val arrivalMillis = departureMillis + 86_400_000L
+            val route = RouteOption(
+                id = "overnight-service",
+                origin = MapPoint(52.665, 8.237, "Lohne"),
+                destination = MapPoint(53.083, 8.813, "Bremen"),
+                line = "RE", direction = "Bremen",
+                departure = "23:50", arrival = "00:15",
+                walkingMinutes = 0, transfers = 0,
+                departureEpochMillis = departureMillis,
+                arrivalEpochMillis = arrivalMillis,
+            )
+            store.save(listOf(CachedTransitPlan("overnight", listOf(route), emptyList(), 100L)))
+            val original = requireNotNull(prefs.getString("plans_json", null))
+            val restored = SharedPreferencesTransitCacheStore(context)
+                .load().single().routeOptions.single()
+            assertEquals(departureMillis, restored.departureEpochMillis)
+            assertEquals(arrivalMillis, restored.arrivalEpochMillis)
+
+            fun restoredWith(
+                departure: Any? = departureMillis,
+                arrival: Any? = arrivalMillis,
+                removeBoth: Boolean = false,
+            ): List<RouteOption> {
+                val plans = org.json.JSONArray(original)
+                val item = plans.getJSONObject(0).getJSONArray("routeOptions").getJSONObject(0)
+                if (removeBoth) {
+                    item.remove("departureEpochMillis")
+                    item.remove("arrivalEpochMillis")
+                } else {
+                    item.put("departureEpochMillis", departure)
+                    item.put("arrivalEpochMillis", arrival)
+                }
+                assertTrue(prefs.edit().putString("plans_json", plans.toString()).commit())
+                return SharedPreferencesTransitCacheStore(context)
+                    .load().single().routeOptions
+            }
+            for (invalid in listOf<Any>(
+                "1700000000000", true, -1L, 1_700_000_000_000.5,
+                org.json.JSONObject.NULL,
+            )) {
+                assertTrue("Malformed departure=$invalid must reject route",
+                    restoredWith(departure = invalid).isEmpty())
+                assertTrue("Malformed arrival=$invalid must reject route",
+                    restoredWith(arrival = invalid).isEmpty())
+            }
+            assertTrue(restoredWith(arrival = departureMillis - 1L).isEmpty())
+            val legacy = restoredWith(removeBoth = true).single()
+            assertEquals(null, legacy.departureEpochMillis)
+            assertEquals(null, legacy.arrivalEpochMillis)
+            assertEquals(1, restoredWith().size)
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
 }
