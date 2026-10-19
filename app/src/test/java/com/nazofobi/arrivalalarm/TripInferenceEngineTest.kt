@@ -83,6 +83,26 @@ class TripInferenceEngineTest {
         assertTrue(result.suggestions.single().timeScore > 0.0)
     }
 
+    @Test fun duplicateProviderRowsCannotImpersonateAnAmbiguousSecondTrip() {
+        val engine = TripInferenceEngine(TripInferenceSettings(enabled = true, topK = 1))
+        val trip = candidate("route-6", "Flughafen", 180.0)
+        val result = engine.infer(observation(), listOf(trip, trip, trip))
+        assertEquals("route-6", result.accepted?.candidate?.routeId)
+        assertEquals(1, result.suggestions.size)
+        assertTrue(result.requiresExplicitConfirmation)
+    }
+
+    @Test fun deduplicationPreservesDistinctCompetingTripEvidence() {
+        val engine = TripInferenceEngine(TripInferenceSettings(enabled = true, topK = 1))
+        val trip = candidate("route-6", "Flughafen", 180.0)
+        val competitor = candidate("route-7", "Hafen", 180.0)
+        val result = engine.infer(observation(), listOf(trip, trip, competitor, competitor))
+        assertNull("Different trip choices must still trigger the ambiguity gate", result.accepted)
+        assertEquals(1, result.suggestions.size)
+        assertTrue(result.reason.contains("belirsiz"))
+        assertTrue(result.requiresExplicitConfirmation)
+    }
+
     @Test fun oppositeDirectionAmbiguityFailsClosed() {
         val engine = TripInferenceEngine(TripInferenceSettings(enabled = true, ambiguityMargin = 0.12))
         val result = engine.infer(
