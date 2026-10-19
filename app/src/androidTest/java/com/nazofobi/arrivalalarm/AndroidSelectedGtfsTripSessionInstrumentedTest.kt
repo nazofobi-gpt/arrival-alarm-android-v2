@@ -203,4 +203,30 @@ class AndroidSelectedGtfsTripSessionInstrumentedTest {
         )
     }
 
+    @Test fun boardInspectionRejectsTerminalAndNonAlightableDownstreamStops() = runBlocking {
+        seedSchedule()
+        AndroidSelectedGtfsTripSession(context).use { session ->
+            // A terminal boarding event must not fabricate an alighting destination.
+            assertEquals(
+                GtfsDepartureInspection.Rejected(
+                    GtfsDepartureInspectionFailure.NO_DOWNSTREAM_ALIGHTING_STOP,
+                ),
+                session.inspect(scheduledDeparture().copy(boardingStopSequence = 30), "C"),
+            )
+            NationwideTransitIndex(context).use { index ->
+                index.writableDatabase.execSQL(
+                    "UPDATE stop_times SET drop_off_type=1 WHERE trip_id='T' AND stop_sequence>10"
+                )
+            }
+            // Later physical stops are insufficient when alighting is forbidden there.
+            assertEquals(
+                GtfsDepartureInspection.Rejected(
+                    GtfsDepartureInspectionFailure.NO_DOWNSTREAM_ALIGHTING_STOP,
+                ),
+                session.inspect(scheduledDeparture(), "A"),
+            )
+            assertEquals(GtfsSelectionRestore.Empty, session.restore())
+        }
+    }
+
 }
