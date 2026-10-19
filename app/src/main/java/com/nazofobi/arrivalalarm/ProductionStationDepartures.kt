@@ -49,6 +49,8 @@ internal fun distinctStationDepartures(departures: List<Departure>): List<Depart
             departure.routeId,
             departure.line,
             departure.direction,
+            departure.gtfsInstance,
+            departure.boardingStopSequence,
         )
     }
 
@@ -136,6 +138,7 @@ internal class ProductionStationDeparturesPlanner(
                     direction = direction,
                     scheduledEpochSeconds = scheduled,
                     plannedPlatform = plannedPlatform,
+                    serviceDate = serviceDate,
                 ),
             )
         }
@@ -204,9 +207,12 @@ internal class ProductionStationDeparturesPlanner(
         direction: String,
         scheduledEpochSeconds: Long,
         plannedPlatform: String?,
+        serviceDate: GtfsServiceDate? = null,
         realtimeTripStartDate: String? = null,
         realtimeTripStartTime: String? = null,
-    ) = Departure(
+    ): Departure {
+        val evidence = stationDepartureEvidence(candidate.trip, candidate.stopSequence, serviceDate)
+        return Departure(
         tripId = candidate.trip.id,
         line = line,
         direction = direction,
@@ -215,7 +221,10 @@ internal class ProductionStationDeparturesPlanner(
         routeId = candidate.trip.routeId,
         realtimeTripStartDate = realtimeTripStartDate,
         realtimeTripStartTime = realtimeTripStartTime,
-    )
+        gtfsInstance = evidence?.identity,
+        boardingStopSequence = evidence?.boardingStopSequence,
+        )
+    }
 
     private fun parseServiceSeconds(raw: String): Int? =
         runCatching { GtfsServiceTime.parse(raw).secondsFromServiceDayStart }.getOrNull()
