@@ -3,6 +3,7 @@ package com.nazofobi.arrivalalarm
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.TimeZone
 
 /**
  * A departure-board tap may preview a concrete GTFS trip, but it is not consent
@@ -100,6 +101,28 @@ class AndroidSelectedGtfsTripSession(context: Context) : AutoCloseable {
                 } ?: return@synchronized reject(
                     GtfsDepartureInspectionFailure.SOURCE_EVIDENCE_MISMATCH,
                 )
+                // A valid trip ID and stop sequence are not sufficient evidence
+                // for the departure card's service-day clock. Reject mismatched
+                // timetable rows before asking the rider to confirm stop roles.
+                // Match the same Europe/Berlin GTFS service-time conversion used
+                // when creating scheduled station departures.
+                val boardingClock = boarding.scheduledDeparture ?: boarding.scheduledArrival
+                val verifiedEpochSeconds = try {
+                    boardingClock?.let {
+                        GtfsServiceTime.parse(it)
+                            .resolve(identity.serviceDate, TimeZone.getTimeZone("Europe/Berlin"))
+                            .epochMillis / 1_000L
+                    }
+                } catch (_: RuntimeException) {
+                    null
+                }
+                if (verifiedEpochSeconds == null ||
+                    departure.scheduledEpochSeconds != verifiedEpochSeconds
+                ) {
+                    return@synchronized reject(
+                        GtfsDepartureInspectionFailure.SOURCE_EVIDENCE_MISMATCH,
+                    )
+                }
                 if (boarding.pickupType != null && boarding.pickupType != 0) {
                     return@synchronized reject(
                         GtfsDepartureInspectionFailure.BOARDING_NOT_ALLOWED,
