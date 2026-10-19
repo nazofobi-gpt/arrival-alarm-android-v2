@@ -249,6 +249,31 @@ class SearchMapPlannerTest {
         assertTrue(scoped.routeOptions(MapPoint(52.5500, 13.4050, "too far"), to).isEmpty())
     }
 
+    @Test fun blankOrInvalidGeocoderResultsNeverBecomeMapPins() {
+        val queries = mutableListOf<String>()
+        val valid = MapPoint(52.5200, 13.4050, "Berlin")
+        val geocoder = SearchMapPlanner(
+            GermanyTransitCatalog(TestGermanyTransitFixtures.snapshot),
+            object : GeocodeProvider {
+                override fun search(query: String): List<MapPoint> {
+                    queries.add(query)
+                    return listOf(
+                        valid,
+                        MapPoint(Double.NaN, 13.4050, "NaN"),
+                        MapPoint(52.5200, Double.POSITIVE_INFINITY, "infinite"),
+                        MapPoint(91.0, 13.4050, "north"),
+                        MapPoint(52.5200, -181.0, "west"),
+                    )
+                }
+            },
+        )
+
+        assertTrue(geocoder.addressOrPoi("  \\t  ").isEmpty())
+        assertTrue(queries.isEmpty())
+        assertEquals(listOf(valid), geocoder.addressOrPoi("  Berlin  "))
+        assertEquals(listOf("Berlin"), queries)
+    }
+
     @Test fun geocoderIsProviderSwappable() {
         val custom = SearchMapPlanner(GermanyTransitCatalog(TestGermanyTransitFixtures.snapshot), object : GeocodeProvider {
             override fun search(query: String) = listOf(MapPoint(50.0, 8.0, "POI:$query"))
