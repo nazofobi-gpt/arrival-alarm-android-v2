@@ -38,7 +38,7 @@ internal fun GtfsTripConsentPanel(
 ) {
     val boarding = preview.boarding
     val detail = preview.detail
-    key(detail.identity, boarding.stopSequence, boarding.stopId) {
+    key(detail.identity, boarding.stopSequence, boarding.stopId, detail.stops) {
         var destinationSequence by remember { mutableStateOf<Int?>(null) }
         var alarmOverride by remember { mutableStateOf<Int?>(null) }
         var destinationExpanded by remember { mutableStateOf(false) }

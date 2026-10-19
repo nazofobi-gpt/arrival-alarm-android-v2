@@ -94,6 +94,44 @@ class GtfsTripConsentPanelInstrumentedTest {
         assertEquals(GtfsSelectedStopRef(30, "stop-30"), chosen?.destination)
     }
 
+    @Test fun refreshedTripStopsRequireNewDestinationConsent() {
+        var confirmed: GtfsSelectedTrip? = null
+        val previewState = mutableStateOf(
+            GtfsDepartureInspection.Ready(detail, detail.stops.first())
+        )
+        compose.setContent {
+            GtfsTripConsentPanel(
+                preview = previewState.value,
+                busy = false,
+                onConfirm = { confirmed = it },
+                onDismiss = {},
+            )
+        }
+
+        compose.onNodeWithTag("gtfs-destination-picker").performClick()
+        compose.onNodeWithTag("gtfs-destination-30").performClick()
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsEnabled()
+
+        // Same service-day/trip and stop sequence, but a different physical stop.
+        // An old selection must not silently confirm the replacement destination.
+        val changed = detail.copy(
+            stops = detail.stops.dropLast(1) +
+                detail.stops.last().copy(stopId = "replacement-30", name = "Replacement 30")
+        )
+        compose.runOnUiThread {
+            previewState.value = GtfsDepartureInspection.Ready(changed, changed.stops.first())
+        }
+        compose.waitForIdle()
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsNotEnabled()
+        assertNull(confirmed)
+
+        // Explicitly selecting the replacement creates a new, intentional choice.
+        compose.onNodeWithTag("gtfs-destination-picker").performClick()
+        compose.onNodeWithTag("gtfs-destination-30").performClick()
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsEnabled().performClick()
+        assertEquals(GtfsSelectedStopRef(30, "replacement-30"), confirmed?.destination)
+    }
+
     @Test fun openDestinationChoicesAreDisabledWhenConsentBecomesBusy() {
         val busy = mutableStateOf(false)
         compose.setContent {
