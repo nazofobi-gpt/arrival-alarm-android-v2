@@ -6,6 +6,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LatestRequestGateTest {
+    @Test fun initialOrNonPositiveGenerationCannotPublishWithoutBegin() {
+        val gate = LatestRequestGate()
+        var published = false
+
+        assertFalse(gate.isCurrent(0L))
+        assertFalse(gate.isCurrent(-1L))
+        assertFalse(gate.commitIfCurrent(0L) { published = true })
+        assertFalse(gate.commitIfCurrent(-1L) { published = true })
+        assertFalse(published)
+
+        val validToken = gate.begin()
+        assertTrue(validToken > 0L)
+        assertTrue(gate.commitIfCurrent(validToken) { published = true })
+        assertTrue(published)
+    }
+
     @Test fun newerRequestRejectsOlderCallbacks() {
         val gate = LatestRequestGate()
         val first = gate.begin()
