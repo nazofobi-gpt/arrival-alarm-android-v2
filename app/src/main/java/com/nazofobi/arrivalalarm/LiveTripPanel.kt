@@ -254,5 +254,5 @@ internal fun routeStopClock(value: String?): String? {
     return "%02d:%02d".format(java.util.Locale.ROOT, time.hour, time.minute)
 }
 
-private val GTFS_DISPLAY_HH_MM = Regex("""^\\d{1,2}:[0-5]\\d$""")
-private val GTFS_DISPLAY_HH_MM_SS = Regex("""^\\d{1,2}:[0-5]\\d:[0-5]\\d$""")
+private val GTFS_DISPLAY_HH_MM = Regex("""^\d{1,2}:[0-5]\d$""")
+private val GTFS_DISPLAY_HH_MM_SS = Regex("""^\d{1,2}:[0-5]\d:[0-5]\d$""")
