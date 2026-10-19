@@ -45,6 +45,8 @@ class SelectedGtfsTripStoreInstrumentedTest {
         wheelchairBoarding = null,
         scheduledArrival = "08:00:00",
         scheduledDeparture = "08:01:00",
+        latitude = 52.665,
+        longitude = 8.237,
     )
 
     private fun detail(
@@ -260,6 +262,58 @@ class SelectedGtfsTripStoreInstrumentedTest {
         assertTrue(
             preferences.edit().putString(SelectedGtfsTripStore.KEY, legacy.toString()).commit()
         )
+        assertRejected(
+            GtfsSelectionRestoreProblem.LEGACY_SNAPSHOT_REQUIRES_RESELECTION,
+            store().restore(),
+        )
+    }
+
+
+    @Test fun nonBoardableAndNonAlightableStopsCannotBePersisted() {
+        val noPickup = detail().copy(stops = detail().stops.map { stop ->
+            if (stop.stopSequence == 2) stop.copy(pickupType = 1) else stop
+        })
+        assertFalse(store { GtfsTripDetailResult.Available(noPickup) }.save(selected))
+
+        val requestOnlyDropOff = detail().copy(stops = detail().stops.map { stop ->
+            if (stop.stopSequence == 13) stop.copy(dropOffType = 2) else stop
+        })
+        assertFalse(store { GtfsTripDetailResult.Available(requestOnlyDropOff) }.save(selected))
+
+        val missingCoordinates = detail().copy(stops = detail().stops.map { stop ->
+            if (stop.stopSequence == 7) stop.copy(latitude = Double.NaN) else stop
+        })
+        assertFalse(store { GtfsTripDetailResult.Available(missingCoordinates) }.save(selected))
+        assertEquals(GtfsSelectionRestore.Empty, store().restore())
+    }
+
+    @Test fun physicalLocationAndIntermediateAccessChangesInvalidateOldConsent() {
+        assertTrue(store().save(selected))
+        val persisted = preferences.getString(SelectedGtfsTripStore.KEY, null)
+        val movedStop = detail().copy(stops = detail().stops.map { stop ->
+            if (stop.stopSequence == 7) stop.copy(latitude = 52.666) else stop
+        })
+        assertRejected(
+            GtfsSelectionRestoreProblem.STATIC_TRUTH_CHANGED,
+            store { GtfsTripDetailResult.Available(movedStop) }.restore(),
+        )
+        val changedIntermediatePickup = detail().copy(stops = detail().stops.map { stop ->
+            if (stop.stopSequence == 7) stop.copy(pickupType = 2) else stop
+        })
+        assertRejected(
+            GtfsSelectionRestoreProblem.STATIC_TRUTH_CHANGED,
+            store { GtfsTripDetailResult.Available(changedIntermediatePickup) }.restore(),
+        )
+        assertEquals(persisted, preferences.getString(SelectedGtfsTripStore.KEY, null))
+    }
+
+    @Test fun oldVersionThreeSnapshotCannotBypassNewStopSafetyRules() {
+        assertTrue(store().save(selected))
+        val saved = requireNotNull(preferences.getString(SelectedGtfsTripStore.KEY, null))
+        val legacy = JSONObject(saved).apply { put("version", 3) }
+        assertTrue(preferences.edit().putString(
+            SelectedGtfsTripStore.KEY, legacy.toString(),
+        ).commit())
         assertRejected(
             GtfsSelectionRestoreProblem.LEGACY_SNAPSHOT_REQUIRES_RESELECTION,
             store().restore(),
