@@ -70,14 +70,15 @@ class TransitRecentsStore(
     recentTripIds: Collection<String> = emptyList(),
     private val onChanged: ((favorites: List<String>, recents: List<String>) -> Unit)? = null,
 ) {
-    private val favorites = linkedSetOf<String>().apply { addAll(favoriteIds) }
+    private val favorites = linkedSetOf<String>().apply { addAll(favoriteIds.filter(String::isNotBlank)) }
     private val recents = ArrayDeque<String>().apply {
-        recentTripIds.distinct().take(maxItems.coerceAtLeast(0)).forEach { addLast(it) }
+        recentTripIds.filter(String::isNotBlank).distinct().take(maxItems.coerceAtLeast(0)).forEach { addLast(it) }
     }
 
-    fun isFavorite(stopId: String): Boolean = stopId in favorites
+    fun isFavorite(stopId: String): Boolean = stopId.isNotBlank() && stopId in favorites
 
     fun toggleFavorite(stopId: String): Boolean {
+        if (stopId.isBlank()) return false
         if (!favorites.add(stopId)) favorites.remove(stopId)
         publish()
         return stopId in favorites
@@ -86,6 +87,7 @@ class TransitRecentsStore(
     fun favorites(): List<String> = favorites.toList()
 
     fun recordTrip(tripId: String) {
+        if (tripId.isBlank()) return
         recents.remove(tripId)
         recents.addFirst(tripId)
         while (recents.size > maxItems.coerceAtLeast(0)) recents.removeLast()

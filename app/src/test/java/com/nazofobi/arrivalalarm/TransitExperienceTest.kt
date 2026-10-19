@@ -205,6 +205,32 @@ class TransitExperienceTest {
         assertEquals(listOf("trip-b", "trip-a", "trip-c"), store.recents())
     }
 
+    @Test fun blankIdentifiersAreRejectedWithoutPublishingPhantomState() {
+        var publishes = 0
+        val store = TransitRecentsStore(
+            maxItems = 3,
+            favoriteIds = listOf("", "  ", "station"),
+            recentTripIds = listOf("", "trip-one", " ", "trip-two"),
+        ) { _, _ -> publishes++ }
+
+        assertEquals(listOf("station"), store.favorites())
+        assertEquals(listOf("trip-one", "trip-two"), store.recents())
+        assertFalse(store.isFavorite("  "))
+        assertFalse(store.toggleFavorite(""))
+        assertFalse(store.toggleFavorite(" "))
+        store.recordTrip("")
+        store.recordTrip("   ")
+        assertEquals(0, publishes)
+        assertEquals(listOf("station"), store.favorites())
+        assertEquals(listOf("trip-one", "trip-two"), store.recents())
+
+        assertTrue(store.toggleFavorite("station-two"))
+        store.recordTrip("trip-three")
+        assertEquals(2, publishes)
+        assertEquals(listOf("station", "station-two"), store.favorites())
+        assertEquals(listOf("trip-three", "trip-one", "trip-two"), store.recents())
+    }
+
     @Test fun favoritesAndRecentsCanSeedAndPublishPersistentState() {
         var savedFavorites = emptyList<String>()
         var savedRecents = emptyList<String>()
