@@ -86,6 +86,29 @@ class TransitExperienceTest {
         assertEquals((0 until 8).map { "alternative-$it" }, board.map { it.tripId })
     }
 
+    @Test fun stationBoardPreservesDistinctLoopStopBoardingPositions() {
+        // A single GTFS trip can call at the same station twice. Different
+        // stop_sequence values must not collapse into one departure card.
+        val firstVisit = Departure(
+            tripId = "loop-trip",
+            line = "RB 1",
+            direction = "Bremen",
+            scheduledEpochSeconds = 1_200L,
+            routeId = "loop-route",
+            boardingStopSequence = 2,
+        )
+        val repeatUpdate = firstVisit.copy(realtimeEpochSeconds = 1_240L)
+        val secondVisit = firstVisit.copy(boardingStopSequence = 9)
+        val deduped = distinctStationDepartures(
+            listOf(firstVisit, repeatUpdate, secondVisit, firstVisit),
+        )
+
+        assertEquals(listOf(2, 9), deduped.map { it.boardingStopSequence })
+        assertEquals(firstVisit, deduped.first())
+        assertFalse(firstVisit.sameScheduledInstanceAs(secondVisit))
+        assertTrue(firstVisit.sameScheduledInstanceAs(repeatUpdate))
+    }
+
     @Test fun frequencyInstancesRemainDistinctAlternatives() {
         val first = Departure(
             tripId = "template", line = "RE 9", direction = "Bremen",
