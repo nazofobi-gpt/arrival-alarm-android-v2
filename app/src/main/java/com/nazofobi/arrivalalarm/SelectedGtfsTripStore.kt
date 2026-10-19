@@ -59,10 +59,10 @@ class SelectedGtfsTripStore(
         } catch (_: RuntimeException) {
             return GtfsSelectionRestore.Rejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT)
         } ?: return GtfsSelectionRestore.Rejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT)
-        // V1 omitted the timetable and V2 omitted physical stop metadata.
-        // Neither can prove the confirmed platform/accessibility context still matches.
+        // Earlier snapshots did not fingerprint all physical stop coordinates and
+        // pickup/drop-off rules. They cannot safely inherit the user's approval.
         val version = try { JSONObject(raw).opt("version") as? Int } catch (_: JSONException) { null }
-        if (version == 1 || version == 2) {
+        if (version == 1 || version == 2 || version == 3) {
             return GtfsSelectionRestore.Rejected(
                 GtfsSelectionRestoreProblem.LEGACY_SNAPSHOT_REQUIRES_RESELECTION
             )
@@ -111,6 +111,17 @@ class SelectedGtfsTripStore(
             detail.stops.zipWithNext().any { (a, b) -> a.stopSequence >= b.stopSequence }
         ) return GtfsSelectionRestore.Rejected(GtfsSelectionRestoreProblem.STATIC_TRUTH_CHANGED)
 
+        // The persistence boundary must enforce the same physical stop validity and
+        // GTFS pickup/drop-off restrictions as the interactive role selector.
+        // Otherwise a caller could save an impossible boarding or arrival stop.
+        val roleCheck = TripStopRoleValidator.validate(
+            detail,
+            TripStopRoles(boarding.sequence, destination.sequence, alarm.sequence),
+        )
+        if (roleCheck !is TripStopRoleResult.Accepted) {
+            return GtfsSelectionRestore.Rejected(GtfsSelectionRestoreProblem.INVALID_STOP_ROLES)
+        }
+
         fun matches(reference: GtfsSelectedStopRef): Boolean =
             detail.stops.singleOrNull { it.stopSequence == reference.sequence }?.stopId == reference.stopId
         if (!matches(boarding) || !matches(destination) || !matches(alarm)) {
@@ -148,6 +159,10 @@ class SelectedGtfsTripStore(
             part(stop.parentStationId)
             part(stop.platformCode)
             part(stop.wheelchairBoarding?.toString())
+            part(stop.latitude.toBits().toString())
+            part(stop.longitude.toBits().toString())
+            part(stop.pickupType?.toString())
+            part(stop.dropOffType?.toString())
         }
         val hex = "0123456789abcdef"
         return buildString {
@@ -227,7 +242,7 @@ class SelectedGtfsTripStore(
 
     companion object {
         internal const val KEY = "selected_gtfs_trip_v1"
-        private const val VERSION = 3
+        private const val VERSION = 4
         private val FINGERPRINT_REGEX = Regex("^[a-f0-9]{64}$")
     }
 }
