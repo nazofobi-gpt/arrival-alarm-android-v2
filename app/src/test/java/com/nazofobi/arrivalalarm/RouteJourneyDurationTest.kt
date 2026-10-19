@@ -86,4 +86,18 @@ class RouteJourneyDurationTest {
     @Test fun undatedInvalidIsoClockFailsClosed() {
         assertNull(routeDurationMinutes(option(departure = "2026-10-11T25:10:00", arrival = "2026-10-12T00:15:00")))
     }
+
+
+    @Test fun stopClockDisplaysOnlyValidProviderTimes() {
+        assertEquals("08:07", routeClock("08:07"))
+        assertEquals("08:07", routeClock("2026-10-19T08:07:31"))
+        assertEquals("25:07", routeClock("25:07:59"))
+        for (invalid in listOf(
+            null, "", "Planlı", "garbage", "9:00", "+1:30",
+            "08:7x", "08:60", "08:20:99", "08:20bogus",
+            "2026-10-19T12:6z:02",
+        )) {
+            assertNull("Invalid stop time: $invalid", routeClock(invalid))
+        }
+    }
 }
