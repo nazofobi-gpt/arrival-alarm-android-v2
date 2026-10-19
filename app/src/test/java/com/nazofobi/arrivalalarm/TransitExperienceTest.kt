@@ -86,6 +86,52 @@ class TransitExperienceTest {
         assertEquals((0 until 8).map { "alternative-$it" }, board.map { it.tripId })
     }
 
+    @Test fun frequencyInstancesRemainDistinctAlternatives() {
+        val first = Departure(
+            tripId = "template", line = "RE 9", direction = "Bremen",
+            scheduledEpochSeconds = 1_200L, routeId = "route-re9",
+            realtimeTripStartDate = "20261019", realtimeTripStartTime = "08:00:00",
+        )
+        val next = first.copy(
+            scheduledEpochSeconds = 1_500L,
+            realtimeTripStartTime = "08:05:00",
+        )
+        val engine = TransitExperienceEngine(TransitProviderCapabilities())
+        assertEquals(listOf(1_500L),
+            engine.alternateDepartures(listOf(first, next), first, now)
+                .map { it.scheduledEpochSeconds })
+        assertFalse(first.sameScheduledInstanceAs(next))
+        assertTrue(first.sameScheduledInstanceAs(first.copy(realtimeEpochSeconds = 1_350L)))
+    }
+
+    @Test fun excludedFrequencyInstancesDoNotConsumeAlternativeLimit() {
+        val selected = Departure("template", "RE", "Lohne", 1_200L)
+        val manySameInstance = (0 until 12).map { selected }
+        val alternatives = (0 until 10).map { selected.copy(scheduledEpochSeconds = 1_300L + it) }
+        val found = TransitExperienceEngine(TransitProviderCapabilities())
+            .alternateDepartures(manySameInstance + alternatives, selected, now)
+        assertEquals((0 until 8).map { 1_300L + it }, found.map { it.scheduledEpochSeconds })
+    }
+
+    @Test fun identicalProviderRowsCannotCrowdOutDistinctDepartures() {
+        val repeated = Departure("first", "RE", "Lohne", 1_100L)
+        val second = Departure("second", "RE", "Diepholz", 1_200L)
+        val third = Departure("third", "RE", "Bremen", 1_300L)
+        val all = List(12) { repeated } + listOf(second, third)
+        val engine = TransitExperienceEngine(TransitProviderCapabilities())
+
+        // De-duplicate before the result limit; otherwise repeated first rows
+        // hide other, independently selectable services.
+        assertEquals(
+            listOf("first", "second", "third"),
+            engine.departureBoard(all, now, limit = 3).map { it.tripId },
+        )
+        assertEquals(
+            listOf("second", "third"),
+            engine.alternateDepartures(all, repeated, now).map { it.tripId },
+        )
+    }
+
     @Test fun accessibilityPenaltyOnlyAppliesWhenProviderSupportsIt() {
         val pref=AccessibilityPreference(stepFreeOnly=true,extraTransferMinutes=6)
         assertEquals(11,TransitExperienceEngine(TransitProviderCapabilities(accessibility=true)).walkingTransferMinutes(5,pref))
