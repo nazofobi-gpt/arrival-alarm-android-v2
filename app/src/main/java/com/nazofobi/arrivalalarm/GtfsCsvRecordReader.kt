@@ -2,7 +2,7 @@ package com.nazofobi.arrivalalarm
 
 import java.io.BufferedReader
 
-private enum class GtfsCsvFieldState { START, UNQUOTED, QUOTED, AFTER_QUOTE }
+private enum class GtfsCsvFieldState { START, UNQUOTED, QUOTED, AFTER_QUOTE, AFTER_QUOTE_WS }
 
 /** Yields complete GTFS CSV records, including quoted newlines, without loading the feed. */
 internal fun gtfsCsvRecords(
@@ -45,8 +45,13 @@ internal fun gtfsCsvRecords(
                 GtfsCsvFieldState.AFTER_QUOTE -> when (character) {
                     '"' -> GtfsCsvFieldState.QUOTED // Escaped pair inside a quoted field.
                     ',' -> GtfsCsvFieldState.START
-                    ' ', '\t' -> GtfsCsvFieldState.AFTER_QUOTE
+                    ' ', '\t' -> GtfsCsvFieldState.AFTER_QUOTE_WS
                     else -> error("GTFS CSV record has text after a closing quote")
+                }
+                GtfsCsvFieldState.AFTER_QUOTE_WS -> when (character) {
+                    ',' -> GtfsCsvFieldState.START
+                    ' ', '\t' -> GtfsCsvFieldState.AFTER_QUOTE_WS
+                    else -> error("GTFS CSV record has text after whitespace following a closing quote")
                 }
             }
         }
