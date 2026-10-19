@@ -1,5 +1,6 @@
 package com.nazofobi.arrivalalarm
 
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -85,6 +86,8 @@ class GtfsTripConsentPanelInstrumentedTest {
         compose.onNodeWithTag("gtfs-destination-picker").performClick()
         compose.onNodeWithTag("gtfs-destination-30").performClick()
         compose.onNodeWithTag("gtfs-alarm-target-picker").performClick()
+        // Reaching the boarding stop is not a meaningful arrival notification.
+        compose.onNodeWithTag("gtfs-alarm-10").assertDoesNotExist()
         compose.onNodeWithTag("gtfs-alarm-20").performClick()
         compose.onNodeWithTag("gtfs-consent-confirm").performClick()
         assertEquals(GtfsSelectedStopRef(20, "stop-20"), chosen?.alarmTarget)
