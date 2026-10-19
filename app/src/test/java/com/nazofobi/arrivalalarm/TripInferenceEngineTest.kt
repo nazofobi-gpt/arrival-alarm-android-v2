@@ -427,6 +427,37 @@ class TripInferenceEngineTest {
         assertEquals(1.0, metrics.accuracy, 0.0)
     }
 
+    @Test fun evaluatorCannotCountWrongDirectionOrDepartureAsCorrectTrip() {
+        val engine = TripInferenceEngine(TripInferenceSettings(enabled = true))
+        val observed = observation()
+        val accepted = candidate("route-6", "Flughafen", 180.0)
+        val fixtures = listOf(
+            LabeledInferenceFixture(
+                "wrong direction", observed, listOf(accepted), "route-6",
+                expectedDirection = "Universität",
+            ),
+            LabeledInferenceFixture(
+                "wrong departure", observed, listOf(accepted), "route-6",
+                expectedDirection = "Flughafen", expectedScheduledEpochSeconds = now + 300L,
+            ),
+            LabeledInferenceFixture(
+                "fully correct", observed, listOf(accepted), "route-6",
+                expectedDirection = "Flughafen", expectedScheduledEpochSeconds = now,
+            ),
+            LabeledInferenceFixture(
+                "true negative", observed, listOf(accepted.copy(serviceActive = false)), null,
+            ),
+        )
+        val metrics = TripInferenceEvaluator.evaluate(engine, fixtures)
+        assertEquals(4, metrics.total)
+        assertEquals(2, metrics.correct)
+        assertEquals(2, metrics.falsePositive)
+        assertEquals(2, metrics.falseNegative)
+        assertEquals(0.75, metrics.coverage, 0.0)
+        assertEquals(1.0 / 3.0, metrics.precision, 0.000001)
+        assertEquals(0.5, metrics.accuracy, 0.0)
+    }
+
     @Test fun emptyPredictionsReportZeroPrecisionInsteadOfPerfectScore() {
         val engine = TripInferenceEngine(TripInferenceSettings(enabled = true))
         val fixtures = listOf(
