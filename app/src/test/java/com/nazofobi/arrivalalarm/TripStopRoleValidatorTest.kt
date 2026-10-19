@@ -45,6 +45,21 @@ class TripStopRoleValidatorTest {
         )
     }
 
+    @Test fun frequencyTemplateCannotBeConfirmedAsConcreteTrip() {
+        val template = detail.copy(
+            identity = identity.copy(frequencyStartSeconds = 8 * 3600),
+        )
+        assertEquals(
+            TripStopRoleProblem.UNSUPPORTED_FREQUENCY_INSTANCE,
+            rejected(template, TripStopRoles(2, 13, 7)),
+        )
+        // Ordinary service-date-bound scheduled trips remain selectable.
+        assertTrue(
+            TripStopRoleValidator.validate(detail, TripStopRoles(2, 13, 7))
+                is TripStopRoleResult.Accepted,
+        )
+    }
+
     @Test fun missingAndReversedRolesCannotChooseAnotherTripStop() {
         assertEquals(
             TripStopRoleProblem.BOARDING_STOP_NOT_FOUND,
