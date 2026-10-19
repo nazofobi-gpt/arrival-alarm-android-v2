@@ -55,6 +55,9 @@ class TransitExperienceEngine(private val capabilities: TransitProviderCapabilit
             .filterNot { it.cancelled }
             .filter { it.effectiveEpochSeconds >= nowEpochSeconds }
             .sortedBy { it.effectiveEpochSeconds }
+            // Identical provider rows must not consume distinct departure slots.
+            // Keep differing realtime evidence separate until reconciliation is proven.
+            .distinct()
             .take(limit.coerceAtLeast(0))
             .toList()
 
