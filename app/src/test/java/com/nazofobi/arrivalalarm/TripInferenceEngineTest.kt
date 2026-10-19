@@ -241,6 +241,23 @@ class TripInferenceEngineTest {
         }
     }
 
+    @Test fun implausiblyHighFiniteGpsSpeedCannotCreateTripSuggestion() {
+        val engine = TripInferenceEngine(TripInferenceSettings(enabled = true))
+        val candidates = listOf(candidate("south", "Flughafen", 180.0))
+        // Speed contributes only 0.10 to the weighted score; reducing its score
+        // cannot stop a false trip suggestion when time/location/heading match.
+        for (speed in listOf(120.01, 500.0, Double.MAX_VALUE)) {
+            val result = engine.infer(observation(speed = speed), candidates)
+            assertNull("Corrupt speed $speed must not identify a trip", result.accepted)
+            assertTrue("Corrupt speed must not even be suggested", result.suggestions.isEmpty())
+            assertTrue(result.requiresExplicitConfirmation)
+        }
+        // Boundary and normal rail speeds remain available with explicit consent.
+        val boundary = engine.infer(observation(speed = 120.0), candidates)
+        assertEquals("south", boundary.accepted?.candidate?.routeId)
+        assertTrue(boundary.requiresExplicitConfirmation)
+    }
+
     @Test fun missingLineOrDirectionCannotBeSuggestedOrAccepted() {
         val engine = TripInferenceEngine(TripInferenceSettings(enabled = true))
         val valid = candidate("route-6", "Flughafen", 180.0)
