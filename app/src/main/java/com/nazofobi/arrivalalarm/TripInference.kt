@@ -73,8 +73,11 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
             .asSequence()
             .filter {
                 it.serviceActive &&
-                    // An unidentifiable route cannot become an accepted trip.
+                    // A suggested journey must display a route, line and direction
+                    // the user can distinguish before explicitly confirming it.
                     it.routeId.isNotBlank() &&
+                    it.line.isNotBlank() &&
+                    it.direction.isNotBlank() &&
                     validCoordinates(it.anchor) &&
                     validBearing(it.expectedBearingDegrees) &&
                     it.scheduledEpochSeconds > 0L
