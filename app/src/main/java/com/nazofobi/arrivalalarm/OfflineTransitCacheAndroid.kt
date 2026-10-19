@@ -44,10 +44,18 @@ private fun JSONObject.toCachedTransitPlan(): CachedTransitPlan? {
     val key = (opt("key") as? String)?.takeIf { it.isNotBlank() } ?: return null
     // A malformed or missing save time cannot be used to establish cache freshness.
     val savedAt = strictPositiveEpochSecondsOrNull("savedAtEpochSeconds") ?: return null
+    // A present, wrong-typed collection is not a verified empty cache. Reject
+    // that entry rather than silently hiding its itinerary or departure board.
+    // Missing/null arrays remain supported for older cache records.
+    val routesJson = optJSONArray("routeOptions")
+    val departuresJson = optJSONArray("departures")
+    if ((has("routeOptions") && !isNull("routeOptions") && routesJson == null) ||
+        (has("departures") && !isNull("departures") && departuresJson == null)
+    ) return null
     return CachedTransitPlan(
         key = key,
-        routeOptions = optJSONArray("routeOptions").toRouteOptions(),
-        departures = optJSONArray("departures").toDepartures(),
+        routeOptions = routesJson.toRouteOptions(),
+        departures = departuresJson.toDepartures(),
         savedAtEpochSeconds = savedAt,
     )
 }
