@@ -192,6 +192,71 @@ class ArrivalProgressControllerTest {
         }
     }
 
+    @Test fun corruptRestoredMetricsAreDiscardedWithoutLosingTerminalOneShotState() {
+        val invalidPairs = listOf(
+            Double.NaN to Double.NaN,
+            Double.POSITIVE_INFINITY to Double.NEGATIVE_INFINITY,
+            -1.0 to 119.0,
+            Double.NEGATIVE_INFINITY to 321.0,
+        )
+        for (phase in listOf(ArrivalAlertPhase.TRACKING, ArrivalAlertPhase.ARRIVED)) {
+            for ((distance, threshold) in invalidPairs) {
+                var persisted: ArrivalProgressState? = ArrivalProgressState(
+                    routeId = route.routeId,
+                    armed = true,
+                    phase = phase,
+                    lastMatchedStopIndex = route.targetIndex,
+                    progressFraction = 0.5,
+                    distanceToTargetMeters = distance,
+                    adaptiveThresholdMeters = threshold,
+                    arrivalEventCount = if (phase == ArrivalAlertPhase.ARRIVED) 1 else 0,
+                    routeFingerprint = route.persistenceFingerprint,
+                )
+                val store = object : ArrivalProgressStateStore {
+                    override fun load(): ArrivalProgressState? = persisted
+                    override fun save(state: ArrivalProgressState) { persisted = state }
+                }
+
+                val controller = ArrivalProgressController(store)
+                controller.arm(route)
+                assertNull(controller.state.distanceToTargetMeters)
+                assertNull(controller.state.adaptiveThresholdMeters)
+                assertEquals(route.targetIndex, controller.state.lastMatchedStopIndex)
+                assertEquals(phase, controller.state.phase)
+                assertEquals(if (phase == ArrivalAlertPhase.ARRIVED) 1 else 0, controller.state.arrivalEventCount)
+                assertNull(persisted?.distanceToTargetMeters)
+                assertNull(persisted?.adaptiveThresholdMeters)
+
+                if (phase == ArrivalAlertPhase.ARRIVED) {
+                    controller.onLocation(fix(route.stops[route.targetIndex]))
+                    assertEquals(ArrivalAlertPhase.ARRIVED, controller.state.phase)
+                    assertEquals(1, controller.state.arrivalEventCount)
+                }
+            }
+        }
+    }
+
+    @Test fun validRestoredDistanceAndThresholdRemainAvailable() {
+        val state = ArrivalProgressState(
+            routeId = route.routeId,
+            armed = true,
+            phase = ArrivalAlertPhase.IMMINENT,
+            progressFraction = 0.5,
+            distanceToTargetMeters = 42.0,
+            adaptiveThresholdMeters = 180.0,
+            routeFingerprint = route.persistenceFingerprint,
+        )
+        val store = object : ArrivalProgressStateStore {
+            override fun load(): ArrivalProgressState? = state
+            override fun save(state: ArrivalProgressState) = Unit
+        }
+        val controller = ArrivalProgressController(store)
+        controller.arm(route)
+        assertEquals(ArrivalAlertPhase.IMMINENT, controller.state.phase)
+        assertEquals(42.0, controller.state.distanceToTargetMeters!!, 0.0)
+        assertEquals(180.0, controller.state.adaptiveThresholdMeters!!, 0.0)
+    }
+
     @Test fun adaptiveThresholdIsBoundedAndRespondsToUncertainty() {
         val c = ArrivalProgressController()
         val clean = c.adaptiveThresholdMeters(fix(route.stops[0], accuracy = 3.0, speed = 0.0, rt = 0))
