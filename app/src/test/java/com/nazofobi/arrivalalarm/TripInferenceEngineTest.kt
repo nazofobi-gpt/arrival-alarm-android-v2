@@ -103,6 +103,24 @@ class TripInferenceEngineTest {
         assertTrue(result.requiresExplicitConfirmation)
     }
 
+    @Test fun zeroAmbiguityMarginStillRejectsExactlyTiedDistinctTrips() {
+        val engine = TripInferenceEngine(
+            TripInferenceSettings(enabled = true, ambiguityMargin = 0.0, topK = 1)
+        )
+        val selected = candidate("route-a", "Flughafen", 180.0)
+        val tied = candidate("route-b", "Neustadt", 180.0)
+        val ambiguous = engine.infer(observation(), listOf(selected, tied))
+        assertNull("Exactly tied distinct trips cannot pass a zero-margin gate", ambiguous.accepted)
+        assertEquals(1, ambiguous.suggestions.size)
+        assertTrue(ambiguous.reason.contains("belirsiz"))
+        assertTrue(ambiguous.requiresExplicitConfirmation)
+
+        val weaker = candidate("route-c", "Universität", 0.0, offsetSec = 600)
+        val distinct = engine.infer(observation(), listOf(selected, weaker))
+        assertEquals("route-a", distinct.accepted?.candidate?.routeId)
+        assertTrue(distinct.requiresExplicitConfirmation)
+    }
+
     @Test fun oppositeDirectionAmbiguityFailsClosed() {
         val engine = TripInferenceEngine(TripInferenceSettings(enabled = true, ambiguityMargin = 0.12))
         val result = engine.infer(
