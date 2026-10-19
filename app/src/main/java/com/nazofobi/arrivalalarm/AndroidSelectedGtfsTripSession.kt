@@ -15,6 +15,7 @@ enum class GtfsDepartureInspectionFailure {
     SOURCE_EVIDENCE_MISMATCH,
     TRIP_UNAVAILABLE,
     BOARDING_NOT_ALLOWED,
+    NO_DOWNSTREAM_ALIGHTING_STOP,
 }
 
 sealed interface GtfsDepartureInspection {
@@ -102,6 +103,18 @@ class AndroidSelectedGtfsTripSession(context: Context) : AutoCloseable {
                 if (boarding.pickupType != null && boarding.pickupType != 0) {
                     return@synchronized reject(
                         GtfsDepartureInspectionFailure.BOARDING_NOT_ALLOWED,
+                    )
+                }
+                // A boarding position is actionable only when the same verified
+                // trip has a later stop where normal alighting is permitted.
+                // This also rejects terminal/loop-end positions without
+                // inventing a destination from a repeated stop name or ID.
+                if (detail.stops.none { stop ->
+                        stop.stopSequence > boardingSequence &&
+                            (stop.dropOffType == null || stop.dropOffType == 0)
+                    }) {
+                    return@synchronized reject(
+                        GtfsDepartureInspectionFailure.NO_DOWNSTREAM_ALIGHTING_STOP,
                     )
                 }
 
