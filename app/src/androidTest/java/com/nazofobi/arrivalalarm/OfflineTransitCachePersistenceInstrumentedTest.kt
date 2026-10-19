@@ -71,6 +71,49 @@ class OfflineTransitCachePersistenceInstrumentedTest {
     }
 
     @Test
+    fun wrongTypedTopLevelCacheCollectionsRejectOnlyCorruptedRecord() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val store = SharedPreferencesTransitCacheStore(context)
+        val departure = Departure("trip", "RE 9", "Bremen", 1_700_000_000L)
+        try {
+            prefs.edit().clear().commit()
+            store.save(listOf(
+                CachedTransitPlan("safe", emptyList(), listOf(departure), 100L),
+                CachedTransitPlan("broken", emptyList(), listOf(departure), 100L),
+            ))
+            val baseline = requireNotNull(prefs.getString("plans_json", null))
+            for (field in listOf("routeOptions", "departures")) {
+                for (invalid in listOf<Any>(
+                    "not-an-array", 42, true,
+                    org.json.JSONObject().put("unexpected", true),
+                )) {
+                    val snapshot = org.json.JSONArray(baseline)
+                    snapshot.getJSONObject(1).put(field, invalid)
+                    assertTrue(prefs.edit().putString("plans_json", snapshot.toString()).commit())
+                    // Never pretend that a present wrong-typed collection is empty.
+                    assertEquals(listOf("safe"), store.load().map { it.key })
+                }
+                // Older records may omit optional collections or encode them as null.
+                for (nullOrMissing in listOf(false, true)) {
+                    val snapshot = org.json.JSONArray(baseline)
+                    val item = snapshot.getJSONObject(1)
+                    if (nullOrMissing) item.remove(field)
+                    else item.put(field, org.json.JSONObject.NULL)
+                    assertTrue(prefs.edit().putString("plans_json", snapshot.toString()).commit())
+                    val restored = store.load()
+                    assertEquals(listOf("safe", "broken"), restored.map { it.key })
+                    val broken = restored.last()
+                    if (field == "routeOptions") assertTrue(broken.routeOptions.isEmpty())
+                    else assertTrue(broken.departures.isEmpty())
+                }
+            }
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
+    @Test
     fun cachedRouteSurvivesCacheRecreation() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
