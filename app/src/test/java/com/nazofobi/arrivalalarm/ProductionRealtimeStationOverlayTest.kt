@@ -82,6 +82,69 @@ class ProductionRealtimeStationOverlayTest {
     }
 
     @Test
+    fun loopStopWithTwoVisitsDoesNotUseAnArbitraryRealtimeUpdate() {
+        fun update(sequence: Int, skipped: Boolean) = GermanyRealtimeMatchedStopUpdate(
+            stopSequence = sequence,
+            scheduledStopId = "A",
+            realtimeStopId = "A",
+            assignedStopId = null,
+            platformCode = if (skipped) "9" else "5",
+            arrivalDelaySeconds = null,
+            departureDelaySeconds = 120,
+            arrivalTimeEpochSeconds = null,
+            departureTimeEpochSeconds = null,
+            scheduleRelationship = if (skipped) "SKIPPED" else "SCHEDULED",
+            pickupType = null,
+            dropOffType = null,
+            stopHeadsign = null,
+        )
+
+        fun result(updates: List<GermanyRealtimeMatchedStopUpdate>, cancelled: Boolean) =
+            overlay(
+                GermanyRealtimeOverlayResult.Matched(
+                    tripOverlays = listOf(
+                        GermanyRealtimeTripOverlay(
+                            staticTrip = trip(),
+                            startDate = null,
+                            startTime = null,
+                            cancelled = cancelled,
+                            scheduleRelationship = if (cancelled) "CANCELED" else "SCHEDULED",
+                            stopUpdates = updates,
+                            sourceTimestampEpochSeconds = 990L,
+                        ),
+                    ),
+                    serviceAlerts = emptyList(),
+                    freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+                    ageSeconds = 10L,
+                    provenance = provenance(),
+                ),
+            ).enrich("A", listOf(planned))
+
+        val twoVisits = listOf(update(1, skipped = true), update(5, skipped = false))
+        for (ordered in listOf(twoVisits, twoVisits.reversed())) {
+            val ambiguous = result(ordered, cancelled = false)
+            assertEquals(StationRealtimeState.FRESH_NO_MATCH, ambiguous.realtimeState)
+            assertEquals(listOf(planned), ambiguous.departures)
+
+            // A trip-wide cancellation remains valid even without a known stop_sequence.
+            val globallyCancelled = result(ordered, cancelled = true)
+            assertEquals(StationRealtimeState.FRESH_MATCHED, globallyCancelled.realtimeState)
+            assertTrue(globallyCancelled.departures.single().cancelled)
+            assertEquals("1", globallyCancelled.departures.single().platform)
+            assertNull(globallyCancelled.departures.single().realtimeEpochSeconds)
+        }
+
+        // A sole matching station update is still safe with other stops in the trip.
+        val unambiguous = result(
+            listOf(update(1, skipped = false).copy(scheduledStopId = "B"), update(5, skipped = true)),
+            cancelled = false,
+        )
+        assertEquals(StationRealtimeState.FRESH_MATCHED, unambiguous.realtimeState)
+        assertTrue(unambiguous.departures.single().cancelled)
+        assertEquals("9", unambiguous.departures.single().platform)
+    }
+
+    @Test
     fun reusedTripIdRealtimeDoesNotCancelAnotherRoute() {
         val matched = GermanyRealtimeOverlayResult.Matched(
             tripOverlays = listOf(
