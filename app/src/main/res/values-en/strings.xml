@@ -245,4 +245,18 @@
     <string name="journey_show_fewer_stops">Show fewer stops</string>
     <string name="readiness_share_diagnostics">Share diagnostics summary</string>
     <string name="readiness_share_diagnostics_note">Only capability status is shared. Exact location, journey history, and access credentials are excluded.</string>
+    <string name="gtfs_consent_title">Confirm trip stops</string>
+    <string name="gtfs_consent_boarding">Boarding: %1$s</string>
+    <string name="gtfs_consent_choose_destination">Choose where to get off</string>
+    <string name="gtfs_consent_alarm_target">Alarm target (defaults to destination)</string>
+    <string name="gtfs_consent_invalid">There is no valid stop selection for this trip.</string>
+    <string name="gtfs_consent_no_automatic_alarm">Your selection is saved; the arrival alarm is not armed automatically.</string>
+    <string name="gtfs_consent_save">Confirm and save selection</string>
+    <string name="gtfs_consent_cancel">Discard selection</string>
+    <string name="gtfs_consent_loading">Verifying trip and stop evidence…</string>
+    <string name="gtfs_consent_inspect_failed">This departure cannot be verified against current data. Choose another departure.</string>
+    <string name="gtfs_consent_save_failed">Selection was not safely saved; no alarm was armed.</string>
+    <string name="gtfs_consent_saved">Selection saved. Activate the arrival alarm separately.</string>
+    <string name="gtfs_consent_restored">Saved trip and stop roles verified against current data.</string>
+    <string name="gtfs_consent_restore_invalid">Saved trip changed or is unavailable. Please select again.</string>
 </resources>
