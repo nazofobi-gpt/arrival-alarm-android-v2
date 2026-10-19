@@ -97,6 +97,15 @@ class ArrivalProgressController(
             // A restored debounce counter has no persisted GPS timestamp
             // watermark, so it cannot prove a second independent fix.
             restored?.copy(
+                // Persisted UI metrics may be corrupt even when the route identity
+                // and terminal one-shot event are valid. Drop only invalid metrics:
+                // resetting an ARRIVED state would risk a duplicate arrival alarm.
+                distanceToTargetMeters = restored.distanceToTargetMeters?.takeIf {
+                    it.isFinite() && it >= 0.0
+                },
+                adaptiveThresholdMeters = restored.adaptiveThresholdMeters?.takeIf {
+                    it.isFinite() && it in 120.0..320.0
+                },
                 consecutiveInsideThreshold = 0,
                 consecutivePastTarget = 0,
             ) ?: ArrivalProgressState(
