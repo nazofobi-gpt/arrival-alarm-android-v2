@@ -19,6 +19,9 @@ data class Departure(
     val routeId: String? = null,
     val realtimeTripStartDate: String? = null,
     val realtimeTripStartTime: String? = null,
+    // Only concrete scheduled GTFS departures expose evidence for later user confirmation.
+    val gtfsInstance: GtfsTripInstanceIdentity? = null,
+    val boardingStopSequence: Int? = null,
 ) {
     // A non-positive provider timestamp is malformed/unavailable, not a real
     // departure in 1970. Preserve the known scheduled departure instead.
@@ -34,7 +37,9 @@ internal fun Departure.sameScheduledInstanceAs(other: Departure): Boolean =
         line == other.line &&
         direction == other.direction &&
         realtimeTripStartDate == other.realtimeTripStartDate &&
-        realtimeTripStartTime == other.realtimeTripStartTime
+        realtimeTripStartTime == other.realtimeTripStartTime &&
+        gtfsInstance == other.gtfsInstance &&
+        boardingStopSequence == other.boardingStopSequence
 
 data class ServiceAlert(val id: String, val title: String, val detail: String)
 data class LiveVehicle(val tripId: String, val point: GeoPoint)
