@@ -63,6 +63,27 @@ class SearchMapPlannerTest {
         assertTrue(planner.nearby(center, 1).isNotEmpty())
     }
 
+    @Test fun stopHeavyAutocompleteStillShowsMatchingRouteAndTrip() {
+        val stops = (1..12).map { index ->
+            CatalogStop("stop-$index", "vbb", "S1 Platform $index", 52.5200, 13.4050)
+        }
+        val route = CatalogRoute("s1", "vbb", "S1", "City Center", emptyList())
+        val trip = CatalogTrip("trip-s1", "vbb", "s1", "08:00")
+        val snapshot = TestGermanyTransitFixtures.snapshot.copy(
+            stops = stops,
+            routes = listOf(route),
+            trips = listOf(trip),
+        )
+        val scoped = SearchMapPlanner(GermanyTransitCatalog(snapshot))
+
+        val results = scoped.search("S1", 3)
+        assertEquals(3, results.size)
+        assertTrue(results[0] is SearchResult.Stop)
+        assertEquals(route, (results[1] as SearchResult.Route).value)
+        assertEquals(trip, (results[2] as SearchResult.Trip).value)
+        assertEquals(1, scoped.search("S1", 1).size)
+    }
+
     @Test fun nearestStopsAreRankedAndExposeBearing() {
         val near = planner.nearby(MapPoint(52.5250, 13.3695, "current"), 2)
         assertEquals("Berlin Hauptbahnhof", near.first().stop.name)
