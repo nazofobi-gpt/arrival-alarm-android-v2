@@ -156,7 +156,8 @@ private fun RouteStop.toJson(): JSONObject = JSONObject()
     .putNullable("plannedPlatform", plannedPlatform)
 
 private fun JSONObject.toRouteStop(): RouteStop? {
-    val name = optString("name").takeIf { it.isNotBlank() } ?: return null
+    // A number, boolean or JSON container cannot be treated as an actual stop name.
+    val name = (opt("name") as? String)?.takeIf { it.isNotBlank() } ?: return null
     // Optional coordinates may be absent, but supplied invalid values cannot be trusted.
     if (hasInvalidCoordinate("latitude", -90.0, 90.0) ||
         hasInvalidCoordinate("longitude", -180.0, 180.0)
