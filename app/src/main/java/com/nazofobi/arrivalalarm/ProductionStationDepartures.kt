@@ -362,8 +362,12 @@ internal class ProductionRealtimeStationOverlay(
                     overlayMatchesDeparture(candidate, departure)
                 }
                 ?: return@map departure
-            val update = trip.stopUpdates.firstOrNull { it.scheduledStopId == stopId }
-            matchedAny = true
+            // A loop trip can visit the same stop_id more than once with different
+            // stop_sequence values. The board lacks that sequence, so choosing the
+            // first matching update can display a false skipped stop or platform.
+            // Keep only unambiguous stop-specific evidence; trip cancellation is global.
+            val update = trip.stopUpdates.singleOrNull { it.scheduledStopId == stopId }
+            matchedAny = matchedAny || trip.cancelled || update != null
             // SKIPPED is stop-specific; do not offer boarding here or project
             // a predicted departure. Other stops of this trip remain available.
             val skippedAtStop = update?.scheduleRelationship == "SKIPPED"
