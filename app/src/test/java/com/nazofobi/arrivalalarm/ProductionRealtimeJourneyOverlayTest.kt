@@ -499,6 +499,43 @@ class ProductionRealtimeJourneyOverlayTest {
     }
 
     @Test
+    fun cancelledDuringFetchSkipsMatcherAndPreservesInterruption() {
+        var fetchCount = 0
+        var matchCount = 0
+        val realtime = ProductionRealtimeJourneyOverlay(
+            fetch = {
+                fetchCount++
+                Thread.currentThread().interrupt()
+                GermanyRealtimeFetchResult.Unavailable(
+                    GermanyRealtimeUnavailableReason.NETWORK,
+                    "cancelled",
+                )
+            },
+            match = { _, _ ->
+                matchCount++
+                error("match must not run after cancellation")
+            },
+            nowEpochSeconds = { at("08:00:00") / 1_000L },
+        )
+
+        var interrupted = false
+        try {
+            try {
+                realtime.enrich(listOf(option()))
+            } catch (_: InterruptedException) {
+                interrupted = true
+                assertTrue(Thread.currentThread().isInterrupted)
+            }
+        } finally {
+            Thread.interrupted()
+        }
+
+        assertTrue(interrupted)
+        assertEquals(1, fetchCount)
+        assertEquals(0, matchCount)
+    }
+
+    @Test
     fun interruptedRealtimeFetchPreservesThreadCancellation() {
         val realtime = ProductionRealtimeJourneyOverlay(
             fetch = { throw InterruptedException("request cancelled") },
