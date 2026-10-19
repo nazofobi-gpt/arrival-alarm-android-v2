@@ -48,7 +48,9 @@ class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
     fun searchStops(query:String,limit:Int=20):List<CatalogStop> {
         val q = query.trim()
         if (q.isEmpty() || limit <= 0) return emptyList()
-        return snapshot.stops.asSequence().filter { it.name.contains(q, true) }.take(limit).toList()
+        return snapshot.stops.asSequence().filter { it.name.contains(q, true) }
+            .distinctBy { it.providerId to it.id }
+            .take(limit).toList()
     }
 
     fun searchRoutes(query:String,limit:Int=20):List<CatalogRoute> {
@@ -56,7 +58,7 @@ class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
         if (q.isEmpty() || limit <= 0) return emptyList()
         return snapshot.routes.asSequence().filter {
             it.shortName.contains(q, true) || it.direction.contains(q, true)
-        }.take(limit).toList()
+        }.distinctBy { it.providerId to it.id }.take(limit).toList()
     }
 
     fun searchTrips(query:String,limit:Int=20):List<Pair<CatalogTrip,CatalogRoute>> {
@@ -68,6 +70,7 @@ class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
                 trip.id.contains(q, true) || trip.departure.contains(q, true) ||
                     route.shortName.contains(q, true) || route.direction.contains(q, true)
             }
+            .distinctBy { (trip, _) -> trip.providerId to trip.id }
             .take(limit)
             .toList()
     }
