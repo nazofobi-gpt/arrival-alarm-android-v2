@@ -92,6 +92,7 @@ internal fun GtfsTripConsentPanel(
                                     invalidRoles = false
                                     destinationExpanded = false
                                 },
+                                enabled = !busy,
                                 modifier = Modifier.testTag("gtfs-destination-${stop.stopSequence}"),
                             )
                         }
@@ -121,6 +122,7 @@ internal fun GtfsTripConsentPanel(
                                         invalidRoles = false
                                         alarmExpanded = false
                                     },
+                                    enabled = !busy,
                                     modifier = Modifier.testTag("gtfs-alarm-${stop.stopSequence}"),
                                 )
                             }
