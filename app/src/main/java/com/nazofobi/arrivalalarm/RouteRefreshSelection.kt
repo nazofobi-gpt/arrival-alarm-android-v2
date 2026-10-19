@@ -27,6 +27,13 @@ internal fun retainSelectedRouteAfterRefresh(
     val boardingInstant = previous.departureEpochMillis ?: return null
     if (boardingInstant <= 0L || updated.departureEpochMillis != boardingInstant) return null
 
+    // Matching bad coordinates are not physical trip identity evidence.
+    if (listOf(previous, updated).any { option ->
+            !knownCoordinatesAreValid(option.origin.latitude, option.origin.longitude) ||
+                !knownCoordinatesAreValid(option.destination.latitude, option.destination.longitude) ||
+                option.stops.any { !knownCoordinatesAreValid(it.latitude, it.longitude) }
+        }) return null
+
     if (
         previous.origin.latitude != updated.origin.latitude ||
         previous.origin.longitude != updated.origin.longitude ||
@@ -49,3 +56,7 @@ internal fun retainSelectedRouteAfterRefresh(
 
     return id
 }
+
+private fun knownCoordinatesAreValid(latitude: Double?, longitude: Double?): Boolean =
+    (latitude == null || (latitude.isFinite() && latitude in -90.0..90.0)) &&
+        (longitude == null || (longitude.isFinite() && longitude in -180.0..180.0))
