@@ -36,6 +36,11 @@ internal class ProductionRealtimeJourneyOverlay(
         // Degrade on ordinary provider failures, but never swallow JVM fatal Errors.
         // Exception messages may contain provider URLs, credentials or user coordinates.
         val overlay = try {
+            // A cancelled journey must not start a new provider request.
+            // Preserve interruption so the caller can end the work promptly.
+            if (Thread.currentThread().isInterrupted) {
+                throw InterruptedException("Realtime lookup cancelled before dispatch")
+            }
             match(fetch(), now)
         } catch (interrupted: InterruptedException) {
             Thread.currentThread().interrupt()
