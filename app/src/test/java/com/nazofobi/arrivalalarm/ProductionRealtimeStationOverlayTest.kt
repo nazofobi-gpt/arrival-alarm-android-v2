@@ -597,6 +597,66 @@ class ProductionRealtimeStationOverlayTest {
     }
 
     @Test
+    fun preInterruptedStationLookupSkipsFetchAndMatcher() {
+        var fetchCount = 0
+        var matchCount = 0
+        var caught = false
+        try {
+            Thread.currentThread().interrupt()
+            ProductionRealtimeStationOverlay(
+                fetch = {
+                    fetchCount++
+                    GermanyRealtimeFetchResult.Unavailable(
+                        GermanyRealtimeUnavailableReason.NETWORK, "unused",
+                    )
+                },
+                match = { _, _ ->
+                    matchCount++
+                    error("matcher must not run for cancelled lookup")
+                },
+            ).enrich("A", listOf(planned))
+        } catch (_: InterruptedException) {
+            caught = true
+            assertTrue(Thread.currentThread().isInterrupted)
+        } finally {
+            Thread.interrupted()
+        }
+        assertTrue(caught)
+        assertEquals(0, fetchCount)
+        assertEquals(0, matchCount)
+    }
+
+    @Test
+    fun interruptionDuringStationFetchSkipsMatcher() {
+        var fetchCount = 0
+        var matchCount = 0
+        var caught = false
+        try {
+            ProductionRealtimeStationOverlay(
+                fetch = {
+                    fetchCount++
+                    Thread.currentThread().interrupt()
+                    GermanyRealtimeFetchResult.Unavailable(
+                        GermanyRealtimeUnavailableReason.NETWORK, "cancelled",
+                    )
+                },
+                match = { _, _ ->
+                    matchCount++
+                    error("matcher must not run after fetch cancellation")
+                },
+            ).enrich("A", listOf(planned))
+        } catch (_: InterruptedException) {
+            caught = true
+            assertTrue(Thread.currentThread().isInterrupted)
+        } finally {
+            Thread.interrupted()
+        }
+        assertTrue(caught)
+        assertEquals(1, fetchCount)
+        assertEquals(0, matchCount)
+    }
+
+    @Test
     fun providerInterruptionPropagatesAndPreservesInterruptFlag() {
         var caught = false
         try {
