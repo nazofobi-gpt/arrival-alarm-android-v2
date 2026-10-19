@@ -47,12 +47,12 @@ class AndroidSelectedGtfsTripSession(context: Context) : AutoCloseable {
     }
 
     /**
-     * Preview only the exact provider-backed departure and its boarding call.
+     * Preview only the exact provider-backed departure at the explicitly selected stop_id.
      * Synthetic/frequency departures and stale/mismatched evidence fail closed.
      * This method has no persistence or journey/alarm side effects; the UI must
      * collect explicit destination and alarm-target consent before confirm().
      */
-    suspend fun inspect(departure: Departure): GtfsDepartureInspection =
+    suspend fun inspect(departure: Departure, expectedBoardingStopId: String): GtfsDepartureInspection =
         withContext(Dispatchers.IO) {
             synchronized(mutex) {
                 fun reject(reason: GtfsDepartureInspectionFailure) =
@@ -75,7 +75,7 @@ class AndroidSelectedGtfsTripSession(context: Context) : AutoCloseable {
                     departure.tripId != identity.tripId ||
                     departure.routeId != identity.routeId ||
                     departure.scheduledEpochSeconds <= 0L ||
-                    boardingSequence < 0
+                    boardingSequence < 0 || expectedBoardingStopId.isBlank()
                 ) {
                     return@synchronized reject(
                         GtfsDepartureInspectionFailure.SOURCE_EVIDENCE_MISMATCH,
@@ -95,7 +95,7 @@ class AndroidSelectedGtfsTripSession(context: Context) : AutoCloseable {
                     )
                 }
                 val boarding = detail.stops.singleOrNull {
-                    it.stopSequence == boardingSequence
+                    it.stopSequence == boardingSequence && it.stopId == expectedBoardingStopId
                 } ?: return@synchronized reject(
                     GtfsDepartureInspectionFailure.SOURCE_EVIDENCE_MISMATCH,
                 )
