@@ -13,7 +13,10 @@ internal fun upcomingCancelledDepartures(
     nowEpochSeconds: Long,
     limit: Int = 3,
 ): List<Departure> = departures.asSequence()
-    .filter { it.cancelled && it.scheduledEpochSeconds >= nowEpochSeconds }
+    .filter {
+        it.cancelled && it.scheduledEpochSeconds.isDisplayableDepartureEpochSeconds() &&
+            it.scheduledEpochSeconds >= nowEpochSeconds
+    }
     // Trip IDs and scheduled times can collide across routes and feeds.
     // Retain distinct visible services while deduplicating repeated updates.
     .distinctBy {
