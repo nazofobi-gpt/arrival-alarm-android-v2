@@ -409,6 +409,47 @@ class ProductionRealtimeJourneyOverlayTest {
     }
 
     @Test
+    fun preInterruptedRealtimeWorkDoesNotDispatchProviderRequests() {
+        var fetchCount = 0
+        var matchCount = 0
+        val realtime = ProductionRealtimeJourneyOverlay(
+            fetch = {
+                fetchCount++
+                GermanyRealtimeFetchResult.Unavailable(
+                    GermanyRealtimeUnavailableReason.NETWORK,
+                    "unused",
+                )
+            },
+            match = { _, _ ->
+                matchCount++
+                GermanyRealtimeOverlayResult.Unavailable(
+                    reason = GermanyRealtimeUnavailableReason.NETWORK,
+                    detail = null,
+                )
+            },
+            nowEpochSeconds = { at("08:00:00") / 1_000L },
+        )
+
+        var interrupted = false
+        try {
+            Thread.currentThread().interrupt()
+            try {
+                realtime.enrich(listOf(option()))
+            } catch (_: InterruptedException) {
+                interrupted = true
+                assertTrue(Thread.currentThread().isInterrupted)
+            }
+        } finally {
+            // A cancelled test must not taint later JUnit tests.
+            Thread.interrupted()
+        }
+
+        assertTrue(interrupted)
+        assertEquals(0, fetchCount)
+        assertEquals(0, matchCount)
+    }
+
+    @Test
     fun interruptedRealtimeFetchPreservesThreadCancellation() {
         val realtime = ProductionRealtimeJourneyOverlay(
             fetch = { throw InterruptedException("request cancelled") },
