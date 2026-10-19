@@ -82,6 +82,10 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
                     validBearing(it.expectedBearingDegrees) &&
                     it.scheduledEpochSeconds > 0L
             }
+            // Exact duplicate upstream rows are not separate trip choices:
+            // counting them as runner-up candidates falsely triggers ambiguity.
+            // Distinct service times, directions and provider evidence remain separate.
+            .distinct()
             .map { score(observation, it) }
             .filter { it.confidence > 0.0 }
             .sortedByDescending { it.confidence }
