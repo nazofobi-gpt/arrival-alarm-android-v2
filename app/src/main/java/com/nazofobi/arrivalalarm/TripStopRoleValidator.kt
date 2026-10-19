@@ -62,7 +62,7 @@ object TripStopRoleValidator {
             return reject(TripStopRoleProblem.ALIGHTING_NOT_ALLOWED)
         }
         if (boarding.stopSequence >= destination.stopSequence ||
-            alarm.stopSequence < boarding.stopSequence ||
+            alarm.stopSequence <= boarding.stopSequence ||
             alarm.stopSequence > destination.stopSequence
         ) return reject(TripStopRoleProblem.WRONG_STOP_ORDER)
 
