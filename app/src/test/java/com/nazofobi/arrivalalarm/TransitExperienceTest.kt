@@ -86,6 +86,31 @@ class TransitExperienceTest {
         assertEquals((0 until 8).map { "alternative-$it" }, board.map { it.tripId })
     }
 
+    @Test fun stationEvidenceRequiresRealServiceDayAndValidKeys() {
+        val trip = GtfsScheduleTrip(
+            id = "T17", routeId = "R5", serviceId = "WEEKDAY",
+            headsign = "Bremen", directionId = 1,
+            shapeId = null, wheelchairAccessible = null, bikesAllowed = null,
+        )
+        val date = GtfsServiceDate(2026, 10, 19)
+        val evidence = stationDepartureEvidence(trip, stopSequence = 7, serviceDate = date)
+
+        assertEquals(GtfsTripInstanceIdentity.scheduled(trip, date), evidence?.identity)
+        assertEquals(7, evidence?.boardingStopSequence)
+        assertEquals(null, stationDepartureEvidence(trip, 7, null))
+        assertEquals(null, stationDepartureEvidence(trip, -1, date))
+        for (invalid in listOf(
+            trip.copy(id = " "),
+            trip.copy(serviceId = ""),
+            trip.copy(routeId = " "),
+        )) {
+            assertEquals(null, stationDepartureEvidence(invalid, 7, date))
+        }
+        val followingDay = GtfsServiceDate(2026, 10, 20)
+        assertFalse(evidence?.identity ==
+            stationDepartureEvidence(trip, 7, followingDay)?.identity)
+    }
+
     @Test fun stationBoardPreservesDistinctLoopStopBoardingPositions() {
         // A single GTFS trip can call at the same station twice. Different
         // stop_sequence values must not collapse into one departure card.
