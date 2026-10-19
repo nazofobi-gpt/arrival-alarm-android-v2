@@ -66,13 +66,22 @@ class SearchMapPlanner(
         val trips = catalog.searchTrips(q, limit).map { (trip, route) -> SearchResult.Trip(trip, route) }
         // Display labels are not identities: different providers (and distinct stops
         // or trips within one provider) can legitimately share the same label.
-        return (stops + routes + trips).distinctBy { result ->
+        val distinct = (stops + routes + trips).distinctBy { result ->
             when (result) {
                 is SearchResult.Stop -> Triple("stop", result.value.providerId, result.value.id)
                 is SearchResult.Route -> Triple("route", result.value.providerId, result.value.id)
                 is SearchResult.Trip -> Triple("trip", result.value.providerId, result.value.id)
             }
-        }.take(limit)
+        }
+        // Stop-heavy queries must not hide matching lines and departures.
+        // Preserve the result cap and original ranking when it already fits.
+        val firstPerKind = listOfNotNull(
+            distinct.firstOrNull { it is SearchResult.Stop },
+            distinct.firstOrNull { it is SearchResult.Route },
+            distinct.firstOrNull { it is SearchResult.Trip },
+        )
+        if (distinct.size <= limit || firstPerKind.size > limit) return distinct.take(limit)
+        return (firstPerKind + distinct.filterNot { it in firstPerKind }).take(limit)
     }
 
     fun nearby(point: MapPoint, limit: Int = 5): List<NearbyCandidate> =
