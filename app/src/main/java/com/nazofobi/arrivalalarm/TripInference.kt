@@ -105,7 +105,7 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
             return TripInferenceResult(scored, null, "Sefer zamanı hareket kanıtıyla uyumsuz")
         }
         val runnerUp = ranked.getOrNull(1)
-        if (runnerUp != null && best.confidence - runnerUp.confidence < settings.ambiguityMargin) {
+        if (runnerUp != null && best.confidence - runnerUp.confidence <= settings.ambiguityMargin) {
             return TripInferenceResult(scored, null, "Adaylar belirsiz; kullanıcıya otomatik öneri yok")
         }
         return TripInferenceResult(scored, best, "Aday bulundu; hedef/alarm yalnız kullanıcı onayıyla kurulabilir")
