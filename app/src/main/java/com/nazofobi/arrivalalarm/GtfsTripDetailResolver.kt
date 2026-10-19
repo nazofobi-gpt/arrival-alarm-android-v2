@@ -63,6 +63,7 @@ enum class GtfsTripDetailFailure {
     FREQUENCY_INSTANCE_UNSUPPORTED,
     MISSING_OR_TRUNCATED_SEQUENCE,
     INVALID_STOP_SEQUENCE,
+    INVALID_STOP_TIME,
     MISSING_STOP_METADATA,
 }
 
@@ -164,6 +165,22 @@ class GtfsTripDetailResolver(private val source: GtfsTripDetailSource) {
         if (stopTimes.any { it.tripId != trip.id || it.stopSequence < 0 || it.stopId.isBlank() } ||
             stopTimes.zipWithNext().any { (a, b) -> a.stopSequence >= b.stopSequence }
         ) return unavailable(GtfsTripDetailFailure.INVALID_STOP_SEQUENCE)
+
+        // GTFS allows times beyond midnight (24:10:00) and absent non-timepoint
+        // clocks, but a malformed non-null provider clock must never be used
+        // to offer a concrete, user-confirmable service.
+        fun validClock(clock: String?): Boolean {
+            if (clock == null) return true
+            return try {
+                GtfsServiceTime.parse(clock)
+                true
+            } catch (_: IllegalArgumentException) {
+                false
+            }
+        }
+        if (stopTimes.any { !validClock(it.arrivalTime) || !validClock(it.departureTime) }) {
+            return unavailable(GtfsTripDetailFailure.INVALID_STOP_TIME)
+        }
 
         val stops = mutableListOf<GtfsTripDetailStop>()
         val stopCache = mutableMapOf<String, GtfsScheduleStop?>()
