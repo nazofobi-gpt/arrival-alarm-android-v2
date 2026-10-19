@@ -52,4 +52,30 @@ class GtfsCsvRecordReaderTest {
         assertEquals("", csv[1])
         assertEquals(listOf("1", "Achim"), parseCsvLine(csv[2]))
     }
+
+    @Test fun malformedQuoteInUnquotedFieldIsRejectedBeforeNextRecord() {
+        val failure = runCatching { records("1,Bad\"name\n2,Achim") }.exceptionOrNull()
+        assertTrue(failure is IllegalStateException)
+        assertTrue(failure?.message?.contains("unquoted") == true)
+    }
+
+    @Test fun nonWhitespaceAfterClosingQuoteIsRejected() {
+        val failure = runCatching { records("1,\"Bremen\"junk\n2,Achim") }.exceptionOrNull()
+        assertTrue(failure is IllegalStateException)
+        assertTrue(failure?.message?.contains("closing quote") == true)
+    }
+
+    @Test fun escapedQuotesAndOptionalWhitespaceStillEndAtCorrectRecord() {
+        assertEquals(
+            listOf("1,\"Bremen\"\" Hbf\" ,DE", "2,Achim,DE"),
+            records("1,\"Bremen\"\" Hbf\" ,DE\n2,Achim,DE"),
+        )
+    }
+
+    @Test fun utf8BomBeforeQuotedFirstHeaderIsAccepted() {
+        assertEquals(
+            listOf("\uFEFF\"stop_id\",stop_name", "1,Achim"),
+            records("\uFEFF\"stop_id\",stop_name\n1,Achim"),
+        )
+    }
 }
