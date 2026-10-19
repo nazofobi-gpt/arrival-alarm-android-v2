@@ -84,7 +84,12 @@ class SearchMapPlanner(
         MapPoint(it.stop.latitude, it.stop.longitude, it.stop.name)
     }
 
-    fun addressOrPoi(query: String): List<MapPoint> = geocoder.search(query.trim())
+    fun addressOrPoi(query: String): List<MapPoint> {
+        val q = query.trim()
+        if (q.isEmpty()) return emptyList()
+        // External geocoders must not inject invalid map coordinates into selection.
+        return geocoder.search(q).filter(::hasValidCoordinates)
+    }
 
     fun pointFor(stop: CatalogStop) = MapPoint(stop.latitude, stop.longitude, stop.name)
     fun arbitraryPoint(latitude: Double, longitude: Double, label: String = "Harita noktası") = MapPoint(latitude, longitude, label)
