@@ -584,6 +584,20 @@ class MainActivityTest {
     }
 
     private fun navigateTo(tag: String) {
+        // ActivityScenario.recreate() may return before the new Compose hierarchy
+        // is registered. Wait for the actual navigation target, not just idle.
+        rule.waitUntil(timeoutMillis = 60_000L) {
+            try {
+                rule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+            } catch (error: IllegalStateException) {
+                // The Compose test rule throws while no hierarchy is attached.
+                // Other unexpected state failures should still fail the test.
+                if (error.message?.contains("No compose hierarchies found") != true) {
+                    throw error
+                }
+                false
+            }
+        }
         rule.onNodeWithTag(tag).assertIsDisplayed().performClick()
         rule.waitForIdle()
     }
