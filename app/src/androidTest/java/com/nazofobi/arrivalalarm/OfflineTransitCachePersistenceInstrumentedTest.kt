@@ -545,4 +545,91 @@ class OfflineTransitCachePersistenceInstrumentedTest {
         }
     }
 
+
+    @Test
+    fun cachedMultidayRouteRetainsExactEpochInstantsAfterRecreation() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val departure = 1_700_000_000_000L
+        val arrival = departure + 25L * 60L * 60L * 1_000L
+        val route = RouteOption(
+            id = "overnight-25h",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen"),
+            line = "RE", direction = "Bremen",
+            departure = "23:30", arrival = "00:30",
+            walkingMinutes = 0, transfers = 0,
+            departureEpochMillis = departure, arrivalEpochMillis = arrival,
+        )
+        try {
+            prefs.edit().clear().commit()
+            OfflineTransitCache(backingStore = SharedPreferencesTransitCacheStore(context)).put(
+                CachedTransitPlan("overnight", listOf(route), emptyList(), 100L)
+            )
+            val restored = OfflineTransitCache(
+                backingStore = SharedPreferencesTransitCacheStore(context)
+            ).routeOptions("overnight").single()
+            assertEquals(departure, restored.departureEpochMillis)
+            assertEquals(arrival, restored.arrivalEpochMillis)
+            assertEquals(25L * 60L, (restored.arrivalEpochMillis!! -
+                restored.departureEpochMillis!!) / 60_000L)
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
+    @Test
+    fun malformedOfflineRouteEpochsRejectOnlyTheCorruptItinerary() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val store = SharedPreferencesTransitCacheStore(context)
+        val base = 1_700_000_000_000L
+        val route = RouteOption(
+            id = "valid-timing",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen"),
+            line = "RE", direction = "Bremen",
+            departure = "23:30", arrival = "00:30",
+            walkingMinutes = 0, transfers = 0,
+            departureEpochMillis = base, arrivalEpochMillis = base + 90_000_000L,
+        )
+        try {
+            prefs.edit().clear().commit()
+            store.save(listOf(CachedTransitPlan("valid", listOf(route), emptyList(), 100L)))
+            val original = requireNotNull(prefs.getString("plans_json", null))
+            fun restoreModified(field: String, value: Any?, remove: Boolean = false): List<RouteOption> {
+                val array = org.json.JSONArray(original)
+                val saved = array.getJSONObject(0).getJSONArray("routeOptions").getJSONObject(0)
+                if (remove) saved.remove(field) else saved.put(field, value)
+                assertTrue(prefs.edit().putString("plans_json", array.toString()).commit())
+                return store.load().single().routeOptions
+            }
+            for (field in listOf("departureEpochMillis", "arrivalEpochMillis")) {
+                val invalid: List<Any> = listOf(
+                    "1700000000000", true, -1L, 0L, 1.25, Long.MAX_VALUE,
+                    org.json.JSONObject().put("epoch", base),
+                    org.json.JSONArray().put(base),
+                )
+                invalid.forEach { value ->
+                    assertTrue("Invalid $field=$value must reject route",
+                        restoreModified(field, value).isEmpty())
+                }
+                // Missing/nullable legacy values are intentionally represented as unknown.
+                assertEquals(null, if (field == "departureEpochMillis")
+                    restoreModified(field, null, remove = true).single().departureEpochMillis
+                else restoreModified(field, null, remove = true).single().arrivalEpochMillis)
+                assertEquals(null, if (field == "departureEpochMillis")
+                    restoreModified(field, org.json.JSONObject.NULL).single().departureEpochMillis
+                else restoreModified(field, org.json.JSONObject.NULL).single().arrivalEpochMillis)
+                assertEquals(1, restoreModified(field, base + 60_000L).size)
+            }
+            assertTrue("Arrival before departure cannot be used as route duration",
+                restoreModified("arrivalEpochMillis", base - 1L).isEmpty())
+            assertEquals(base + 90_000_000L,
+                restoreModified("arrivalEpochMillis", base + 90_000_000L)
+                    .single().arrivalEpochMillis)
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
 }
