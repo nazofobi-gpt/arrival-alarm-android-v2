@@ -253,4 +253,18 @@
     <string name="journey_show_fewer_stops">Daha az durak göster</string>
     <string name="readiness_share_diagnostics">Tanı özetini paylaş</string>
     <string name="readiness_share_diagnostics_note">Yalnız durum bilgileri paylaşılır. Konum, yolculuk geçmişi ve erişim anahtarları eklenmez.</string>
+    <string name="gtfs_consent_title">Sefer duraklarını onayla</string>
+    <string name="gtfs_consent_boarding">Biniş: %1$s</string>
+    <string name="gtfs_consent_choose_destination">İniş durağını seç</string>
+    <string name="gtfs_consent_alarm_target">Alarm hedefi (varsayılan: iniş durağı)</string>
+    <string name="gtfs_consent_invalid">Bu sefer için geçerli durak seçimi yapılamıyor.</string>
+    <string name="gtfs_consent_no_automatic_alarm">Seçim kaydedilir; varış alarmı kendiliğinden kurulmaz.</string>
+    <string name="gtfs_consent_save">Seçimi onayla ve kaydet</string>
+    <string name="gtfs_consent_cancel">Seçimden vazgeç</string>
+    <string name="gtfs_consent_loading">Sefer ve durak bilgileri doğrulanıyor…</string>
+    <string name="gtfs_consent_inspect_failed">Seferin güncel kaynağı doğrulanamadı. Başka bir kalkış seçin.</string>
+    <string name="gtfs_consent_save_failed">Seçim güvenle kaydedilemedi; alarm kurulmadı.</string>
+    <string name="gtfs_consent_saved">Seçim kaydedildi. Alarmı ayrıca etkinleştirin.</string>
+    <string name="gtfs_consent_restored">Kaydedilen sefer ve duraklar güncel veriyle doğrulandı.</string>
+    <string name="gtfs_consent_restore_invalid">Kaydedilen sefer değişmiş veya kullanılamıyor. Lütfen yeniden seçin.</string>
 </resources>

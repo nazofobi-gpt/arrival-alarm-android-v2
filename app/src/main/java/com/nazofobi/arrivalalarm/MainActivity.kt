@@ -133,6 +133,10 @@ fun ArrivalAlarmApp(
     val connectorSessionStore = graph.connectorSessionStore
     val connectorBaseUrl = BuildConfig.CONNECTOR_BASE_URL.trim().trimEnd('/')
     val coroutineScope = rememberCoroutineScope()
+    val selectedGtfsSession = remember(context) { AndroidSelectedGtfsTripSession(context) }
+    DisposableEffect(selectedGtfsSession) {
+        onDispose { selectedGtfsSession.close() }
+    }
     val transit: ArrivalTransitClient = remember(context, transitOverride) {
         transitOverride ?: NationwideTransitGateway(context)
     }
@@ -224,6 +228,13 @@ fun ArrivalAlarmApp(
     var stationStatus by remember { mutableStateOf<String?>(null) }
     var stationLoading by remember { mutableStateOf(false) }
     var stationResolved by remember { mutableStateOf(false) }
+    // A departure preview has no side effects. Only a separate, explicit user
+    // confirmation may write the service-day/stop-role snapshot; it never arms GPS.
+    val gtfsConsentGate = remember { LatestRequestGate() }
+    var gtfsPreview by remember { mutableStateOf<GtfsDepartureInspection.Ready?>(null) }
+    var gtfsConfirmed by remember { mutableStateOf<GtfsSelectionRestore.Verified?>(null) }
+    var gtfsConsentBusy by remember { mutableStateOf(false) }
+    var gtfsConsentStatus by remember { mutableStateOf<String?>(null) }
     var liveNowEpochSeconds by remember { mutableStateOf(System.currentTimeMillis() / 1_000) }
     var readinessRefreshTick by remember { mutableStateOf(0) }
     val routeCache = remember(context) {
@@ -1149,6 +1160,39 @@ fun ArrivalAlarmApp(
                         ?: routeOptions.firstOrNull()
                     val boardDepartures = if (boardStopId != null) stationDepartures else departures
                     val boardAlerts = if (stationResolved) stationAlerts else emptyList()
+                    LaunchedEffect(boardStopId, stationResolved) {
+                        gtfsConsentGate.invalidate()
+                        gtfsPreview = null
+                        gtfsConfirmed = null
+                        gtfsConsentBusy = false
+                        gtfsConsentStatus = null
+                        if (!boardStopId.isNullOrBlank() && stationResolved) {
+                            val token = gtfsConsentGate.begin()
+                            val restored = try {
+                                selectedGtfsSession.restore()
+                            } catch (_: RuntimeException) {
+                                GtfsSelectionRestore.Rejected(
+                                    GtfsSelectionRestoreProblem.TRIP_UNAVAILABLE,
+                                )
+                            }
+                            gtfsConsentGate.commitIfCurrent(token) {
+                                when (restored) {
+                                    is GtfsSelectionRestore.Verified -> {
+                                        gtfsConfirmed = restored
+                                        gtfsConsentStatus = context.getString(
+                                            R.string.gtfs_consent_restored,
+                                        )
+                                    }
+                                    is GtfsSelectionRestore.Rejected -> {
+                                        gtfsConsentStatus = context.getString(
+                                            R.string.gtfs_consent_restore_invalid,
+                                        )
+                                    }
+                                    GtfsSelectionRestore.Empty -> Unit
+                                }
+                            }
+                        }
+                    }
                     TransitExperiencePanel(
                         stopId = boardStopId
                             ?: "coord:${destinationPoint.latitude},${destinationPoint.longitude}",
@@ -1168,6 +1212,32 @@ fun ArrivalAlarmApp(
                             routeOptions.firstOrNull { it.id == routeId }
                                 ?.let { selectRouteOption(it) }
                         },
+                        onSelectDeparture = if (boardStopId != null && stationResolved) {
+                            departure: Departure ->
+                                val token = gtfsConsentGate.begin()
+                                gtfsPreview = null
+                                gtfsConfirmed = null
+                                gtfsConsentStatus = null
+                                gtfsConsentBusy = true
+                                coroutineScope.launch {
+                                    val inspected = try {
+                                        selectedGtfsSession.inspect(departure, boardStopId)
+                                    } catch (_: RuntimeException) {
+                                        GtfsDepartureInspection.Rejected(
+                                            GtfsDepartureInspectionFailure.TRIP_UNAVAILABLE,
+                                        )
+                                    }
+                                    gtfsConsentGate.commitIfCurrent(token) {
+                                        gtfsConsentBusy = false
+                                        gtfsPreview = inspected as? GtfsDepartureInspection.Ready
+                                        if (gtfsPreview == null) {
+                                            gtfsConsentStatus = context.getString(
+                                                R.string.gtfs_consent_inspect_failed,
+                                            )
+                                        }
+                                    }
+                                }
+                        } else null,
                         statusMessage = stationStatus
                             ?: if (boardStopId == null && !stationResolved && !stationLoading) {
                                 context.getString(R.string.departures_route_fallback)
@@ -1176,6 +1246,62 @@ fun ArrivalAlarmApp(
                         loading = stationLoading,
                         modifier = Modifier.fillMaxWidth().testTag("transit-experience-panel"),
                     )
+                    if (gtfsConsentBusy) {
+                        Text(
+                            stringResource(R.string.gtfs_consent_loading),
+                            modifier = Modifier.testTag("gtfs-consent-loading"),
+                        )
+                    }
+                    gtfsConsentStatus?.let {
+                        Text(it, modifier = Modifier.testTag("gtfs-consent-status"))
+                    }
+                    gtfsPreview?.let { preview ->
+                        GtfsTripConsentPanel(
+                            preview = preview,
+                            busy = gtfsConsentBusy,
+                            onDismiss = {
+                                gtfsConsentGate.invalidate()
+                                gtfsPreview = null
+                                gtfsConsentBusy = false
+                                gtfsConsentStatus = null
+                            },
+                            onConfirm = { selection ->
+                                val token = gtfsConsentGate.begin()
+                                gtfsConsentBusy = true
+                                coroutineScope.launch {
+                                    val saved = try {
+                                        selectedGtfsSession.confirm(selection)
+                                    } catch (_: RuntimeException) {
+                                        false
+                                    }
+                                    val verified = if (saved) {
+                                        try {
+                                            selectedGtfsSession.restore()
+                                        } catch (_: RuntimeException) {
+                                            null
+                                        }
+                                    } else null
+                                    gtfsConsentGate.commitIfCurrent(token) {
+                                        gtfsConsentBusy = false
+                                        if (verified is GtfsSelectionRestore.Verified &&
+                                            verified.selection == selection
+                                        ) {
+                                            gtfsConfirmed = verified
+                                            gtfsPreview = null
+                                            gtfsConsentStatus = context.getString(
+                                                R.string.gtfs_consent_saved,
+                                            )
+                                        } else {
+                                            gtfsConsentStatus = context.getString(
+                                                R.string.gtfs_consent_save_failed,
+                                            )
+                                        }
+                                    }
+                                }
+                            },
+                            modifier = Modifier.testTag("gtfs-consent-container"),
+                        )
+                    }
                 } else {
                     ScreenEmptyState(
                         title = stringResource(R.string.departures_empty_title),

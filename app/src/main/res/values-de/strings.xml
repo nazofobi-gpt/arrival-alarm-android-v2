@@ -245,4 +245,18 @@
     <string name="journey_show_fewer_stops">Weniger Halte anzeigen</string>
     <string name="readiness_share_diagnostics">Diagnoseübersicht teilen</string>
     <string name="readiness_share_diagnostics_note">Nur Statusangaben werden geteilt. Genaue Standorte, Fahrtenverlauf und Zugangsdaten bleiben ausgeschlossen.</string>
+    <string name="gtfs_consent_title">Haltestellen der Fahrt bestätigen</string>
+    <string name="gtfs_consent_boarding">Einstieg: %1$s</string>
+    <string name="gtfs_consent_choose_destination">Ausstiegshaltestelle wählen</string>
+    <string name="gtfs_consent_alarm_target">Alarmziel (Standard: Ausstieg)</string>
+    <string name="gtfs_consent_invalid">Für diese Fahrt ist keine gültige Haltestellenauswahl möglich.</string>
+    <string name="gtfs_consent_no_automatic_alarm">Die Auswahl wird gespeichert. Der Ankunftsalarm wird nicht automatisch aktiviert.</string>
+    <string name="gtfs_consent_save">Auswahl bestätigen und speichern</string>
+    <string name="gtfs_consent_cancel">Auswahl verwerfen</string>
+    <string name="gtfs_consent_loading">Fahrt und Haltestellen werden geprüft…</string>
+    <string name="gtfs_consent_inspect_failed">Die aktuelle Fahrtdatenquelle konnte nicht bestätigt werden. Andere Abfahrt wählen.</string>
+    <string name="gtfs_consent_save_failed">Die Auswahl wurde nicht sicher gespeichert; kein Alarm aktiviert.</string>
+    <string name="gtfs_consent_saved">Auswahl gespeichert. Alarm separat aktivieren.</string>
+    <string name="gtfs_consent_restored">Gespeicherte Fahrt und Haltestellen mit aktuellen Daten bestätigt.</string>
+    <string name="gtfs_consent_restore_invalid">Gespeicherte Fahrt geändert oder nicht verfügbar. Bitte erneut auswählen.</string>
 </resources>
