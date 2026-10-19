@@ -86,6 +86,7 @@ internal fun GtfsTripConsentPanel(
                         destinations.forEach { stop ->
                             DropdownMenuItem(
                                 text = { Text("${stop.name} (#${stop.stopSequence})") },
+                                enabled = !busy,
                                 onClick = {
                                     destinationSequence = stop.stopSequence
                                     alarmOverride = null
@@ -117,6 +118,7 @@ internal fun GtfsTripConsentPanel(
                             alarmStops.forEach { stop ->
                                 DropdownMenuItem(
                                     text = { Text("${stop.name} (#${stop.stopSequence})") },
+                                    enabled = !busy,
                                     onClick = {
                                         alarmOverride = stop.stopSequence
                                         invalidRoles = false
