@@ -41,7 +41,13 @@ internal class ProductionRealtimeJourneyOverlay(
             if (Thread.currentThread().isInterrupted) {
                 throw InterruptedException("Realtime lookup cancelled before dispatch")
             }
-            match(fetch(), now)
+            val response = fetch()
+            // A request can be cancelled while fetch() is completing. Never
+            // run matching against a result that the caller has abandoned.
+            if (Thread.currentThread().isInterrupted) {
+                throw InterruptedException("Realtime lookup cancelled after fetch")
+            }
+            match(response, now)
         } catch (interrupted: InterruptedException) {
             Thread.currentThread().interrupt()
             throw interrupted
