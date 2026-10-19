@@ -1,5 +1,6 @@
 package com.nazofobi.arrivalalarm
 
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -91,5 +92,42 @@ class GtfsTripConsentPanelInstrumentedTest {
         compose.onNodeWithTag("gtfs-consent-confirm").performClick()
         assertEquals(GtfsSelectedStopRef(20, "stop-20"), chosen?.alarmTarget)
         assertEquals(GtfsSelectedStopRef(30, "stop-30"), chosen?.destination)
+    }
+
+    @Test fun openDestinationChoicesAreDisabledWhenConsentBecomesBusy() {
+        val busy = mutableStateOf(false)
+        compose.setContent {
+            GtfsTripConsentPanel(
+                preview = GtfsDepartureInspection.Ready(detail, detail.stops.first()),
+                busy = busy.value,
+                onConfirm = {},
+                onDismiss = {},
+            )
+        }
+        compose.onNodeWithTag("gtfs-destination-picker").performClick()
+        compose.onNodeWithTag("gtfs-destination-30").assertIsEnabled()
+        compose.runOnUiThread { busy.value = true }
+        compose.waitForIdle()
+        compose.onNodeWithTag("gtfs-destination-30").assertIsNotEnabled()
+    }
+
+    @Test fun openAlarmChoicesAreDisabledWhenConsentBecomesBusy() {
+        val busy = mutableStateOf(false)
+        compose.setContent {
+            GtfsTripConsentPanel(
+                preview = GtfsDepartureInspection.Ready(detail, detail.stops.first()),
+                busy = busy.value,
+                onConfirm = {},
+                onDismiss = {},
+            )
+        }
+        compose.onNodeWithTag("gtfs-destination-picker").performClick()
+        compose.onNodeWithTag("gtfs-destination-30").performClick()
+        compose.onNodeWithTag("gtfs-alarm-target-picker").performClick()
+        compose.onNodeWithTag("gtfs-alarm-20").assertIsEnabled()
+        compose.runOnUiThread { busy.value = true }
+        compose.waitForIdle()
+        compose.onNodeWithTag("gtfs-alarm-20").assertIsNotEnabled()
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsNotEnabled()
     }
 }
