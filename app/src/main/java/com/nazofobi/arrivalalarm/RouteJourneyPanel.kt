@@ -561,9 +561,21 @@ private fun routeDurationMinutes(departure: String, arrival: String): Int? {
     return if (end >= start) end - start else end + 24 * 60 - start
 }
 
-private fun routeClock(value: String?): String? {
+/** Invalid provider labels must not be displayed as a scheduled stop clock. */
+internal fun routeClock(value: String?): String? {
     val raw = value?.substringAfter('T', value)?.takeIf { it.isNotBlank() } ?: return null
-    return raw.take(5).takeIf { it.length >= 4 }
+    if (raw.length != 5 && raw.length != 8) return null
+    if (raw[2] != ':' || (raw.length == 8 && raw[5] != ':')) return null
+    if (!raw.substring(0, 2).all { it in '0'..'9' } ||
+        !raw.substring(3, 5).all { it in '0'..'9' }) return null
+    val minute = raw.substring(3, 5).toInt()
+    if (minute !in 0..59) return null
+    if (raw.length == 8) {
+        if (!raw.substring(6, 8).all { it in '0'..'9' }) return null
+        if (raw.substring(6, 8).toInt() !in 0..59) return null
+    }
+    // GTFS extended service-day hours (24+) are valid; do not silently wrap them.
+    return raw.substring(0, 5)
 }
 
 private fun hasRealtimeDelta(stop: RouteStop): Boolean =
