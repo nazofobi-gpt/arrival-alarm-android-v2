@@ -56,6 +56,28 @@ data class TransitLocationResult(
         }
 }
 
+/** GTFS identifiers are scoped to their provider; identical stop IDs are not the same station. */
+internal fun providerScopedStopLocationKey(stop: CatalogStop): String =
+    "stop:${stop.providerId}:${stop.id}"
+
+/** Preserve different providers and genuine stations, while collapsing repeated source rows. */
+internal fun mergeTransitLocationResults(
+    local: List<TransitLocationResult>,
+    live: List<TransitLocationResult>,
+    limit: Int,
+): List<TransitLocationResult> {
+    if (limit <= 0) return emptyList()
+    return (local + live).distinctBy { result ->
+        if (result.kind == TransitLocationKind.STOP && result.stop != null) {
+            providerScopedStopLocationKey(result.stop)
+        } else {
+            "${result.kind}:${result.label.lowercase(Locale.ROOT)}:" +
+                "${"%.5f".format(Locale.ROOT, result.latitude)}:" +
+                "${"%.5f".format(Locale.ROOT, result.longitude)}"
+        }
+    }.take(limit)
+}
+
 data class StationDeparturesSnapshot(
     val departures: List<Departure> = emptyList(),
     val alerts: List<ServiceAlert> = emptyList(),
@@ -355,7 +377,7 @@ class NationwideTransitGateway(
     }
 
     private fun localLocation(stop: CatalogStop) = TransitLocationResult(
-        key = "stop:${stop.id}",
+        key = providerScopedStopLocationKey(stop),
         kind = TransitLocationKind.STOP,
         label = stop.name,
         latitude = stop.latitude,
@@ -367,18 +389,7 @@ class NationwideTransitGateway(
         local: List<TransitLocationResult>,
         live: List<TransitLocationResult>,
         limit: Int,
-    ): List<TransitLocationResult> =
-        (local + live)
-            .distinctBy { result ->
-                if (result.kind == TransitLocationKind.STOP && result.stop != null) {
-                    "stop:${result.stop.id}"
-                } else {
-                    "${result.kind}:${result.label.lowercase(Locale.ROOT)}:" +
-                        "${"%.5f".format(Locale.ROOT, result.latitude)}:" +
-                        "${"%.5f".format(Locale.ROOT, result.longitude)}"
-                }
-            }
-            .take(limit)
+    ): List<TransitLocationResult> = mergeTransitLocationResults(local, live, limit)
 
     private fun <T> liveLookup(
         outcome: TransitProviderOutcome<List<T>>,
