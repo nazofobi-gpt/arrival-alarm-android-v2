@@ -75,6 +75,70 @@ class ProductionRealtimeJourneyOverlayTest {
     }
 
     @Test
+    fun ambiguousLoopVisitsCannotInventRouteStopTimesOrPlatforms() {
+        fun update(sequence: Int, stopId: String, platform: String) =
+            GermanyRealtimeMatchedStopUpdate(
+                stopSequence = sequence,
+                scheduledStopId = stopId,
+                realtimeStopId = stopId,
+                assignedStopId = null,
+                platformCode = platform,
+                arrivalDelaySeconds = 120,
+                departureDelaySeconds = 120,
+                arrivalTimeEpochSeconds = null,
+                departureTimeEpochSeconds = null,
+                scheduleRelationship = "SCHEDULED",
+                pickupType = null,
+                dropOffType = null,
+                stopHeadsign = null,
+            )
+
+        fun matched(updates: List<GermanyRealtimeMatchedStopUpdate>) =
+            GermanyRealtimeOverlayResult.Matched(
+                tripOverlays = listOf(
+                    GermanyRealtimeTripOverlay(
+                        staticTrip = trip("T1"),
+                        startDate = "20261004",
+                        startTime = null,
+                        cancelled = false,
+                        scheduleRelationship = "SCHEDULED",
+                        stopUpdates = updates,
+                        sourceTimestampEpochSeconds = at("07:59:00") / 1_000L,
+                    ),
+                ),
+                serviceAlerts = emptyList(),
+                freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+                ageSeconds = 30,
+                provenance = provenance(),
+            )
+
+        // Multiple realtime visits to A must not pick whichever update came first.
+        val visits = listOf(update(1, "A", "8"), update(5, "A", "9"), update(2, "B", "4"))
+        for (ordered in listOf(visits, visits.reversed())) {
+            val result = overlay(matched(ordered)).enrich(listOf(option())).single()
+            assertNull(result.stops.first().departure)
+            assertNull(result.stops.first().platform)
+            assertEquals("1", result.stops.first().plannedPlatform)
+            assertEquals("2026-10-04T08:32:00+02:00", result.stops.last().arrival)
+            assertEquals("4", result.stops.last().platform)
+        }
+
+        // Even one provider update cannot identify a visit when the planned
+        // route itself contains the same stop_id more than once.
+        val loopRoute = option().let { original ->
+            original.copy(stops = original.stops + original.stops.first().copy(name = "Lohne return"))
+        }
+        val loop = overlay(matched(listOf(update(5, "A", "9"), update(2, "B", "4"))))
+            .enrich(listOf(loopRoute)).single()
+        assertNull(loop.stops[0].departure)
+        assertNull(loop.stops[0].platform)
+        assertNull(loop.stops[2].departure)
+        assertNull(loop.stops[2].platform)
+        assertEquals("2026-10-04T08:32:00+02:00", loop.stops[1].arrival)
+        assertEquals("4", loop.stops[1].platform)
+    }
+
+    @Test
     fun reversedProviderOrderUsesSelectedLegOrderAtTransferStop() {
         val selected = option().copy(
             tripIds = listOf("T1", "T2"),
