@@ -717,8 +717,11 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
     }
 
     private fun rows(reader: BufferedReader): Pair<List<String>, Sequence<List<String>>> {
-        val header = parseGtfsCsvHeader(reader.readLine() ?: error("GTFS dosyası boş"))
-        return header to generateSequence { reader.readLine() }.map(::parseCsvLine)
+        val records = gtfsCsvRecords(reader).iterator()
+        val header = parseGtfsCsvHeader(if (records.hasNext()) records.next() else error("GTFS dosyası boş"))
+        return header to generateSequence {
+            if (records.hasNext()) parseCsvLine(records.next()) else null
+        }
     }
 
     private inline fun importRows(reader: BufferedReader, crossinline consume: (List<String>, List<String>) -> Boolean): Int {
