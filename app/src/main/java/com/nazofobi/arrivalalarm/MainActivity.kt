@@ -380,22 +380,32 @@ fun ArrivalAlarmApp(
                 routeBusy = false
                 if (options.isNotEmpty()) {
                     routeOffline = false
+                    val hadSelection = selectedRouteId != null
+                    val retainedSelection = retainSelectedRouteAfterRefresh(
+                        selectedRouteId, routeOptions, options,
+                    )
                     routeOptions = options
-                    if (selectedRouteId !in options.map { it.id }) {
-                        selectedRouteId = null
-                    }
+                    selectedRouteId = retainedSelection
                     graph.routeRegistry.replace(options)
-                    routeStatus = status
+                    routeStatus = if (hadSelection && retainedSelection == null) {
+                        context.getString(R.string.error_trip_required)
+                    } else status
                     routeCache.put(CachedTransitPlan(key, options, emptyList(), System.currentTimeMillis() / 1000))
                 } else {
                     val cached = routeCache.routeOptions(key)
                     routeOffline = cached.isNotEmpty()
+                    val hadSelection = selectedRouteId != null
+                    val retainedSelection = retainSelectedRouteAfterRefresh(
+                        selectedRouteId, routeOptions, cached,
+                    )
                     routeOptions = cached
-                    if (selectedRouteId !in cached.map { it.id }) {
-                        selectedRouteId = null
-                    }
+                    selectedRouteId = retainedSelection
                     graph.routeRegistry.replace(cached)
-                    routeStatus = if (cached.isNotEmpty()) context.getString(R.string.route_offline_fallback) else status
+                    routeStatus = when {
+                        hadSelection && retainedSelection == null -> context.getString(R.string.error_trip_required)
+                        cached.isNotEmpty() -> context.getString(R.string.route_offline_fallback)
+                        else -> status
+                    }
                 }
             }
         }
