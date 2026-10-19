@@ -268,7 +268,7 @@ class SearchMapPlannerTest {
             },
         )
 
-        assertTrue(geocoder.addressOrPoi("  \\t  ").isEmpty())
+        assertTrue(geocoder.addressOrPoi("    ").isEmpty())
         assertTrue(queries.isEmpty())
         assertEquals(listOf(valid), geocoder.addressOrPoi("  Berlin  "))
         assertEquals(listOf("Berlin"), queries)
