@@ -100,4 +100,71 @@ class AndroidSelectedGtfsTripSessionInstrumentedTest {
             (session.restore() as GtfsSelectionRestore.Rejected).reason,
         )
     }
+
+    private fun concreteDeparture() = Departure(
+        tripId = "T",
+        line = "RE1",
+        direction = "Achim",
+        scheduledEpochSeconds = 1_900_000_000L,
+        routeId = "R",
+        gtfsInstance = identity,
+        boardingStopSequence = 10,
+    )
+
+    @Test fun concreteDeparturePreviewsRolesWithoutConsentOrAlarmAndPersistsOnlyAfterConfirmation() = runBlocking {
+        seedSchedule()
+        AndroidSelectedGtfsTripSession(context).use { session ->
+            val preview = session.preview(concreteDeparture(), "A") as GtfsDeparturePreview.Available
+            assertEquals(identity, preview.detail.identity)
+            assertEquals("A", preview.boarding.stopId)
+            assertEquals(listOf("B", "C"), preview.destinations.map { it.stopId })
+            assertEquals(GtfsSelectionRestore.Empty, session.restore())
+            assertEquals(null, preview.selectionFor(5))
+            assertEquals(null, preview.selectionFor(30, 40))
+            val approved = preview.selectionFor(30, 20)!!
+            assertEquals(selection, approved)
+            assertTrue(session.confirm(approved))
+            assertEquals(approved, (session.restore() as GtfsSelectionRestore.Verified).selection)
+        }
+    }
+
+    @Test fun boardPreviewRejectsMissingSourceIdentityWrongPlatformAndCancelledOrFrequencyRows() = runBlocking {
+        seedSchedule()
+        AndroidSelectedGtfsTripSession(context).use { session ->
+            val row = concreteDeparture()
+            fun rejected(result: GtfsDeparturePreview) =
+                (result as GtfsDeparturePreview.Rejected).problem
+            assertEquals(
+                GtfsDeparturePreviewProblem.INCOMPLETE_OR_CANCELLED_DEPARTURE,
+                rejected(session.preview(row.copy(gtfsInstance = null), "A")),
+            )
+            assertEquals(
+                GtfsDeparturePreviewProblem.INCOMPLETE_OR_CANCELLED_DEPARTURE,
+                rejected(session.preview(row.copy(cancelled = true), "A")),
+            )
+            assertEquals(
+                GtfsDeparturePreviewProblem.INCOMPLETE_OR_CANCELLED_DEPARTURE,
+                rejected(session.preview(row.copy(realtimeTripStartDate = "20261018"), "A")),
+            )
+            assertEquals(
+                GtfsDeparturePreviewProblem.BOARDING_STOP_MISMATCH,
+                rejected(session.preview(row, "B")),
+            )
+            assertEquals(GtfsSelectionRestore.Empty, session.restore())
+        }
+    }
+
+    @Test fun boardPreviewFailsClosedWithoutInstalledGtfsOrAfterSessionClose() = runBlocking {
+        val row = concreteDeparture()
+        val session = AndroidSelectedGtfsTripSession(context)
+        assertEquals(
+            GtfsDeparturePreviewProblem.TRIP_UNAVAILABLE,
+            (session.preview(row, "A") as GtfsDeparturePreview.Rejected).problem,
+        )
+        session.close()
+        assertEquals(
+            GtfsDeparturePreviewProblem.SESSION_CLOSED,
+            (session.preview(row, "A") as GtfsDeparturePreview.Rejected).problem,
+        )
+    }
 }
