@@ -27,6 +27,13 @@ class ProviderProbeDiagnosticsTest {
         assertFalse(summary.contains("123456"))
     }
 
+    @Test fun orphanLatencyIsNotAttributedToUnknownProvider() {
+        val summary = ProviderProbeDiagnostics.render(null, 50L)
+        assertEquals("unknown", summary.value("provider_role"))
+        assertEquals("not_measured", summary.value("provider_state"))
+        assertEquals("not_measured", summary.value("latency_bucket"))
+    }
+
     @Test fun unknownProviderCannotBeReportedReadyEvenWithLatency() {
         val health = TransitProviderHealth(
             providerId = "unrecognized-provider",
