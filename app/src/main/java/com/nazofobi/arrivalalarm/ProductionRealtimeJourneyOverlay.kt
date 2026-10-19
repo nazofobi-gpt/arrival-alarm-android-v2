@@ -115,9 +115,24 @@ internal class ProductionRealtimeJourneyOverlay(
             )
         }
 
+        // A stop_id is not a stop visit: loop trips can visit it twice with
+        // different stop_sequence values. RouteStop has no sequence/leg binding,
+        // so an ambiguous update must not overwrite the static time/platform.
+        // Keep distinct arriving/departing leg updates at a single transfer stop.
+        val ambiguousStopIds = mutableSetOf<String>()
+        fun markRepeatedIds(ids: List<String>) {
+            ids.groupingBy { it }.eachCount().forEach { (id, count) ->
+                if (count > 1) ambiguousStopIds += id
+            }
+        }
+        markRepeatedIds(option.stops.mapNotNull { it.id })
+        tripOverlays.forEach { trip ->
+            markRepeatedIds(trip.stopUpdates.map { it.scheduledStopId })
+        }
+
         val updates = tripOverlays.flatMap { it.stopUpdates }
         val enrichedStops = option.stops.map { stop ->
-            val matching = stop.id?.let { stopId ->
+            val matching = stop.id?.takeUnless { it in ambiguousStopIds }?.let { stopId ->
                 updates.filter { it.scheduledStopId == stopId }
             }.orEmpty()
             if (matching.isEmpty()) {
