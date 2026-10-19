@@ -129,11 +129,9 @@ private fun MapPoint.toJson(): JSONObject = JSONObject()
     .put("label", label)
 
 private fun JSONObject.toMapPoint(): MapPoint? {
-    val latitude = optDouble("latitude", Double.NaN)
-    val longitude = optDouble("longitude", Double.NaN)
-    if (!latitude.isFinite() || latitude !in -90.0..90.0 ||
-        !longitude.isFinite() || longitude !in -180.0..180.0
-    ) return null
+    // Saved coordinates must be JSON numbers; org.json otherwise coerces strings.
+    val latitude = strictStoredCoordinateOrNull("latitude", -90.0, 90.0) ?: return null
+    val longitude = strictStoredCoordinateOrNull("longitude", -180.0, 180.0) ?: return null
     return MapPoint(latitude, longitude, optString("label"))
 }
 
@@ -254,10 +252,13 @@ private fun JSONObject.strictPositiveStoredEpochMillisOrNull(key: String): Long?
         ?.takeIf { it > 0L && it <= 253_402_300_799_999L }
 
 private fun JSONObject.optNullableDouble(key: String): Double? =
-    if (!has(key) || isNull(key)) null else optDouble(key).takeIf { it.isFinite() }
+    (opt(key) as? Number)?.toDouble()?.takeIf { it.isFinite() }
+
+/** Reject nonnumeric JSON coordinates rather than accepting org.json's conversions. */
+private fun JSONObject.strictStoredCoordinateOrNull(key: String, min: Double, max: Double): Double? =
+    (opt(key) as? Number)?.toDouble()?.takeIf { it.isFinite() && it in min..max }
 
 private fun JSONObject.hasInvalidCoordinate(key: String, min: Double, max: Double): Boolean {
     if (!has(key) || isNull(key)) return false
-    val value = optDouble(key, Double.NaN)
-    return !value.isFinite() || value !in min..max
+    return strictStoredCoordinateOrNull(key, min, max) == null
 }
