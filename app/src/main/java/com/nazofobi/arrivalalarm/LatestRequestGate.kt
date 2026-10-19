@@ -15,7 +15,9 @@ internal class LatestRequestGate {
         generation.incrementAndGet()
     }
 
-    fun isCurrent(token: Long): Boolean = token == generation.get()
+    // Zero is the unissued initial generation, never a valid request ticket.
+    // Negative tokens also fail closed if an extreme counter wrap occurs.
+    fun isCurrent(token: Long): Boolean = token > 0L && token == generation.get()
 
     /** Runs the callback atomically against a simultaneous selection change. */
     @Synchronized fun commitIfCurrent(token: Long, update: () -> Unit): Boolean {
