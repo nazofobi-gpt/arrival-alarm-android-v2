@@ -60,6 +60,18 @@ class TripStopRoleValidatorTest {
         )
     }
 
+    @Test fun boardingStopCannotBeAnArrivalAlarmTarget() {
+        assertEquals(
+            TripStopRoleProblem.WRONG_STOP_ORDER,
+            rejected(detail, TripStopRoles(2, 13, 2)),
+        )
+        // A later stop within the journey remains a valid early alarm target.
+        assertTrue(
+            TripStopRoleValidator.validate(detail, TripStopRoles(2, 13, 7))
+                is TripStopRoleResult.Accepted,
+        )
+    }
+
     @Test fun gtfsNoPickupAndRequestOnlyDropOffAreNotSilentlyAllowed() {
         val noPickup = detail.copy(
             stops = listOf(stop(2, "Lohne").copy(pickupType = 1)) + detail.stops.drop(1)
