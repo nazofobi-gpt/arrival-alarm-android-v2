@@ -66,6 +66,8 @@ private fun RouteOption.toJson(): JSONObject = JSONObject()
     .put("stops", JSONArray().apply { stops.forEach { put(it.toJson()) } })
     .putNullable("refreshToken", refreshToken)
     .putNullable("sourceUpdatedAtEpochSeconds", sourceUpdatedAtEpochSeconds)
+    .putNullable("departureEpochMillis", departureEpochMillis)
+    .putNullable("arrivalEpochMillis", arrivalEpochMillis)
 
 private fun JSONObject.toRouteOption(): RouteOption? {
     val origin = optJSONObject("origin")?.toMapPoint() ?: return null
@@ -89,6 +91,19 @@ private fun JSONObject.toRouteOption(): RouteOption? {
         !has("sourceUpdatedAtEpochSeconds") || isNull("sourceUpdatedAtEpochSeconds") -> null
         else -> strictNonNegativeEpochSecondsOrNull("sourceUpdatedAtEpochSeconds") ?: return null
     }
+    // Legacy itineraries have no exact instants; malformed present values cannot be trusted.
+    val departureEpochMillis = when {
+        !has("departureEpochMillis") || isNull("departureEpochMillis") -> null
+        else -> strictPositiveStoredEpochMillisOrNull("departureEpochMillis") ?: return null
+    }
+    val arrivalEpochMillis = when {
+        !has("arrivalEpochMillis") || isNull("arrivalEpochMillis") -> null
+        else -> strictPositiveStoredEpochMillisOrNull("arrivalEpochMillis") ?: return null
+    }
+    // Reject impossible itinerary chronology rather than show a misleading duration.
+    if (departureEpochMillis != null && arrivalEpochMillis != null &&
+        arrivalEpochMillis < departureEpochMillis
+    ) return null
     return RouteOption(
         id = id,
         origin = origin,
@@ -103,6 +118,8 @@ private fun JSONObject.toRouteOption(): RouteOption? {
         stops = stops,
         refreshToken = optNullableString("refreshToken"),
         sourceUpdatedAtEpochSeconds = sourceUpdatedAt,
+        departureEpochMillis = departureEpochMillis,
+        arrivalEpochMillis = arrivalEpochMillis,
     )
 }
 
@@ -230,6 +247,11 @@ private fun JSONObject.strictPositiveEpochSecondsOrNull(key: String): Long? =
 private fun JSONObject.strictNonNegativeEpochSecondsOrNull(key: String): Long? =
     (opt(key) as? Number)?.toString()?.toLongOrNull()
         ?.takeIf { it >= 0L && it <= Long.MAX_VALUE / 1_000L }
+
+/** Exact positive numeric milliseconds, bounded to the supported calendar range through year 9999. */
+private fun JSONObject.strictPositiveStoredEpochMillisOrNull(key: String): Long? =
+    (opt(key) as? Number)?.toString()?.toLongOrNull()
+        ?.takeIf { it > 0L && it <= 253_402_300_799_999L }
 
 private fun JSONObject.optNullableDouble(key: String): Double? =
     if (!has(key) || isNull(key)) null else optDouble(key).takeIf { it.isFinite() }
