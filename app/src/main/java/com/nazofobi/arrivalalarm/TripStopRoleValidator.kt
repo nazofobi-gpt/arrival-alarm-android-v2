@@ -15,6 +15,7 @@ data class ConfirmedTripStopRoles(
 )
 
 enum class TripStopRoleProblem {
+    UNSUPPORTED_FREQUENCY_INSTANCE,
     INVALID_STOP_SEQUENCE,
     BOARDING_STOP_NOT_FOUND,
     DESTINATION_STOP_NOT_FOUND,
@@ -38,6 +39,11 @@ sealed interface TripStopRoleResult {
 object TripStopRoleValidator {
     fun validate(detail: GtfsTripDetail, roles: TripStopRoles): TripStopRoleResult {
         fun reject(reason: TripStopRoleProblem) = TripStopRoleResult.Rejected(reason)
+        // A frequency template is not a uniquely identified scheduled departure.
+        // Its stop roles cannot be confirmed until the precise instance is resolved.
+        if (detail.identity.frequencyStartSeconds != null) {
+            return reject(TripStopRoleProblem.UNSUPPORTED_FREQUENCY_INSTANCE)
+        }
         val stops = detail.stops
         if (stops.size < 2 || stops.any {
                 it.stopSequence < 0 || it.stopId.isBlank() || it.name.isBlank() ||
