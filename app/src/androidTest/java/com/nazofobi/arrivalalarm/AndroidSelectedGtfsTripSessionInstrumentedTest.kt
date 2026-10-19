@@ -26,6 +26,16 @@ class AndroidSelectedGtfsTripSessionInstrumentedTest {
         GtfsSelectedStopRef(20, "B"),
     )
 
+    private fun scheduledDeparture() = Departure(
+        tripId = identity.tripId,
+        line = "RE1",
+        direction = "Achim",
+        scheduledEpochSeconds = 1_760_000_000L,
+        routeId = identity.routeId,
+        gtfsInstance = identity,
+        boardingStopSequence = 10,
+    )
+
     @Before fun clean() {
         context.deleteDatabase("nationwide_transit.db")
         context.getSharedPreferences("selected_gtfs_trip_state", Context.MODE_PRIVATE)
@@ -100,4 +110,97 @@ class AndroidSelectedGtfsTripSessionInstrumentedTest {
             (session.restore() as GtfsSelectionRestore.Rejected).reason,
         )
     }
+    @Test fun boardInspectionExposesExactStopsWithoutSavingOrArming() = runBlocking {
+        seedSchedule()
+        AndroidSelectedGtfsTripSession(context).use { session ->
+            val inspected = session.inspect(scheduledDeparture(), "A")
+            assertTrue(inspected is GtfsDepartureInspection.Ready)
+            val preview = inspected as GtfsDepartureInspection.Ready
+            assertEquals(identity, preview.detail.identity)
+            assertEquals(10, preview.boarding.stopSequence)
+            assertEquals("A", preview.boarding.stopId)
+            assertEquals(listOf(10, 20, 30), preview.detail.stops.map { it.stopSequence })
+            // A departure preview is not user approval of destination/alarm roles.
+            assertEquals(GtfsSelectionRestore.Empty, session.restore())
+        }
+    }
+
+    @Test fun boardInspectionRejectsSyntheticCancelledOrConflictingEvidence() = runBlocking {
+        seedSchedule()
+        AndroidSelectedGtfsTripSession(context).use { session ->
+            val valid = scheduledDeparture()
+            assertEquals(
+                GtfsDepartureInspection.Rejected(
+                    GtfsDepartureInspectionFailure.SOURCE_IDENTITY_MISSING,
+                ),
+                session.inspect(valid.copy(gtfsInstance = null), "A"),
+            )
+            assertEquals(
+                GtfsDepartureInspection.Rejected(
+                    GtfsDepartureInspectionFailure.SOURCE_IDENTITY_MISSING,
+                ),
+                session.inspect(valid.copy(boardingStopSequence = null), "A"),
+            )
+            assertEquals(
+                GtfsDepartureInspection.Rejected(
+                    GtfsDepartureInspectionFailure.CANCELLED_DEPARTURE,
+                ),
+                session.inspect(valid.copy(cancelled = true), "A"),
+            )
+            for (invalid in listOf(
+                valid.copy(tripId = "another-trip"),
+                valid.copy(routeId = "another-route"),
+                valid.copy(boardingStopSequence = 99),
+                valid.copy(boardingStopSequence = -1),
+                valid.copy(scheduledEpochSeconds = 0L),
+            )) {
+                assertEquals(
+                    GtfsDepartureInspection.Rejected(
+                        GtfsDepartureInspectionFailure.SOURCE_EVIDENCE_MISMATCH,
+                    ),
+                    session.inspect(invalid, "A"),
+                )
+            }
+            // The sequence alone is insufficient: a platform or loop stop may differ.
+            assertEquals(
+                GtfsDepartureInspection.Rejected(
+                    GtfsDepartureInspectionFailure.SOURCE_EVIDENCE_MISMATCH,
+                ),
+                session.inspect(valid, "B"),
+            )
+            assertEquals(GtfsSelectionRestore.Empty, session.restore())
+        }
+    }
+
+    @Test fun boardInspectionRejectsDisallowedPickupAndUnavailableIndex() = runBlocking {
+        AndroidSelectedGtfsTripSession(context).use { missing ->
+            assertEquals(
+                GtfsDepartureInspection.Rejected(
+                    GtfsDepartureInspectionFailure.TRIP_UNAVAILABLE,
+                ),
+                missing.inspect(scheduledDeparture(), "A"),
+            )
+        }
+        seedSchedule()
+        NationwideTransitIndex(context).use { index ->
+            index.writableDatabase.execSQL(
+                "UPDATE stop_times SET pickup_type=1 WHERE trip_id='T' AND stop_sequence=10"
+            )
+        }
+        val session = AndroidSelectedGtfsTripSession(context)
+        assertEquals(
+            GtfsDepartureInspection.Rejected(
+                GtfsDepartureInspectionFailure.BOARDING_NOT_ALLOWED,
+            ),
+            session.inspect(scheduledDeparture(), "A"),
+        )
+        session.close()
+        assertEquals(
+            GtfsDepartureInspection.Rejected(
+                GtfsDepartureInspectionFailure.SESSION_CLOSED,
+            ),
+            session.inspect(scheduledDeparture(), "A"),
+        )
+    }
+
 }
