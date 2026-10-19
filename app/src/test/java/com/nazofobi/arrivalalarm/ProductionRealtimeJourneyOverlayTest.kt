@@ -75,6 +75,55 @@ class ProductionRealtimeJourneyOverlayTest {
     }
 
     @Test
+    fun blankRealtimePlatformPreservesKnownPlatformWhileNonblankIsNormalized() {
+        fun matchedPlatform(platform: String) = GermanyRealtimeOverlayResult.Matched(
+            tripOverlays = listOf(
+                GermanyRealtimeTripOverlay(
+                    staticTrip = trip("T1"),
+                    startDate = "20261004",
+                    startTime = "08:00:00",
+                    cancelled = false,
+                    scheduleRelationship = "SCHEDULED",
+                    stopUpdates = listOf(
+                        GermanyRealtimeMatchedStopUpdate(
+                            stopSequence = 2,
+                            scheduledStopId = "B",
+                            realtimeStopId = "B",
+                            assignedStopId = null,
+                            platformCode = platform,
+                            arrivalDelaySeconds = null,
+                            departureDelaySeconds = null,
+                            arrivalTimeEpochSeconds = at("08:32:00") / 1_000L,
+                            departureTimeEpochSeconds = null,
+                            scheduleRelationship = "SCHEDULED",
+                            pickupType = null,
+                            dropOffType = null,
+                            stopHeadsign = null,
+                        ),
+                    ),
+                    sourceTimestampEpochSeconds = at("07:59:00") / 1_000L,
+                ),
+            ),
+            serviceAlerts = emptyList(),
+            freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+            ageSeconds = 30,
+            provenance = provenance(),
+        )
+        val known = option().let { original ->
+            original.copy(stops = original.stops.dropLast(1) +
+                original.stops.last().copy(platform = "6"))
+        }
+
+        for (blank in listOf("", " ", "\t")) {
+            val actual = overlay(matchedPlatform(blank)).enrich(listOf(known)).single()
+            assertEquals("blank=$blank", "6", actual.stops.last().platform)
+            assertEquals("2026-10-04T08:32:00+02:00", actual.stops.last().arrival)
+        }
+        val nonblank = overlay(matchedPlatform(" 8 ")).enrich(listOf(known)).single()
+        assertEquals("8", nonblank.stops.last().platform)
+    }
+
+    @Test
     fun ambiguousLoopVisitsCannotInventRouteStopTimesOrPlatforms() {
         fun update(sequence: Int, stopId: String, platform: String) =
             GermanyRealtimeMatchedStopUpdate(
