@@ -4,6 +4,29 @@ import java.io.BufferedReader
 
 private enum class GtfsCsvFieldState { START, UNQUOTED, QUOTED, AFTER_QUOTE, AFTER_QUOTE_WS }
 
+/**
+ * Reads a physical CSV line without first allocating an unbounded readLine() result.
+ * Delimiter semantics match BufferedReader.readLine(): LF, CR, and CRLF.
+ */
+private fun readBoundedGtfsPhysicalLine(reader: BufferedReader, maxChars: Int): String? {
+    val line = StringBuilder()
+    while (true) {
+        when (val next = reader.read()) {
+            -1 -> return if (line.isEmpty()) null else line.toString()
+            '\n'.code -> return line.toString()
+            '\r'.code -> {
+                reader.mark(1)
+                if (reader.read() != '\n'.code) reader.reset()
+                return line.toString()
+            }
+            else -> {
+                check(line.length < maxChars) { "GTFS CSV record exceeds size limit" }
+                line.append(next.toChar())
+            }
+        }
+    }
+}
+
 /** Yields complete GTFS CSV records, including quoted newlines, without loading the feed. */
 internal fun gtfsCsvRecords(
     reader: BufferedReader,
@@ -15,17 +38,12 @@ internal fun gtfsCsvRecords(
     var hasLine = false
     var firstRecord = true
     while (true) {
-        val line = reader.readLine() ?: break
-        if (hasLine) {
-            check(record.length < maxRecordChars) { "GTFS CSV record exceeds size limit" }
-            record.append('\n')
-        }
-        check(line.length <= maxRecordChars - record.length) {
-            "GTFS CSV record exceeds size limit"
-        }
+        val remainingChars = maxRecordChars - record.length - if (hasLine) 1 else 0
+        check(remainingChars >= 0) { "GTFS CSV record exceeds size limit" }
+        val line = readBoundedGtfsPhysicalLine(reader, remainingChars) ?: break
+        if (hasLine) record.append('\n')
         record.append(line)
         for ((index, character) in line.withIndex()) {
-            // The UTF-8 BOM belongs to the first header, not to its first field.
             if (firstRecord && !hasLine && index == 0 && character == '\uFEFF') continue
             fieldState = when (fieldState) {
                 GtfsCsvFieldState.START -> when (character) {
@@ -43,7 +61,7 @@ internal fun gtfsCsvRecords(
                     else -> GtfsCsvFieldState.QUOTED
                 }
                 GtfsCsvFieldState.AFTER_QUOTE -> when (character) {
-                    '"' -> GtfsCsvFieldState.QUOTED // Escaped pair inside a quoted field.
+                    '"' -> GtfsCsvFieldState.QUOTED
                     ',' -> GtfsCsvFieldState.START
                     ' ', '\t' -> GtfsCsvFieldState.AFTER_QUOTE_WS
                     else -> error("GTFS CSV record has text after a closing quote")
