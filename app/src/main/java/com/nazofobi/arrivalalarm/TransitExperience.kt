@@ -26,6 +26,16 @@ data class Departure(
     val isRealtime: Boolean get() = realtimeEpochSeconds?.let { it > 0L } == true
 }
 
+/** Identity is stable across realtime delay updates and distinguishes frequency instances. */
+internal fun Departure.sameScheduledInstanceAs(other: Departure): Boolean =
+    tripId == other.tripId &&
+        scheduledEpochSeconds == other.scheduledEpochSeconds &&
+        routeId == other.routeId &&
+        line == other.line &&
+        direction == other.direction &&
+        realtimeTripStartDate == other.realtimeTripStartDate &&
+        realtimeTripStartTime == other.realtimeTripStartTime
+
 data class ServiceAlert(val id: String, val title: String, val detail: String)
 data class LiveVehicle(val tripId: String, val point: GeoPoint)
 data class AccessibilityPreference(val stepFreeOnly: Boolean = false, val extraTransferMinutes: Int = 0)
@@ -50,6 +60,10 @@ class TransitExperienceEngine(private val capabilities: TransitProviderCapabilit
 
     fun alerts(values: List<ServiceAlert>): List<ServiceAlert> = if (capabilities.serviceAlerts) values else emptyList()
     fun vehicles(values: List<LiveVehicle>): List<LiveVehicle> = if (capabilities.liveVehiclePositions) values else emptyList()
+
+    /** Exclude only the selected departure, not every service of its GTFS template. */
+    fun alternateDepartures(values: List<Departure>, selected: Departure, nowEpochSeconds: Long): List<Departure> =
+        departureBoard(values.filterNot { it.sameScheduledInstanceAs(selected) }, nowEpochSeconds)
 
     fun alternateDepartures(values: List<Departure>, selectedTripId: String, nowEpochSeconds: Long): List<Departure> =
         departureBoard(values.filterNot { it.tripId == selectedTripId }, nowEpochSeconds)
