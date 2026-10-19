@@ -43,6 +43,11 @@ def placeholders(value: str) -> Counter[tuple[int, str]]:
         if match is None:
             raise ValueError(f"malformed format argument at offset {start}")
         conversion = match.group(3)
+        # Java Formatter throws DuplicateFormatFlagsException when a flag repeats.
+        # Reject these tokens even if all translations contain the same invalid form.
+        flags = match.group(2)
+        if len(flags) != len(set(flags)):
+            raise ValueError(f"duplicate format flags at offset {start}")
         if len(conversion) == 2:
             if conversion[1] not in VALID_DATETIME_SUFFIXES:
                 raise ValueError(f"unsupported date/time conversion %{conversion} at offset {start}")
