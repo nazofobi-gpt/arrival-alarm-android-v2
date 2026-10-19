@@ -117,6 +117,37 @@ class GtfsTripDetailResolverTest {
     }
 
     @Test
+    fun malformedScheduledStopClocksCannotBecomeConfirmableTripDetails() {
+        val source = FakeSource()
+        val resolver = GtfsTripDetailResolver(source)
+        val identity = GtfsTripInstanceIdentity.scheduled(trip, serviceDate)
+        val original = source.times
+        val malformed = listOf("08:60:00", "08:00:60", "08:00", "08:00:00junk", "-1:00:00", "1000:00:00", "")
+        for (clock in malformed) {
+            source.times = original.mapIndexed { index, stop ->
+                if (index == 1) stop.copy(departureTime = clock) else stop
+            }
+            assertEquals(
+                "Invalid departure clock must be rejected: $clock",
+                GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.INVALID_STOP_TIME),
+                resolver.resolve(identity),
+            )
+        }
+        source.times = original.mapIndexed { index, stop ->
+            if (index == 1) stop.copy(arrivalTime = "24:99:00") else stop
+        }
+        assertEquals(
+            GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.INVALID_STOP_TIME),
+            resolver.resolve(identity),
+        )
+        // Extended service-day clocks stay supported. A non-timepoint may be null.
+        source.times = original.mapIndexed { index, stop ->
+            if (index == 1) stop.copy(arrivalTime = null, departureTime = "26:05:07") else stop
+        }
+        assertTrue(resolver.resolve(identity) is GtfsTripDetailResult.Available)
+    }
+
+    @Test
     fun rejectsFrequencyTemplateAndPotentiallyTruncatedSequence() {
         val source = FakeSource()
         val identity = GtfsTripInstanceIdentity.scheduled(trip, serviceDate)
