@@ -114,6 +114,57 @@ class OfflineTransitCachePersistenceInstrumentedTest {
     }
 
     @Test
+    fun wrongTypedRestoredStopNameRejectsRouteWithoutCoercion() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val store = SharedPreferencesTransitCacheStore(context)
+        val route = RouteOption(
+            id = "route-stop-name",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
+            line = "RE", direction = "Bremen",
+            departure = "10:00", arrival = "11:00",
+            walkingMinutes = 0, transfers = 0,
+            stops = listOf(RouteStop(id = "stop-a", name = "Lohne")),
+        )
+        try {
+            prefs.edit().clear().commit()
+            store.save(listOf(
+                CachedTransitPlan("valid", listOf(route), emptyList(), 100L),
+                CachedTransitPlan("damaged", listOf(route.copy(id = "damaged-route")), emptyList(), 101L),
+            ))
+            val baseline = requireNotNull(prefs.getString("plans_json", null))
+            fun restoreWithStopName(value: Any?): List<CachedTransitPlan> {
+                val snapshot = org.json.JSONArray(baseline)
+                val stop = snapshot.getJSONObject(1).getJSONArray("routeOptions")
+                    .getJSONObject(0).getJSONArray("stops").getJSONObject(0)
+                if (value == null) stop.remove("name") else stop.put("name", value)
+                assertTrue(prefs.edit().putString("plans_json", snapshot.toString()).commit())
+                return store.load()
+            }
+            val malformed: List<Any?> = listOf(
+                null, org.json.JSONObject.NULL, 123, true,
+                org.json.JSONArray().put("Lohne"),
+                org.json.JSONObject().put("name", "Lohne"), "",
+            )
+            malformed.forEach { value ->
+                val restored = restoreWithStopName(value)
+                assertEquals(listOf("valid", "damaged"), restored.map { it.key })
+                assertEquals("Lohne", restored.first().routeOptions.single().stops.single().name)
+                // Reject the entire corrupted itinerary, not only the invalid stop.
+                assertTrue("Coerced stop name accepted: $value", restored.last().routeOptions.isEmpty())
+            }
+            assertEquals(
+                "München Hauptbahnhof",
+                restoreWithStopName("München Hauptbahnhof")
+                    .last().routeOptions.single().stops.single().name,
+            )
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
+    @Test
     fun cachedRouteSurvivesCacheRecreation() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
