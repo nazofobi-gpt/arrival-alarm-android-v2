@@ -313,7 +313,16 @@ internal class ProductionRealtimeStationOverlay(
     ): ProductionStationDeparturesResult {
         if (planned.isEmpty()) return ProductionStationDeparturesResult(emptyList())
         val overlay = try {
-            match(fetch(), nowEpochSeconds())
+            // A cancelled lookup must never begin provider I/O or run matching.
+            if (Thread.currentThread().isInterrupted) {
+                throw InterruptedException("Station realtime lookup cancelled before fetch")
+            }
+            val response = fetch()
+            // Cancellation may occur while the provider call is completing.
+            if (Thread.currentThread().isInterrupted) {
+                throw InterruptedException("Station realtime lookup cancelled after fetch")
+            }
+            match(response, nowEpochSeconds())
         } catch (interrupted: InterruptedException) {
             // Cancellation is not an upstream outage; preserve the interrupt signal.
             Thread.currentThread().interrupt()
