@@ -199,6 +199,10 @@ data class LabeledInferenceFixture(
     val observation: MovementObservation,
     val candidates: List<TripCandidate>,
     val expectedRouteId: String?,
+    // Optional frozen-label detail: a route alone does not uniquely identify
+    // its direction or a particular scheduled departure.
+    val expectedDirection: String? = null,
+    val expectedScheduledEpochSeconds: Long? = null,
 )
 
 data class TripInferenceMetrics(
@@ -220,13 +224,24 @@ object TripInferenceEvaluator {
         var truePositive = 0
 
         fixtures.forEach { fixture ->
-            val predicted = engine.infer(fixture.observation, fixture.candidates).accepted?.candidate?.routeId
-            if (predicted != null) suggestions++
-            if (predicted == fixture.expectedRouteId) {
-                correct++
-                if (predicted != null) truePositive++
+            val accepted = engine.infer(fixture.observation, fixture.candidates).accepted?.candidate
+            if (accepted != null) suggestions++
+            // A correct route with the wrong direction or departure must not
+            // count as an accurate trip-identification result in frozen QA.
+            val matchesLabel = if (accepted == null) {
+                fixture.expectedRouteId == null
             } else {
-                if (predicted != null) falsePositive++
+                fixture.expectedRouteId != null &&
+                    accepted.routeId == fixture.expectedRouteId &&
+                    (fixture.expectedDirection == null || accepted.direction == fixture.expectedDirection) &&
+                    (fixture.expectedScheduledEpochSeconds == null ||
+                        accepted.scheduledEpochSeconds == fixture.expectedScheduledEpochSeconds)
+            }
+            if (matchesLabel) {
+                correct++
+                if (accepted != null) truePositive++
+            } else {
+                if (accepted != null) falsePositive++
                 if (fixture.expectedRouteId != null) falseNegative++
             }
         }
