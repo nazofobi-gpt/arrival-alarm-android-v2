@@ -11,6 +11,66 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class OfflineTransitCachePersistenceInstrumentedTest {
     @Test
+    fun persistedRouteCoordinatesRejectCoercedJsonTypesWithoutLosingValidNumbers() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val store = SharedPreferencesTransitCacheStore(context)
+        val route = RouteOption(
+            id = "coordinate-type-guard",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen"),
+            line = "RE", direction = "Bremen", departure = "10:00", arrival = "11:00",
+            walkingMinutes = 0, transfers = 0,
+            stops = listOf(RouteStop(id = "start", name = "Lohne", latitude = 52.665, longitude = 8.237)),
+        )
+        try {
+            prefs.edit().clear().commit()
+            store.save(listOf(CachedTransitPlan("coordinate-test", listOf(route), emptyList(), 100L)))
+            val baseline = requireNotNull(prefs.getString("plans_json", null))
+            fun restoredWith(change: (org.json.JSONObject) -> Unit): List<RouteOption> {
+                val plans = org.json.JSONArray(baseline)
+                val stored = plans.getJSONObject(0).getJSONArray("routeOptions").getJSONObject(0)
+                change(stored)
+                assertTrue(prefs.edit().putString("plans_json", plans.toString()).commit())
+                return store.load().single().routeOptions
+            }
+            assertEquals(1, restoredWith { }.size)
+            val invalidTypes: List<Any> = listOf(
+                "52.665", true, org.json.JSONArray().put(52.665),
+                org.json.JSONObject().put("latitude", 52.665),
+            )
+            for (field in listOf("latitude", "longitude")) {
+                val invalidValues = invalidTypes + if (field == "latitude") 91.0 else 181.0
+                invalidValues.forEach { value ->
+                    for (point in listOf("origin", "destination")) {
+                        assertTrue("Required $point.$field=$value was accepted",
+                            restoredWith { it.getJSONObject(point).put(field, value) }.isEmpty())
+                    }
+                    assertTrue("Invalid route stop $field=$value was silently dropped",
+                        restoredWith { it.getJSONArray("stops").getJSONObject(0).put(field, value) }.isEmpty())
+                }
+            }
+            assertTrue(restoredWith {
+                it.getJSONObject("origin").put("latitude", org.json.JSONObject.NULL)
+            }.isEmpty())
+            assertEquals(null, restoredWith {
+                it.getJSONArray("stops").getJSONObject(0).put("latitude", org.json.JSONObject.NULL)
+            }.single().stops.single().latitude)
+            // Zero and geographic boundaries are valid JSON numeric coordinates.
+            val valid = restoredWith {
+                it.getJSONObject("origin").put("latitude", -90.0).put("longitude", -180.0)
+                it.getJSONObject("destination").put("latitude", 90.0).put("longitude", 180.0)
+                it.getJSONArray("stops").getJSONObject(0).put("latitude", 0).put("longitude", 0)
+            }.single()
+            assertEquals(-90.0, valid.origin.latitude, 0.0)
+            assertEquals(180.0, valid.destination.longitude, 0.0)
+            assertEquals(0.0, valid.stops.single().latitude!!, 0.0)
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
+    @Test
     fun cachedRouteSurvivesCacheRecreation() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
