@@ -161,7 +161,9 @@ internal class ProductionRealtimeJourneyOverlay(
                 stop.copy(
                     arrival = arrival ?: stop.arrival,
                     departure = departure ?: stop.departure,
-                    platform = matching.mapNotNull { it.platformCode }.lastOrNull() ?: stop.platform,
+                    platform = matching.mapNotNull { update ->
+                        update.platformCode?.trim()?.takeIf { it.isNotEmpty() }
+                    }.lastOrNull() ?: stop.platform,
                 )
             }
         }
