@@ -50,8 +50,9 @@ internal fun GtfsTripConsentPanel(
                 (it.dropOffType == null || it.dropOffType == 0)
         }
         val destination = destinations.singleOrNull { it.stopSequence == destinationSequence }
+        // The boarding event is not a valid arrival-alarm target.
         val alarmStops = if (destination != null) detail.stops.filter {
-            it.stopSequence >= boarding.stopSequence &&
+            it.stopSequence > boarding.stopSequence &&
                 it.stopSequence <= destination.stopSequence
         } else emptyList()
         val alarm = alarmStops.singleOrNull { it.stopSequence == alarmOverride }
