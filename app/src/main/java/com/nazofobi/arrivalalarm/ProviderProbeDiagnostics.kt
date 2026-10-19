@@ -15,14 +15,16 @@ internal object ProviderProbeDiagnostics {
             ArrivalAlarmTransitProviders.DbEnrichment.id -> "enrichment"
             else -> "unknown"
         }
-        val providerState = when (health?.state) {
+        // An unrecognized provider cannot contribute verified health evidence.
+        val recognizedProvider = providerRole != "unknown"
+        val providerState = if (!recognizedProvider) "not_measured" else when (health?.state) {
             TransitProviderHealthState.READY -> "ready"
             TransitProviderHealthState.DEGRADED -> "degraded"
             TransitProviderHealthState.UNAVAILABLE -> "unavailable"
             null -> "not_measured"
         }
         val latencyBucket = when {
-            latencyMillis == null || latencyMillis < 0L -> "not_measured"
+            !recognizedProvider || latencyMillis == null || latencyMillis < 0L -> "not_measured"
             latencyMillis < 250L -> "under_250ms"
             latencyMillis < 1_000L -> "250ms_to_1s"
             latencyMillis < 5_000L -> "1s_to_5s"
