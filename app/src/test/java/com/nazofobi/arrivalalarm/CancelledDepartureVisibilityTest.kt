@@ -78,6 +78,24 @@ class CancelledDepartureVisibilityTest {
         )
     }
 
+    @Test fun frequencyInstancesWithSameTripAndScheduleRemainDistinct() {
+        val first = Departure(
+            "frequency", "RE 1", "Bremen", 1_100L,
+            cancelled = true, routeId = "route-1",
+            realtimeTripStartDate = "20261019", realtimeTripStartTime = "08:00:00",
+        )
+        val second = first.copy(realtimeTripStartTime = "08:10:00")
+        val duplicateUpdate = first.copy(realtimeEpochSeconds = 1_400L)
+
+        assertEquals(
+            listOf(first, second),
+            upcomingCancelledDepartures(
+                listOf(first, duplicateUpdate, second),
+                nowEpochSeconds = 1_000L,
+            ),
+        )
+    }
+
     @Test fun realtimeTimestampDoesNotResurrectAlreadyPassedCancellation() {
         val actual = upcomingCancelledDepartures(
             listOf(cancelled("past", 900L, realtime = 1_500L)),
