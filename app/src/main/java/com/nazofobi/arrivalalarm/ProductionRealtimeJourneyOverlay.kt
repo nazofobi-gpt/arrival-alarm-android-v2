@@ -47,7 +47,13 @@ internal class ProductionRealtimeJourneyOverlay(
             if (Thread.currentThread().isInterrupted) {
                 throw InterruptedException("Realtime lookup cancelled after fetch")
             }
-            match(response, now)
+            val matched = match(response, now)
+            // Matchers can observe cancellation after the provider response.
+            // Never publish even typed realtime state for an abandoned request.
+            if (Thread.currentThread().isInterrupted) {
+                throw InterruptedException("Realtime lookup cancelled after matching")
+            }
+            matched
         } catch (interrupted: InterruptedException) {
             Thread.currentThread().interrupt()
             throw interrupted
