@@ -97,6 +97,49 @@ class RouteRefreshSelectionTest {
     }
 
     @Test
+    fun identicallyInvalidCoordinatesRequireReselection() {
+        val valid = option()
+        val invalidOrigin = valid.copy(origin = origin.copy(latitude = 91.0))
+        assertNull(retainSelectedRouteAfterRefresh(
+            invalidOrigin.id, listOf(invalidOrigin), listOf(invalidOrigin),
+        ))
+
+        val invalidDestination = valid.copy(destination = destination.copy(longitude = -181.0))
+        assertNull(retainSelectedRouteAfterRefresh(
+            invalidDestination.id, listOf(invalidDestination), listOf(invalidDestination),
+        ))
+
+        val infiniteStop = valid.copy(stops = stops.mapIndexed { index, stop ->
+            if (index == 1) stop.copy(latitude = Double.POSITIVE_INFINITY) else stop
+        })
+        assertNull(retainSelectedRouteAfterRefresh(
+            infiniteStop.id, listOf(infiniteStop), listOf(infiniteStop),
+        ))
+
+        val invalidUpdatedStop = valid.copy(stops = stops.mapIndexed { index, stop ->
+            if (index == 1) stop.copy(longitude = Double.NaN) else stop
+        })
+        assertNull(retainSelectedRouteAfterRefresh(
+            valid.id, listOf(valid), listOf(invalidUpdatedStop),
+        ))
+    }
+
+    @Test
+    fun unknownStopCoordinatesDoNotInvalidateOtherVerifiedEvidence() {
+        val withoutOptionalStopGeometry = option().copy(stops = stops.map { it.copy(
+            latitude = null, longitude = null,
+        ) })
+        assertEquals(
+            withoutOptionalStopGeometry.id,
+            retainSelectedRouteAfterRefresh(
+                withoutOptionalStopGeometry.id,
+                listOf(withoutOptionalStopGeometry),
+                listOf(withoutOptionalStopGeometry),
+            ),
+        )
+    }
+
+    @Test
     fun missingOrAmbiguousCandidateDoesNotSelectAnotherRoute() {
         val old = option()
         assertNull(retainSelectedRouteAfterRefresh(null, listOf(old), listOf(old)))
