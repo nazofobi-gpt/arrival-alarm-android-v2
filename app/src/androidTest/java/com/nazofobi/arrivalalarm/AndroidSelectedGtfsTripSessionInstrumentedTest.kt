@@ -113,7 +113,7 @@ class AndroidSelectedGtfsTripSessionInstrumentedTest {
     @Test fun boardInspectionExposesExactStopsWithoutSavingOrArming() = runBlocking {
         seedSchedule()
         AndroidSelectedGtfsTripSession(context).use { session ->
-            val inspected = session.inspect(scheduledDeparture())
+            val inspected = session.inspect(scheduledDeparture(), "A")
             assertTrue(inspected is GtfsDepartureInspection.Ready)
             val preview = inspected as GtfsDepartureInspection.Ready
             assertEquals(identity, preview.detail.identity)
@@ -133,19 +133,19 @@ class AndroidSelectedGtfsTripSessionInstrumentedTest {
                 GtfsDepartureInspection.Rejected(
                     GtfsDepartureInspectionFailure.SOURCE_IDENTITY_MISSING,
                 ),
-                session.inspect(valid.copy(gtfsInstance = null)),
+                session.inspect(valid.copy(gtfsInstance = null), "A"),
             )
             assertEquals(
                 GtfsDepartureInspection.Rejected(
                     GtfsDepartureInspectionFailure.SOURCE_IDENTITY_MISSING,
                 ),
-                session.inspect(valid.copy(boardingStopSequence = null)),
+                session.inspect(valid.copy(boardingStopSequence = null), "A"),
             )
             assertEquals(
                 GtfsDepartureInspection.Rejected(
                     GtfsDepartureInspectionFailure.CANCELLED_DEPARTURE,
                 ),
-                session.inspect(valid.copy(cancelled = true)),
+                session.inspect(valid.copy(cancelled = true), "A"),
             )
             for (invalid in listOf(
                 valid.copy(tripId = "another-trip"),
@@ -158,9 +158,16 @@ class AndroidSelectedGtfsTripSessionInstrumentedTest {
                     GtfsDepartureInspection.Rejected(
                         GtfsDepartureInspectionFailure.SOURCE_EVIDENCE_MISMATCH,
                     ),
-                    session.inspect(invalid),
+                    session.inspect(invalid, "A"),
                 )
             }
+            // The sequence alone is insufficient: a platform or loop stop may differ.
+            assertEquals(
+                GtfsDepartureInspection.Rejected(
+                    GtfsDepartureInspectionFailure.SOURCE_EVIDENCE_MISMATCH,
+                ),
+                session.inspect(valid, "B"),
+            )
             assertEquals(GtfsSelectionRestore.Empty, session.restore())
         }
     }
@@ -171,7 +178,7 @@ class AndroidSelectedGtfsTripSessionInstrumentedTest {
                 GtfsDepartureInspection.Rejected(
                     GtfsDepartureInspectionFailure.TRIP_UNAVAILABLE,
                 ),
-                missing.inspect(scheduledDeparture()),
+                missing.inspect(scheduledDeparture(), "A"),
             )
         }
         seedSchedule()
@@ -185,14 +192,14 @@ class AndroidSelectedGtfsTripSessionInstrumentedTest {
             GtfsDepartureInspection.Rejected(
                 GtfsDepartureInspectionFailure.BOARDING_NOT_ALLOWED,
             ),
-            session.inspect(scheduledDeparture()),
+            session.inspect(scheduledDeparture(), "A"),
         )
         session.close()
         assertEquals(
             GtfsDepartureInspection.Rejected(
                 GtfsDepartureInspectionFailure.SESSION_CLOSED,
             ),
-            session.inspect(scheduledDeparture()),
+            session.inspect(scheduledDeparture(), "A"),
         )
     }
 
