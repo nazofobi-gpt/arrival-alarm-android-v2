@@ -60,6 +60,8 @@ private fun RouteOption.toJson(): JSONObject = JSONObject()
     .put("direction", direction)
     .put("departure", departure)
     .put("arrival", arrival)
+    .putNullable("departureEpochMillis", departureEpochMillis)
+    .putNullable("arrivalEpochMillis", arrivalEpochMillis)
     .put("walkingMinutes", walkingMinutes)
     .put("transfers", transfers)
     .put("tripIds", JSONArray(tripIds))
@@ -89,6 +91,19 @@ private fun JSONObject.toRouteOption(): RouteOption? {
         !has("sourceUpdatedAtEpochSeconds") || isNull("sourceUpdatedAtEpochSeconds") -> null
         else -> strictNonNegativeEpochSecondsOrNull("sourceUpdatedAtEpochSeconds") ?: return null
     }
+    // Absolute scheduled instants must survive offline recreation together.
+    // Reject partial, coerced, reversed or negative timestamps rather than
+    // silently falling back to clock labels and showing an incorrect duration.
+    val hasDepartureEpoch = has("departureEpochMillis") && !isNull("departureEpochMillis")
+    val hasArrivalEpoch = has("arrivalEpochMillis") && !isNull("arrivalEpochMillis")
+    if (hasDepartureEpoch != hasArrivalEpoch) return null
+    val departureEpoch = if (hasDepartureEpoch) {
+        strictNonNegativeEpochMillisOrNull("departureEpochMillis") ?: return null
+    } else null
+    val arrivalEpoch = if (hasArrivalEpoch) {
+        strictNonNegativeEpochMillisOrNull("arrivalEpochMillis") ?: return null
+    } else null
+    if (departureEpoch != null && arrivalEpoch != null && arrivalEpoch < departureEpoch) return null
     return RouteOption(
         id = id,
         origin = origin,
@@ -103,6 +118,8 @@ private fun JSONObject.toRouteOption(): RouteOption? {
         stops = stops,
         refreshToken = optNullableString("refreshToken"),
         sourceUpdatedAtEpochSeconds = sourceUpdatedAt,
+        departureEpochMillis = departureEpoch,
+        arrivalEpochMillis = arrivalEpoch,
     )
 }
 
@@ -230,6 +247,10 @@ private fun JSONObject.strictPositiveEpochSecondsOrNull(key: String): Long? =
 private fun JSONObject.strictNonNegativeEpochSecondsOrNull(key: String): Long? =
     (opt(key) as? Number)?.toString()?.toLongOrNull()
         ?.takeIf { it >= 0L && it <= Long.MAX_VALUE / 1_000L }
+
+/** Persisted absolute route instants accept JSON integral numbers only, never coercions. */
+private fun JSONObject.strictNonNegativeEpochMillisOrNull(key: String): Long? =
+    (opt(key) as? Number)?.toString()?.toLongOrNull()?.takeIf { it >= 0L }
 
 private fun JSONObject.optNullableDouble(key: String): Double? =
     if (!has(key) || isNull(key)) null else optDouble(key).takeIf { it.isFinite() }
