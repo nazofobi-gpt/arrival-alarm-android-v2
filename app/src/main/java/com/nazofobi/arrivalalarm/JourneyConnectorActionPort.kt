@@ -125,6 +125,17 @@ class JourneyConnectorActionPort(
     @Synchronized
     override fun setBoardingStop(stop: ConnectorStopState): ConnectorActionOutcome {
         val trip = activeTrip ?: return ConnectorActionOutcome(false, "Önce sefer seçilmeli")
+        // Typed connector callers bypass the JSON decoder. Validate the same
+        // physical stop invariants at this last local mutation boundary.
+        val latitude = stop.latitude
+        val longitude = stop.longitude
+        if (stop.name.isBlank() ||
+            (latitude == null) != (longitude == null) ||
+            (latitude != null && (!latitude.isFinite() || latitude !in -90.0..90.0)) ||
+            (longitude != null && (!longitude.isFinite() || longitude !in -180.0..180.0))
+        ) {
+            return ConnectorActionOutcome(false, "Geçersiz biniş durağı")
+        }
         activeTrip = trip.copy(boardingStop = stop)
         markChanged()
         return ConnectorActionOutcome(true, "Biniş durağı güncellendi")
