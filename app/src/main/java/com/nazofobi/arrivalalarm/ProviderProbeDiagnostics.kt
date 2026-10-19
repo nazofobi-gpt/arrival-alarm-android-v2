@@ -22,7 +22,7 @@ internal object ProviderProbeDiagnostics {
             null -> "not_measured"
         }
         val latencyBucket = when {
-            latencyMillis == null || latencyMillis < 0L -> "not_measured"
+            health == null || latencyMillis == null || latencyMillis < 0L -> "not_measured"
             latencyMillis < 250L -> "under_250ms"
             latencyMillis < 1_000L -> "250ms_to_1s"
             latencyMillis < 5_000L -> "1s_to_5s"
