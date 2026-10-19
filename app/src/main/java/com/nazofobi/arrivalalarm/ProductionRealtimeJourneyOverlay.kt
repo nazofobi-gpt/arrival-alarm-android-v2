@@ -1,5 +1,6 @@
 package com.nazofobi.arrivalalarm
 
+import java.text.ParsePosition
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -211,9 +212,13 @@ internal class ProductionRealtimeJourneyOverlay(
             raw
         }
         return runCatching {
-            SimpleDateFormat(ISO_PATTERN, Locale.ROOT).apply {
+            // SimpleDateFormat.parse(String) accepts a valid prefix and ignores
+            // trailing garbage, which can invent a realtime ETA from bad data.
+            val position = ParsePosition(0)
+            val parsed = SimpleDateFormat(ISO_PATTERN, Locale.ROOT).apply {
                 isLenient = false
-            }.parse(normalized)?.time
+            }.parse(normalized, position)
+            parsed?.takeIf { position.index == normalized.length }?.time
         }.getOrNull()
     }
 
