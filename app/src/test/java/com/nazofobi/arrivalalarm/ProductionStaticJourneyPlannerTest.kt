@@ -7,6 +7,17 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ProductionStaticJourneyPlannerTest {
+    @Test
+    fun nonpositiveStaticJourneyLimitNeverSynthesizesARequestedOption() {
+        for (invalid in listOf(0, -1, Int.MIN_VALUE)) {
+            assertEquals(0, boundedStaticJourneyOptionLimit(invalid))
+        }
+        assertEquals(1, boundedStaticJourneyOptionLimit(1))
+        assertEquals(3, boundedStaticJourneyOptionLimit(3))
+        assertEquals(6, boundedStaticJourneyOptionLimit(6))
+        assertEquals(6, boundedStaticJourneyOptionLimit(Int.MAX_VALUE))
+    }
+
     private val zone = TimeZone.getTimeZone("Europe/Berlin")
     private val date = GtfsServiceDate(2026, 10, 4)
 

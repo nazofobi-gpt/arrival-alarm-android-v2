@@ -267,6 +267,10 @@ internal fun staticRoutingServiceDates(epochMillis: Long, timeZone: TimeZone): L
         )
     }
 
+/** Only requested positive route-option limits may initiate timetable routing. */
+internal fun boundedStaticJourneyOptionLimit(requested: Int): Int =
+    requested.coerceIn(0, 6)
+
 class ProductionStaticJourneyPlanner(
     private val index: NationwideTransitIndex,
     agencyTimeZone: TimeZone = TimeZone.getTimeZone("Europe/Berlin"),
@@ -296,8 +300,9 @@ class ProductionStaticJourneyPlanner(
         if (!validTransitJourneyCoordinates(origin.latitude, origin.longitude) ||
             !validTransitJourneyCoordinates(destination.latitude, destination.longitude)
         ) return LocalStaticJourneyOutcome.NoPath
+        val boundedLimit = boundedStaticJourneyOptionLimit(limit)
+        if (boundedLimit == 0) return LocalStaticJourneyOutcome.NoPath
         if (!index.isReady()) return LocalStaticJourneyOutcome.Unavailable
-        val boundedLimit = limit.coerceIn(1, 6)
         val originNearby = index.nearest(
             origin.latitude,
             origin.longitude,
