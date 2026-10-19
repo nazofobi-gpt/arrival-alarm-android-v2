@@ -54,6 +54,20 @@ class LocaleResourceContractTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "invalid string format flags"):
                     placeholders(token)
 
+    def test_duplicate_java_formatter_flags_are_rejected(self):
+        # Verified on Java 21: these raise DuplicateFormatFlagsException.
+        for token in ("%--5s", "%++d", "%1$--10s"):
+            with self.subTest(token=token):
+                with self.assertRaisesRegex(ValueError, "duplicate format flags"):
+                    placeholders(token)
+
+    def test_matching_duplicate_flags_across_locales_still_fail(self):
+        for locale in ("values", "values-de", "values-en"):
+            self.write(locale, '<string name="arrival">Stop %1$--10s</string>')
+        self.assertTrue(
+            any("duplicate format flags" in error for error in validate(self.root))
+        )
+
     def test_valid_java_string_padding_remains_allowed(self):
         self.assertEqual({(1, "s"): 1}, dict(placeholders("%1$-10s")))
         self.assertEqual({(1, "s"): 1}, dict(placeholders("%10s")))
