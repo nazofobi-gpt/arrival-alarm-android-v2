@@ -2,6 +2,10 @@ package com.nazofobi.arrivalalarm
 
 import kotlin.math.*
 
+// A conservative rail/transit GPS sanity limit: 120 m/s = 432 km/h.
+// Corrupt yet finite speed measurements must never identify a specific trip.
+private const val MAX_PLAUSIBLE_INFERENCE_SPEED_MPS = 120.0
+
 data class TripInferenceSettings(
     val enabled: Boolean = false,
     val minimumConfidence: Double = 0.72,
@@ -64,6 +68,7 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
         // Reject corrupt location/movement samples before scoring a trip.
         if (!validCoordinates(observation.point) ||
             !observation.speedMps.isFinite() || observation.speedMps < 0.0 ||
+            observation.speedMps > MAX_PLAUSIBLE_INFERENCE_SPEED_MPS ||
             !validBearing(observation.bearingDegrees) ||
             observation.epochSeconds <= 0L
         ) {
