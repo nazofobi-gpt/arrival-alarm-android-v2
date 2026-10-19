@@ -231,16 +231,28 @@ private fun guidanceUiStatus(state: GuidanceReliabilityState): String = stringRe
     }
 )
 
-private fun routeStopClock(value: String?): String? {
+/**
+ * Show a destination clock only after validating the complete provider value.
+ * Prefix slicing can turn malformed payloads (e.g. 08:45garbage) into false ETAs.
+ * ISO timestamps are parsed with the existing strict transit validator; GTFS
+ * clock-only values may cross midnight, but cannot exceed the 47-hour UI bound.
+ */
+internal fun routeStopClock(value: String?): String? {
     val raw = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-    val time = raw.substringAfter('T', raw)
-    val candidate = time.take(5)
-    return candidate.takeIf {
-        if (candidate.length != 5 || candidate[2] != ':') return@takeIf false
-        val hour = candidate.take(2).toIntOrNull() ?: return@takeIf false
-        val minute = candidate.drop(3).toIntOrNull() ?: return@takeIf false
-        // GTFS clock-only service times may extend past midnight. Invalid minutes
-        // or implausible 48+ hour values must not appear as a destination ETA.
-        hour in 0..47 && minute in 0..59
+    if ('T' in raw) {
+        if (raw.toTransitEpochSecondsOrNull() == null) return null
+        return raw.substringAfter('T').take(5)
     }
+
+    val fullClock = when {
+        GTFS_DISPLAY_HH_MM.matches(raw) -> "$raw:00"
+        GTFS_DISPLAY_HH_MM_SS.matches(raw) -> raw
+        else -> return null
+    }
+    val time = runCatching { GtfsServiceTime.parse(fullClock) }.getOrNull() ?: return null
+    if (time.hour !in 0..47) return null
+    return "%02d:%02d".format(java.util.Locale.ROOT, time.hour, time.minute)
 }
+
+private val GTFS_DISPLAY_HH_MM = Regex("""^\d{1,2}:[0-5]\d$""")
+private val GTFS_DISPLAY_HH_MM_SS = Regex("""^\d{1,2}:[0-5]\d:[0-5]\d$""")
