@@ -657,6 +657,41 @@ class ProductionRealtimeStationOverlayTest {
     }
 
     @Test
+    fun interruptionDuringStationMatcherNeverReturnsARealtimeResult() {
+        var fetchCount = 0
+        var matchCount = 0
+        var caught = false
+        try {
+            ProductionRealtimeStationOverlay(
+                fetch = {
+                    fetchCount++
+                    GermanyRealtimeFetchResult.Unavailable(
+                        GermanyRealtimeUnavailableReason.NETWORK, "unused",
+                    )
+                },
+                match = { _, _ ->
+                    matchCount++
+                    Thread.currentThread().interrupt()
+                    GermanyRealtimeOverlayResult.NoMatch(
+                        freshness = GermanyRealtimeOverlayFreshnessState.FRESH,
+                        ageSeconds = 0L,
+                        provenance = provenance(),
+                    )
+                },
+            ).enrich("A", listOf(planned))
+        } catch (_: InterruptedException) {
+            caught = true
+            assertTrue(Thread.currentThread().isInterrupted)
+        } finally {
+            // The test must not leave the JUnit worker interrupted.
+            Thread.interrupted()
+        }
+        assertTrue(caught)
+        assertEquals(1, fetchCount)
+        assertEquals(1, matchCount)
+    }
+
+    @Test
     fun providerInterruptionPropagatesAndPreservesInterruptFlag() {
         var caught = false
         try {
