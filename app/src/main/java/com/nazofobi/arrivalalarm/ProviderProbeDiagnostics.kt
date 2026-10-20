@@ -10,6 +10,8 @@ package com.nazofobi.arrivalalarm
 internal object ProviderProbeDiagnostics {
     // Old provider outcomes must not be presented as current health evidence.
     private const val MAX_HEALTH_CHECK_AGE_SECONDS = 86_400L
+    // Small device/provider clock differences must not invalidate a fresh check.
+    private const val MAX_PROVIDER_FUTURE_SKEW_SECONDS = 30L
 
     fun render(health: TransitProviderHealth?, latencyMillis: Long?): String =
         renderAt(health, latencyMillis, System.currentTimeMillis() / 1_000L)
