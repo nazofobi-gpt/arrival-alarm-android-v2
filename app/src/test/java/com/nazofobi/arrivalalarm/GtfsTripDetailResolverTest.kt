@@ -117,6 +117,34 @@ class GtfsTripDetailResolverTest {
     }
 
     @Test
+    fun rejectsReversedDwellWhilePreservingValidExtendedServiceDayTimes() {
+        val source = FakeSource()
+        val identity = GtfsTripInstanceIdentity.scheduled(trip, serviceDate)
+        val resolver = GtfsTripDetailResolver(source)
+        val original = source.times
+
+        source.times = original.mapIndexed { index, stop ->
+            if (index == 1) stop.copy(arrivalTime = "09:05:00", departureTime = "09:00:00")
+            else stop
+        }
+        assertEquals(
+            GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.INVALID_STOP_TIME),
+            resolver.resolve(identity),
+        )
+
+        // A legitimate overnight dwell and a zero-length dwell are still valid.
+        for (departure in listOf("24:05:00", "24:03:00")) {
+            source.times = original.mapIndexed { index, stop ->
+                if (index == 1) stop.copy(
+                    arrivalTime = "24:03:00",
+                    departureTime = departure,
+                ) else stop
+            }
+            assertTrue(resolver.resolve(identity) is GtfsTripDetailResult.Available)
+        }
+    }
+
+    @Test
     fun malformedScheduledStopClocksCannotBecomeConfirmableTripDetails() {
         val source = FakeSource()
         val resolver = GtfsTripDetailResolver(source)
