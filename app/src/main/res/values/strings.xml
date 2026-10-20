@@ -211,6 +211,7 @@
     <string name="live_trip_current">Saat verisine göre mevcut durak</string>
     <string name="live_trip_between_stops">Duraklar arasında • fiziksel durak konumu doğrulanmadı</string>
     <string name="live_trip_progress_unavailable">Durak ilerlemesi için sağlayıcı zamanı yok</string>
+    <string name="live_trip_remaining_stops">Kalan durak (sağlayıcı zamanına göre)</string>
     <string name="live_trip_next">Sıradaki durak</string>
     <string name="live_trip_target">Hedef durak</string>
     <string name="live_trip_target_time">Hedef zamanı</string>
