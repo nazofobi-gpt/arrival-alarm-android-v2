@@ -78,6 +78,19 @@ class ReducerClockTimeTest(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertEqual(-1, self.clock(value))
 
+    def test_gtfs_hour_single_digit_is_valid(self):
+        # The GTFS Time format explicitly accepts H:MM:SS.
+        self.assertEqual(8 * 3600 + 15 * 60, self.clock("8:15:00"))
+
+    def test_noncanonical_clock_tokens_fail_closed(self):
+        for value in (
+            "08:+15:00", "08:5:00", "08:15:0", "08:15:00 ",
+            " 08:15:00", "+08:15:00", "08:１５:00",
+            "08:15:00:00", None,
+        ):
+            with self.subTest(value=value):
+                self.assertEqual(-1, self.clock(value))
+
     def test_negative_hours_and_malformed_time_are_rejected(self):
         for value in ("-1:50:00", "08:30", "abc", ""):
             with self.subTest(value=value):

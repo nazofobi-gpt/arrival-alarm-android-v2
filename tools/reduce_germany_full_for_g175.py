@@ -86,13 +86,26 @@ def active_services(zf, names, day):
     return active
 
 def clock_seconds(raw):
-    try:
-        h, m, s = map(int, raw.split(":"))
-        if h < 0 or not (0 <= m < 60 and 0 <= s < 60):
-            return -1
-        return h * 3600 + m * 60 + s
-    except Exception:
+    if not isinstance(raw, str):
         return -1
+    parts = raw.split(":")
+    # GTFS allows H:MM:SS and extended service-day hours, but not
+    # signs, whitespace, non-ASCII digits or abbreviated minute/second fields.
+    if (
+        len(parts) != 3
+        or not parts[0]
+        or len(parts[1]) != 2
+        or len(parts[2]) != 2
+        or any(not part.isascii() or not part.isdecimal() for part in parts)
+    ):
+        return -1
+    try:
+        h, m, s = map(int, parts)
+    except ValueError:
+        return -1
+    if m >= 60 or s >= 60:
+        return -1
+    return h * 3600 + m * 60 + s
 
 def write_csv(zf, filename, fieldnames, records):
     buffer = io.StringIO(newline="")
