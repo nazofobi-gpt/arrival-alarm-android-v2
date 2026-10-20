@@ -44,6 +44,20 @@ class SupportDiagnosticsTest {
         assertFalse(report.contains(sensitive))
     }
 
+    @Test fun emptyOrInvalidReadyIndexCannotClaimInstalledStops() {
+        val timestamp = 1_700_000_000L
+        for (count in listOf(0, -3)) {
+            val report = SupportDiagnostics.render(
+                state(NationwideDataState.Ready(count, timestamp, "private-feed-source")),
+                nowEpochSeconds = timestamp + 20L,
+            )
+            assertTrue(report.contains("transit_index=index_empty\n"))
+            assertTrue(report.contains("installed_stop_count=0\n"))
+            assertFalse(report.contains("transit_index=index_present_unverified\n"))
+            assertFalse(report.contains("private-feed-source"))
+        }
+    }
+
     @Test fun feedFreshnessUsesCoarseBucketsOnly() {
         val saved = state(NationwideDataState.Ready(10, 1_000L, "test"))
         assertTrue(SupportDiagnostics.render(saved, 605_800L).contains("feed_age_bucket=over_7d"))

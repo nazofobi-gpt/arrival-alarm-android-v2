@@ -9,10 +9,12 @@ import java.util.Locale
 internal object SupportDiagnostics {
     fun render(state: SettingsReadinessState, nowEpochSeconds: Long): String {
         val ready = state.dataState as? NationwideDataState.Ready
-        val dataStatus = when (state.dataState) {
+        val dataStatus = when (val data = state.dataState) {
             NationwideDataState.Idle -> "not_installed"
             is NationwideDataState.Loading -> "loading"
-            is NationwideDataState.Ready -> "index_present_unverified"
+            // An empty or invalid index must not appear as installed evidence.
+            is NationwideDataState.Ready ->
+                if (data.stopCount > 0) "index_present_unverified" else "index_empty"
             is NationwideDataState.Error -> "error"
         }
         val feedAge = when {
