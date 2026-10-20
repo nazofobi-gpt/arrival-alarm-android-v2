@@ -121,6 +121,8 @@ class GuidanceReliabilityController(
     }
 
     fun requestGuidance(utterance: GuidanceUtterance): Boolean {
+        // Reject provider/UI gaps before TTS or durable pending-state mutation.
+        if (utterance.key.isBlank() || utterance.text.isBlank()) return false
         if (utterance.key == state.lastSpokenKey) return false
         if (state.permissionState == GuidancePermissionState.DENIED) {
             update(state.copy(
@@ -139,6 +141,11 @@ class GuidanceReliabilityController(
 
     fun retryPending(): Boolean {
         val pending = state.pending ?: return false
+        // A restored malformed announcement must never be spoken on permission recovery.
+        if (pending.key.isBlank() || pending.text.isBlank()) {
+            update(state.copy(pending = null, pendingSinceEpochMillis = null))
+            return false
+        }
         if (pending.key == state.lastSpokenKey) {
             update(state.copy(pending = null, pendingSinceEpochMillis = null))
             return false
