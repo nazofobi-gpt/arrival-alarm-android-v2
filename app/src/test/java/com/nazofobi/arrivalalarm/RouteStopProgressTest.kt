@@ -30,6 +30,59 @@ class RouteStopProgressTest {
         ),
     )
 
+    @Test fun adjacentScheduledStopWindowsDoNotInventCurrentStopAtSharedSecond() {
+        val touching = listOf(
+            RouteStop(
+                id = "a", name = "Lohne",
+                plannedArrival = "2026-09-26T08:00:00+02:00",
+                plannedDeparture = "2026-09-26T08:10:00+02:00",
+            ),
+            RouteStop(
+                id = "b", name = "Diepholz",
+                plannedArrival = "2026-09-26T08:10:00+02:00",
+                plannedDeparture = "2026-09-26T08:20:00+02:00",
+            ),
+        )
+        val boundary = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
+        val tracker = RouteStopProgressTracker()
+
+        val ambiguous = tracker.resolve(touching, boundary, trustRealtime = false)
+        assertFalse(ambiguous.resolvedByProviderTime)
+        assertNull(ambiguous.current)
+        assertNull(ambiguous.previous)
+        assertNull(ambiguous.next)
+        assertNull(ambiguous.remainingStops)
+
+        assertEquals("Lohne", tracker.resolve(touching, boundary - 1, false).current?.name)
+        assertEquals("Diepholz", tracker.resolve(touching, boundary + 1, false).current?.name)
+    }
+
+    @Test fun ambiguousRealtimeBoundaryFallsBackToDistinctPlannedStopTimes() {
+        val observations = listOf(
+            RouteStop(
+                id = "a", name = "Lohne",
+                departure = "2026-09-26T08:10:00+02:00",
+                plannedArrival = "2026-09-26T07:55:00+02:00",
+                plannedDeparture = "2026-09-26T08:00:00+02:00",
+            ),
+            RouteStop(
+                id = "b", name = "Diepholz",
+                arrival = "2026-09-26T08:10:00+02:00",
+                plannedArrival = "2026-09-26T08:20:00+02:00",
+                plannedDeparture = "2026-09-26T08:30:00+02:00",
+            ),
+        )
+        val boundary = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
+
+        val progress = RouteStopProgressTracker().resolve(observations, boundary)
+        assertTrue(progress.resolvedByProviderTime)
+        assertEquals(TransitTimingBasis.SCHEDULED, progress.timingBasis)
+        assertEquals("Lohne", progress.previous?.name)
+        assertNull(progress.current)
+        assertEquals("Diepholz", progress.next?.name)
+        assertEquals(1, progress.remainingStops)
+    }
+
     @Test fun betweenStopsDoesNotInventCurrentStop() {
         val now = 1_790_403_600L
         val progress = RouteStopProgressTracker().resolve(stops, now)
