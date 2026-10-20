@@ -256,4 +256,32 @@ class AndroidSelectedGtfsTripSessionInstrumentedTest {
         }
     }
 
+    @Test fun supersededConsentCannotPersistOrReplaceVerifiedTripRoles() = runBlocking {
+        seedSchedule()
+        AndroidSelectedGtfsTripSession(context).use { session ->
+            val gate = LatestRequestGate()
+            val cancelled = gate.begin()
+            gate.invalidate()
+            assertFalse(session.confirmIfCurrent(selection, gate, cancelled))
+            assertEquals(GtfsSelectionRestore.Empty, session.restore())
+
+            val approved = gate.begin()
+            assertTrue(session.confirmIfCurrent(selection, gate, approved))
+            assertEquals(
+                selection,
+                (session.restore() as GtfsSelectionRestore.Verified).selection,
+            )
+
+            // A late callback from an older departure must not overwrite consent.
+            val obsolete = gate.begin()
+            gate.begin()
+            val otherAlarm = selection.copy(alarmTarget = GtfsSelectedStopRef(30, "C"))
+            assertFalse(session.confirmIfCurrent(otherAlarm, gate, obsolete))
+            assertEquals(
+                selection,
+                (session.restore() as GtfsSelectionRestore.Verified).selection,
+            )
+        }
+    }
+
 }
