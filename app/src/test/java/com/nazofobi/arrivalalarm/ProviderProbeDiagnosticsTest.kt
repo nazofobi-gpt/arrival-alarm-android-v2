@@ -78,6 +78,33 @@ class ProviderProbeDiagnosticsTest {
         assertFalse(summary.contains("sensitive-provider-error"))
     }
 
+    @Test fun futureDatedCheckCannotClaimMeasuredHealthOrLatency() {
+        val health = TransitProviderHealth(
+            providerId = ArrivalAlarmTransitProviders.GermanyRealtime.id,
+            state = TransitProviderHealthState.READY,
+            checkedAtEpochSeconds = Long.MAX_VALUE,
+            detail = "private-error-or-endpoint",
+        )
+        val summary = ProviderProbeDiagnostics.render(health, 25L)
+        assertEquals("realtime", summary.value("provider_role"))
+        assertEquals("not_measured", summary.value("provider_state"))
+        assertEquals("not_measured", summary.value("latency_bucket"))
+        assertFalse(summary.contains("private-error-or-endpoint"))
+    }
+
+    @Test fun recentHealthCheckWithinClockToleranceIsStillMeasured() {
+        val now = System.currentTimeMillis() / 1_000L
+        val health = TransitProviderHealth(
+            providerId = ArrivalAlarmTransitProviders.LocalStatic.id,
+            state = TransitProviderHealthState.READY,
+            checkedAtEpochSeconds = now + 15L,
+            detail = null,
+        )
+        val summary = ProviderProbeDiagnostics.render(health, 249L)
+        assertEquals("ready", summary.value("provider_state"))
+        assertEquals("under_250ms", summary.value("latency_bucket"))
+    }
+
     @Test fun nonzeroCheckAllowsReportedStateWithoutInferringAppReadiness() {
         val health = TransitProviderHealth(
             providerId = ArrivalAlarmTransitProviders.DbEnrichment.id,
