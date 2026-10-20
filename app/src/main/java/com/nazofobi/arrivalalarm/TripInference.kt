@@ -5,6 +5,9 @@ import kotlin.math.*
 // A conservative rail/transit GPS sanity limit: 120 m/s = 432 km/h.
 // Corrupt yet finite speed measurements must never identify a specific trip.
 private const val MAX_PLAUSIBLE_INFERENCE_SPEED_MPS = 120.0
+// A corrupted preference must not expand a small suggestion UI into an
+// unbounded scored-candidate result list. The default remains topK=3.
+private const val MAX_VISIBLE_INFERENCE_CANDIDATES = 10
 
 data class TripInferenceSettings(
     val enabled: Boolean = false,
@@ -53,7 +56,7 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
         if (!settings.enabled) return TripInferenceResult(emptyList(), null, "Sefer algılama kullanıcı tarafından kapalı")
         // Display size must not weaken the ambiguity gate: even topK=1 needs
         // the runner-up to decide whether the leading trip is distinguishable.
-        if (settings.topK <= 0) {
+        if (settings.topK !in 1..MAX_VISIBLE_INFERENCE_CANDIDATES) {
             return TripInferenceResult(emptyList(), null, "Gösterilecek sefer adayı sınırı geçersiz")
         }
         // Never let invalid persisted or injected calibration settings disable
