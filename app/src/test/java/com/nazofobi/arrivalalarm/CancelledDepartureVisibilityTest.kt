@@ -96,6 +96,34 @@ class CancelledDepartureVisibilityTest {
         )
     }
 
+    @Test fun cancellationDedupKeepsDistinctGtfsInstancesAndBoardingStops() {
+        val identity = GtfsTripInstanceIdentity(
+            tripId = "shared-trip",
+            serviceDate = GtfsServiceDate.parse("20261020"),
+            serviceId = "service-1",
+            routeId = "route-1",
+            directionId = 0,
+        )
+        val first = Departure(
+            "shared-trip", "RE 1", "Bremen", 1_100L,
+            cancelled = true, routeId = "route-1",
+            gtfsInstance = identity, boardingStopSequence = 1,
+        )
+        val duplicateUpdate = first.copy(realtimeEpochSeconds = 1_400L)
+        val nextServiceDay = first.copy(
+            gtfsInstance = identity.copy(serviceDate = GtfsServiceDate.parse("20261021")),
+        )
+        val otherBoardingStop = first.copy(boardingStopSequence = 2)
+
+        assertEquals(
+            listOf(first, nextServiceDay, otherBoardingStop),
+            upcomingCancelledDepartures(
+                listOf(first, duplicateUpdate, nextServiceDay, otherBoardingStop),
+                nowEpochSeconds = 1_000L,
+            ),
+        )
+    }
+
     @Test fun realtimeTimestampDoesNotResurrectAlreadyPassedCancellation() {
         val actual = upcomingCancelledDepartures(
             listOf(cancelled("past", 900L, realtime = 1_500L)),
