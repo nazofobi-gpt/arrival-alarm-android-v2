@@ -26,11 +26,16 @@ class AndroidSelectedGtfsTripSessionInstrumentedTest {
         GtfsSelectedStopRef(20, "B"),
     )
 
+    private fun serviceTimeEpoch(clock: String): Long =
+        GtfsServiceTime.parse(clock)
+            .resolve(identity.serviceDate, java.util.TimeZone.getTimeZone("Europe/Berlin"))
+            .epochMillis / 1_000L
+
     private fun scheduledDeparture() = Departure(
         tripId = identity.tripId,
         line = "RE1",
         direction = "Achim",
-        scheduledEpochSeconds = 1_760_000_000L,
+        scheduledEpochSeconds = serviceTimeEpoch("08:01:00"),
         routeId = identity.routeId,
         gtfsInstance = identity,
         boardingStopSequence = 10,
@@ -172,6 +177,22 @@ class AndroidSelectedGtfsTripSessionInstrumentedTest {
         }
     }
 
+    @Test fun boardInspectionRejectsDepartureTimeNotMatchingGtfsServiceDay() = runBlocking {
+        seedSchedule()
+        AndroidSelectedGtfsTripSession(context).use { session ->
+            val tampered = scheduledDeparture().copy(
+                scheduledEpochSeconds = serviceTimeEpoch("08:02:00"),
+            )
+            assertEquals(
+                GtfsDepartureInspection.Rejected(
+                    GtfsDepartureInspectionFailure.SOURCE_EVIDENCE_MISMATCH,
+                ),
+                session.inspect(tampered, "A"),
+            )
+            assertEquals(GtfsSelectionRestore.Empty, session.restore())
+        }
+    }
+
     @Test fun boardInspectionRejectsDisallowedPickupAndUnavailableIndex() = runBlocking {
         AndroidSelectedGtfsTripSession(context).use { missing ->
             assertEquals(
@@ -211,7 +232,13 @@ class AndroidSelectedGtfsTripSessionInstrumentedTest {
                 GtfsDepartureInspection.Rejected(
                     GtfsDepartureInspectionFailure.NO_DOWNSTREAM_ALIGHTING_STOP,
                 ),
-                session.inspect(scheduledDeparture().copy(boardingStopSequence = 30), "C"),
+                session.inspect(
+                    scheduledDeparture().copy(
+                        boardingStopSequence = 30,
+                        scheduledEpochSeconds = serviceTimeEpoch("09:00:00"),
+                    ),
+                    "C",
+                ),
             )
             NationwideTransitIndex(context).use { index ->
                 index.writableDatabase.execSQL(
