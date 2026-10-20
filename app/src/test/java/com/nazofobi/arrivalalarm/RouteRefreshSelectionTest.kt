@@ -164,6 +164,23 @@ class RouteRefreshSelectionTest {
     }
 
     @Test
+    fun missingStopSequenceCannotProveTripIdentity() {
+        val valid = option()
+        val missingStops = valid.copy(stops = emptyList())
+        // A transit trip without ordered physical stops cannot prove that the
+        // refreshed itinerary still boards and alights at the selected roles.
+        assertNull(retainSelectedRouteAfterRefresh(
+            valid.id, listOf(missingStops), listOf(missingStops),
+        ))
+        assertNull(retainSelectedRouteAfterRefresh(
+            valid.id, listOf(valid), listOf(missingStops),
+        ))
+        assertNull(retainSelectedRouteAfterRefresh(
+            valid.id, listOf(missingStops), listOf(valid),
+        ))
+    }
+
+    @Test
     fun missingOrAmbiguousCandidateDoesNotSelectAnotherRoute() {
         val old = option()
         assertNull(retainSelectedRouteAfterRefresh(null, listOf(old), listOf(old)))
