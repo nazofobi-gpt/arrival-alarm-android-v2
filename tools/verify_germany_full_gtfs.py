@@ -40,6 +40,8 @@ def inspect(zf, member):
             return {"rows": rows, "header": header}
     except zipfile.BadZipFile:
         raise SystemExit(f"invalid GTFS ZIP entry {member}") from None
+    except NotImplementedError:
+        raise SystemExit(f"unsupported GTFS ZIP entry compression {member}") from None
     except UnicodeDecodeError:
         raise SystemExit(f"invalid UTF-8 in GTFS table {member}") from None
     except csv.Error:
