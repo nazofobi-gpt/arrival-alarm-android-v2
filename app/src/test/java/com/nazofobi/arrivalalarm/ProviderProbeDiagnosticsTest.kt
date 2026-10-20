@@ -191,6 +191,32 @@ class ProviderProbeDiagnosticsTest {
         assertEquals("not_measured", invalidSummary.value("latency_bucket"))
     }
 
+
+    @Test fun invalidDeviceClockDoesNotAuthenticateProviderMeasurement() {
+        val health = TransitProviderHealth(
+            providerId = ArrivalAlarmTransitProviders.GermanyRealtime.id,
+            state = TransitProviderHealthState.READY,
+            checkedAtEpochSeconds = 10L,
+        )
+        for (invalidNow in listOf(0L, -1L)) {
+            val summary = ProviderProbeDiagnostics.renderAt(health, 125L, invalidNow)
+            assertEquals("not_measured", summary.value("provider_state"))
+            assertEquals("not_measured", summary.value("latency_bucket"))
+        }
+    }
+
+    @Test fun maximumEpochDoesNotOverflowFutureSkewCheck() {
+        val now = Long.MAX_VALUE - 5L
+        val health = TransitProviderHealth(
+            providerId = ArrivalAlarmTransitProviders.LocalStatic.id,
+            state = TransitProviderHealthState.DEGRADED,
+            checkedAtEpochSeconds = Long.MAX_VALUE,
+        )
+        val summary = ProviderProbeDiagnostics.renderAt(health, 1_000L, now)
+        assertEquals("degraded", summary.value("provider_state"))
+        assertEquals("1s_to_5s", summary.value("latency_bucket"))
+    }
+
     private fun String.value(key: String): String =
         lineSequence().first { it.startsWith("$key=") }.substringAfter('=')
 }
