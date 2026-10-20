@@ -82,14 +82,25 @@ class RouteStopProgressTracker {
             TransitTimingBasis.SCHEDULED
         }
 
-        val currentIndex = windows.indexOfFirst { window ->
+        // Inclusive windows may touch at the same provider second. Both stops then
+        // match "current"; choosing the first one would fabricate a stop identity.
+        // Fall back to scheduled evidence when it can disambiguate the boundary.
+        var currentIndex = -1
+        for ((index, window) in windows.withIndex()) {
             val arrival = window.arrival
             val departure = window.departure
-            when {
+            val matches = when {
                 arrival != null && departure != null -> nowEpochSeconds in arrival..departure
                 arrival != null -> nowEpochSeconds == arrival
                 departure != null -> nowEpochSeconds == departure
                 else -> false
+            }
+            if (matches) {
+                if (currentIndex >= 0) {
+                    return if (trustRealtime) resolve(stops, nowEpochSeconds, trustRealtime = false)
+                        else RouteStopProgress()
+                }
+                currentIndex = index
             }
         }
         if (currentIndex >= 0) {
