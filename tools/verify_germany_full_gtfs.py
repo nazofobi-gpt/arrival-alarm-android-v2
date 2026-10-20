@@ -18,7 +18,7 @@ def inspect(zf, member):
     try:
         with zf.open(member) as raw:
             text = io.TextIOWrapper(raw, encoding="utf-8-sig", newline="")
-            reader = csv.reader(text)
+            reader = csv.reader(text, strict=True)
             header = next(reader)
             if not any(column.strip() for column in header):
                 raise SystemExit(f"empty GTFS table {member}: missing CSV header")
