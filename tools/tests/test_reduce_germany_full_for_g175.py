@@ -1,5 +1,6 @@
 """Regression tests for duplicate GTFS table identities in the G-175 reducer."""
 
+import ast
 from pathlib import Path
 import subprocess
 import sys
@@ -54,6 +55,33 @@ class ReducerMemberIdentityTest(unittest.TestCase):
         self.assertIn("no active service", result.stderr)
         self.assertNotIn("duplicate GTFS table", result.stderr)
         self.assertFalse(created_output)
+
+
+class ReducerClockTimeTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # The reducer is an executable script with top-level ZIP processing.
+        # Load only the pure clock parser to keep regression tests feed-independent.
+        tree = ast.parse(SCRIPT.read_text(encoding="utf-8"))
+        fn = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "clock_seconds")
+        namespace = {}
+        exec(compile(ast.Module(body=[fn], type_ignores=[]), str(SCRIPT), "exec"), namespace)
+        cls.clock = staticmethod(namespace["clock_seconds"])
+
+    def test_valid_gtfs_times_include_overnight_service_hours(self):
+        self.assertEqual(8 * 3600 + 15 * 60, self.clock("08:15:00"))
+        self.assertEqual(25 * 3600 + 2 * 60 + 3, self.clock("25:02:03"))
+        self.assertEqual(0, self.clock("00:00:00"))
+
+    def test_invalid_minutes_and_seconds_are_not_normalized_into_other_times(self):
+        for value in ("08:60:00", "08:99:00", "09:00:60", "09:15:99", "10:-01:00"):
+            with self.subTest(value=value):
+                self.assertEqual(-1, self.clock(value))
+
+    def test_negative_hours_and_malformed_time_are_rejected(self):
+        for value in ("-1:50:00", "08:30", "abc", ""):
+            with self.subTest(value=value):
+                self.assertEqual(-1, self.clock(value))
 
 
 if __name__ == "__main__":

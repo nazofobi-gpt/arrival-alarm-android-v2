@@ -88,6 +88,8 @@ def active_services(zf, names, day):
 def clock_seconds(raw):
     try:
         h, m, s = map(int, raw.split(":"))
+        if h < 0 or not (0 <= m < 60 and 0 <= s < 60):
+            return -1
         return h * 3600 + m * 60 + s
     except Exception:
         return -1
