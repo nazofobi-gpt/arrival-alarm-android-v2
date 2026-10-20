@@ -261,6 +261,25 @@ class GtfsArchiveMemberTest(unittest.TestCase):
         self.assertNotIn("Traceback", result.stderr)
 
 
+    def test_report_path_cannot_overwrite_input_zip(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            archive = Path(dirname) / "feed.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                for name in REQUIRED:
+                    zf.writestr(name, "header\\n")
+            original_zip = archive.read_bytes()
+            for optimized in (False, True):
+                with self.subTest(optimized=optimized):
+                    result = subprocess.run(
+                        [sys.executable, *(["-O"] if optimized else []),
+                         str(SCRIPT), str(archive), str(archive)],
+                        capture_output=True, text=True, timeout=10, check=False,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn("GTFS report path must differ from input ZIP archive", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertEqual(original_zip, archive.read_bytes())
+
     def test_missing_gtfs_zip_fails_closed_without_python_traceback(self):
         with tempfile.TemporaryDirectory() as dirname:
             archive = Path(dirname) / "missing-feed.zip"
