@@ -55,8 +55,10 @@ def normalized_title(title: str) -> str:
 
 def is_new(pr: dict[str, Any]) -> bool:
     created = pr.get("created_at")
+    # Missing provider timestamp cannot prove a legacy PR exemption.
+    # Fail closed by enforcing new-PR metadata requirements.
     if not created:
-        return False
+        return True
     return datetime.fromisoformat(created.replace("Z", "+00:00")) >= START_REQUIRED
 
 
