@@ -82,6 +82,8 @@ private fun JSONObject.toRouteOption(): RouteOption? {
     val destination = optJSONObject("destination")?.toMapPoint() ?: return null
     // Route identities must survive persistence without JSON primitive coercion.
     val id = (opt("id") as? String)?.takeIf { it.isNotBlank() } ?: return null
+    // A corrupt refresh token cannot become a provider request identity.
+    if (hasNonStringOptional("refreshToken")) return null
     val stopsJson = optJSONArray("stops")
     if (has("stops") && !isNull("stops") && stopsJson == null) return null
     val stops = stopsJson.toRouteStops()
@@ -164,6 +166,8 @@ private fun RouteStop.toJson(): JSONObject = JSONObject()
 private fun JSONObject.toRouteStop(): RouteStop? {
     // A number, boolean or JSON container cannot be treated as an actual stop name.
     val name = (opt("name") as? String)?.takeIf { it.isNotBlank() } ?: return null
+    // An optional physical stop ID must not be manufactured from a JSON primitive.
+    if (hasNonStringOptional("id")) return null
     // Optional coordinates may be absent, but supplied invalid values cannot be trusted.
     if (hasInvalidCoordinate("latitude", -90.0, 90.0) ||
         hasInvalidCoordinate("longitude", -180.0, 180.0)
@@ -195,6 +199,8 @@ private fun Departure.toJson(): JSONObject = JSONObject()
 private fun JSONObject.toDeparture(): Departure? {
     // A coerced numeric/boolean JSON value is not an authoritative GTFS trip identity.
     val tripId = (opt("tripId") as? String)?.takeIf { it.isNotBlank() } ?: return null
+    // Reject a forged route identity, rather than stringifying a stored JSON number.
+    if (hasNonStringOptional("routeId")) return null
     // JSON getters silently coerce missing, malformed or fractional times to epoch zero.
     // Keep offline departures only when a positive whole-second timestamp is proven.
     val scheduled = strictPositiveEpochSecondsOrNull("scheduledEpochSeconds") ?: return null
@@ -247,6 +253,9 @@ private fun JSONObject.nonNegativeStoredIntOrNull(key: String): Int? {
     if (!has(key)) return 0
     return (opt(key) as? Number)?.toString()?.toIntOrNull()?.takeIf { it >= 0 }
 }
+
+private fun JSONObject.hasNonStringOptional(key: String): Boolean =
+    has(key) && !isNull(key) && opt(key) !is String
 
 private fun JSONObject.optNullableString(key: String): String? =
     if (!has(key) || isNull(key)) null else optString(key).takeIf { it.isNotBlank() }
