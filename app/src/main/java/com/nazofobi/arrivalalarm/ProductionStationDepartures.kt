@@ -322,7 +322,12 @@ internal class ProductionRealtimeStationOverlay(
             if (Thread.currentThread().isInterrupted) {
                 throw InterruptedException("Station realtime lookup cancelled after fetch")
             }
-            match(response, nowEpochSeconds())
+            val matched = match(response, nowEpochSeconds())
+            // The matcher itself may be cancelled; do not return a stale result.
+            if (Thread.currentThread().isInterrupted) {
+                throw InterruptedException("Station realtime lookup cancelled during match")
+            }
+            matched
         } catch (interrupted: InterruptedException) {
             // Cancellation is not an upstream outage; preserve the interrupt signal.
             Thread.currentThread().interrupt()
