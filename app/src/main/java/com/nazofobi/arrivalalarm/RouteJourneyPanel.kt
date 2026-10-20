@@ -53,6 +53,9 @@ fun RouteJourneyPanel(
     val context = LocalContext.current
     val preferences = remember(context) { ArrivalUiPreferences(context) }
     var directOnly by rememberSaveable { mutableStateOf(preferences.loadDirectOnlyRoutes()) }
+    var fewerTransfersFirst by rememberSaveable {
+        mutableStateOf(preferences.loadFewerTransfersFirst())
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -128,7 +131,10 @@ fun RouteJourneyPanel(
                     }
                 }
 
-                val visibleOptions = RouteResultsFilter(directOnly).apply(routeOptions)
+                val visibleOptions = RouteResultsFilter(
+                    directOnly = directOnly,
+                    fewerTransfersFirst = fewerTransfersFirst,
+                ).apply(routeOptions)
                 FilterChip(
                     selected = directOnly,
                     onClick = {
@@ -139,6 +145,17 @@ fun RouteJourneyPanel(
                     modifier = Modifier
                         .heightIn(min = 48.dp)
                         .testTag("route-direct-only-filter"),
+                )
+                FilterChip(
+                    selected = fewerTransfersFirst,
+                    onClick = {
+                        fewerTransfersFirst = !fewerTransfersFirst
+                        preferences.saveFewerTransfersFirst(fewerTransfersFirst)
+                    },
+                    label = { Text(stringResource(R.string.route_fewer_transfers_filter)) },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("route-fewer-transfers-filter"),
                 )
 
                 visibleOptions.take(6).forEachIndexed { index, option ->
