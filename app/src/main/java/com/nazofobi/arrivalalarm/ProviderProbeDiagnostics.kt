@@ -11,7 +11,15 @@ internal object ProviderProbeDiagnostics {
     // Old provider outcomes must not be presented as current health evidence.
     private const val MAX_HEALTH_CHECK_AGE_SECONDS = 86_400L
 
-    fun render(health: TransitProviderHealth?, latencyMillis: Long?): String {
+    fun render(health: TransitProviderHealth?, latencyMillis: Long?): String =
+        renderAt(health, latencyMillis, System.currentTimeMillis() / 1_000L)
+
+    // Separate wall-clock acquisition from classification for deterministic boundary tests.
+    internal fun renderAt(
+        health: TransitProviderHealth?,
+        latencyMillis: Long?,
+        nowEpochSeconds: Long,
+    ): String {
         val providerRole = when (health?.providerId) {
             ArrivalAlarmTransitProviders.LocalStatic.id -> "local_static"
             ArrivalAlarmTransitProviders.GermanyRealtime.id -> "realtime"
@@ -20,7 +28,6 @@ internal object ProviderProbeDiagnostics {
         }
         // A recognized provider without a real check cannot provide health evidence.
         val checkedAt = health?.checkedAtEpochSeconds ?: 0L
-        val nowEpochSeconds = System.currentTimeMillis() / 1_000L
         // Provider health is not evidence if its check time is absent or
         // impossibly far in the future. Allow minor device clock skew.
         val recognizedProvider = providerRole != "unknown" &&
