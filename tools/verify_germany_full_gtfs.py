@@ -10,7 +10,7 @@ archive = sys.argv[1]
 report_path = sys.argv[2] if len(sys.argv) > 2 else "g174-real-feed-report.json"
 
 # The report is an output artifact; never overwrite the input GTFS archive.
-# resolve() also catches relative-path and symlink aliases of the same file.
+# resolve() catches relative/symlink aliases; samefile() also catches hard links.
 archive_path = Path(archive)
 output_path = Path(report_path)
 if archive_path.resolve() == output_path.resolve() or (
