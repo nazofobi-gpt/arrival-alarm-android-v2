@@ -29,6 +29,50 @@ class GuidanceReliabilityTest {
         assertEquals("Hedef Flughafen Bremen", speaker.spoken.last().text)
     }
 
+    @Test fun blankGuidanceIdentityOrTextCannotReachTtsOrPendingStore() {
+        val speaker = RecordingSpeaker()
+        val store = InMemoryGuidanceStateStore()
+        val controller = GuidanceReliabilityController(speaker, store)
+        controller.onPermissions(GuidancePermissionSnapshot(true, true, true))
+
+        assertFalse(controller.requestGuidance(GuidanceUtterance("  ", "Next stop", "en-US")))
+        assertFalse(controller.requestGuidance(GuidanceUtterance("stop:missing", "  ", "en-US")))
+        assertTrue(speaker.spoken.isEmpty())
+        assertNull(controller.state.pending)
+        assertNull(controller.state.lastSpokenKey)
+
+        controller.onPermissions(GuidancePermissionSnapshot(false, false, false))
+        assertFalse(controller.requestGuidance(GuidanceUtterance("", "Destination", "en-US")))
+        assertFalse(controller.requestGuidance(GuidanceUtterance("stop:blank", "", "en-US")))
+        assertNull(controller.state.pending)
+        assertNull(controller.state.pendingSinceEpochMillis)
+    }
+
+    @Test fun malformedRestoredPendingGuidanceIsDiscardedWithoutSpeech() {
+        val speaker = RecordingSpeaker()
+        val malformed = GuidanceUtterance("stop:unknown", "  ", "tr-TR")
+        val store = object : GuidanceStateStore {
+            var saved = GuidanceReliabilityState(
+                pending = malformed,
+                pendingSinceEpochMillis = 10_000L,
+                permissionState = GuidancePermissionState.GRANTED,
+            )
+            override fun load(): GuidanceReliabilityState = saved
+            override fun save(state: GuidanceReliabilityState) { saved = state }
+        }
+        val controller = GuidanceReliabilityController(
+            speaker,
+            store,
+            nowEpochMillis = { 10_001L },
+        )
+
+        assertFalse(controller.retryPending())
+        assertTrue(speaker.spoken.isEmpty())
+        assertNull(controller.state.pending)
+        assertNull(controller.state.pendingSinceEpochMillis)
+        assertNull(store.saved.pending)
+    }
+
     @Test fun deterministicVoiceFallbackPolicy() {
         assertEquals(VoiceChoice.DESIRED_LOCALE, TtsVoicePolicy.choose(true, true))
         assertEquals(VoiceChoice.DEVICE_FALLBACK, TtsVoicePolicy.choose(false, true))
