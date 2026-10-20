@@ -149,6 +149,27 @@ class AndroidSelectedGtfsTripSession(context: Context) : AutoCloseable {
         synchronized(mutex) { !closed && store.save(selection) }
     }
 
+    /**
+     * A superseded/cancelled UI request must not persist a stale trip selection.
+     * Hold the request gate for the short synchronous SharedPreferences commit,
+     * so invalidation and the write cannot race between check and mutation.
+     * No alarm is armed here.
+     */
+    internal suspend fun confirmIfCurrent(
+        selection: GtfsSelectedTrip,
+        gate: LatestRequestGate,
+        requestToken: Long,
+    ): Boolean = withContext(Dispatchers.IO) {
+        synchronized(mutex) {
+            if (closed) return@synchronized false
+            var saved = false
+            if (!gate.commitIfCurrent(requestToken) { saved = store.save(selection) }) {
+                return@synchronized false
+            }
+            saved
+        }
+    }
+
     suspend fun restore(): GtfsSelectionRestore = withContext(Dispatchers.IO) {
         synchronized(mutex) {
             if (closed) {
