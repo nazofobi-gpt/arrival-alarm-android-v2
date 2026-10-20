@@ -46,6 +46,30 @@ class GtfsCsvRecordReaderTest {
         assertTrue(failure?.message?.contains("unterminated") == true)
     }
 
+    @Test fun physicalLineOverLimitFailsBeforeReadingEntireUntrustedLine() {
+        val counting = object : java.io.Reader() {
+            private val input = StringReader("X".repeat(100_000))
+            var charsRead = 0
+            override fun read(target: CharArray, offset: Int, length: Int): Int {
+                val count = input.read(target, offset, length)
+                if (count > 0) charsRead += count
+                return count
+            }
+            override fun close() = input.close()
+        }
+        val failure = runCatching {
+            gtfsCsvRecords(BufferedReader(counting), maxRecordChars = 64).toList()
+        }.exceptionOrNull()
+        assertTrue(failure is IllegalStateException)
+        assertTrue(failure?.message?.contains("size limit") == true)
+        assertTrue("Consumed entire overlong line before rejecting", counting.charsRead < 100_000)
+    }
+
+    @Test fun bareCrCrLfAndLfPreservePhysicalRecordBoundaries() {
+        assertEquals(listOf("a", "b", "c", "d"), records("a\rb\r\nc\nd"))
+        assertEquals(listOf("", "", ""), records("\n\r\r\n"))
+    }
+
     @Test fun blankLineAndBomHeaderRemainDistinctRecords() {
         val csv = records("\uFEFFstop_id,stop_name\n\n1,Achim")
         assertEquals(listOf("stop_id", "stop_name"), parseGtfsCsvHeader(csv[0]))
