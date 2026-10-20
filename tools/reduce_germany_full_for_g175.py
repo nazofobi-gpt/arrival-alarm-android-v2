@@ -51,6 +51,18 @@ def rows(zf, member):
     finally:
         text.close()
 
+def valid_stop_coordinates(row):
+    # A malformed provider coordinate must not abort nationwide fixture selection.
+    try:
+        latitude = float(row["stop_lat"])
+        longitude = float(row["stop_lon"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not (math.isfinite(latitude) and -90.0 <= latitude <= 90.0
+            and math.isfinite(longitude) and -180.0 <= longitude <= 180.0):
+        return None
+    return latitude, longitude
+
 def distance_m(a, b):
     lat1, lon1 = map(math.radians, a)
     lat2, lon2 = map(math.radians, b)
@@ -134,9 +146,8 @@ with zipfile.ZipFile(SOURCE) as source:
             stop_fields = list(row)
         if len(filler) < MIN_STOPS:
             filler.append(row)
-        try:
-            location = (float(row["stop_lat"]), float(row["stop_lon"]))
-        except (KeyError, ValueError):
+        location = valid_stop_coordinates(row)
+        if location is None:
             continue
         for point in points:
             if distance_m(location, point) <= 1_750:
