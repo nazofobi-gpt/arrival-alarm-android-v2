@@ -60,7 +60,9 @@ data class TransitExperienceSnapshot(
 
 class TransitExperienceEngine(private val capabilities: TransitProviderCapabilities) {
     fun departureBoard(departures: List<Departure>, nowEpochSeconds: Long, limit: Int = 8): List<Departure> =
-        departures.asSequence()
+        // An unset device clock cannot establish which scheduled services are upcoming.
+        if (!nowEpochSeconds.isDisplayableDepartureEpochSeconds()) emptyList()
+        else departures.asSequence()
             .map { if (capabilities.realtimeDepartures) it else it.copy(realtimeEpochSeconds = null) }
             .filterNot { it.cancelled }
             // A valid realtime update cannot make an invalid scheduled identity selectable.
