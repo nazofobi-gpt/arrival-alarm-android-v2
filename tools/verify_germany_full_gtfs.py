@@ -22,6 +22,8 @@ def inspect(zf, member):
             header = next(reader)
             if not any(column.strip() for column in header):
                 raise SystemExit(f"empty GTFS table {member}: missing CSV header")
+            if any(not column.strip() for column in header):
+                raise SystemExit(f"blank GTFS column name in {member}")
             seen = set()
             for column in header:
                 if column in seen:
