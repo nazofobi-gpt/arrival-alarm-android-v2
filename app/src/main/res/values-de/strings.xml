@@ -187,6 +187,7 @@
     <string name="live_trip_between_stops">Zwischen Haltestellen • physische Haltestellenposition nicht bestätigt</string>
     <string name="live_trip_progress_unavailable">Keine Anbieterzeit für den Haltestellenfortschritt verfügbar</string>
     <string name="live_trip_next">Nächste Haltestelle</string>
+    <string name="live_trip_remaining_stops">Verbleibende Halte (Anbieterzeit-Schätzung)</string>
     <string name="live_trip_target">Zielhaltestelle</string>
     <string name="live_trip_target_time">Zielzeit</string>
     <string name="live_trip_gps_distance">Echte GPS-Distanz zum Ziel</string>
