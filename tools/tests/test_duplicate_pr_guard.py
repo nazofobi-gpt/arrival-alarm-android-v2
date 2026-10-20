@@ -66,6 +66,14 @@ class DuplicateGuardTest(unittest.TestCase):
         errors, _ = guard.analyze(current, [first, second], [])
         self.assertTrue(any("#102" in error for error in errors))
 
+    def test_missing_creation_time_cannot_bypass_new_pr_metadata(self):
+        for created in (None, ""):
+            with self.subTest(created=created):
+                current = pr(470, "", "fix(G-173): safe duplicate gate", created=created)
+                errors, _ = guard.analyze(current, [], [])
+                self.assertTrue(any("Work-Unit" in error for error in errors))
+                self.assertTrue(any("Overlap-Review" in error for error in errors))
+
     def test_missing_metadata_is_required_only_for_new_pr(self):
         new = pr(402, "", "fix(G-168): route")
         old = pr(90, "", "fix(G-168): route", created="2026-10-11T12:00:00Z")
