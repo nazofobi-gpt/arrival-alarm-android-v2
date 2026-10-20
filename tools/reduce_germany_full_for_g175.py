@@ -115,7 +115,12 @@ def write_csv(zf, filename, fieldnames, records):
     zf.writestr(filename, buffer.getvalue().encode("utf-8"))
 
 target_day = next_weekday()
-with zipfile.ZipFile(SOURCE) as source:
+try:
+    source_archive = zipfile.ZipFile(SOURCE)
+except (OSError, zipfile.BadZipFile):
+    raise SystemExit("unable to open Germany Full GTFS ZIP source") from None
+
+with source_archive as source:
     names = member_map(source)
     for required in ("stops.txt", "routes.txt", "trips.txt", "stop_times.txt"):
         if required not in names:
