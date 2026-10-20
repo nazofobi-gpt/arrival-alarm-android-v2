@@ -186,6 +186,7 @@
     <string name="live_trip_current">Current stop by provider time</string>
     <string name="live_trip_between_stops">Between stops • physical stop position is not confirmed</string>
     <string name="live_trip_progress_unavailable">Provider timing is unavailable for stop progress</string>
+    <string name="live_trip_remaining_stops">Stops remaining (by provider time)</string>
     <string name="live_trip_next">Next stop</string>
     <string name="live_trip_target">Target stop</string>
     <string name="live_trip_target_time">Target time</string>
