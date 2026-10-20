@@ -125,27 +125,27 @@ class RouteRefreshSelectionTest {
     }
 
     @Test
-    fun partialCoordinatePairsAreNotValidTripIdentityEvidence() {
+    fun partialStopCoordinatePairsAreNotValidTripIdentityEvidence() {
         val old = option()
-        val missingOriginLatitude = old.copy(origin = origin.copy(latitude = null))
-        assertNull(retainSelectedRouteAfterRefresh(
-            old.id, listOf(missingOriginLatitude), listOf(missingOriginLatitude),
-        ))
-
-        val missingDestinationLongitude = old.copy(destination = destination.copy(longitude = null))
-        assertNull(retainSelectedRouteAfterRefresh(
-            old.id, listOf(missingDestinationLongitude), listOf(missingDestinationLongitude),
-        ))
-
+        // MapPoint requires a complete non-null coordinate pair at the type level.
+        // RouteStop allows nullable geometry, so partial pairs can enter via transit data.
         val missingStopLongitude = old.copy(stops = stops.mapIndexed { index, stop ->
             if (index == 1) stop.copy(longitude = null) else stop
         })
-        assertNull(retainSelectedRouteAfterRefresh(
-            old.id, listOf(missingStopLongitude), listOf(missingStopLongitude),
-        ))
-        assertNull(retainSelectedRouteAfterRefresh(
-            old.id, listOf(old), listOf(missingStopLongitude),
-        ))
+        val missingStopLatitude = old.copy(stops = stops.mapIndexed { index, stop ->
+            if (index == 1) stop.copy(latitude = null) else stop
+        })
+        for (invalid in listOf(missingStopLongitude, missingStopLatitude)) {
+            assertNull(retainSelectedRouteAfterRefresh(
+                old.id, listOf(invalid), listOf(invalid),
+            ))
+            assertNull(retainSelectedRouteAfterRefresh(
+                old.id, listOf(old), listOf(invalid),
+            ))
+            assertNull(retainSelectedRouteAfterRefresh(
+                old.id, listOf(invalid), listOf(old),
+            ))
+        }
     }
 
     @Test
