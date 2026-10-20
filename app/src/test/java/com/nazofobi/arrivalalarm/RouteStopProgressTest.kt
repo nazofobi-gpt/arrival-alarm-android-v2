@@ -231,6 +231,45 @@ class RouteStopProgressTest {
         )
     }
 
+    @Test fun untimedIntermediateStopCannotBeSkippedAsNext() {
+        val observations = listOf(
+            RouteStop(id = "a", name = "First", plannedDeparture = "2026-09-26T08:00:00+02:00"),
+            RouteStop(id = "b", name = "Untimed intermediate"),
+            RouteStop(id = "c", name = "Third", plannedArrival = "2026-09-26T08:20:00+02:00"),
+        )
+        val now = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
+        val progress = RouteStopProgressTracker().resolve(observations, now, trustRealtime = false)
+
+        assertFalse(progress.resolvedByProviderTime)
+        assertNull(progress.previous)
+        assertNull(progress.current)
+        assertNull(progress.next)
+    }
+
+    @Test fun untimedPrefixCannotBeHiddenByLaterTimedStop() {
+        val observations = listOf(
+            RouteStop(id = "a", name = "Untimed first"),
+            RouteStop(id = "b", name = "Second", plannedArrival = "2026-09-26T08:20:00+02:00"),
+        )
+        val now = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
+        val progress = RouteStopProgressTracker().resolve(observations, now, trustRealtime = false)
+
+        assertFalse(progress.resolvedByProviderTime)
+        assertNull(progress.next)
+    }
+
+    @Test fun untimedSuffixCannotBeHiddenByEarlierTimedStop() {
+        val observations = listOf(
+            RouteStop(id = "a", name = "First", plannedDeparture = "2026-09-26T08:00:00+02:00"),
+            RouteStop(id = "b", name = "Untimed last"),
+        )
+        val now = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
+        val progress = RouteStopProgressTracker().resolve(observations, now, trustRealtime = false)
+
+        assertFalse(progress.resolvedByProviderTime)
+        assertNull(progress.previous)
+    }
+
     @Test fun onlyFreshMatchedOnlineUncancelledRealtimeIsTrusted() {
         assertTrue(isTrustedRealtimeForJourney(RouteRealtimeState.FRESH_MATCHED, false))
         assertFalse(isTrustedRealtimeForJourney(RouteRealtimeState.STALE, false))
