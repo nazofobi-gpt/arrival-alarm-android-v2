@@ -56,6 +56,21 @@ class ArrivalUiPreferencesInstrumentedTest {
         }
     }
 
+    @Test
+    fun atMostOneTransferPreferencePersistsAndMalformedTypeFailsClosed() {
+        val prefs = context.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+        withRestoredPreferenceKeys(prefs, ArrivalUiPreferences.KEY_AT_MOST_ONE_TRANSFER) {
+            prefs.edit().remove(ArrivalUiPreferences.KEY_AT_MOST_ONE_TRANSFER).commit()
+            assertFalse(ArrivalUiPreferences(context).loadAtMostOneTransfer())
+
+            ArrivalUiPreferences(context).saveAtMostOneTransfer(true)
+            assertTrue(ArrivalUiPreferences(context).loadAtMostOneTransfer())
+
+            prefs.edit().putString(ArrivalUiPreferences.KEY_AT_MOST_ONE_TRANSFER, "invalid").commit()
+            assertFalse(ArrivalUiPreferences(context).loadAtMostOneTransfer())
+        }
+    }
+
     private inline fun withRestoredPreferenceKeys(
         prefs: SharedPreferences,
         vararg keys: String,
