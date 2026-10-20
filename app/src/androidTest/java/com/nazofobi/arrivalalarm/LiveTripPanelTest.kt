@@ -139,6 +139,8 @@ class LiveTripPanelTest {
 
         rule.onNodeWithTag("live-trip-previous").assertTextContains("Diepholz", substring = true)
         rule.onNodeWithTag("live-trip-next").assertTextContains("Bremen Hbf", substring = true)
+        // Stale realtime must retain the coherent scheduled stop count, not stale timing.
+        rule.onNodeWithTag("live-trip-remaining-stops").assertTextContains("1")
     }
 
 
