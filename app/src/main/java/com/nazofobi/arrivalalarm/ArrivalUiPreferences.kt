@@ -24,8 +24,16 @@ class ArrivalUiPreferences(context: Context) {
         prefs.edit().putBoolean(KEY_DIRECT_ONLY_ROUTES, enabled).apply()
     }
 
+    fun loadFewerTransfersFirst(): Boolean =
+        runCatching { prefs.getBoolean(KEY_FEWER_TRANSFERS_FIRST, false) }.getOrDefault(false)
+
+    fun saveFewerTransfersFirst(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_FEWER_TRANSFERS_FIRST, enabled).apply()
+    }
+
     companion object {
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_DIRECT_ONLY_ROUTES = "direct_only_routes"
+        const val KEY_FEWER_TRANSFERS_FIRST = "fewer_transfers_first"
     }
 }
