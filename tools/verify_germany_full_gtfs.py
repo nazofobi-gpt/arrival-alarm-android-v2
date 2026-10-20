@@ -42,6 +42,9 @@ def inspect(zf, member):
         raise SystemExit(f"invalid GTFS ZIP entry {member}") from None
     except NotImplementedError:
         raise SystemExit(f"unsupported GTFS ZIP entry compression {member}") from None
+    except RuntimeError:
+        # Password-protected GTFS tables must fail closed without a traceback.
+        raise SystemExit(f"unable to read GTFS ZIP entry {member}") from None
     except UnicodeDecodeError:
         raise SystemExit(f"invalid UTF-8 in GTFS table {member}") from None
     except csv.Error:
