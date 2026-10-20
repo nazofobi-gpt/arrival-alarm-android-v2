@@ -125,6 +125,30 @@ class RouteRefreshSelectionTest {
     }
 
     @Test
+    fun partialCoordinatePairsAreNotValidTripIdentityEvidence() {
+        val old = option()
+        val missingOriginLatitude = old.copy(origin = origin.copy(latitude = null))
+        assertNull(retainSelectedRouteAfterRefresh(
+            old.id, listOf(missingOriginLatitude), listOf(missingOriginLatitude),
+        ))
+
+        val missingDestinationLongitude = old.copy(destination = destination.copy(longitude = null))
+        assertNull(retainSelectedRouteAfterRefresh(
+            old.id, listOf(missingDestinationLongitude), listOf(missingDestinationLongitude),
+        ))
+
+        val missingStopLongitude = old.copy(stops = stops.mapIndexed { index, stop ->
+            if (index == 1) stop.copy(longitude = null) else stop
+        })
+        assertNull(retainSelectedRouteAfterRefresh(
+            old.id, listOf(missingStopLongitude), listOf(missingStopLongitude),
+        ))
+        assertNull(retainSelectedRouteAfterRefresh(
+            old.id, listOf(old), listOf(missingStopLongitude),
+        ))
+    }
+
+    @Test
     fun unknownStopCoordinatesDoNotInvalidateOtherVerifiedEvidence() {
         val withoutOptionalStopGeometry = option().copy(stops = stops.map { it.copy(
             latitude = null, longitude = null,
