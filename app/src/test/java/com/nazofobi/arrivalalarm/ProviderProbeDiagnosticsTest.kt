@@ -64,6 +64,35 @@ class ProviderProbeDiagnosticsTest {
         assertFalse(summary.contains("987654"))
     }
 
+    @Test fun zeroEpochCheckDoesNotBecomeVerifiedProviderHealth() {
+        val health = TransitProviderHealth(
+            providerId = ArrivalAlarmTransitProviders.GermanyRealtime.id,
+            state = TransitProviderHealthState.READY,
+            checkedAtEpochSeconds = 0L,
+            detail = "sensitive-provider-error",
+        )
+        val summary = ProviderProbeDiagnostics.render(health, 25L)
+        assertEquals("realtime", summary.value("provider_role"))
+        assertEquals("not_measured", summary.value("provider_state"))
+        assertEquals("not_measured", summary.value("latency_bucket"))
+        assertFalse(summary.contains("sensitive-provider-error"))
+    }
+
+    @Test fun nonzeroCheckAllowsReportedStateWithoutInferringAppReadiness() {
+        val health = TransitProviderHealth(
+            providerId = ArrivalAlarmTransitProviders.DbEnrichment.id,
+            state = TransitProviderHealthState.DEGRADED,
+            checkedAtEpochSeconds = 1L,
+            detail = "private-diagnostic",
+        )
+        val summary = ProviderProbeDiagnostics.render(health, 1000L)
+        assertEquals("enrichment", summary.value("provider_role"))
+        assertEquals("degraded", summary.value("provider_state"))
+        assertEquals("1s_to_5s", summary.value("latency_bucket"))
+        assertFalse(summary.contains("private-diagnostic"))
+        assertFalse(summary.contains("checked_at"))
+    }
+
     private fun String.value(key: String): String =
         lineSequence().first { it.startsWith("$key=") }.substringAfter('=')
 }
