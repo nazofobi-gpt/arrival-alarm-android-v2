@@ -39,6 +39,7 @@ class RouteStopProgressTest {
         assertEquals("Diepholz", progress.previous?.name)
         assertNull(progress.current)
         assertEquals("Bremen Hbf", progress.next?.name)
+        assertEquals(1, progress.remainingStops)
     }
 
     @Test fun dwellWindowExposesActualCurrentStop() {
@@ -48,6 +49,7 @@ class RouteStopProgressTest {
         assertEquals("Lohne", progress.previous?.name)
         assertEquals("Diepholz", progress.current?.name)
         assertEquals("Bremen Hbf", progress.next?.name)
+        assertEquals(1, progress.remainingStops)
     }
 
     @Test fun missingProviderTimesFailsUnknownInsteadOfGuessing() {
@@ -60,6 +62,7 @@ class RouteStopProgressTest {
         assertNull(progress.previous)
         assertNull(progress.current)
         assertNull(progress.next)
+        assertNull(progress.remainingStops)
     }
 
     @Test fun staleRealtimeTimesFallBackToScheduledStopSequence() {
@@ -292,6 +295,52 @@ class RouteStopProgressTest {
 
         assertFalse(progress.resolvedByProviderTime)
         assertNull(progress.previous)
+    }
+
+    @Test fun remainingStopsAreKnownBeforeFirstAndAfterLastTimedStop() {
+        val tracker = RouteStopProgressTracker()
+        val before = "2026-09-26T07:50:00+02:00".toTransitEpochSecondsOrNull()!!
+        val after = "2026-09-26T09:00:00+02:00".toTransitEpochSecondsOrNull()!!
+
+        val waiting = tracker.resolve(stops, before)
+        assertTrue(waiting.resolvedByProviderTime)
+        assertNull(waiting.current)
+        assertEquals("Lohne", waiting.next?.name)
+        assertEquals(3, waiting.remainingStops)
+
+        val finished = tracker.resolve(stops, after)
+        assertTrue(finished.resolvedByProviderTime)
+        assertNull(finished.next)
+        assertEquals(0, finished.remainingStops)
+    }
+
+    @Test fun remainingStopsUseOrderedOccurrencesNotRepeatedStopIds() {
+        val loop = listOf(
+            RouteStop(id = "a", name = "Loop", plannedDeparture = "2026-09-26T08:00:00+02:00"),
+            RouteStop(id = "b", name = "Middle", plannedDeparture = "2026-09-26T08:15:00+02:00"),
+            RouteStop(id = "a", name = "Loop", plannedArrival = "2026-09-26T08:30:00+02:00"),
+        )
+        val now = "2026-09-26T08:20:00+02:00".toTransitEpochSecondsOrNull()!!
+        val progress = RouteStopProgressTracker().resolve(loop, now, trustRealtime = false)
+
+        assertTrue(progress.resolvedByProviderTime)
+        assertNull(progress.current)
+        assertEquals("Middle", progress.previous?.name)
+        assertEquals("Loop", progress.next?.name)
+        assertEquals(1, progress.remainingStops)
+    }
+
+    @Test fun untimedGapLeavesRemainingStopsUnknown() {
+        val route = listOf(
+            RouteStop(id = "a", name = "Known", plannedDeparture = "2026-09-26T08:00:00+02:00"),
+            RouteStop(id = "b", name = "Untimed"),
+            RouteStop(id = "c", name = "Known", plannedArrival = "2026-09-26T08:30:00+02:00"),
+        )
+        val now = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
+        val progress = RouteStopProgressTracker().resolve(route, now, trustRealtime = false)
+
+        assertFalse(progress.resolvedByProviderTime)
+        assertNull(progress.remainingStops)
     }
 
     @Test fun onlyFreshMatchedOnlineUncancelledRealtimeIsTrusted() {
