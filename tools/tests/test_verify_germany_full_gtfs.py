@@ -384,12 +384,12 @@ class GtfsArchiveMemberTest(unittest.TestCase):
             report = Path(dirname) / "report.json"
             with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_STORED) as zf:
                 for name in REQUIRED:
-                    zf.writestr(name, b"column\\n")
+                    zf.writestr(name, b"column\n")
 
             # Set the encrypted-entry bit in the first member's local and central headers.
             payload = bytearray(archive.read_bytes())
-            local = payload.find(b"PK\\x03\\x04")
-            central = payload.find(b"PK\\x01\\x02")
+            local = payload.find(b"PK\x03\x04")
+            central = payload.find(b"PK\x01\x02")
             self.assertGreaterEqual(local, 0)
             self.assertGreaterEqual(central, 0)
             for offset in (local + 6, central + 8):
