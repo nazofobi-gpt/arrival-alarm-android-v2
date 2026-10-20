@@ -27,7 +27,15 @@ def inspect(zf, member):
                 if column in seen:
                     raise SystemExit(f"duplicate GTFS column {member}: {column}")
                 seen.add(column)
-            return {"rows": sum(1 for _ in reader), "header": header}
+            rows = 0
+            for row in reader:
+                if len(row) != len(header):
+                    raise SystemExit(
+                        f"GTFS table {member} has {len(row)} columns at CSV line "
+                        f"{reader.line_num}; expected {len(header)}"
+                    )
+                rows += 1
+            return {"rows": rows, "header": header}
     except UnicodeDecodeError:
         raise SystemExit(f"invalid UTF-8 in GTFS table {member}") from None
     except csv.Error:
