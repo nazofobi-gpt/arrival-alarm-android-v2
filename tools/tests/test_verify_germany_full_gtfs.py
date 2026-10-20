@@ -378,5 +378,38 @@ class GtfsArchiveMemberTest(unittest.TestCase):
                     self.assertFalse(report.exists())
 
 
+    def test_encrypted_zip_entry_fails_closed_without_traceback(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            archive = Path(dirname) / "encrypted-entry.zip"
+            report = Path(dirname) / "report.json"
+            with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_STORED) as zf:
+                for name in REQUIRED:
+                    zf.writestr(name, b"column\\n")
+
+            # Set the encrypted-entry bit in the first member's local and central headers.
+            payload = bytearray(archive.read_bytes())
+            local = payload.find(b"PK\\x03\\x04")
+            central = payload.find(b"PK\\x01\\x02")
+            self.assertGreaterEqual(local, 0)
+            self.assertGreaterEqual(central, 0)
+            for offset in (local + 6, central + 8):
+                flags = int.from_bytes(payload[offset:offset + 2], "little")
+                payload[offset:offset + 2] = (flags | 1).to_bytes(2, "little")
+            archive.write_bytes(payload)
+
+            for optimized in (False, True):
+                with self.subTest(optimized=optimized):
+                    result = subprocess.run(
+                        [sys.executable, *(['-O'] if optimized else []),
+                         str(SCRIPT), str(archive), str(report)],
+                        capture_output=True, text=True, timeout=10, check=False,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn("unable to read GTFS ZIP entry stops.txt", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertFalse(report.exists())
+
+
+
 if __name__ == "__main__":
     unittest.main()
