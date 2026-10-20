@@ -76,6 +76,38 @@ class RouteResultsFilterTest {
     }
 
     @Test
+    fun oneTransferLimitPreservesProviderOrderAndExcludesInvalidCounts() {
+        val candidates = listOf(
+            option("two", 2), option("one", 1),
+            option("unknown", -1), option("direct", 0),
+        )
+        assertEquals(
+            listOf("one", "direct"),
+            RouteResultsFilter(maxTransfers = 1).apply(candidates).map { it.id },
+        )
+        assertEquals(
+            listOf("direct"),
+            RouteResultsFilter(directOnly = true, maxTransfers = 1)
+                .apply(candidates).map { it.id },
+        )
+        assertEquals(
+            listOf("direct", "one"),
+            RouteResultsFilter(fewerTransfersFirst = true, maxTransfers = 1)
+                .apply(candidates).map { it.id },
+        )
+        assertTrue(RouteResultsFilter(maxTransfers = -1).apply(candidates).isEmpty())
+    }
+
+    @Test
+    fun oneTransferLimitShowsEmptyWhenOnlyLongConnectionsExist() {
+        assertTrue(
+            RouteResultsFilter(maxTransfers = 1)
+                .apply(listOf(option("two", 2), option("three", 3)))
+                .isEmpty(),
+        )
+    }
+
+    @Test
     fun togglingBackToAllDoesNotMutateCandidates() {
         val candidates = listOf(option("via", 1), option("direct", 0))
         RouteResultsFilter(directOnly = true).apply(candidates)
