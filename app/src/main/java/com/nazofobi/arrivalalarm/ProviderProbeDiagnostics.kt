@@ -32,11 +32,15 @@ internal object ProviderProbeDiagnostics {
         val checkedAt = health?.checkedAtEpochSeconds ?: 0L
         // Provider health is not evidence if its check time is absent or
         // impossibly far in the future. Allow minor device clock skew.
-        val recognizedProvider = providerRole != "unknown" &&
-            checkedAt > 0L &&
-            checkedAt <= nowEpochSeconds + MAX_PROVIDER_FUTURE_SKEW_SECONDS &&
-            (checkedAt >= nowEpochSeconds ||
-                nowEpochSeconds - checkedAt <= MAX_HEALTH_CHECK_AGE_SECONDS)
+        // A device with an unset clock cannot attest to a recent provider check.
+        // Compare positive epochs by subtraction to avoid Long overflow near its limit.
+        val validCheckTime = nowEpochSeconds > 0L && checkedAt > 0L && when {
+            checkedAt >= nowEpochSeconds ->
+                checkedAt - nowEpochSeconds <= MAX_PROVIDER_FUTURE_SKEW_SECONDS
+            else ->
+                nowEpochSeconds - checkedAt <= MAX_HEALTH_CHECK_AGE_SECONDS
+        }
+        val recognizedProvider = providerRole != "unknown" && validCheckTime
         val providerState = if (!recognizedProvider) "not_measured" else when (health?.state) {
             TransitProviderHealthState.READY -> "ready"
             TransitProviderHealthState.DEGRADED -> "degraded"
