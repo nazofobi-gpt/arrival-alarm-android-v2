@@ -172,3 +172,59 @@ internal fun GtfsTripConsentPanel(
         }
     }
 }
+
+
+/**
+ * Show the exact rider-confirmed, source-verified GTFS stop roles after save or
+ * process recreation. Display is read-only: it never starts tracking or arms an alarm.
+ * Reject inconsistent detail rather than inventing a current trip or stop.
+ */
+@Composable
+internal fun GtfsConfirmedTripSummary(
+    verified: GtfsSelectionRestore.Verified,
+    modifier: Modifier = Modifier,
+) {
+    val selection = verified.selection
+    val detail = verified.detail
+    if (detail.identity != selection.identity) return
+
+    fun matching(ref: GtfsSelectedStopRef): GtfsTripDetailStop? =
+        detail.stops.singleOrNull {
+            it.stopSequence == ref.sequence && it.stopId == ref.stopId
+        }
+    val boarding = matching(selection.boarding) ?: return
+    val destination = matching(selection.destination) ?: return
+    val alarmTarget = matching(selection.alarmTarget) ?: return
+    if (boarding.stopSequence >= destination.stopSequence ||
+        alarmTarget.stopSequence <= boarding.stopSequence ||
+        alarmTarget.stopSequence > destination.stopSequence
+    ) return
+
+    Card(modifier = modifier.fillMaxWidth().testTag("gtfs-confirmed-trip-summary")) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                stringResource(R.string.gtfs_consent_restored),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                stringResource(R.string.gtfs_consent_boarding, boarding.name),
+                modifier = Modifier.testTag("gtfs-confirmed-boarding"),
+            )
+            Text(
+                "${stringResource(R.string.gtfs_consent_choose_destination)}: ${destination.name}",
+                modifier = Modifier.testTag("gtfs-confirmed-destination"),
+            )
+            Text(
+                "${stringResource(R.string.gtfs_consent_alarm_target)}: ${alarmTarget.name}",
+                modifier = Modifier.testTag("gtfs-confirmed-alarm-target"),
+            )
+            Text(
+                stringResource(R.string.gtfs_consent_no_automatic_alarm),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
