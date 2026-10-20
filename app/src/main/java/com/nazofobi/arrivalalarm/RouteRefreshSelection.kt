@@ -41,6 +41,9 @@ internal fun retainSelectedRouteAfterRefresh(
         previous.destination.longitude != updated.destination.longitude
     ) return null
 
+    // No ordered physical stops means there is no verified stop-role identity.
+    // Even matching route IDs and trip IDs must not silently preserve selection.
+    if (previous.stops.isEmpty() || updated.stops.isEmpty()) return null
     if (previous.stops.size != updated.stops.size) return null
     if (previous.stops.any { it.id.isNullOrBlank() } || updated.stops.any { it.id.isNullOrBlank() }) {
         return null
