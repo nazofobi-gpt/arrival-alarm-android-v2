@@ -53,7 +53,7 @@ class ProviderProbeDiagnosticsTest {
         val health = TransitProviderHealth(
             providerId = ArrivalAlarmTransitProviders.LocalStatic.id,
             state = TransitProviderHealthState.READY,
-            checkedAtEpochSeconds = 987654L,
+            checkedAtEpochSeconds = (System.currentTimeMillis() / 1_000L) - 30L,
             detail = "private-provider-detail",
         )
         val summary = ProviderProbeDiagnostics.render(health, 250L)
@@ -109,7 +109,7 @@ class ProviderProbeDiagnosticsTest {
         val health = TransitProviderHealth(
             providerId = ArrivalAlarmTransitProviders.DbEnrichment.id,
             state = TransitProviderHealthState.DEGRADED,
-            checkedAtEpochSeconds = 1L,
+            checkedAtEpochSeconds = (System.currentTimeMillis() / 1_000L) - 60L,
             detail = "private-diagnostic",
         )
         val summary = ProviderProbeDiagnostics.render(health, 1000L)
@@ -118,6 +118,34 @@ class ProviderProbeDiagnosticsTest {
         assertEquals("1s_to_5s", summary.value("latency_bucket"))
         assertFalse(summary.contains("private-diagnostic"))
         assertFalse(summary.contains("checked_at"))
+    }
+
+
+    @Test fun expiredHealthCheckCannotClaimProviderReadyOrMeasuredLatency() {
+        val now = System.currentTimeMillis() / 1_000L
+        val health = TransitProviderHealth(
+            providerId = ArrivalAlarmTransitProviders.GermanyRealtime.id,
+            state = TransitProviderHealthState.READY,
+            checkedAtEpochSeconds = now - 86_401L,
+            detail = "private-health-error",
+        )
+        val summary = ProviderProbeDiagnostics.render(health, 300L)
+        assertEquals("realtime", summary.value("provider_role"))
+        assertEquals("not_measured", summary.value("provider_state"))
+        assertEquals("not_measured", summary.value("latency_bucket"))
+        assertFalse(summary.contains("private-health-error"))
+    }
+
+    @Test fun recentPastHealthCheckCanStillReportCoarseHealth() {
+        val now = System.currentTimeMillis() / 1_000L
+        val health = TransitProviderHealth(
+            providerId = ArrivalAlarmTransitProviders.LocalStatic.id,
+            state = TransitProviderHealthState.DEGRADED,
+            checkedAtEpochSeconds = now - 80_000L,
+        )
+        val summary = ProviderProbeDiagnostics.render(health, 250L)
+        assertEquals("degraded", summary.value("provider_state"))
+        assertEquals("250ms_to_1s", summary.value("latency_bucket"))
     }
 
     private fun String.value(key: String): String =
