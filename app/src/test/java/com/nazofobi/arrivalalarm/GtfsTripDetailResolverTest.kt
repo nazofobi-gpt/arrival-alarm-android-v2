@@ -170,7 +170,11 @@ class GtfsTripDetailResolverTest {
         )
         // Extended service-day clocks stay supported. A non-timepoint may be null.
         source.times = original.mapIndexed { index, stop ->
-            if (index == 1) stop.copy(arrivalTime = null, departureTime = "26:05:07") else stop
+            when (index) {
+                1 -> stop.copy(arrivalTime = null, departureTime = "26:05:07")
+                2 -> stop.copy(arrivalTime = "26:10:00", departureTime = "26:12:00")
+                else -> stop
+            }
         }
         assertTrue(resolver.resolve(identity) is GtfsTripDetailResult.Available)
     }
