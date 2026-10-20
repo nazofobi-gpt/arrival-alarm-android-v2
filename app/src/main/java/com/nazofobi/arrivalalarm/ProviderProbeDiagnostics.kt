@@ -15,8 +15,9 @@ internal object ProviderProbeDiagnostics {
             ArrivalAlarmTransitProviders.DbEnrichment.id -> "enrichment"
             else -> "unknown"
         }
-        // An unrecognized provider cannot contribute verified health evidence.
-        val recognizedProvider = providerRole != "unknown"
+        // A recognized provider without a real check cannot provide health evidence.
+        val recognizedProvider = providerRole != "unknown" &&
+            (health?.checkedAtEpochSeconds ?: 0L) > 0L
         val providerState = if (!recognizedProvider) "not_measured" else when (health?.state) {
             TransitProviderHealthState.READY -> "ready"
             TransitProviderHealthState.DEGRADED -> "degraded"
