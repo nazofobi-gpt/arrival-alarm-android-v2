@@ -16,8 +16,11 @@ internal object ProviderProbeDiagnostics {
             else -> "unknown"
         }
         // A recognized provider without a real check cannot provide health evidence.
+        // A future check timestamp cannot establish observed provider health.
+        val checkedAtEpochSeconds = health?.checkedAtEpochSeconds ?: 0L
         val recognizedProvider = providerRole != "unknown" &&
-            (health?.checkedAtEpochSeconds ?: 0L) > 0L
+            checkedAtEpochSeconds > 0L &&
+            checkedAtEpochSeconds <= System.currentTimeMillis() / 1_000L
         val providerState = if (!recognizedProvider) "not_measured" else when (health?.state) {
             TransitProviderHealthState.READY -> "ready"
             TransitProviderHealthState.DEGRADED -> "degraded"
