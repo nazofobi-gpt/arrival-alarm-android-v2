@@ -321,5 +321,43 @@ class GtfsArchiveMemberTest(unittest.TestCase):
                             self.assertFalse(report.exists())
 
 
+    def test_unsupported_zip_compression_fails_closed_without_traceback(self):
+        fixtures = {
+            "stops.txt": b"stop_id,stop_name,stop_lat,stop_lon\n1,Test,52.0,8.0\n",
+            "routes.txt": b"route_id,route_type\nR,3\n",
+            "trips.txt": b"route_id,service_id,trip_id\nR,S,T\n",
+            "stop_times.txt": b"trip_id,arrival_time,departure_time,stop_id,stop_sequence\nT,10:00:00,10:00:00,1,1\n",
+        }
+        with tempfile.TemporaryDirectory() as dirname:
+            archive = Path(dirname) / "unsupported-compression.zip"
+            report = Path(dirname) / "report.json"
+            with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_STORED) as zf:
+                for name in REQUIRED:
+                    zf.writestr(name, fixtures[name])
+
+            # Only the first entry (stops.txt) advertises an unknown ZIP method.
+            # Both local and central directory metadata must agree.
+            payload = bytearray(archive.read_bytes())
+            local = payload.find(b"PK\x03\x04")
+            central = payload.find(b"PK\x01\x02")
+            self.assertGreaterEqual(local, 0)
+            self.assertGreaterEqual(central, 0)
+            payload[local + 8:local + 10] = (99).to_bytes(2, "little")
+            payload[central + 10:central + 12] = (99).to_bytes(2, "little")
+            archive.write_bytes(payload)
+
+            for optimized in (False, True):
+                with self.subTest(optimized=optimized):
+                    result = subprocess.run(
+                        [sys.executable, *(["-O"] if optimized else []),
+                         str(SCRIPT), str(archive), str(report)],
+                        capture_output=True, text=True, timeout=10, check=False,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn("unsupported GTFS ZIP entry compression stops.txt", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertFalse(report.exists())
+
+
 if __name__ == "__main__":
     unittest.main()
