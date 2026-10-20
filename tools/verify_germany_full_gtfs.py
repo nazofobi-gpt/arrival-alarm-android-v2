@@ -38,6 +38,8 @@ def inspect(zf, member):
                     )
                 rows += 1
             return {"rows": rows, "header": header}
+    except zipfile.BadZipFile:
+        raise SystemExit(f"invalid GTFS ZIP entry {member}") from None
     except UnicodeDecodeError:
         raise SystemExit(f"invalid UTF-8 in GTFS table {member}") from None
     except csv.Error:
@@ -45,7 +47,12 @@ def inspect(zf, member):
     except StopIteration:
         raise SystemExit(f"empty GTFS table {member}: missing CSV header") from None
 
-with zipfile.ZipFile(archive) as zf:
+try:
+    zf = zipfile.ZipFile(archive)
+except zipfile.BadZipFile:
+    raise SystemExit("invalid GTFS ZIP archive") from None
+
+with zf:
     # A ZIP can contain both stops.txt and nested/stops.txt (or a case alias).
     # Never silently select the last table: a mixed source would be unverifiable.
     known_tables = set(required) | set(optional)

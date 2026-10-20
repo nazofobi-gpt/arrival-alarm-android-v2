@@ -261,5 +261,65 @@ class GtfsArchiveMemberTest(unittest.TestCase):
         self.assertNotIn("Traceback", result.stderr)
 
 
+    def test_invalid_zip_container_fails_without_python_traceback(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            archive = Path(dirname) / "broken.zip"
+            report = Path(dirname) / "report.json"
+            archive.write_bytes(b"not a GTFS ZIP archive")
+            for optimized in (False, True):
+                with self.subTest(optimized=optimized):
+                    result = subprocess.run(
+                        [sys.executable, *(["-O"] if optimized else []),
+                         str(SCRIPT), str(archive), str(report)],
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                        check=False,
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("invalid GTFS ZIP archive", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertFalse(report.exists())
+
+
+    def test_corrupt_zip_entry_crc_fails_closed_without_traceback(self):
+        fixtures = {
+            "stops.txt": b"stop_id,stop_name,stop_lat,stop_lon\n1,Test,52.0,8.0\n",
+            "routes.txt": b"route_id,route_type\nR,3\n",
+            "trips.txt": b"route_id,service_id,trip_id\nR,S,T\n",
+            "stop_times.txt": b"trip_id,arrival_time,departure_time,stop_id,stop_sequence\nT,10:00:00,10:00:00,1,1\n",
+            "feed_info.txt": b"id,name\n1,Example\n",
+        }
+        for member, entries, original, corrupted in (
+            ("stops.txt", REQUIRED, b"1,Test,52.0,8.0", b"1,Fail,52.0,8.0"),
+            ("feed_info.txt", REQUIRED + ("feed_info.txt",),
+             b"1,Example", b"1,Changed"),
+        ):
+            with self.subTest(member=member):
+                with tempfile.TemporaryDirectory() as dirname:
+                    archive = Path(dirname) / "corrupted-entry.zip"
+                    report = Path(dirname) / "report.json"
+                    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_STORED) as zf:
+                        for name in entries:
+                            zf.writestr(name, fixtures[name])
+                    archive_bytes = archive.read_bytes()
+                    self.assertEqual(archive_bytes.count(original), 1)
+                    archive.write_bytes(archive_bytes.replace(original, corrupted, 1))
+                    for optimized in (False, True):
+                        with self.subTest(optimized=optimized):
+                            result = subprocess.run(
+                                [sys.executable, *(['-O'] if optimized else []),
+                                 str(SCRIPT), str(archive), str(report)],
+                                capture_output=True,
+                                text=True,
+                                timeout=10,
+                                check=False,
+                            )
+                            self.assertNotEqual(result.returncode, 0)
+                            self.assertIn(f"invalid GTFS ZIP entry {member}", result.stderr)
+                            self.assertNotIn("Traceback", result.stderr)
+                            self.assertFalse(report.exists())
+
+
 if __name__ == "__main__":
     unittest.main()
