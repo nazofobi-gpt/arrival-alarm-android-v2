@@ -53,6 +53,7 @@ class SupportDiagnosticsTest {
             )
             assertTrue(report.contains("transit_index=index_empty\n"))
             assertTrue(report.contains("installed_stop_count=0\n"))
+            assertTrue(report.contains("feed_age_bucket=unknown\n"))
             assertFalse(report.contains("transit_index=index_present_unverified\n"))
             assertFalse(report.contains("private-feed-source"))
         }
