@@ -135,6 +135,25 @@ class AndroidManifestPrivacyPolicyTest(unittest.TestCase):
                     validate_manifest(bad),
                 )
 
+    def test_main_activity_requires_same_filter_main_and_launcher(self):
+        main_action = '<action android:name="android.intent.action.MAIN" />'
+        launcher_category = '<category android:name="android.intent.category.LAUNCHER" />'
+        split_filters = VALID.replace(
+            launcher_category,
+            '</intent-filter>\n            <intent-filter>\n                ' + launcher_category,
+        )
+        for label, malformed in (
+            ("missing_main_action", VALID.replace(main_action, "")),
+            ("missing_launcher_category", VALID.replace(launcher_category, "")),
+            ("split_across_filters", split_filters),
+        ):
+            with self.subTest(case=label):
+                self.assertIn(
+                    "MainActivity must have a MAIN/LAUNCHER intent filter",
+                    validate_manifest(malformed),
+                )
+        self.assertEqual([], validate_manifest(VALID))
+
     def test_missing_or_duplicate_main_activity_fails_closed(self):
         missing = VALID.replace('android:name=".MainActivity"', 'android:name=".OtherActivity"')
         self.assertIn("exactly one MainActivity must be declared", validate_manifest(missing))
