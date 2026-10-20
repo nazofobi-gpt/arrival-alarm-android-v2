@@ -286,7 +286,7 @@ class GtfsArchiveMemberTest(unittest.TestCase):
             report = Path(dirname) / "report.json"
             with zipfile.ZipFile(archive, "w") as zf:
                 for name in REQUIRED:
-                    zf.writestr(name, "header\\n")
+                    zf.writestr(name, "header\n")
             report.hardlink_to(archive)
             original_zip = archive.read_bytes()
             for optimized in (False, True):
