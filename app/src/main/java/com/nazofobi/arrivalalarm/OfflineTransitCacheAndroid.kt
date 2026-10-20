@@ -140,7 +140,13 @@ private fun JSONObject.toMapPoint(): MapPoint? {
     // Saved coordinates must be JSON numbers; org.json otherwise coerces strings.
     val latitude = strictStoredCoordinateOrNull("latitude", -90.0, 90.0) ?: return null
     val longitude = strictStoredCoordinateOrNull("longitude", -180.0, 180.0) ?: return null
-    return MapPoint(latitude, longitude, optString("label"))
+    // A stored label must be a real JSON string; do not coerce numbers or booleans.
+    // Older route snapshots may omit the optional label altogether.
+    val label = when {
+        !has("label") || isNull("label") -> ""
+        else -> opt("label") as? String ?: return null
+    }
+    return MapPoint(latitude, longitude, label)
 }
 
 private fun RouteStop.toJson(): JSONObject = JSONObject()
