@@ -42,8 +42,11 @@ class JourneyController(
         (saved.distanceMeters == null ||
             (saved.distanceMeters.isFinite() && saved.distanceMeters >= 0.0)) &&
             when (saved.phase) {
-            JourneyPhase.EMPTY -> saved.start == null && saved.destination == null
-            JourneyPhase.START_SELECTED -> saved.start?.isValidCoordinate() == true && saved.destination == null
+            JourneyPhase.EMPTY -> saved.start == null && saved.destination == null &&
+                saved.distanceMeters == null
+            JourneyPhase.START_SELECTED ->
+                saved.start?.isValidCoordinate() == true && saved.destination == null &&
+                saved.distanceMeters == null
             JourneyPhase.DESTINATION_SELECTED, JourneyPhase.ARMED ->
                 saved.start?.isValidCoordinate() == true && saved.destination?.isValidCoordinate() == true
             JourneyPhase.ARRIVED ->

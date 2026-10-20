@@ -129,6 +129,38 @@ class JourneyControllerTest {
         assertEquals(250.0, restored.distanceMeters ?: -1.0, 0.0)
     }
 
+    @Test fun restoredJourneyWithoutDestinationRejectsOrphanedGpsDistance() {
+        val start = GeoPoint(53.083, 8.813)
+        var persisted = JourneyUiState(
+            phase = JourneyPhase.EMPTY,
+            distanceMeters = 125.0,
+        )
+        val store = object : JourneyStateStore {
+            override fun load(): JourneyUiState = persisted
+            override fun save(state: JourneyUiState) = Unit
+        }
+
+        val restoredEmpty = JourneyController(stateStore = store).state
+        assertEquals(JourneyPhase.EMPTY, restoredEmpty.phase)
+        assertNull(restoredEmpty.distanceMeters)
+
+        persisted = JourneyUiState(
+            phase = JourneyPhase.START_SELECTED,
+            start = start,
+            distanceMeters = 125.0,
+        )
+        val restoredStartWithStaleDistance = JourneyController(stateStore = store).state
+        assertEquals(JourneyPhase.EMPTY, restoredStartWithStaleDistance.phase)
+        assertNull(restoredStartWithStaleDistance.distanceMeters)
+
+        // A legitimate saved origin with no distance still survives recreation.
+        persisted = JourneyUiState(phase = JourneyPhase.START_SELECTED, start = start)
+        val validRestoredStart = JourneyController(stateStore = store).state
+        assertEquals(JourneyPhase.START_SELECTED, validRestoredStart.phase)
+        assertEquals(start, validRestoredStart.start)
+        assertNull(validRestoredStart.distanceMeters)
+    }
+
     @Test fun corruptedPersistedArmedJourneyFailsClosedOnRestart() {
         val store = object : JourneyStateStore {
             override fun load() = JourneyUiState(
