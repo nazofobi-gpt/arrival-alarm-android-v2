@@ -173,6 +173,36 @@ class TransitProviderContractTest {
         assertNull(outsideSkew.updatedAtEpochSeconds)
     }
 
+
+    @Test
+    fun zeroEpochSentinelsCannotClaimFreshTransitEvidence() {
+        for ((lastUpdate, now) in listOf(
+            0L to 100L,
+            5L to 0L,
+            0L to 0L,
+        )) {
+            val result = TransitProviderFreshness.evaluate(
+                updatedAtEpochSeconds = lastUpdate,
+                nowEpochSeconds = now,
+                staleAfterSeconds = 1_000L,
+            )
+            assertEquals(TransitProviderFreshnessState.UNKNOWN, result.state)
+            assertNull(result.ageSeconds)
+            assertNull(result.updatedAtEpochSeconds)
+        }
+    }
+
+    @Test
+    fun earliestPositiveEpochRemainsValidFreshnessEvidence() {
+        val result = TransitProviderFreshness.evaluate(
+            updatedAtEpochSeconds = 1L,
+            nowEpochSeconds = 1L,
+            staleAfterSeconds = 0L,
+        )
+        assertEquals(TransitProviderFreshnessState.FRESH, result.state)
+        assertEquals(0L, result.ageSeconds)
+    }
+
     @Test
     fun farFutureProviderTimestampCannotMasqueradeAsFresh() {
         val invalid = TransitProviderFreshness.evaluate(
