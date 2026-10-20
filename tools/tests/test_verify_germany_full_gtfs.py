@@ -266,7 +266,7 @@ class GtfsArchiveMemberTest(unittest.TestCase):
             archive = Path(dirname) / "feed.zip"
             with zipfile.ZipFile(archive, "w") as zf:
                 for name in REQUIRED:
-                    zf.writestr(name, "header\\n")
+                    zf.writestr(name, "header\n")
             original_zip = archive.read_bytes()
             for optimized in (False, True):
                 with self.subTest(optimized=optimized):
