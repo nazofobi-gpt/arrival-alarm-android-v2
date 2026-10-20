@@ -161,6 +161,41 @@ class JourneyControllerTest {
         assertNull(validRestoredStart.distanceMeters)
     }
 
+    @Test fun restoredUnarmedDestinationRejectsOrphanedGpsDistance() {
+        val start = GeoPoint(53.083, 8.813)
+        val destination = GeoPoint(53.1, 8.9)
+        var saved = JourneyUiState(
+            phase = JourneyPhase.DESTINATION_SELECTED,
+            start = start,
+            destination = destination,
+            distanceMeters = 20.0,
+        )
+        val store = object : JourneyStateStore {
+            override fun load(): JourneyUiState = saved
+            override fun save(state: JourneyUiState) = Unit
+        }
+
+        // A distance recorded in the unarmed phase must not become a valid current
+        // proximity reading or silently carry into a newly armed journey.
+        assertEquals(JourneyPhase.EMPTY, JourneyController(stateStore = store).state.phase)
+
+        saved = saved.copy(distanceMeters = null)
+        val valid = JourneyController(stateStore = store)
+        assertEquals(JourneyPhase.DESTINATION_SELECTED, valid.state.phase)
+        assertEquals(destination, valid.state.destination)
+        assertNull(valid.state.distanceMeters)
+
+        valid.arm()
+        assertEquals(JourneyPhase.ARMED, valid.state.phase)
+        assertNull(valid.state.distanceMeters)
+
+        // An actually armed and measured trip still survives restoration.
+        saved = saved.copy(phase = JourneyPhase.ARMED, distanceMeters = 400.0)
+        val armed = JourneyController(stateStore = store)
+        assertEquals(JourneyPhase.ARMED, armed.state.phase)
+        assertEquals(400.0, armed.state.distanceMeters ?: -1.0, 0.0)
+    }
+
     @Test fun corruptedPersistedArmedJourneyFailsClosedOnRestart() {
         val store = object : JourneyStateStore {
             override fun load() = JourneyUiState(

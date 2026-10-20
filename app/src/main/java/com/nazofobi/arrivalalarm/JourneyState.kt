@@ -47,8 +47,14 @@ class JourneyController(
             JourneyPhase.START_SELECTED ->
                 saved.start?.isValidCoordinate() == true && saved.destination == null &&
                 saved.distanceMeters == null
-            JourneyPhase.DESTINATION_SELECTED, JourneyPhase.ARMED ->
-                saved.start?.isValidCoordinate() == true && saved.destination?.isValidCoordinate() == true
+            JourneyPhase.DESTINATION_SELECTED ->
+                // Unarmed state cannot inherit the previous trip's proximity measurement.
+                saved.start?.isValidCoordinate() == true &&
+                    saved.destination?.isValidCoordinate() == true &&
+                    saved.distanceMeters == null
+            JourneyPhase.ARMED ->
+                saved.start?.isValidCoordinate() == true &&
+                    saved.destination?.isValidCoordinate() == true
             JourneyPhase.ARRIVED ->
                 // A restored arrival must have measured proximity, not just valid coordinates.
                 saved.start?.isValidCoordinate() == true &&
