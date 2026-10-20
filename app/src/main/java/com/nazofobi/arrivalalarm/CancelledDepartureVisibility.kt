@@ -23,6 +23,7 @@ internal fun upcomingCancelledDepartures(
         listOf(
             it.tripId, it.scheduledEpochSeconds, it.routeId, it.line, it.direction,
             it.realtimeTripStartDate, it.realtimeTripStartTime,
+            it.gtfsInstance, it.boardingStopSequence,
         )
     }
     .sortedBy { it.scheduledEpochSeconds }
