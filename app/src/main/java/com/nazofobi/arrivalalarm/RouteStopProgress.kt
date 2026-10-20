@@ -14,6 +14,9 @@ data class RouteStopProgress(
     val next: RouteStop? = null,
     val resolvedByProviderTime: Boolean = false,
     val timingBasis: TransitTimingBasis = TransitTimingBasis.SCHEDULED,
+    // Null means provider stop-time evidence cannot establish progress.
+    // Count is based on ordered stop occurrences, never on possibly repeated stop IDs.
+    val remainingStops: Int? = null,
 )
 
 /**
@@ -96,6 +99,7 @@ class RouteStopProgressTracker {
                 next = stops.getOrNull(currentIndex + 1),
                 resolvedByProviderTime = true,
                 timingBasis = basis,
+                remainingStops = stops.lastIndex - currentIndex,
             )
         }
 
@@ -124,6 +128,7 @@ class RouteStopProgressTracker {
             next = stops.getOrNull(nextIndex),
             resolvedByProviderTime = true,
             timingBasis = basis,
+            remainingStops = if (nextIndex >= 0) stops.size - nextIndex else 0,
         )
     }
 
