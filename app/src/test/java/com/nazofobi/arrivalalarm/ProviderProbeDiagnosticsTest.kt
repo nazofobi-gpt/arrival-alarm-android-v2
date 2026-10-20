@@ -148,6 +148,41 @@ class ProviderProbeDiagnosticsTest {
         assertEquals("250ms_to_1s", summary.value("latency_bucket"))
     }
 
+
+    @Test fun exact24HourBoundaryRemainsMeasuredButOlderEvidenceExpires() {
+        val now = 1_800_000_000L
+        val timely = TransitProviderHealth(
+            providerId = ArrivalAlarmTransitProviders.GermanyRealtime.id,
+            state = TransitProviderHealthState.READY,
+            checkedAtEpochSeconds = now - 86_400L,
+        )
+        val expired = timely.copy(checkedAtEpochSeconds = now - 86_401L)
+        val validSummary = ProviderProbeDiagnostics.renderAt(timely, 100L, now)
+        val expiredSummary = ProviderProbeDiagnostics.renderAt(expired, 100L, now)
+
+        assertEquals("ready", validSummary.value("provider_state"))
+        assertEquals("under_250ms", validSummary.value("latency_bucket"))
+        assertEquals("not_measured", expiredSummary.value("provider_state"))
+        assertEquals("not_measured", expiredSummary.value("latency_bucket"))
+    }
+
+    @Test fun providerFutureClockSkewIsInclusiveAt30SecondsOnly() {
+        val now = 1_800_000_000L
+        val withinSkew = TransitProviderHealth(
+            providerId = ArrivalAlarmTransitProviders.LocalStatic.id,
+            state = TransitProviderHealthState.DEGRADED,
+            checkedAtEpochSeconds = now + 30L,
+        )
+        val pastTolerance = withinSkew.copy(checkedAtEpochSeconds = now + 31L)
+
+        val validSummary = ProviderProbeDiagnostics.renderAt(withinSkew, 600L, now)
+        val invalidSummary = ProviderProbeDiagnostics.renderAt(pastTolerance, 600L, now)
+        assertEquals("degraded", validSummary.value("provider_state"))
+        assertEquals("250ms_to_1s", validSummary.value("latency_bucket"))
+        assertEquals("not_measured", invalidSummary.value("provider_state"))
+        assertEquals("not_measured", invalidSummary.value("latency_bucket"))
+    }
+
     private fun String.value(key: String): String =
         lineSequence().first { it.startsWith("$key=") }.substringAfter('=')
 }
