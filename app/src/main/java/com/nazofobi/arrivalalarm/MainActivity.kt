@@ -1178,10 +1178,14 @@ fun ArrivalAlarmApp(
                             gtfsConsentGate.commitIfCurrent(token) {
                                 when (restored) {
                                     is GtfsSelectionRestore.Verified -> {
-                                        gtfsConfirmed = restored
-                                        gtfsConsentStatus = context.getString(
-                                            R.string.gtfs_consent_restored,
-                                        )
+                                        // The saved trip may belong to a different departure
+                                        // board. Never display its confirmed stops here.
+                                        if (restored.selection.boarding.stopId == boardStopId) {
+                                            gtfsConfirmed = restored
+                                            gtfsConsentStatus = context.getString(
+                                                R.string.gtfs_consent_restored,
+                                            )
+                                        }
                                     }
                                     is GtfsSelectionRestore.Rejected -> {
                                         gtfsConsentStatus = context.getString(
@@ -1254,6 +1258,9 @@ fun ArrivalAlarmApp(
                     }
                     gtfsConsentStatus?.let {
                         Text(it, modifier = Modifier.testTag("gtfs-consent-status"))
+                    }
+                    gtfsConfirmed?.let { verified ->
+                        GtfsConfirmedTripSummary(verified)
                     }
                     gtfsPreview?.let { preview ->
                         GtfsTripConsentPanel(
