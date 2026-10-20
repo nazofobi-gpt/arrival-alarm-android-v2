@@ -6,6 +6,9 @@ import sys
 import zipfile
 from pathlib import Path
 
+if len(sys.argv) not in (2, 3):
+    raise SystemExit("usage: verify_germany_full_gtfs.py GTFS_ZIP [REPORT_JSON]")
+
 archive = sys.argv[1]
 report_path = sys.argv[2] if len(sys.argv) > 2 else "g174-real-feed-report.json"
 
