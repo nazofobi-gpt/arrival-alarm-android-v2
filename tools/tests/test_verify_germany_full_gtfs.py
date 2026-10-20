@@ -261,5 +261,26 @@ class GtfsArchiveMemberTest(unittest.TestCase):
         self.assertNotIn("Traceback", result.stderr)
 
 
+    def test_invalid_zip_container_fails_without_python_traceback(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            archive = Path(dirname) / "broken.zip"
+            report = Path(dirname) / "report.json"
+            archive.write_bytes(b"not a GTFS ZIP archive")
+            for optimized in (False, True):
+                with self.subTest(optimized=optimized):
+                    result = subprocess.run(
+                        [sys.executable, *(["-O"] if optimized else []),
+                         str(SCRIPT), str(archive), str(report)],
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                        check=False,
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("invalid GTFS ZIP archive", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertFalse(report.exists())
+
+
 if __name__ == "__main__":
     unittest.main()
