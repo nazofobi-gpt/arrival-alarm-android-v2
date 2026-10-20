@@ -56,6 +56,9 @@ fun RouteJourneyPanel(
     var fewerTransfersFirst by rememberSaveable {
         mutableStateOf(preferences.loadFewerTransfersFirst())
     }
+    var atMostOneTransfer by rememberSaveable {
+        mutableStateOf(preferences.loadAtMostOneTransfer())
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -134,6 +137,7 @@ fun RouteJourneyPanel(
                 val visibleOptions = RouteResultsFilter(
                     directOnly = directOnly,
                     fewerTransfersFirst = fewerTransfersFirst,
+                    maxTransfers = if (atMostOneTransfer) 1 else null,
                 ).apply(routeOptions)
                 FilterChip(
                     selected = directOnly,
@@ -158,6 +162,18 @@ fun RouteJourneyPanel(
                         .testTag("route-fewer-transfers-filter"),
                 )
 
+                FilterChip(
+                    selected = atMostOneTransfer,
+                    onClick = {
+                        atMostOneTransfer = !atMostOneTransfer
+                        preferences.saveAtMostOneTransfer(atMostOneTransfer)
+                    },
+                    label = { Text(stringResource(R.string.route_at_most_one_transfer_filter)) },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("route-at-most-one-transfer-filter"),
+                )
+
                 visibleOptions.take(6).forEachIndexed { index, option ->
                     RouteOptionCard(
                         option = option,
@@ -170,10 +186,12 @@ fun RouteJourneyPanel(
 
                 if (!routeBusy && visibleOptions.isEmpty()) {
                     Text(
-                        text = if (directOnly && routeOptions.isNotEmpty()) {
-                            stringResource(R.string.route_direct_only_empty)
-                        } else {
-                            routeStatus ?: stringResource(R.string.route_not_found)
+                        text = when {
+                            directOnly && routeOptions.isNotEmpty() ->
+                                stringResource(R.string.route_direct_only_empty)
+                            atMostOneTransfer && routeOptions.isNotEmpty() ->
+                                stringResource(R.string.route_at_most_one_transfer_empty)
+                            else -> routeStatus ?: stringResource(R.string.route_not_found)
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
