@@ -4,9 +4,15 @@ import io
 import json
 import sys
 import zipfile
+from pathlib import Path
 
 archive = sys.argv[1]
 report_path = sys.argv[2] if len(sys.argv) > 2 else "g174-real-feed-report.json"
+
+# The report is an output artifact; never overwrite the input GTFS archive.
+# resolve() also catches relative-path and symlink aliases of the same file.
+if Path(archive).resolve() == Path(report_path).resolve():
+    raise SystemExit("GTFS report path must differ from input ZIP archive")
 required = ["stops.txt", "routes.txt", "trips.txt", "stop_times.txt"]
 optional = [
     "agency.txt", "calendar.txt", "calendar_dates.txt", "transfers.txt",
@@ -40,6 +46,11 @@ def inspect(zf, member):
             return {"rows": rows, "header": header}
     except zipfile.BadZipFile:
         raise SystemExit(f"invalid GTFS ZIP entry {member}") from None
+    except NotImplementedError:
+        raise SystemExit(f"unsupported GTFS ZIP entry compression {member}") from None
+    except RuntimeError:
+        # Password-protected GTFS tables must fail closed without a traceback.
+        raise SystemExit(f"unable to read GTFS ZIP entry {member}") from None
     except UnicodeDecodeError:
         raise SystemExit(f"invalid UTF-8 in GTFS table {member}") from None
     except csv.Error:

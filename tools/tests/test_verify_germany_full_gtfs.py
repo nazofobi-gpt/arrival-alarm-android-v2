@@ -261,6 +261,25 @@ class GtfsArchiveMemberTest(unittest.TestCase):
         self.assertNotIn("Traceback", result.stderr)
 
 
+    def test_report_path_cannot_overwrite_input_zip(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            archive = Path(dirname) / "feed.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                for name in REQUIRED:
+                    zf.writestr(name, "header\n")
+            original_zip = archive.read_bytes()
+            for optimized in (False, True):
+                with self.subTest(optimized=optimized):
+                    result = subprocess.run(
+                        [sys.executable, *(["-O"] if optimized else []),
+                         str(SCRIPT), str(archive), str(archive)],
+                        capture_output=True, text=True, timeout=10, check=False,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn("GTFS report path must differ from input ZIP archive", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertEqual(original_zip, archive.read_bytes())
+
     def test_missing_gtfs_zip_fails_closed_without_python_traceback(self):
         with tempfile.TemporaryDirectory() as dirname:
             archive = Path(dirname) / "missing-feed.zip"
@@ -338,6 +357,77 @@ class GtfsArchiveMemberTest(unittest.TestCase):
                             self.assertIn(f"invalid GTFS ZIP entry {member}", result.stderr)
                             self.assertNotIn("Traceback", result.stderr)
                             self.assertFalse(report.exists())
+
+
+    def test_unsupported_zip_compression_fails_closed_without_traceback(self):
+        fixtures = {
+            "stops.txt": b"stop_id,stop_name,stop_lat,stop_lon\n1,Test,52.0,8.0\n",
+            "routes.txt": b"route_id,route_type\nR,3\n",
+            "trips.txt": b"route_id,service_id,trip_id\nR,S,T\n",
+            "stop_times.txt": b"trip_id,arrival_time,departure_time,stop_id,stop_sequence\nT,10:00:00,10:00:00,1,1\n",
+        }
+        with tempfile.TemporaryDirectory() as dirname:
+            archive = Path(dirname) / "unsupported-compression.zip"
+            report = Path(dirname) / "report.json"
+            with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_STORED) as zf:
+                for name in REQUIRED:
+                    zf.writestr(name, fixtures[name])
+
+            # Only the first entry (stops.txt) advertises an unknown ZIP method.
+            # Both local and central directory metadata must agree.
+            payload = bytearray(archive.read_bytes())
+            local = payload.find(b"PK\x03\x04")
+            central = payload.find(b"PK\x01\x02")
+            self.assertGreaterEqual(local, 0)
+            self.assertGreaterEqual(central, 0)
+            payload[local + 8:local + 10] = (99).to_bytes(2, "little")
+            payload[central + 10:central + 12] = (99).to_bytes(2, "little")
+            archive.write_bytes(payload)
+
+            for optimized in (False, True):
+                with self.subTest(optimized=optimized):
+                    result = subprocess.run(
+                        [sys.executable, *(["-O"] if optimized else []),
+                         str(SCRIPT), str(archive), str(report)],
+                        capture_output=True, text=True, timeout=10, check=False,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn("unsupported GTFS ZIP entry compression stops.txt", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertFalse(report.exists())
+
+
+    def test_encrypted_zip_entry_fails_closed_without_traceback(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            archive = Path(dirname) / "encrypted-entry.zip"
+            report = Path(dirname) / "report.json"
+            with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_STORED) as zf:
+                for name in REQUIRED:
+                    zf.writestr(name, b"column\n")
+
+            # Set the encrypted-entry bit in the first member's local and central headers.
+            payload = bytearray(archive.read_bytes())
+            local = payload.find(b"PK\x03\x04")
+            central = payload.find(b"PK\x01\x02")
+            self.assertGreaterEqual(local, 0)
+            self.assertGreaterEqual(central, 0)
+            for offset in (local + 6, central + 8):
+                flags = int.from_bytes(payload[offset:offset + 2], "little")
+                payload[offset:offset + 2] = (flags | 1).to_bytes(2, "little")
+            archive.write_bytes(payload)
+
+            for optimized in (False, True):
+                with self.subTest(optimized=optimized):
+                    result = subprocess.run(
+                        [sys.executable, *(['-O'] if optimized else []),
+                         str(SCRIPT), str(archive), str(report)],
+                        capture_output=True, text=True, timeout=10, check=False,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn("unable to read GTFS ZIP entry stops.txt", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertFalse(report.exists())
+
 
 
 if __name__ == "__main__":
