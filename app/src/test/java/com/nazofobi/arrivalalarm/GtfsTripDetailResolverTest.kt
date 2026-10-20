@@ -176,6 +176,46 @@ class GtfsTripDetailResolverTest {
     }
 
     @Test
+    fun rejectsBackwardsTripClocksAcrossStopsIncludingMissingNonTimepoints() {
+        val source = FakeSource()
+        val identity = GtfsTripInstanceIdentity.scheduled(trip, serviceDate)
+        val resolver = GtfsTripDetailResolver(source)
+        val original = source.times
+
+        // Both stops have valid, non-reversed dwell times, but time travels
+        // backwards from the first departure to the next arrival.
+        source.times = listOf(
+            original[0].copy(arrivalTime = "08:10:00", departureTime = "08:11:00"),
+            original[1].copy(arrivalTime = "08:09:00", departureTime = "08:12:00"),
+            original[2],
+        )
+        assertEquals(
+            GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.INVALID_STOP_TIME),
+            resolver.resolve(identity),
+        )
+
+        // A skipped non-timepoint must not hide reversed known times.
+        source.times = listOf(
+            original[0].copy(arrivalTime = "08:10:00", departureTime = "08:11:00"),
+            original[1].copy(arrivalTime = null, departureTime = null),
+            original[2].copy(arrivalTime = "08:09:59", departureTime = "08:12:00"),
+        )
+        assertEquals(
+            GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.INVALID_STOP_TIME),
+            resolver.resolve(identity),
+        )
+
+        // Legitimate overnight service-day clocks and equal stop-boundary
+        // times remain a confirmable, chronologically ordered trip.
+        source.times = listOf(
+            original[0].copy(arrivalTime = "23:58:00", departureTime = "23:59:00"),
+            original[1].copy(arrivalTime = "24:00:00", departureTime = "24:01:00"),
+            original[2].copy(arrivalTime = "24:01:00", departureTime = "24:04:00"),
+        )
+        assertTrue(resolver.resolve(identity) is GtfsTripDetailResult.Available)
+    }
+
+    @Test
     fun rejectsFrequencyTemplateAndPotentiallyTruncatedSequence() {
         val source = FakeSource()
         val identity = GtfsTripInstanceIdentity.scheduled(trip, serviceDate)
