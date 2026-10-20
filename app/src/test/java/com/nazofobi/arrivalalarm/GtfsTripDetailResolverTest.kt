@@ -234,8 +234,16 @@ class GtfsTripDetailResolverTest {
 
     private fun st(sequence: Int, stopId: String) = GtfsScheduleStopTime(
         tripId = trip.id, stopSequence = sequence, stopId = stopId,
-        arrivalTime = if (sequence == 13) "24:10:00" else "08:00:00",
-        departureTime = if (sequence == 13) "24:12:00" else "08:01:00",
+        arrivalTime = when (sequence) {
+            13 -> "24:10:00"
+            7 -> "08:02:00"
+            else -> "08:00:00"
+        },
+        departureTime = when (sequence) {
+            13 -> "24:12:00"
+            7 -> "08:03:00"
+            else -> "08:01:00"
+        },
         pickupType = null, dropOffType = null, shapeDistanceTraveled = null, timepoint = 1,
     )
 
