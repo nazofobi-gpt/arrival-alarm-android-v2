@@ -154,6 +154,17 @@ fun LiveTripPanel(
                 )
             }
 
+            // Timetable/realtime stop sequence estimate, not GPS vehicle-position evidence.
+            progress.remainingStops
+                ?.takeIf { progress.resolvedByProviderTime && it >= 0 }
+                ?.let { remaining ->
+                    LiveTripFact(
+                        label = stringResource(R.string.live_trip_remaining_stops),
+                        value = remaining.toString(),
+                        tag = "live-trip-remaining-stops",
+                    )
+                }
+
             LiveTripFact(
                 label = stringResource(R.string.live_trip_target),
                 value = targetLabel,
