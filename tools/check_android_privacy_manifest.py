@@ -117,6 +117,17 @@ def validate_manifest(source: str) -> list[str]:
             errors.append("MainActivity must be enabled")
         if activity.get(ANDROID + "exported") != "true":
             errors.append("MainActivity must be exported for launcher and OAuth callbacks")
+        # MAIN and LAUNCHER must belong to the same intent-filter. Merely
+        # declaring an exported MainActivity does not make it launchable.
+        has_launcher_filter = any(
+            any(action.get(ANDROID + "name") == "android.intent.action.MAIN"
+                for action in intent_filter.findall("action"))
+            and any(category.get(ANDROID + "name") == "android.intent.category.LAUNCHER"
+                for category in intent_filter.findall("category"))
+            for intent_filter in activity.findall("intent-filter")
+        )
+        if not has_launcher_filter:
+            errors.append("MainActivity must have a MAIN/LAUNCHER intent filter")
 
     return errors
 
