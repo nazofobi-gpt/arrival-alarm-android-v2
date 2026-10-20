@@ -103,6 +103,16 @@ class RouteStopProgressTracker {
             upcomingAt != null && upcomingAt > nowEpochSeconds
         }
 
+        // A timed stop across an untimed segment is not necessarily the immediate
+        // previous/next stop. Missing intermediate evidence must remain unknown.
+        val unknownNeighbor = when {
+            previousIndex >= 0 && nextIndex >= 0 -> nextIndex != previousIndex + 1
+            previousIndex < 0 && nextIndex >= 0 -> nextIndex != 0
+            previousIndex >= 0 && nextIndex < 0 -> previousIndex != stops.lastIndex
+            else -> false
+        }
+        if (unknownNeighbor) return RouteStopProgress()
+
         return RouteStopProgress(
             previous = stops.getOrNull(previousIndex),
             current = null,
