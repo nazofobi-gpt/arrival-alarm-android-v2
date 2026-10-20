@@ -156,7 +156,11 @@ class ProviderProbeDiagnosticsTest {
             state = TransitProviderHealthState.READY,
             checkedAtEpochSeconds = now - 86_400L,
         )
-        val expired = timely.copy(checkedAtEpochSeconds = now - 86_401L)
+        val expired = TransitProviderHealth(
+            providerId = ArrivalAlarmTransitProviders.GermanyRealtime.id,
+            state = TransitProviderHealthState.READY,
+            checkedAtEpochSeconds = now - 86_401L,
+        )
         val validSummary = ProviderProbeDiagnostics.renderAt(timely, 100L, now)
         val expiredSummary = ProviderProbeDiagnostics.renderAt(expired, 100L, now)
 
@@ -173,7 +177,11 @@ class ProviderProbeDiagnosticsTest {
             state = TransitProviderHealthState.DEGRADED,
             checkedAtEpochSeconds = now + 30L,
         )
-        val pastTolerance = withinSkew.copy(checkedAtEpochSeconds = now + 31L)
+        val pastTolerance = TransitProviderHealth(
+            providerId = ArrivalAlarmTransitProviders.LocalStatic.id,
+            state = TransitProviderHealthState.DEGRADED,
+            checkedAtEpochSeconds = now + 31L,
+        )
 
         val validSummary = ProviderProbeDiagnostics.renderAt(withinSkew, 600L, now)
         val invalidSummary = ProviderProbeDiagnostics.renderAt(pastTolerance, 600L, now)
