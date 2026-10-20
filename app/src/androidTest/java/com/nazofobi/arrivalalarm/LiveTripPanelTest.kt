@@ -85,6 +85,7 @@ class LiveTripPanelTest {
         rule.onNodeWithTag("live-trip-panel").assertIsDisplayed()
         rule.onNodeWithTag("live-trip-current").assertTextContains("Diepholz", substring = true)
         rule.onNodeWithTag("live-trip-next").assertTextContains("Bremen Hbf", substring = true)
+        rule.onNodeWithTag("live-trip-remaining-stops").assertTextContains("1", substring = true)
         rule.onNodeWithTag("live-trip-distance").assertTextContains("430", substring = true)
         rule.onNodeWithTag("live-trip-audio").performScrollTo().assertIsDisplayed()
     }
@@ -138,6 +139,8 @@ class LiveTripPanelTest {
 
         rule.onNodeWithTag("live-trip-previous").assertTextContains("Diepholz", substring = true)
         rule.onNodeWithTag("live-trip-next").assertTextContains("Bremen Hbf", substring = true)
+        // With stale realtime data, only the coherent schedule supplies a count.
+        rule.onNodeWithTag("live-trip-remaining-stops").assertTextContains("1", substring = true)
     }
 
 
@@ -233,6 +236,7 @@ class LiveTripPanelTest {
 
         // A malformed provider minute must not be shown as an arrival ETA.
         rule.onNodeWithTag("live-trip-target-time").assertDoesNotExist()
+        rule.onNodeWithTag("live-trip-remaining-stops").assertDoesNotExist()
 
         // Nor should an implausibly large service hour be treated as a clock.
         rule.runOnUiThread {
