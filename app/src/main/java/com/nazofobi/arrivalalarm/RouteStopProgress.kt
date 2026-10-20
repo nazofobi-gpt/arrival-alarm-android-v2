@@ -66,7 +66,12 @@ class RouteStopProgressTracker {
 
         // Preserve route-order semantics when schedule/realtime timestamps disagree.
         // Two distinct stops must not occupy overlapping provider time windows.
-        if (!hasCoherentTimeline(windows)) return RouteStopProgress()
+        if (!hasCoherentTimeline(windows)) {
+            // Conflicting realtime observations must not erase a coherent planned journey.
+            // Recalculate solely from scheduled stops, clearly labeling the timing basis.
+            return if (trustRealtime) resolve(stops, nowEpochSeconds, trustRealtime = false)
+                else RouteStopProgress()
+        }
 
         val basis = if (windows.any { it.hasRealtimeEvidence }) {
             TransitTimingBasis.REALTIME
