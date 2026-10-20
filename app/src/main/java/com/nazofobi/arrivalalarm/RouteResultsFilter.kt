@@ -9,9 +9,14 @@ package com.nazofobi.arrivalalarm
 internal data class RouteResultsFilter(
     val directOnly: Boolean = false,
     val fewerTransfersFirst: Boolean = false,
+    val maxTransfers: Int? = null,
 ) {
     fun apply(options: List<RouteOption>): List<RouteOption> {
-        val filtered = if (directOnly) options.filter { it.transfers == 0 } else options
+        val limit = maxTransfers
+        val filtered = options.filter { option ->
+            (!directOnly || option.transfers == 0) &&
+                (limit == null || (option.transfers >= 0 && option.transfers <= limit))
+        }
         // Keep provider order for equally convenient routes. Invalid negative counts
         // must not outrank known transfer counts in the opt-in ranking.
         return if (fewerTransfersFirst) {
