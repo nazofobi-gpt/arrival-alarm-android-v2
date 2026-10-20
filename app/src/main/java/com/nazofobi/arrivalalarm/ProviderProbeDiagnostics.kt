@@ -8,6 +8,9 @@ package com.nazofobi.arrivalalarm
  * An unavailable provider does not imply that the app itself is unready.
  */
 internal object ProviderProbeDiagnostics {
+    // Old provider outcomes must not be presented as current health evidence.
+    private const val MAX_HEALTH_CHECK_AGE_SECONDS = 86_400L
+
     fun render(health: TransitProviderHealth?, latencyMillis: Long?): String {
         val providerRole = when (health?.providerId) {
             ArrivalAlarmTransitProviders.LocalStatic.id -> "local_static"
@@ -22,7 +25,9 @@ internal object ProviderProbeDiagnostics {
         // impossibly far in the future. Allow minor device clock skew.
         val recognizedProvider = providerRole != "unknown" &&
             checkedAt > 0L &&
-            checkedAt <= nowEpochSeconds + 30L
+            checkedAt <= nowEpochSeconds + MAX_PROVIDER_FUTURE_SKEW_SECONDS &&
+            (checkedAt >= nowEpochSeconds ||
+                nowEpochSeconds - checkedAt <= MAX_HEALTH_CHECK_AGE_SECONDS)
         val providerState = if (!recognizedProvider) "not_measured" else when (health?.state) {
             TransitProviderHealthState.READY -> "ready"
             TransitProviderHealthState.DEGRADED -> "degraded"
