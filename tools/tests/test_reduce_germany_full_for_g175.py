@@ -78,10 +78,53 @@ class ReducerClockTimeTest(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertEqual(-1, self.clock(value))
 
+    def test_gtfs_hour_single_digit_is_valid(self):
+        # The GTFS Time format explicitly accepts H:MM:SS.
+        self.assertEqual(8 * 3600 + 15 * 60, self.clock("8:15:00"))
+
+    def test_noncanonical_clock_tokens_fail_closed(self):
+        for value in (
+            "08:+15:00", "08:5:00", "08:15:0", "08:15:00 ",
+            " 08:15:00", "+08:15:00", "08:１５:00",
+            "08:15:00:00", None,
+        ):
+            with self.subTest(value=value):
+                self.assertEqual(-1, self.clock(value))
+
     def test_negative_hours_and_malformed_time_are_rejected(self):
         for value in ("-1:50:00", "08:30", "abc", ""):
             with self.subTest(value=value):
                 self.assertEqual(-1, self.clock(value))
+
+
+class ReducerStopCoordinateTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Parse the feed-independent helper without running the ZIP reduction.
+        tree = ast.parse(SCRIPT.read_text(encoding="utf-8"))
+        fn = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "valid_stop_coordinates")
+        namespace = {"math": __import__("math")}
+        exec(compile(ast.Module(body=[fn], type_ignores=[]), str(SCRIPT), "exec"), namespace)
+        cls.point = staticmethod(namespace["valid_stop_coordinates"])
+
+    def test_finite_valid_coordinates_remain_usable(self):
+        self.assertEqual((52.6669, 8.2387), self.point({"stop_lat": "52.6669", "stop_lon": "8.2387"}))
+        self.assertEqual((-90.0, 180.0), self.point({"stop_lat": "-90", "stop_lon": "180"}))
+
+    def test_nonfinite_out_of_range_and_missing_coordinates_are_ignored(self):
+        for row in (
+            {"stop_lat": "NaN", "stop_lon": "8.2"},
+            {"stop_lat": "52.6", "stop_lon": "Infinity"},
+            {"stop_lat": "-Infinity", "stop_lon": "8.2"},
+            {"stop_lat": "1e309", "stop_lon": "8.2"},
+            {"stop_lat": "90.001", "stop_lon": "8.2"},
+            {"stop_lat": "52.6", "stop_lon": "-180.001"},
+            {"stop_lat": "52.6", "stop_lon": None},
+            {"stop_lat": "52.6"},
+            {"stop_lat": "wrong", "stop_lon": "8.2"},
+        ):
+            with self.subTest(row=row):
+                self.assertIsNone(self.point(row))
 
 
 if __name__ == "__main__":

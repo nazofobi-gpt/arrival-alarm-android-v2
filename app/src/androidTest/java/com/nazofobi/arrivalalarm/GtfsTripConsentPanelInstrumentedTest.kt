@@ -132,6 +132,60 @@ class GtfsTripConsentPanelInstrumentedTest {
         assertEquals(GtfsSelectedStopRef(30, "replacement-30"), confirmed?.destination)
     }
 
+    @Test fun sameStopIdMovedToDifferentCoordinatesRequiresFreshConsent() {
+        var chosen: GtfsSelectedTrip? = null
+        val previewState = mutableStateOf(
+            GtfsDepartureInspection.Ready(detail, detail.stops.first())
+        )
+        compose.setContent {
+            GtfsTripConsentPanel(
+                preview = previewState.value,
+                busy = false,
+                onConfirm = { chosen = it },
+                onDismiss = {},
+            )
+        }
+
+        compose.onNodeWithTag("gtfs-destination-picker").performClick()
+        compose.onNodeWithTag("gtfs-destination-30").performClick()
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsEnabled()
+
+        // GTFS feed revisions can retain stop_id while changing physical location.
+        // The previously chosen destination must not carry over implicitly.
+        val moved = detail.copy(
+            stops = detail.stops.dropLast(1) +
+                detail.stops.last().copy(latitude = 52.70, longitude = 8.30)
+        )
+        compose.runOnUiThread {
+            previewState.value = GtfsDepartureInspection.Ready(moved, moved.stops.first())
+        }
+        compose.waitForIdle()
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsNotEnabled()
+        assertNull(chosen)
+
+        compose.onNodeWithTag("gtfs-destination-picker").performClick()
+        compose.onNodeWithTag("gtfs-destination-30").performClick()
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsEnabled().performClick()
+        assertEquals(GtfsSelectedStopRef(30, "stop-30"), chosen?.destination)
+    }
+
+    @Test fun terminalBoardingStopCannotBecomeItsOwnDestinationOrAlarm() {
+        var confirmations = 0
+        compose.setContent {
+            GtfsTripConsentPanel(
+                preview = GtfsDepartureInspection.Ready(detail, detail.stops.last()),
+                busy = false,
+                onConfirm = { confirmations++ },
+                onDismiss = {},
+            )
+        }
+
+        compose.onNodeWithTag("gtfs-consent-invalid").assertExists()
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsNotEnabled()
+        compose.onNodeWithTag("gtfs-alarm-target-picker").assertDoesNotExist()
+        assertEquals(0, confirmations)
+    }
+
     @Test fun openDestinationChoicesAreDisabledWhenConsentBecomesBusy() {
         val busy = mutableStateOf(false)
         compose.setContent {

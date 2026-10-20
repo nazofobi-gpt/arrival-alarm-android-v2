@@ -117,6 +117,34 @@ class GtfsTripDetailResolverTest {
     }
 
     @Test
+    fun rejectsReversedDwellWhilePreservingValidExtendedServiceDayTimes() {
+        val source = FakeSource()
+        val identity = GtfsTripInstanceIdentity.scheduled(trip, serviceDate)
+        val resolver = GtfsTripDetailResolver(source)
+        val original = source.times
+
+        source.times = original.mapIndexed { index, stop ->
+            if (index == 1) stop.copy(arrivalTime = "09:05:00", departureTime = "09:00:00")
+            else stop
+        }
+        assertEquals(
+            GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.INVALID_STOP_TIME),
+            resolver.resolve(identity),
+        )
+
+        // A legitimate overnight dwell and a zero-length dwell are still valid.
+        for (departure in listOf("24:05:00", "24:03:00")) {
+            source.times = original.mapIndexed { index, stop ->
+                if (index == 1) stop.copy(
+                    arrivalTime = "24:03:00",
+                    departureTime = departure,
+                ) else stop
+            }
+            assertTrue(resolver.resolve(identity) is GtfsTripDetailResult.Available)
+        }
+    }
+
+    @Test
     fun malformedScheduledStopClocksCannotBecomeConfirmableTripDetails() {
         val source = FakeSource()
         val resolver = GtfsTripDetailResolver(source)
@@ -142,8 +170,52 @@ class GtfsTripDetailResolverTest {
         )
         // Extended service-day clocks stay supported. A non-timepoint may be null.
         source.times = original.mapIndexed { index, stop ->
-            if (index == 1) stop.copy(arrivalTime = null, departureTime = "26:05:07") else stop
+            when (index) {
+                1 -> stop.copy(arrivalTime = null, departureTime = "26:05:07")
+                2 -> stop.copy(arrivalTime = "26:10:00", departureTime = "26:12:00")
+                else -> stop
+            }
         }
+        assertTrue(resolver.resolve(identity) is GtfsTripDetailResult.Available)
+    }
+
+    @Test
+    fun rejectsBackwardsTripClocksAcrossStopsIncludingMissingNonTimepoints() {
+        val source = FakeSource()
+        val identity = GtfsTripInstanceIdentity.scheduled(trip, serviceDate)
+        val resolver = GtfsTripDetailResolver(source)
+        val original = source.times
+
+        // Both stops have valid, non-reversed dwell times, but time travels
+        // backwards from the first departure to the next arrival.
+        source.times = listOf(
+            original[0].copy(arrivalTime = "08:10:00", departureTime = "08:11:00"),
+            original[1].copy(arrivalTime = "08:09:00", departureTime = "08:12:00"),
+            original[2],
+        )
+        assertEquals(
+            GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.INVALID_STOP_TIME),
+            resolver.resolve(identity),
+        )
+
+        // A skipped non-timepoint must not hide reversed known times.
+        source.times = listOf(
+            original[0].copy(arrivalTime = "08:10:00", departureTime = "08:11:00"),
+            original[1].copy(arrivalTime = null, departureTime = null),
+            original[2].copy(arrivalTime = "08:09:59", departureTime = "08:12:00"),
+        )
+        assertEquals(
+            GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.INVALID_STOP_TIME),
+            resolver.resolve(identity),
+        )
+
+        // Legitimate overnight service-day clocks and equal stop-boundary
+        // times remain a confirmable, chronologically ordered trip.
+        source.times = listOf(
+            original[0].copy(arrivalTime = "23:58:00", departureTime = "23:59:00"),
+            original[1].copy(arrivalTime = "24:00:00", departureTime = "24:01:00"),
+            original[2].copy(arrivalTime = "24:01:00", departureTime = "24:04:00"),
+        )
         assertTrue(resolver.resolve(identity) is GtfsTripDetailResult.Available)
     }
 
@@ -166,8 +238,16 @@ class GtfsTripDetailResolverTest {
 
     private fun st(sequence: Int, stopId: String) = GtfsScheduleStopTime(
         tripId = trip.id, stopSequence = sequence, stopId = stopId,
-        arrivalTime = if (sequence == 13) "24:10:00" else "08:00:00",
-        departureTime = if (sequence == 13) "24:12:00" else "08:01:00",
+        arrivalTime = when (sequence) {
+            13 -> "24:10:00"
+            7 -> "08:02:00"
+            else -> "08:00:00"
+        },
+        departureTime = when (sequence) {
+            13 -> "24:12:00"
+            7 -> "08:03:00"
+            else -> "08:01:00"
+        },
         pickupType = null, dropOffType = null, shapeDistanceTraveled = null, timepoint = 1,
     )
 

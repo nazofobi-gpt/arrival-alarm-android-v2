@@ -48,6 +48,34 @@ class RouteResultsFilterTest {
     }
 
     @Test
+    fun fewerTransfersFirstSortsActualOptionsAndKeepsTiesInProviderOrder() {
+        val candidates = listOf(
+            option("two", 2), option("first-direct", 0),
+            option("one", 1), option("second-direct", 0),
+        )
+        assertEquals(
+            listOf("first-direct", "second-direct", "one", "two"),
+            RouteResultsFilter(fewerTransfersFirst = true).apply(candidates).map { it.id },
+        )
+        assertEquals(listOf("two", "first-direct", "one", "second-direct"),
+            candidates.map { it.id })
+    }
+
+    @Test
+    fun fewerTransfersFirstNeverPromotesMalformedNegativeTransferCount() {
+        val candidates = listOf(option("unknown", -1), option("one", 1), option("direct", 0))
+        assertEquals(
+            listOf("direct", "one", "unknown"),
+            RouteResultsFilter(fewerTransfersFirst = true).apply(candidates).map { it.id },
+        )
+        assertEquals(
+            listOf("direct"),
+            RouteResultsFilter(directOnly = true, fewerTransfersFirst = true)
+                .apply(candidates).map { it.id },
+        )
+    }
+
+    @Test
     fun togglingBackToAllDoesNotMutateCandidates() {
         val candidates = listOf(option("via", 1), option("direct", 0))
         RouteResultsFilter(directOnly = true).apply(candidates)

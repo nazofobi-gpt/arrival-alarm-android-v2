@@ -182,6 +182,37 @@ class GtfsTripDetailResolver(private val source: GtfsTripDetailSource) {
             return unavailable(GtfsTripDetailFailure.INVALID_STOP_TIME)
         }
 
+        // Even syntactically valid clocks cannot describe a stop whose vehicle
+        // departs before it arrives. GTFS times may exceed 24:00:00 for overnight
+        // services; compare service-day seconds rather than local clock fields.
+        if (stopTimes.any { stop ->
+                val arrival = stop.arrivalTime?.let {
+                    GtfsServiceTime.parse(it).secondsFromServiceDayStart
+                }
+                val departure = stop.departureTime?.let {
+                    GtfsServiceTime.parse(it).secondsFromServiceDayStart
+                }
+                arrival != null && departure != null && arrival > departure
+            }) {
+            return unavailable(GtfsTripDetailFailure.INVALID_STOP_TIME)
+        }
+
+        // Provider clocks must also be monotonic across the entire ordered trip.
+        // A stop may have null/non-timepoint clocks, but an unknown time cannot
+        // make a later known departure or arrival precede an earlier known one.
+        // Compare service-day seconds so overnight 24:xx times remain valid.
+        var previousKnownSeconds: Int? = null
+        for (time in stopTimes) {
+            for (clock in listOfNotNull(time.arrivalTime, time.departureTime)) {
+                val seconds = GtfsServiceTime.parse(clock).secondsFromServiceDayStart
+                val previous = previousKnownSeconds
+                if (previous != null && seconds < previous) {
+                    return unavailable(GtfsTripDetailFailure.INVALID_STOP_TIME)
+                }
+                previousKnownSeconds = seconds
+            }
+        }
+
         val stops = mutableListOf<GtfsTripDetailStop>()
         val stopCache = mutableMapOf<String, GtfsScheduleStop?>()
         for (time in stopTimes) {

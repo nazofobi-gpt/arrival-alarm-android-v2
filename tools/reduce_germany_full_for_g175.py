@@ -51,6 +51,18 @@ def rows(zf, member):
     finally:
         text.close()
 
+def valid_stop_coordinates(row):
+    # A malformed provider coordinate must not abort nationwide fixture selection.
+    try:
+        latitude = float(row["stop_lat"])
+        longitude = float(row["stop_lon"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not (math.isfinite(latitude) and -90.0 <= latitude <= 90.0
+            and math.isfinite(longitude) and -180.0 <= longitude <= 180.0):
+        return None
+    return latitude, longitude
+
 def distance_m(a, b):
     lat1, lon1 = map(math.radians, a)
     lat2, lon2 = map(math.radians, b)
@@ -86,13 +98,26 @@ def active_services(zf, names, day):
     return active
 
 def clock_seconds(raw):
-    try:
-        h, m, s = map(int, raw.split(":"))
-        if h < 0 or not (0 <= m < 60 and 0 <= s < 60):
-            return -1
-        return h * 3600 + m * 60 + s
-    except Exception:
+    if not isinstance(raw, str):
         return -1
+    parts = raw.split(":")
+    # GTFS allows H:MM:SS and extended service-day hours, but not
+    # signs, whitespace, non-ASCII digits or abbreviated minute/second fields.
+    if (
+        len(parts) != 3
+        or not parts[0]
+        or len(parts[1]) != 2
+        or len(parts[2]) != 2
+        or any(not part.isascii() or not part.isdecimal() for part in parts)
+    ):
+        return -1
+    try:
+        h, m, s = map(int, parts)
+    except ValueError:
+        return -1
+    if m >= 60 or s >= 60:
+        return -1
+    return h * 3600 + m * 60 + s
 
 def write_csv(zf, filename, fieldnames, records):
     buffer = io.StringIO(newline="")
@@ -121,9 +146,8 @@ with zipfile.ZipFile(SOURCE) as source:
             stop_fields = list(row)
         if len(filler) < MIN_STOPS:
             filler.append(row)
-        try:
-            location = (float(row["stop_lat"]), float(row["stop_lon"]))
-        except (KeyError, ValueError):
+        location = valid_stop_coordinates(row)
+        if location is None:
             continue
         for point in points:
             if distance_m(location, point) <= 1_750:

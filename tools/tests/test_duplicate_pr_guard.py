@@ -38,6 +38,34 @@ class DuplicateGuardTest(unittest.TestCase):
         errors, _ = guard.analyze(current, [old], [])
         self.assertTrue(any("not acknowledged" in item for item in errors))
 
+    def test_multiple_overlap_review_lines_acknowledge_distinct_peers(self):
+        body = (
+            "Work-Unit: G-173/multiline-review\\n"
+            "Overlap-Review: #101\\n"
+            "Overlap-Review: #102\\n"
+        )
+        body = body.replace("\\n", "\n")
+        current = pr(402, body, "fix(G-173): gate audit")
+        first = pr(101, "Work-Unit: G-173/search-ui", "feat(G-173): readiness UI")
+        second = pr(102, "Work-Unit: G-173/index-guard", "fix(G-173): index guard")
+        self.assertEqual(guard.overlap_refs(body), {101, 102})
+        errors, _ = guard.analyze(current, [first, second], [])
+        self.assertEqual(errors, [])
+
+    def test_unprefixed_prose_is_not_overlap_acknowledgement(self):
+        body = (
+            "Work-Unit: G-173/multiline-review\\n"
+            "Overlap-Review: #101\\n"
+            "Discussion: #102 was mentioned without an overlap review\\n"
+        )
+        body = body.replace("\\n", "\n")
+        current = pr(402, body, "fix(G-173): gate audit")
+        first = pr(101, "Work-Unit: G-173/search-ui", "feat(G-173): readiness UI")
+        second = pr(102, "Work-Unit: G-173/index-guard", "fix(G-173): index guard")
+        self.assertEqual(guard.overlap_refs(body), {101})
+        errors, _ = guard.analyze(current, [first, second], [])
+        self.assertTrue(any("#102" in error for error in errors))
+
     def test_missing_metadata_is_required_only_for_new_pr(self):
         new = pr(402, "", "fix(G-168): route")
         old = pr(90, "", "fix(G-168): route", created="2026-10-11T12:00:00Z")

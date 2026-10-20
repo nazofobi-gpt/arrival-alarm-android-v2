@@ -167,8 +167,8 @@ class TripInferenceEngineTest {
         assertTrue(result.requiresExplicitConfirmation)
     }
 
-    @Test fun nonpositiveTopKDoesNotCrashOrAcceptTrip() {
-        for (topK in listOf(0, -1)) {
+    @Test fun outOfRangeTopKNeverExpandsSuggestionsOrAcceptsTrip() {
+        for (topK in listOf(0, -1, 11, Int.MAX_VALUE)) {
             val engine = TripInferenceEngine(
                 TripInferenceSettings(enabled = true, topK = topK)
             )
@@ -179,6 +179,17 @@ class TripInferenceEngineTest {
             assertTrue(result.suggestions.isEmpty())
             assertNull(result.accepted)
         }
+    }
+
+    @Test fun upperBoundStillDisplaysTenCandidatesWithoutWeakeningAmbiguityGate() {
+        val engine = TripInferenceEngine(TripInferenceSettings(enabled = true, topK = 10))
+        val candidates = List(12) { index ->
+            candidate("route-$index", "Direction-$index", 180.0)
+        }
+        val result = engine.infer(observation(), candidates)
+        assertEquals(10, result.suggestions.size)
+        assertNull("Indistinguishable competing trips must not be accepted", result.accepted)
+        assertTrue(result.requiresExplicitConfirmation)
     }
 
     @Test fun invalidMinimumConfidenceNeverAcceptsOrSuggests() {
