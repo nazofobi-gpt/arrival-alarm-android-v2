@@ -1270,7 +1270,7 @@ fun ArrivalAlarmApp(
                                 gtfsConsentBusy = true
                                 coroutineScope.launch {
                                     val saved = try {
-                                        selectedGtfsSession.confirm(selection)
+                                        selectedGtfsSession.confirmIfCurrent(selection, gtfsConsentGate, token)
                                     } catch (_: RuntimeException) {
                                         false
                                     }
