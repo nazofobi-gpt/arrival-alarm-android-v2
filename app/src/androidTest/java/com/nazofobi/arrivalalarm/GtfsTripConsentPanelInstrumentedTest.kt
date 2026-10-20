@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -221,5 +222,44 @@ class GtfsTripConsentPanelInstrumentedTest {
         compose.waitForIdle()
         compose.onNodeWithTag("gtfs-alarm-20").assertIsNotEnabled()
         compose.onNodeWithTag("gtfs-consent-confirm").assertIsNotEnabled()
+    }
+
+    @Test fun confirmedTripSummaryDisplaysBoardingDestinationAndExplicitAlarmTarget() {
+        val selected = GtfsSelectedTrip(
+            identity,
+            GtfsSelectedStopRef(10, "stop-10"),
+            GtfsSelectedStopRef(30, "stop-30"),
+            GtfsSelectedStopRef(20, "stop-20"),
+        )
+        compose.setContent {
+            GtfsConfirmedTripSummary(GtfsSelectionRestore.Verified(selected, detail))
+        }
+        compose.onNodeWithTag("gtfs-confirmed-trip-summary").assertExists()
+        compose.onNodeWithTag("gtfs-confirmed-boarding")
+            .assertTextContains("Stop 10", substring = true)
+        compose.onNodeWithTag("gtfs-confirmed-destination")
+            .assertTextContains("Stop 30", substring = true)
+        compose.onNodeWithTag("gtfs-confirmed-alarm-target")
+            .assertTextContains("Stop 20", substring = true)
+        // This is a read-only summary; no alarm-start control is added.
+        compose.onNodeWithTag("gtfs-consent-confirm").assertDoesNotExist()
+    }
+
+    @Test fun confirmedTripSummaryFailsClosedIfConfirmedStopIdentityChanges() {
+        val selected = GtfsSelectedTrip(
+            identity,
+            GtfsSelectedStopRef(10, "stop-10"),
+            GtfsSelectedStopRef(30, "stop-30"),
+            GtfsSelectedStopRef(20, "stop-20"),
+        )
+        val changed = detail.copy(
+            stops = detail.stops.map {
+                if (it.stopSequence == 30) it.copy(stopId = "replacement-30") else it
+            },
+        )
+        compose.setContent {
+            GtfsConfirmedTripSummary(GtfsSelectionRestore.Verified(selected, changed))
+        }
+        compose.onNodeWithTag("gtfs-confirmed-trip-summary").assertDoesNotExist()
     }
 }
