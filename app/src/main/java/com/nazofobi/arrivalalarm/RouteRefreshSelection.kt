@@ -57,6 +57,9 @@ internal fun retainSelectedRouteAfterRefresh(
     return id
 }
 
+// Optional geometry must be absent as a pair, not partially populated.
 private fun knownCoordinatesAreValid(latitude: Double?, longitude: Double?): Boolean =
-    (latitude == null || (latitude.isFinite() && latitude in -90.0..90.0)) &&
-        (longitude == null || (longitude.isFinite() && longitude in -180.0..180.0))
+    (latitude == null && longitude == null) ||
+        (latitude != null && longitude != null &&
+            latitude.isFinite() && latitude in -90.0..90.0 &&
+            longitude.isFinite() && longitude in -180.0..180.0)

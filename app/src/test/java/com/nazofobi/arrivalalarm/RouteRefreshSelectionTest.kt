@@ -125,6 +125,30 @@ class RouteRefreshSelectionTest {
     }
 
     @Test
+    fun partialStopCoordinatePairsAreNotValidTripIdentityEvidence() {
+        val old = option()
+        // MapPoint requires a complete non-null coordinate pair at the type level.
+        // RouteStop allows nullable geometry, so partial pairs can enter via transit data.
+        val missingStopLongitude = old.copy(stops = stops.mapIndexed { index, stop ->
+            if (index == 1) stop.copy(longitude = null) else stop
+        })
+        val missingStopLatitude = old.copy(stops = stops.mapIndexed { index, stop ->
+            if (index == 1) stop.copy(latitude = null) else stop
+        })
+        for (invalid in listOf(missingStopLongitude, missingStopLatitude)) {
+            assertNull(retainSelectedRouteAfterRefresh(
+                old.id, listOf(invalid), listOf(invalid),
+            ))
+            assertNull(retainSelectedRouteAfterRefresh(
+                old.id, listOf(old), listOf(invalid),
+            ))
+            assertNull(retainSelectedRouteAfterRefresh(
+                old.id, listOf(invalid), listOf(old),
+            ))
+        }
+    }
+
+    @Test
     fun unknownStopCoordinatesDoNotInvalidateOtherVerifiedEvidence() {
         val withoutOptionalStopGeometry = option().copy(stops = stops.map { it.copy(
             latitude = null, longitude = null,
