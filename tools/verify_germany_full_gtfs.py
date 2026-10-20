@@ -51,6 +51,8 @@ try:
     zf = zipfile.ZipFile(archive)
 except zipfile.BadZipFile:
     raise SystemExit("invalid GTFS ZIP archive") from None
+except OSError:
+    raise SystemExit("unable to open GTFS ZIP archive") from None
 
 with zf:
     # A ZIP can contain both stops.txt and nested/stops.txt (or a case alias).
