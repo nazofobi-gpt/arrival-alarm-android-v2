@@ -11,6 +11,55 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class OfflineTransitCachePersistenceInstrumentedTest {
     @Test
+    fun restoredRoutePointLabelsRejectJsonCoercionAndPreserveLegacyMissingLabels() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val store = SharedPreferencesTransitCacheStore(context)
+        val route = RouteOption(
+            id = "strict-route-label",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen"),
+            line = "RE", direction = "Bremen",
+            departure = "10:00", arrival = "11:00",
+            walkingMinutes = 0, transfers = 0,
+        )
+        try {
+            prefs.edit().clear().commit()
+            store.save(listOf(CachedTransitPlan("labels", listOf(route), emptyList(), 100L)))
+            val baseline = requireNotNull(prefs.getString("plans_json", null))
+            fun restore(pointName: String, value: Any?, remove: Boolean = false): List<RouteOption> {
+                val snapshot = org.json.JSONArray(baseline)
+                val point = snapshot.getJSONObject(0).getJSONArray("routeOptions")
+                    .getJSONObject(0).getJSONObject(pointName)
+                if (remove) point.remove("label") else point.put("label", value)
+                assertTrue(prefs.edit().putString("plans_json", snapshot.toString()).commit())
+                return store.load().single().routeOptions
+            }
+            for (pointName in listOf("origin", "destination")) {
+                for (invalid in listOf<Any>(
+                    123, true,
+                    org.json.JSONObject().put("label", "Bremen"),
+                    org.json.JSONArray().put("Bremen"),
+                )) {
+                    assertTrue("Coerced $pointName label=$invalid must reject itinerary",
+                        restore(pointName, invalid).isEmpty())
+                }
+                val legacyMissing = restore(pointName, null, remove = true).single()
+                assertEquals("", if (pointName == "origin")
+                    legacyMissing.origin.label else legacyMissing.destination.label)
+                val legacyNull = restore(pointName, org.json.JSONObject.NULL).single()
+                assertEquals("", if (pointName == "origin")
+                    legacyNull.origin.label else legacyNull.destination.label)
+                val valid = restore(pointName, "München Hbf").single()
+                assertEquals("München Hbf", if (pointName == "origin")
+                    valid.origin.label else valid.destination.label)
+            }
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
+    @Test
     fun persistedRouteCoordinatesRejectCoercedJsonTypesWithoutLosingValidNumbers() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
