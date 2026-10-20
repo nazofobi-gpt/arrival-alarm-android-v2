@@ -97,11 +97,11 @@ class GtfsArchiveMemberTest(unittest.TestCase):
         cases = (
             (
                 "stops.txt", REQUIRED,
-                b"stop_id,stop_name,stop_lat,stop_lon,\\n1,Test,52.0,8.0,unused\\n",
+                b"stop_id,stop_name,stop_lat,stop_lon,\n1,Test,52.0,8.0,unused\n",
             ),
             (
                 "feed_info.txt", REQUIRED + ("feed_info.txt",),
-                b"feed_publisher_name, \\nAgency,unused\\n",
+                b"feed_publisher_name, \nAgency,unused\n",
             ),
         )
         for optimized in (False, True):
