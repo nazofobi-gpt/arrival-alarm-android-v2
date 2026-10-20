@@ -43,6 +43,56 @@ class GtfsArchiveMemberTest(unittest.TestCase):
             self.assertFalse(report.exists(), "Unverified feed must not create a success report")
             return result, report
 
+    def test_mismatched_csv_record_columns_fail_closed_in_required_and_optional_tables(self):
+        cases = (
+            ("routes.txt", REQUIRED, b"route_id,route_type\nR\n", 1, 2),
+            (
+                "stops.txt",
+                REQUIRED,
+                b"stop_id,stop_name,stop_lat,stop_lon\n1,Test,52.0,8.0,EXTRA\n",
+                5, 4,
+            ),
+            (
+                "feed_info.txt",
+                REQUIRED + ("feed_info.txt",),
+                b"feed_publisher_name,feed_publisher_url\nAgency\n",
+                1, 2,
+            ),
+            (
+                "agency.txt",
+                REQUIRED + ("agency.txt",),
+                b"agency_id,agency_name\nA,Agency,EXTRA\n",
+                3, 2,
+            ),
+        )
+        for optimized in (False, True):
+            for member, entries, malformed, actual, expected in cases:
+                with self.subTest(member=member, optimized=optimized):
+                    result, _ = self.run_archive(
+                        entries, {member: malformed}, optimized=optimized,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn(
+                        f"GTFS table {member} has {actual} columns at CSV line 2; expected {expected}",
+                        result.stderr,
+                    )
+                    self.assertNotIn("Traceback", result.stderr)
+
+    def test_valid_quoted_multiline_record_does_not_trigger_column_mismatch(self):
+        valid_stops = (
+            b"stop_id,stop_name,stop_lat,stop_lon\n"
+            b'1,"First, stop\nSecond stop",52.0,8.0\n'
+        )
+        for optimized in (False, True):
+            with self.subTest(optimized=optimized):
+                result, _ = self.run_archive(
+                    REQUIRED, {"stops.txt": valid_stops}, optimized=optimized,
+                )
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("stops.txt row count below minimum", result.stderr)
+                self.assertNotIn("has 5 columns", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+
     def test_duplicate_columns_in_required_and_optional_tables_fail_closed(self):
         cases = (
             ("routes.txt", REQUIRED, b"route_id,route_id,route_type\nR,WRONG,3\n"),
