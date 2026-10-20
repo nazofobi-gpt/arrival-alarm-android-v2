@@ -93,6 +93,27 @@ class GtfsArchiveMemberTest(unittest.TestCase):
                 self.assertNotIn("has 5 columns", result.stderr)
                 self.assertNotIn("Traceback", result.stderr)
 
+    def test_blank_column_inside_populated_gtfs_header_fails_closed(self):
+        cases = (
+            (
+                "stops.txt", REQUIRED,
+                b"stop_id,stop_name,stop_lat,stop_lon,\\n1,Test,52.0,8.0,unused\\n",
+            ),
+            (
+                "feed_info.txt", REQUIRED + ("feed_info.txt",),
+                b"feed_publisher_name, \\nAgency,unused\\n",
+            ),
+        )
+        for optimized in (False, True):
+            for member, entries, malformed in cases:
+                with self.subTest(member=member, optimized=optimized):
+                    result, _ = self.run_archive(
+                        entries, {member: malformed}, optimized=optimized,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn(f"blank GTFS column name in {member}", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+
     def test_duplicate_columns_in_required_and_optional_tables_fail_closed(self):
         cases = (
             ("routes.txt", REQUIRED, b"route_id,route_id,route_type\nR,WRONG,3\n"),
