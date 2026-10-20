@@ -40,8 +40,13 @@ def workstream(pr: dict[str, Any]) -> str | None:
 
 
 def overlap_refs(body: str | None) -> set[int]:
-    match = REVIEW.search(body or "")
-    return {int(x) for x in NUMBER.findall(match.group(1))} if match else set()
+    # Review notes can be extended after concurrent PRs arrive; keep every
+    # explicit Overlap-Review line without treating arbitrary prose as a review.
+    return {
+        int(number)
+        for match in REVIEW.finditer(body or "")
+        for number in NUMBER.findall(match.group(1))
+    }
 
 
 def normalized_title(title: str) -> str:
