@@ -256,6 +256,40 @@ class AndroidSelectedGtfsTripSessionInstrumentedTest {
         }
     }
 
+    @Test fun loopBoardingInspectionKeepsRepeatedStopSequenceIdentity() = runBlocking {
+        seedSchedule()
+        // The same physical stop A is visited twice. Its later occurrence is
+        // a different boarding event and must use its own GTFS time and sequence.
+        NationwideTransitIndex(context).use { index ->
+            index.writableDatabase.execSQL(
+                "INSERT INTO stop_times(trip_id,stop_sequence,stop_id,arrival_time,departure_time) " +
+                    "VALUES('T',25,'A','08:44:00','08:45:00')"
+            )
+        }
+        AndroidSelectedGtfsTripSession(context).use { session ->
+            val laterVisit = scheduledDeparture().copy(
+                boardingStopSequence = 25,
+                scheduledEpochSeconds = serviceTimeEpoch("08:45:00"),
+            )
+            val inspection = session.inspect(laterVisit, "A")
+            assertTrue(inspection is GtfsDepartureInspection.Ready)
+            assertEquals(25, (inspection as GtfsDepartureInspection.Ready).boarding.stopSequence)
+            assertEquals(listOf(10, 20, 25, 30), inspection.detail.stops.map { it.stopSequence })
+
+            // A source that reuses the first visit's departure time cannot
+            // silently identify the second visit on a loop.
+            assertEquals(
+                GtfsDepartureInspection.Rejected(
+                    GtfsDepartureInspectionFailure.SOURCE_EVIDENCE_MISMATCH,
+                ),
+                session.inspect(laterVisit.copy(
+                    scheduledEpochSeconds = serviceTimeEpoch("08:01:00"),
+                ), "A"),
+            )
+            assertEquals(GtfsSelectionRestore.Empty, session.restore())
+        }
+    }
+
     @Test fun supersededConsentCannotPersistOrReplaceVerifiedTripRoles() = runBlocking {
         seedSchedule()
         AndroidSelectedGtfsTripSession(context).use { session ->
