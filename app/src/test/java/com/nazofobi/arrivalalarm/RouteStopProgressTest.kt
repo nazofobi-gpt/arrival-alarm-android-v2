@@ -136,6 +136,30 @@ class RouteStopProgressTest {
         assertNull(progress.next)
     }
 
+    @Test fun conflictingRealtimeStopOrderFallsBackToCoherentSchedule() {
+        val observations = listOf(
+            RouteStop(
+                id = "a", name = "Lohne",
+                departure = "2026-09-26T08:40:00+02:00",
+                plannedDeparture = "2026-09-26T08:00:00+02:00",
+            ),
+            RouteStop(
+                id = "b", name = "Diepholz",
+                arrival = "2026-09-26T08:25:00+02:00",
+                plannedArrival = "2026-09-26T08:20:00+02:00",
+            ),
+        )
+        val now = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
+
+        val progress = RouteStopProgressTracker().resolve(observations, now)
+
+        assertTrue(progress.resolvedByProviderTime)
+        assertEquals(TransitTimingBasis.SCHEDULED, progress.timingBasis)
+        assertEquals("Lohne", progress.previous?.name)
+        assertNull(progress.current)
+        assertEquals("Diepholz", progress.next?.name)
+    }
+
     @Test fun reversedStopTimelineDoesNotInventPreviousOrNext() {
         val inconsistent = listOf(
             RouteStop(id = "a", name = "First", departure = "2026-09-26T08:20:00+02:00"),
