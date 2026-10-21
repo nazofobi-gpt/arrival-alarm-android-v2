@@ -159,4 +159,41 @@ class TripStopRoleValidatorTest {
         )
     }
 
+
+    @Test fun roleSpecificClocksRejectOppositeDirectionOnlySchedule() {
+        val onlyArrivalAtBoarding = detail.copy(stops = detail.stops.map {
+            if (it.stopSequence == 2) it.copy(scheduledDeparture = null) else it
+        })
+        assertEquals(
+            TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME,
+            rejected(onlyArrivalAtBoarding, TripStopRoles(2, 13, 13)),
+        )
+        val onlyDepartureAtDestination = detail.copy(stops = detail.stops.map {
+            if (it.stopSequence == 13) it.copy(scheduledArrival = null) else it
+        })
+        assertEquals(
+            TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME,
+            rejected(onlyDepartureAtDestination, TripStopRoles(2, 13, 13)),
+        )
+        val onlyDepartureAtAlarm = detail.copy(stops = detail.stops.map {
+            if (it.stopSequence == 7) it.copy(scheduledArrival = null) else it
+        })
+        assertEquals(
+            TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME,
+            rejected(onlyDepartureAtAlarm, TripStopRoles(2, 13, 7)),
+        )
+    }
+
+    @Test fun appropriateSingleDirectionClockStillConfirmsExplicitRoles() {
+        val directionOnly = detail.copy(stops = listOf(
+            stop(2, "Lohne").copy(scheduledArrival = null),
+            stop(7, "Transfer").copy(scheduledDeparture = null),
+            stop(13, "Achim").copy(scheduledDeparture = null),
+        ))
+        assertTrue(
+            TripStopRoleValidator.validate(directionOnly, TripStopRoles(2, 13, 7))
+                is TripStopRoleResult.Accepted,
+        )
+    }
+
 }
