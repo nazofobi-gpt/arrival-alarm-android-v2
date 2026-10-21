@@ -327,6 +327,9 @@ with source_archive as source:
         )
 
     route_rows = [row for row in rows(source, names["routes.txt"]) if row.get("route_id") in route_ids]
+    missing_route_ids = route_ids - {row.get("route_id") for row in route_rows}
+    if missing_route_ids:
+        raise SystemExit(f"missing selected GTFS routes: {sorted(missing_route_ids)}")
     route_fields = list(route_rows[0])
     schedule_rows = []
     for trip in sorted(selected_trip_ids):
