@@ -58,6 +58,31 @@ class RouteRefreshSelectionTest {
     }
 
     @Test
+    fun resetOrPre2000BoardingClockCannotRetainSelection() {
+        val old = option()
+        for (untrustedEpoch in listOf(Long.MIN_VALUE, -1L, 0L, 1L, 946_684_799_999L)) {
+            val invalid = old.copy(
+                departureEpochMillis = untrustedEpoch,
+                arrivalEpochMillis = 946_684_800_000L,
+            )
+            assertNull(retainSelectedRouteAfterRefresh(
+                invalid.id, listOf(invalid), listOf(invalid),
+            ))
+        }
+    }
+
+    @Test
+    fun firstTrustedBoardingEpochRetainsCoherentIdenticalTrip() {
+        val boundary = option().copy(
+            departureEpochMillis = 946_684_800_000L,
+            arrivalEpochMillis = 946_684_800_000L,
+        )
+        assertEquals(boundary.id, retainSelectedRouteAfterRefresh(
+            boundary.id, listOf(boundary), listOf(boundary),
+        ))
+    }
+
+    @Test
     fun impossibleFutureBoardingEpochCannotRetainSelectedTrip() {
         val impossible = option().copy(departureEpochMillis = Long.MAX_VALUE)
         assertNull(retainSelectedRouteAfterRefresh(
