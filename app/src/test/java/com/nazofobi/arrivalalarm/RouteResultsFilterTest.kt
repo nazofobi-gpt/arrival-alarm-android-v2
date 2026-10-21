@@ -65,7 +65,7 @@ class RouteResultsFilterTest {
     fun fewerTransfersFirstNeverPromotesMalformedNegativeTransferCount() {
         val candidates = listOf(option("unknown", -1), option("one", 1), option("direct", 0))
         assertEquals(
-            listOf("direct", "one", "unknown"),
+            listOf("direct", "one"),
             RouteResultsFilter(fewerTransfersFirst = true).apply(candidates).map { it.id },
         )
         assertEquals(
@@ -73,6 +73,25 @@ class RouteResultsFilterTest {
             RouteResultsFilter(directOnly = true, fewerTransfersFirst = true)
                 .apply(candidates).map { it.id },
         )
+    }
+
+    @Test
+    fun unfilteredRoutesAlsoRejectNegativeTransferCountsWithoutMutatingSource() {
+        val candidates = listOf(
+            option("invalid", -1),
+            option("via", 1),
+            option("invalid-min", Int.MIN_VALUE),
+            option("direct", 0),
+        )
+        assertEquals(
+            listOf("via", "direct"),
+            RouteResultsFilter().apply(candidates).map { it.id },
+        )
+        assertEquals(
+            listOf("direct", "via"),
+            RouteResultsFilter(fewerTransfersFirst = true).apply(candidates).map { it.id },
+        )
+        assertEquals(4, candidates.size)
     }
 
     @Test
