@@ -88,6 +88,18 @@ class DuplicateGuardTest(unittest.TestCase):
         errors, _ = guard.analyze(current, [], [merged])
         self.assertTrue(any("already merged" in item for item in errors))
 
+    def test_merged_self_is_not_a_duplicate_on_postmerge_rerun(self):
+        current = pr(487, "Work-Unit: G-191/manifest-debug-testonly-release-flags\\nOverlap-Review: none".replace("\\n", "\n"),
+                     merged="2026-10-21T02:38:38Z")
+        errors, _ = guard.analyze(current, [], [current])
+        self.assertEqual(errors, [])
+
+    def test_postmerge_self_exemption_does_not_allow_other_reimplementation(self):
+        current = pr(488, "Work-Unit: G-191/manifest-debug-testonly-release-flags\\nOverlap-Review: none".replace("\\n", "\n"))
+        merged = pr(487, current["body"], merged="2026-10-21T02:38:38Z")
+        errors, _ = guard.analyze(current, [], [merged])
+        self.assertTrue(any("already merged" in item for item in errors))
+
     def test_closed_unmerged_same_unit_does_not_block(self):
         current = pr(402, "Work-Unit: G-168/provider-identities\nOverlap-Review: none")
         closed = pr(300, "Work-Unit: G-168/provider-identities")
