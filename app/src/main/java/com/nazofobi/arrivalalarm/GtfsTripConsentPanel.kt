@@ -45,15 +45,19 @@ internal fun GtfsTripConsentPanel(
         var alarmExpanded by remember { mutableStateOf(false) }
         var invalidRoles by remember { mutableStateOf(false) }
 
+        // Untimed non-timepoint stops remain visible in the trip, but cannot
+        // be selected as an actionable destination or arrival-alarm target.
         val destinations = detail.stops.filter {
             it.stopSequence > boarding.stopSequence &&
-                (it.dropOffType == null || it.dropOffType == 0)
+                (it.dropOffType == null || it.dropOffType == 0) &&
+                it.hasActionableScheduleClock()
         }
         val destination = destinations.singleOrNull { it.stopSequence == destinationSequence }
         // The boarding event is not a valid arrival-alarm target.
         val alarmStops = if (destination != null) detail.stops.filter {
             it.stopSequence > boarding.stopSequence &&
-                it.stopSequence <= destination.stopSequence
+                it.stopSequence <= destination.stopSequence &&
+                it.hasActionableScheduleClock()
         } else emptyList()
         val alarm = alarmStops.singleOrNull { it.stopSequence == alarmOverride }
             ?: destination
