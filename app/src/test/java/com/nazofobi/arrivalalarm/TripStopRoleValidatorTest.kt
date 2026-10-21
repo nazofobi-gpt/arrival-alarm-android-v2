@@ -108,4 +108,55 @@ class TripStopRoleValidatorTest {
             ),
         )
     }
+
+    @Test fun missingScheduleClockCannotBecomeConfirmedStopRole() {
+        val untimed = stop(7, "Transfer").copy(
+            scheduledArrival = null, scheduledDeparture = null,
+        )
+        val missingBoarding = detail.copy(stops = listOf(
+            stop(2, "Lohne").copy(scheduledArrival = null, scheduledDeparture = null),
+            stop(7, "Transfer"), stop(13, "Achim"),
+        ))
+        assertEquals(
+            TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME,
+            rejected(missingBoarding, TripStopRoles(2, 13, 13)),
+        )
+        val missingAlarm = detail.copy(stops = listOf(
+            stop(2, "Lohne"), untimed, stop(13, "Achim"),
+        ))
+        assertEquals(
+            TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME,
+            rejected(missingAlarm, TripStopRoles(2, 13, 7)),
+        )
+        assertEquals(
+            TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME,
+            rejected(
+                detail.copy(stops = detail.stops.dropLast(1) +
+                    stop(13, "Achim").copy(scheduledArrival = null, scheduledDeparture = null)),
+                TripStopRoles(2, 13, 13),
+            ),
+        )
+        // A non-timepoint stop which is not a selected role can remain in the itinerary.
+        assertTrue(
+            TripStopRoleValidator.validate(missingAlarm, TripStopRoles(2, 13, 13))
+                is TripStopRoleResult.Accepted,
+        )
+    }
+
+    @Test fun invalidScheduleClockFailsClosedButOvernightServiceTimeIsAllowed() {
+        val broken = detail.copy(stops = detail.stops.dropLast(1) +
+            stop(13, "Achim").copy(scheduledArrival = "invalid", scheduledDeparture = "08:01:00"))
+        assertEquals(
+            TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME,
+            rejected(broken, TripStopRoles(2, 13, 13)),
+        )
+        val overnight = detail.copy(stops = detail.stops.map {
+            it.copy(scheduledArrival = "24:10:00", scheduledDeparture = "24:11:00")
+        })
+        assertTrue(
+            TripStopRoleValidator.validate(overnight, TripStopRoles(2, 13, 13))
+                is TripStopRoleResult.Accepted,
+        )
+    }
+
 }
