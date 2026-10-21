@@ -34,7 +34,10 @@ internal object ProviderProbeDiagnostics {
         // impossibly far in the future. Allow minor device clock skew.
         // A device with an unset clock cannot attest to a recent provider check.
         // Compare positive epochs by subtraction to avoid Long overflow near its limit.
-        val validCheckTime = nowEpochSeconds > 0L && checkedAt > 0L && when {
+        // Reject physically impossible device/provider epochs even when they agree.
+        // A matching corrupted clock must never authenticate provider health.
+        val validCheckTime = nowEpochSeconds.isDisplayableDepartureEpochSeconds() &&
+            checkedAt.isDisplayableDepartureEpochSeconds() && when {
             checkedAt >= nowEpochSeconds ->
                 checkedAt - nowEpochSeconds <= MAX_PROVIDER_FUTURE_SKEW_SECONDS
             else ->

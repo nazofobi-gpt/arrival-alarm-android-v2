@@ -205,12 +205,33 @@ class ProviderProbeDiagnosticsTest {
         }
     }
 
-    @Test fun maximumEpochDoesNotOverflowFutureSkewCheck() {
-        val now = Long.MAX_VALUE - 5L
+    @Test fun impossibleMatchingClocksNeverAttestProviderHealth() {
+        val samples = listOf(
+            Long.MAX_VALUE to Long.MAX_VALUE,
+            (Long.MAX_VALUE - 5L) to Long.MAX_VALUE,
+            (MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS + 1L) to
+                (MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS + 1L),
+            (MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS - 10L) to
+                (MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS + 1L),
+        )
+        for ((deviceEpoch, providerEpoch) in samples) {
+            val health = TransitProviderHealth(
+                providerId = ArrivalAlarmTransitProviders.LocalStatic.id,
+                state = TransitProviderHealthState.READY,
+                checkedAtEpochSeconds = providerEpoch,
+            )
+            val summary = ProviderProbeDiagnostics.renderAt(health, 1_000L, deviceEpoch)
+            assertEquals("not_measured", summary.value("provider_state"))
+            assertEquals("not_measured", summary.value("latency_bucket"))
+        }
+    }
+
+    @Test fun latestDisplayableClockBoundaryKeepsThirtySecondSkewTolerance() {
+        val now = MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS - 31L
         val health = TransitProviderHealth(
             providerId = ArrivalAlarmTransitProviders.LocalStatic.id,
             state = TransitProviderHealthState.DEGRADED,
-            checkedAtEpochSeconds = Long.MAX_VALUE,
+            checkedAtEpochSeconds = MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS - 1L,
         )
         val summary = ProviderProbeDiagnostics.renderAt(health, 1_000L, now)
         assertEquals("degraded", summary.value("provider_state"))
