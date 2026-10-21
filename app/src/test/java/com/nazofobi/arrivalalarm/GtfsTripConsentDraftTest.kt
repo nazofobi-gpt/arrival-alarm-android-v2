@@ -104,4 +104,19 @@ class GtfsTripConsentDraftTest {
         assertEquals(GtfsSelectedStopRef(7, "Lohne"), selection.boarding)
         assertEquals(GtfsSelectedStopRef(13, "Achim"), selection.alarmTarget)
     }
+
+    @Test fun nonTimepointAlarmTargetRequiresAnActionableScheduleClock() {
+        val nonTimepoint = detail.copy(stops = listOf(
+            stop(2, "Lohne"),
+            stop(7, "Transfer").copy(scheduledArrival = null, scheduledDeparture = null),
+            stop(13, "Achim"),
+        ))
+        val rejected = buildGtfsTripConsentDraft(nonTimepoint, 2, 13, 7)
+            as GtfsTripConsentDraft.Rejected
+        assertEquals(GtfsTripConsentFailure.INVALID_STOP_ROLES, rejected.reason)
+        assertEquals(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME, rejected.roleProblem)
+        assertTrue(buildGtfsTripConsentDraft(nonTimepoint, 2, 13, 13)
+            is GtfsTripConsentDraft.Ready)
+    }
+
 }
