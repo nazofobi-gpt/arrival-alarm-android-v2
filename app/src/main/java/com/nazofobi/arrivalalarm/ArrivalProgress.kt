@@ -136,7 +136,7 @@ class ArrivalProgressController(
             !fix.accuracyMeters.isFinite() || fix.accuracyMeters < 0.0 ||
             fix.accuracyMeters > ArrivalLocationQuality.MAX_TRACKING_ACCURACY_METERS ||
             !fix.speedMps.isFinite() || fix.speedMps < 0.0 ||
-            fix.epochMillis < 0L || isFarFutureFix(fix.epochMillis)
+            fix.epochMillis < 0L || !hasPlausibleFixTime(fix.epochMillis)
         ) {
             if (state.consecutiveInsideThreshold != 0 || state.consecutivePastTarget != 0) {
                 setState(state.copy(consecutiveInsideThreshold = 0, consecutivePastTarget = 0))
@@ -220,11 +220,16 @@ class ArrivalProgressController(
             .coerceIn(120.0, 320.0)
     }
 
-    private fun isFarFutureFix(epochMillis: Long): Boolean {
-        if (epochMillis <= 0L) return false // Preserve legacy timestamp-unavailable fixes.
+    /** Timestamped GPS evidence must be recent enough to count toward arrival or missed-stop debounce. */
+    private fun hasPlausibleFixTime(epochMillis: Long): Boolean {
+        if (epochMillis == 0L) return true // Preserve the legacy timestamp-unavailable path.
         val now = nowEpochMillis()
-        return now >= 0L && epochMillis > now &&
-            epochMillis - now > MAX_FUTURE_FIX_SKEW_MILLIS
+        if (now <= 0L) return false // An invalid device clock cannot attest a timestamped fix.
+        return if (epochMillis >= now) {
+            epochMillis - now <= MAX_FUTURE_FIX_SKEW_MILLIS
+        } else {
+            now - epochMillis <= ArrivalLocationQuality.MAX_FIX_AGE_MILLIS
+        }
     }
 
     private fun setState(newState: ArrivalProgressState) {
