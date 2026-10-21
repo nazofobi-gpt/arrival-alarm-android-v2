@@ -215,6 +215,10 @@ with source_archive as source:
                 (trip_rows[pair[0]]["stop_id"], trip_rows[pair[1]]["stop_id"]),
             )
 
+    # Streaming assumes each trip's stop_times occupy one contiguous block.
+    # Reject a reappearing trip rather than silently selecting an incomplete
+    # stop sequence and publishing misleading real-feed acceptance evidence.
+    completed_trip_ids = set()
     for row in rows(source, names["stop_times.txt"]):
         if stop_time_fields is None:
             stop_time_fields = list(row)
@@ -222,6 +226,9 @@ with source_archive as source:
         if current_trip is None:
             current_trip = trip_id
         if trip_id != current_trip:
+            completed_trip_ids.add(current_trip)
+            if trip_id in completed_trip_ids:
+                raise SystemExit(f"noncontiguous stop_times for trip {trip_id}")
             consume(current_trip, current_rows)
             current_trip, current_rows = trip_id, []
         current_rows.append(row)
