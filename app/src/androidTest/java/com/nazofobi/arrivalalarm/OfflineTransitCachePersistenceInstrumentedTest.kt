@@ -835,4 +835,70 @@ class OfflineTransitCachePersistenceInstrumentedTest {
             prefs.edit().clear().commit()
         }
     }
+
+    @Test
+    fun invalidOptionalOfflineProviderIdentifiersAreRejectedInsteadOfStringified() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val store = SharedPreferencesTransitCacheStore(context)
+        val route = RouteOption(
+            id = "route-1",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen"),
+            line = "RE", direction = "Bremen",
+            departure = "10:00", arrival = "11:00",
+            walkingMinutes = 0, transfers = 0,
+            stops = listOf(RouteStop(id = "stop-1", name = "Lohne")),
+        )
+        val departure = Departure("trip-1", "RE", "Bremen", 1_700_000_000L)
+        try {
+            prefs.edit().clear().commit()
+            store.save(listOf(CachedTransitPlan("identity", listOf(route), listOf(departure), 100L)))
+            val baseline = requireNotNull(prefs.getString("plans_json", null))
+
+            fun restore(kind: String, value: Any): CachedTransitPlan {
+                val plans = org.json.JSONArray(baseline)
+                val plan = plans.getJSONObject(0)
+                val target = when (kind) {
+                    "refreshToken" -> plan.getJSONArray("routeOptions").getJSONObject(0)
+                    "stopId" -> plan.getJSONArray("routeOptions").getJSONObject(0)
+                        .getJSONArray("stops").getJSONObject(0)
+                    else -> plan.getJSONArray("departures").getJSONObject(0)
+                }
+                target.put(if (kind == "stopId") "id" else kind, value)
+                assertTrue(prefs.edit().putString("plans_json", plans.toString()).commit())
+                return store.load().single()
+            }
+
+            val invalid = listOf<Any>(
+                42, true, org.json.JSONObject().put("id", "spoof"),
+                org.json.JSONArray().put("spoof"),
+            )
+            for (kind in listOf("refreshToken", "stopId", "routeId")) {
+                invalid.forEach { value ->
+                    val restored = restore(kind, value)
+                    if (kind == "routeId") {
+                        assertTrue("Invalid routeId=$value must reject departure", restored.departures.isEmpty())
+                        assertEquals(1, restored.routeOptions.size)
+                    } else {
+                        assertTrue("Invalid $kind=$value must reject route", restored.routeOptions.isEmpty())
+                        assertEquals(1, restored.departures.size)
+                    }
+                }
+                val valid = restore(kind, "verified-id")
+                val actual = when (kind) {
+                    "refreshToken" -> valid.routeOptions.single().refreshToken
+                    "stopId" -> valid.routeOptions.single().stops.single().id
+                    else -> valid.departures.single().routeId
+                }
+                assertEquals("verified-id", actual)
+                val legacy = restore(kind, org.json.JSONObject.NULL)
+                assertEquals(1, legacy.routeOptions.size)
+                assertEquals(1, legacy.departures.size)
+            }
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
 }
