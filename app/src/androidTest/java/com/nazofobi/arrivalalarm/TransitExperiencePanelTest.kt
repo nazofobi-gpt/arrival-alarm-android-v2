@@ -116,4 +116,52 @@ class TransitExperiencePanelTest {
         }
     }
 
+
+    @Test
+    fun malformedLocalFavoritesAndTripHistoryDoNotCrashDepartureBoard() {
+        val prefs = InstrumentationRegistry.getInstrumentation().targetContext
+            .getSharedPreferences("transit_experience", Context.MODE_PRIVATE)
+        val originalFavorites = prefs.getStringSet("favorite_stop_ids", null)?.toSet()
+        val originalRecents = prefs.getString("recent_trip_ids", null)
+        try {
+            // Both preference types can be wrong after a migration or foreign write.
+            prefs.edit()
+                .putString("favorite_stop_ids", "not-a-string-set")
+                .putInt("recent_trip_ids", 42)
+                .commit()
+
+            rule.setContent {
+                MaterialTheme {
+                    TransitExperiencePanel(
+                        stopId = "stop-corrupt-preferences",
+                        stopName = "Lohne",
+                        lineName = "RE 18",
+                        direction = "Osnabrück",
+                        departures = emptyList(),
+                        alerts = emptyList(),
+                        isOfflineCache = false,
+                        nowEpochSeconds = 1_000L,
+                    )
+                }
+            }
+
+            rule.onNodeWithTag("stop-detail").assertExists()
+            rule.onNodeWithTag("favorite-stop").performClick()
+            rule.runOnIdle {
+                // The next legitimate change repairs both wrong-typed fields.
+                assertEquals(
+                    setOf("stop-corrupt-preferences"),
+                    prefs.getStringSet("favorite_stop_ids", emptySet()).orEmpty(),
+                )
+                assertEquals("", prefs.getString("recent_trip_ids", ""))
+            }
+        } finally {
+            val editor = prefs.edit()
+                .remove("favorite_stop_ids")
+                .remove("recent_trip_ids")
+            originalFavorites?.let { editor.putStringSet("favorite_stop_ids", it) }
+            originalRecents?.let { editor.putString("recent_trip_ids", it) }
+            editor.commit()
+        }
+    }
 }
