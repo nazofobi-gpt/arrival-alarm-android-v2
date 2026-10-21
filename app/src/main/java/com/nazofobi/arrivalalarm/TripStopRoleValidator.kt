@@ -48,6 +48,13 @@ internal fun GtfsTripDetailStop.hasActionableScheduleClock(): Boolean {
     }
 }
 
+/** A boarding requires departure time; an alighting/alarm event requires arrival time. */
+internal fun GtfsTripDetailStop.hasActionableBoardingClock(): Boolean =
+    scheduledDeparture != null && hasActionableScheduleClock()
+
+internal fun GtfsTripDetailStop.hasActionableArrivalClock(): Boolean =
+    scheduledArrival != null && hasActionableScheduleClock()
+
 /**
  * Uses a previously resolved and service-date-verified GtfsTripDetail.
  * The user must explicitly choose boarding/destination and an alarm target
@@ -84,7 +91,10 @@ object TripStopRoleValidator {
             alarm.stopSequence <= boarding.stopSequence ||
             alarm.stopSequence > destination.stopSequence
         ) return reject(TripStopRoleProblem.WRONG_STOP_ORDER)
-        if (listOf(boarding, destination, alarm).any { !it.hasActionableScheduleClock() }) {
+        if (!boarding.hasActionableBoardingClock() ||
+            !destination.hasActionableArrivalClock() ||
+            !alarm.hasActionableArrivalClock()
+        ) {
             return reject(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME)
         }
 
