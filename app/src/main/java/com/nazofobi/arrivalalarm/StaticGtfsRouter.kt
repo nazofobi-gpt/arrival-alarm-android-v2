@@ -626,7 +626,16 @@ class StaticGtfsRouter(
         val source = data.stop(alightStopId)
         val targets = linkedMapOf<String, TransferTarget>()
 
-        fun offer(stop: GtfsScheduleStop?, stopId: String, knownDistanceMeters: Int? = null) {
+        fun offer(
+            stop: GtfsScheduleStop?,
+            stopId: String,
+            knownDistanceMeters: Int? = null,
+            requireValidGeometry: Boolean = false,
+        ) {
+            // Implicit platform/nearby links need actual usable geometry. In Kotlin
+            // NaN.toInt() becomes zero and could fabricate a short transfer.
+            if (requireValidGeometry && (source == null || stop == null ||
+                    !hasValidTransferCoordinates(source) || !hasValidTransferCoordinates(stop))) return
             val walkSeconds = if (stopId == alightStopId) {
                 implicitTransferSeconds
             } else {
@@ -653,7 +662,7 @@ class StaticGtfsRouter(
         }
         if (siblingParentId != null) {
             data.childStops(siblingParentId, maxChildStops).forEach { sibling ->
-                if (sibling.id != alightStopId) offer(sibling, sibling.id)
+                if (sibling.id != alightStopId) offer(sibling, sibling.id, requireValidGeometry = true)
             }
         }
 
@@ -665,11 +674,15 @@ class StaticGtfsRouter(
             .filter { it.distanceMeters in 0..maxImplicitTransferRadiusMeters }
             .take(maxImplicitTransferCandidates)
             .forEach { nearby ->
-                offer(nearby.stop, nearby.stop.id, nearby.distanceMeters)
+                offer(nearby.stop, nearby.stop.id, nearby.distanceMeters, requireValidGeometry = true)
             }
 
         return targets.values.toList()
     }
+
+    private fun hasValidTransferCoordinates(stop: GtfsScheduleStop): Boolean =
+        stop.latitude.isFinite() && stop.longitude.isFinite() &&
+            stop.latitude in -90.0..90.0 && stop.longitude in -180.0..180.0
 
     private fun implicitTransferWalkSeconds(
         from: GtfsScheduleStop?,
