@@ -196,4 +196,54 @@ class TripStopRoleValidatorTest {
         )
     }
 
+
+    @Test fun plannedPhysicalStopCountUsesOccurrenceIndexesNotGtfsSequenceGap() {
+        val loop = detail.copy(stops = listOf(
+            stop(2, "Loop"), stop(50, "Loop"), stop(200, "Achim"),
+        ))
+        val earlyAlarm = GtfsSelectedTrip(
+            identity,
+            GtfsSelectedStopRef(2, "Loop"),
+            GtfsSelectedStopRef(200, "Achim"),
+            GtfsSelectedStopRef(50, "Loop"),
+        )
+        // Second visit to the same stopId is a distinct, physical GTFS stop occurrence.
+        assertEquals(1, plannedPhysicalStopsFromBoardingToAlarm(earlyAlarm, loop))
+        val destinationAlarm = GtfsSelectedTrip(
+            identity,
+            GtfsSelectedStopRef(2, "Loop"),
+            GtfsSelectedStopRef(200, "Achim"),
+            GtfsSelectedStopRef(200, "Achim"),
+        )
+        assertEquals(2, plannedPhysicalStopsFromBoardingToAlarm(destinationAlarm, loop))
+    }
+
+    @Test fun plannedCountFailsClosedOnIdentityRoleAndScheduleMismatch() {
+        val chosen = GtfsSelectedTrip(
+            identity,
+            GtfsSelectedStopRef(2, "Lohne"),
+            GtfsSelectedStopRef(13, "Achim"),
+            GtfsSelectedStopRef(7, "Transfer"),
+        )
+        assertEquals(1, plannedPhysicalStopsFromBoardingToAlarm(chosen, detail))
+        val badRole = GtfsSelectedTrip(
+            identity, chosen.boarding, chosen.destination,
+            GtfsSelectedStopRef(7, "wrong-physical-stop"),
+        )
+        assertEquals(null, plannedPhysicalStopsFromBoardingToAlarm(badRole, detail))
+        val wrongIdentity = GtfsSelectedTrip(
+            GtfsTripInstanceIdentity(
+                tripId = "other-trip",
+                serviceDate = GtfsServiceDate(2026, 10, 11),
+                serviceId = "service-1", routeId = "route-2", directionId = 1,
+            ),
+            chosen.boarding, chosen.destination, chosen.alarmTarget,
+        )
+        assertEquals(null, plannedPhysicalStopsFromBoardingToAlarm(wrongIdentity, detail))
+        val invalidAlarmClock = detail.copy(stops = detail.stops.map {
+            if (it.stopSequence == 7) it.copy(scheduledArrival = null) else it
+        })
+        assertEquals(null, plannedPhysicalStopsFromBoardingToAlarm(chosen, invalidAlarmClock))
+    }
+
 }
