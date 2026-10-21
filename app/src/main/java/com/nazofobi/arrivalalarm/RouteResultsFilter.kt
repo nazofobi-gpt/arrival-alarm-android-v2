@@ -14,13 +14,16 @@ internal data class RouteResultsFilter(
     fun apply(options: List<RouteOption>): List<RouteOption> {
         val limit = maxTransfers
         val filtered = options.filter { option ->
-            (!directOnly || option.transfers == 0) &&
-                (limit == null || (option.transfers >= 0 && option.transfers <= limit))
+            // A negative transfer count is malformed provider evidence, not a
+            // valid route with fewer changes. Never display it as "-1 transfers",
+            // even when all routes are shown without an explicit limit.
+            option.transfers >= 0 &&
+                (!directOnly || option.transfers == 0) &&
+                (limit == null || option.transfers <= limit)
         }
-        // Keep provider order for equally convenient routes. Invalid negative counts
-        // must not outrank known transfer counts in the opt-in ranking.
+        // Keep provider order for equally convenient routes.
         return if (fewerTransfersFirst) {
-            filtered.sortedBy { it.transfers.takeIf { count -> count >= 0 } ?: Int.MAX_VALUE }
+            filtered.sortedBy { it.transfers }
         } else {
             filtered
         }
