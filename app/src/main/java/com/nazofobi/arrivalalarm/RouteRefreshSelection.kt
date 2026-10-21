@@ -35,6 +35,15 @@ internal fun retainSelectedRouteAfterRefresh(
         updated.departureEpochMillis != boardingInstant
     ) return null
 
+    // A departure cannot be the same physical journey if either snapshot places
+    // arrival before boarding or beyond the supported UTC epoch range.
+    // Realtime arrival changes after boarding are still allowed.
+    if (listOf(previous, updated).any { option ->
+            option.arrivalEpochMillis?.let { arrival ->
+                arrival < boardingInstant || arrival > MAX_ROUTE_DEPARTURE_EPOCH_MILLIS
+            } == true
+        }) return null
+
     // Matching bad coordinates are not physical trip identity evidence.
     if (listOf(previous, updated).any { option ->
             !knownCoordinatesAreValid(option.origin.latitude, option.origin.longitude) ||
