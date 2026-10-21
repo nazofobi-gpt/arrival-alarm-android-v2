@@ -262,4 +262,31 @@ class GtfsTripConsentPanelInstrumentedTest {
         }
         compose.onNodeWithTag("gtfs-confirmed-trip-summary").assertDoesNotExist()
     }
+
+    @Test fun untimedStopCannotBeSelectedAsDestinationOrAlarmTarget() {
+        var confirmed: GtfsSelectedTrip? = null
+        val mixed = detail.copy(stops = listOf(
+            stop(10),
+            stop(20).copy(scheduledArrival = null, scheduledDeparture = null),
+            stop(30),
+        ))
+        compose.setContent {
+            GtfsTripConsentPanel(
+                preview = GtfsDepartureInspection.Ready(mixed, mixed.stops.first()),
+                busy = false,
+                onConfirm = { confirmed = it },
+                onDismiss = {},
+            )
+        }
+
+        compose.onNodeWithTag("gtfs-destination-picker").performClick()
+        compose.onNodeWithTag("gtfs-destination-20").assertDoesNotExist()
+        compose.onNodeWithTag("gtfs-destination-30").performClick()
+        compose.onNodeWithTag("gtfs-alarm-target-picker").performClick()
+        compose.onNodeWithTag("gtfs-alarm-20").assertDoesNotExist()
+        compose.onNodeWithTag("gtfs-alarm-30").performClick()
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsEnabled().performClick()
+        assertEquals(GtfsSelectedStopRef(30, "stop-30"), confirmed?.alarmTarget)
+    }
+
 }
