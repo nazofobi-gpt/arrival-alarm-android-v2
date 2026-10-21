@@ -76,8 +76,8 @@ class SupportDiagnosticsTest {
         // Impossible positive device times must not be misreported as over_7d.
         for (invalidNow in listOf(253_402_300_800L, Long.MAX_VALUE)) {
             val report = SupportDiagnostics.render(validFeed, invalidNow)
-            assertTrue(report.contains("feed_age_bucket=unknown\\n"))
-            assertFalse(report.contains("feed_age_bucket=over_7d\\n"))
+            assertTrue(report.contains("feed_age_bucket=unknown\n"))
+            assertFalse(report.contains("feed_age_bucket=over_7d\n"))
         }
 
         // Impossible positive feed times must not look like ordinary clock skew.
@@ -86,12 +86,12 @@ class SupportDiagnosticsTest {
                 state(NationwideDataState.Ready(10, invalidFetchedAt, "private-source")),
                 validNow,
             )
-            assertTrue(report.contains("feed_age_bucket=unknown\\n"))
-            assertFalse(report.contains("feed_age_bucket=clock_mismatch\\n"))
+            assertTrue(report.contains("feed_age_bucket=unknown\n"))
+            assertFalse(report.contains("feed_age_bucket=clock_mismatch\n"))
         }
 
         assertTrue(SupportDiagnostics.render(validFeed, validNow).contains(
-            "feed_age_bucket=under_24h\\n"
+            "feed_age_bucket=under_24h\n"
         ))
     }
 
