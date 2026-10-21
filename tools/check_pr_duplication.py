@@ -90,7 +90,7 @@ def analyze(
 
     if unit:
         for other in closed_prs:
-            if other.get("merged_at") and work_unit(other.get("body")) == unit:
+            if other.get("number") != number and other.get("merged_at") and work_unit(other.get("body")) == unit:
                 errors.append(f"Work-unit was already merged in PR #{other['number']}. Use a new acceptance slice only for genuinely new work.")
 
     same_stream = sorted(p["number"] for p in peers if stream and workstream(p) == stream)
