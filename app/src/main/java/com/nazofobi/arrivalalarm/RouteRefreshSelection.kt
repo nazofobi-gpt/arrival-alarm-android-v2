@@ -8,6 +8,9 @@ package com.nazofobi.arrivalalarm
  * Live delay, platform and status changes intentionally do not affect identity.
  * A provider without sufficient evidence requires explicit reselection.
  */
+private const val MAX_ROUTE_DEPARTURE_EPOCH_MILLIS = 253_402_300_799_999L
+
+/** Route identity cannot be proved with timestamps beyond supported UTC year 9999. */
 internal fun retainSelectedRouteAfterRefresh(
     selectedRouteId: String?,
     previousOptions: List<RouteOption>,
@@ -25,7 +28,11 @@ internal fun retainSelectedRouteAfterRefresh(
 
     // GTFS trip_id may recur each service day; trip_id alone is not a trip instance.
     val boardingInstant = previous.departureEpochMillis ?: return null
-    if (boardingInstant <= 0L || updated.departureEpochMillis != boardingInstant) return null
+    if (
+        boardingInstant <= 0L ||
+        boardingInstant > MAX_ROUTE_DEPARTURE_EPOCH_MILLIS ||
+        updated.departureEpochMillis != boardingInstant
+    ) return null
 
     // Matching bad coordinates are not physical trip identity evidence.
     if (listOf(previous, updated).any { option ->

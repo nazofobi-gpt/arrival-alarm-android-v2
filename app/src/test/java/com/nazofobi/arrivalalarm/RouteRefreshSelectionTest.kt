@@ -58,6 +58,24 @@ class RouteRefreshSelectionTest {
     }
 
     @Test
+    fun impossibleFutureBoardingEpochCannotRetainSelectedTrip() {
+        val impossible = option().copy(departureEpochMillis = Long.MAX_VALUE)
+        assertNull(retainSelectedRouteAfterRefresh(
+            impossible.id, listOf(impossible), listOf(impossible),
+        ))
+
+        val beyondSupportedUtc = option().copy(departureEpochMillis = 253_402_300_800_000L)
+        assertNull(retainSelectedRouteAfterRefresh(
+            beyondSupportedUtc.id, listOf(beyondSupportedUtc), listOf(beyondSupportedUtc),
+        ))
+
+        val supportedBoundary = option().copy(departureEpochMillis = 253_402_300_799_999L)
+        assertEquals(supportedBoundary.id, retainSelectedRouteAfterRefresh(
+            supportedBoundary.id, listOf(supportedBoundary), listOf(supportedBoundary),
+        ))
+    }
+
+    @Test
     fun changedBoardingOrAlightingStopRolesRequireReselection() {
         val old = option()
         assertNull(retainSelectedRouteAfterRefresh(
