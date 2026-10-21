@@ -57,6 +57,41 @@ class ReducerMemberIdentityTest(unittest.TestCase):
         self.assertFalse(created_output)
 
 
+class ReducerSourceZipOpenTest(unittest.TestCase):
+    """Source ZIP failures are controlled, without traceback or partial output."""
+
+    def test_missing_directory_and_corrupt_sources_fail_closed(self):
+        for source_kind in ("missing", "directory", "corrupt", "empty"):
+            with self.subTest(source_kind=source_kind):
+                with tempfile.TemporaryDirectory() as dirname:
+                    root = Path(dirname)
+                    source = root / "source.zip"
+                    output = root / "fixture.zip"
+                    report = root / "report.json"
+                    if source_kind == "directory":
+                        source.mkdir()
+                    elif source_kind == "corrupt":
+                        source.write_bytes(b"not a GTFS ZIP archive")
+                    elif source_kind == "empty":
+                        source.write_bytes(b"")
+
+                    result = subprocess.run(
+                        [sys.executable, str(SCRIPT), str(source), str(output), str(report)],
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                        check=False,
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertEqual(
+                        result.stderr.strip(),
+                        "unable to open Germany Full GTFS ZIP source",
+                    )
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertFalse(output.exists())
+                    self.assertFalse(report.exists())
+
+
 class ReducerClockTimeTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
