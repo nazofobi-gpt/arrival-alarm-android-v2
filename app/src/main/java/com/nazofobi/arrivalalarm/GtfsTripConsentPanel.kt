@@ -39,6 +39,7 @@ internal fun GtfsTripConsentPanel(
     val boarding = preview.boarding
     val detail = preview.detail
     key(detail.identity, boarding.stopSequence, boarding.stopId, detail.stops) {
+        val boardingActionable = boarding.hasActionableBoardingClock()
         var destinationSequence by remember { mutableStateOf<Int?>(null) }
         var alarmOverride by remember { mutableStateOf<Int?>(null) }
         var destinationExpanded by remember { mutableStateOf(false) }
@@ -50,14 +51,14 @@ internal fun GtfsTripConsentPanel(
         val destinations = detail.stops.filter {
             it.stopSequence > boarding.stopSequence &&
                 (it.dropOffType == null || it.dropOffType == 0) &&
-                it.hasActionableScheduleClock()
+                it.hasActionableArrivalClock()
         }
         val destination = destinations.singleOrNull { it.stopSequence == destinationSequence }
         // The boarding event is not a valid arrival-alarm target.
         val alarmStops = if (destination != null) detail.stops.filter {
             it.stopSequence > boarding.stopSequence &&
                 it.stopSequence <= destination.stopSequence &&
-                it.hasActionableScheduleClock()
+                it.hasActionableArrivalClock()
         } else emptyList()
         val alarm = alarmStops.singleOrNull { it.stopSequence == alarmOverride }
             ?: destination
@@ -134,7 +135,7 @@ internal fun GtfsTripConsentPanel(
                     }
                 }
 
-                if (invalidRoles || destinations.isEmpty()) {
+                if (invalidRoles || destinations.isEmpty() || !boardingActionable) {
                     Text(
                         stringResource(R.string.gtfs_consent_invalid),
                         color = MaterialTheme.colorScheme.error,
@@ -158,7 +159,7 @@ internal fun GtfsTripConsentPanel(
                             is GtfsTripConsentDraft.Rejected -> invalidRoles = true
                         }
                     },
-                    enabled = destination != null && !busy,
+                    enabled = destination != null && boardingActionable && !busy,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                         .testTag("gtfs-consent-confirm"),
                 ) {

@@ -289,4 +289,65 @@ class GtfsTripConsentPanelInstrumentedTest {
         assertEquals(GtfsSelectedStopRef(30, "stop-30"), confirmed?.alarmTarget)
     }
 
+
+    @Test fun directionalStopTimesAreReflectedInConsentChoices() {
+        var chosen: GtfsSelectedTrip? = null
+        val directionOnly = detail.copy(stops = listOf(
+            stop(10).copy(scheduledArrival = null),
+            stop(20, dropOff = 1),
+            stop(30).copy(scheduledDeparture = null),
+        ))
+        compose.setContent {
+            GtfsTripConsentPanel(
+                preview = GtfsDepartureInspection.Ready(directionOnly, directionOnly.stops.first()),
+                busy = false,
+                onConfirm = { chosen = it },
+                onDismiss = {},
+            )
+        }
+        compose.onNodeWithTag("gtfs-destination-picker").performClick()
+        compose.onNodeWithTag("gtfs-destination-30").performClick()
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsEnabled().performClick()
+        assertEquals(GtfsSelectedStopRef(30, "stop-30"), chosen?.destination)
+    }
+
+    @Test fun noBoardingDepartureCannotBeConfirmedEvenWithDestinationArrival() {
+        var chosen: GtfsSelectedTrip? = null
+        val noBoardingDeparture = detail.copy(stops = detail.stops.map {
+            if (it.stopSequence == 10) it.copy(scheduledDeparture = null) else it
+        })
+        compose.setContent {
+            GtfsTripConsentPanel(
+                preview = GtfsDepartureInspection.Ready(
+                    noBoardingDeparture, noBoardingDeparture.stops.first()
+                ),
+                busy = false,
+                onConfirm = { chosen = it },
+                onDismiss = {},
+            )
+        }
+        compose.onNodeWithTag("gtfs-destination-picker").performClick()
+        compose.onNodeWithTag("gtfs-destination-30").performClick()
+        compose.onNodeWithTag("gtfs-consent-invalid").assertExists()
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsNotEnabled()
+        assertNull(chosen)
+    }
+
+    @Test fun departureOnlyDestinationIsNotOfferedAsAlightingChoice() {
+        val noArrival = detail.copy(stops = detail.stops.map {
+            if (it.stopSequence == 30) it.copy(scheduledArrival = null) else it
+        })
+        compose.setContent {
+            GtfsTripConsentPanel(
+                preview = GtfsDepartureInspection.Ready(noArrival, noArrival.stops.first()),
+                busy = false,
+                onConfirm = {},
+                onDismiss = {},
+            )
+        }
+        compose.onNodeWithTag("gtfs-destination-picker").performClick()
+        compose.onNodeWithTag("gtfs-destination-30").assertDoesNotExist()
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsNotEnabled()
+    }
+
 }
