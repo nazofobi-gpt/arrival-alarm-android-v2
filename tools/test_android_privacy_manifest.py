@@ -177,6 +177,26 @@ class AndroidManifestPrivacyPolicyTest(unittest.TestCase):
                     any("only the location FGS type" in e for e in validate_manifest(bad))
                 )
 
+    def test_debuggable_or_test_only_manifest_cannot_pass_release_gate(self):
+        for attribute in ("debuggable", "testOnly"):
+            for value in ("true", "@bool/enable_debug"):
+                with self.subTest(attribute=attribute, value=value):
+                    bad = VALID.replace(
+                        "<application ",
+                        f'<application android:{attribute}="{value}" ',
+                    )
+                    self.assertIn(
+                        f"application android:{attribute} must be absent or false",
+                        validate_manifest(bad),
+                    )
+
+    def test_explicitly_disabled_release_flags_still_pass(self):
+        manifest = VALID.replace(
+            "<application ",
+            '<application android:debuggable="false" android:testOnly="false" ',
+        )
+        self.assertEqual([], validate_manifest(manifest))
+
     def test_insecure_backup_and_cleartext_are_rejected(self):
         for original in ('android:allowBackup="false"',
                          'android:usesCleartextTraffic="false"'):
