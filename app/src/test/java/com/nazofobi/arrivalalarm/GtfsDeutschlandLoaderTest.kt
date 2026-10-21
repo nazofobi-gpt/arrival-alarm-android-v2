@@ -88,6 +88,52 @@ class GtfsDeutschlandLoaderTest {
         assertTrue(failure is IllegalStateException && failure.message.orEmpty().contains("unterminated"))
     }
 
+    @Test fun invalidStopGeometryAndMissingReferencesCannotPublishPhantomTrips() {
+        val zip = zipOf(
+            "stops.txt" to (
+                "stop_id,stop_name,stop_lat,stop_lon\n" +
+                "s1,Lohne,52.66,8.23\n" +
+                "s2,Achim,53.01,9.03\n" +
+                "nan,BadNaN,NaN,8.23\n" +
+                "infinite,BadInfinity,52.67,Infinity\n" +
+                "latitude,BadLatitude,91,8.23\n" +
+                "longitude,BadLongitude,52.67,-181\n"
+            ),
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to (
+                "route_id,trip_id\n" +
+                "r1,good\nr1,with_nan\nr1,with_infinite\n" +
+                "r1,with_latitude\nr1,with_longitude\nr1,missing\n"
+            ),
+            "stop_times.txt" to (
+                "trip_id,departure_time,stop_id,stop_sequence\n" +
+                "good,10:00:00,s1,1\ngood,11:00:00,s2,2\n" +
+                "with_nan,10:00:00,s1,1\nwith_nan,11:00:00,nan,2\n" +
+                "with_infinite,10:00:00,s1,1\nwith_infinite,11:00:00,infinite,2\n" +
+                "with_latitude,10:00:00,s1,1\nwith_latitude,11:00:00,latitude,2\n" +
+                "with_longitude,10:00:00,s1,1\nwith_longitude,11:00:00,longitude,2\n" +
+                "missing,10:00:00,s1,1\nmissing,11:00:00,unknown,2\n"
+            ),
+        )
+        val snapshot = GtfsDeutschlandLoader.parse(zip, "fixture", "2026-10-21")
+        assertEquals(listOf("s1", "s2"), snapshot.stops.map { it.id })
+        assertEquals(listOf("r1:good"), snapshot.routes.map { it.id })
+        assertEquals(listOf("s1", "s2"), snapshot.routes.single().stopIds)
+        assertEquals(1, snapshot.trips.size)
+    }
+
+    @Test fun legalGeographicBoundaryCoordinatesRemainAvailable() {
+        val zip = zipOf(
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\nsouth,South,-90,180\nnorth,North,90,-180\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,departure_time,stop_id,stop_sequence\nt1,10:00:00,south,1\nt1,11:00:00,north,2\n",
+        )
+        val snapshot = GtfsDeutschlandLoader.parse(zip, "fixture", "2026-10-21")
+        assertEquals(2, snapshot.stops.size)
+        assertEquals(listOf("south", "north"), snapshot.routes.single().stopIds)
+    }
+
     private fun zipOf(vararg files: Pair<String, String>): ByteArray {
         val bytes = ByteArrayOutputStream()
         ZipOutputStream(bytes).use { zip -> files.forEach { (name, content) -> zip.putNextEntry(ZipEntry(name)); zip.write(content.toByteArray()); zip.closeEntry() } }
