@@ -203,7 +203,11 @@ internal fun String?.toTransitEpochSecondsOrNull(): Long? {
             clear()
             set(year, month - 1, day, hour, minute, second)
         }
-        calendar.timeInMillis / 1_000L - offsetSeconds
+        val epochSeconds = calendar.timeInMillis / 1_000L - offsetSeconds
+        // Reject reset/corrupt provider stop clocks even if the device clock is valid.
+        epochSeconds.takeIf {
+            it in MIN_TRUSTED_PROGRESS_EPOCH_SECONDS..MAX_TRUSTED_PROGRESS_EPOCH_SECONDS
+        }
     }.getOrNull()
 }
 
