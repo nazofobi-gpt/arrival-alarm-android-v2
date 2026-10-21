@@ -444,4 +444,37 @@ class RouteStopProgressTest {
             )
         )
     }
+
+    @Test fun unsetOrResetDeviceClockCannotInventScheduledStopProgress() {
+        val route = listOf(
+            RouteStop(
+                id = "b", name = "Diepholz",
+                plannedArrival = "2026-09-26T08:10:00+02:00",
+                plannedDeparture = "2026-09-26T08:11:00+02:00",
+            ),
+        )
+        for (untrustedNow in listOf(Long.MIN_VALUE, -1L, 0L, 1_000L,
+                946_684_799L, Long.MAX_VALUE)) {
+            val result = RouteStopProgressTracker().resolve(route, untrustedNow, trustRealtime = false)
+            assertFalse("Clock $untrustedNow must fail closed", result.resolvedByProviderTime)
+            assertNull(result.previous)
+            assertNull(result.current)
+            assertNull(result.next)
+            assertNull(result.remainingStops)
+        }
+    }
+
+    @Test fun firstSupportedDeviceClockInstantStillResolvesVerifiedSchedule() {
+        val route = listOf(RouteStop(
+            id = "b", name = "Verified",
+            plannedArrival = "2000-01-01T00:00:00Z",
+            plannedDeparture = "2000-01-01T00:01:00Z",
+        ))
+        val result = RouteStopProgressTracker().resolve(
+            route, 946_684_800L, trustRealtime = false,
+        )
+        assertTrue(result.resolvedByProviderTime)
+        assertEquals("Verified", result.current?.name)
+        assertEquals(0, result.remainingStops)
+    }
 }
