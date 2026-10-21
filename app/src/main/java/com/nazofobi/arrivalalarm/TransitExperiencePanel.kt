@@ -54,11 +54,22 @@ fun TransitExperiencePanel(
         context.getSharedPreferences("transit_experience", Context.MODE_PRIVATE)
     }
     val store = remember(prefs) {
-        val recentTripIds = prefs.getString("recent_trip_ids", "").orEmpty()
-            .split('\u001F')
-            .filter { it.isNotBlank() }
+        // Wrong-typed legacy preferences must not crash the departure board.
+        // Keep valid data in the other field, and recover malformed fields on
+        // the next normal store update instead of clearing the entire store.
+        val savedRecents = try {
+            prefs.getString("recent_trip_ids", "").orEmpty()
+        } catch (_: ClassCastException) {
+            ""
+        }
+        val savedFavorites = try {
+            prefs.getStringSet("favorite_stop_ids", emptySet()).orEmpty().toList()
+        } catch (_: ClassCastException) {
+            emptyList()
+        }
+        val recentTripIds = savedRecents.split('\u001F').filter { it.isNotBlank() }
         TransitRecentsStore(
-            favoriteIds = prefs.getStringSet("favorite_stop_ids", emptySet()).orEmpty().toList(),
+            favoriteIds = savedFavorites,
             recentTripIds = recentTripIds,
         ) { favorites, recents ->
             prefs.edit()
