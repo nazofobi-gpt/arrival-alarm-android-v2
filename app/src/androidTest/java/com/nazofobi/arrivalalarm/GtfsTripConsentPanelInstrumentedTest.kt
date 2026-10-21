@@ -74,6 +74,35 @@ class GtfsTripConsentPanelInstrumentedTest {
         assertEquals(saved?.destination, saved?.alarmTarget)
     }
 
+    @Test fun confirmationIsSingleFlightUntilCallerCompletesBusyCycle() {
+        val busy = mutableStateOf(false)
+        var confirmations = 0
+        compose.setContent {
+            GtfsTripConsentPanel(
+                preview = GtfsDepartureInspection.Ready(detail, detail.stops.first()),
+                busy = busy.value,
+                onConfirm = { confirmations++ },
+                onDismiss = {},
+            )
+        }
+        compose.onNodeWithTag("gtfs-destination-picker").performClick()
+        compose.onNodeWithTag("gtfs-destination-30").performClick()
+        compose.onNodeWithTag("gtfs-consent-confirm").performClick()
+        assertEquals(1, confirmations)
+        // The parent deliberately has not recomposed with busy=true yet.
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsNotEnabled()
+        compose.onNodeWithTag("gtfs-destination-picker").assertIsNotEnabled()
+        compose.onNodeWithTag("gtfs-alarm-target-picker").assertIsNotEnabled()
+
+        // A failed save can be retried only after the parent's busy cycle.
+        compose.runOnUiThread { busy.value = true }
+        compose.waitForIdle()
+        compose.runOnUiThread { busy.value = false }
+        compose.waitForIdle()
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsEnabled().performClick()
+        assertEquals(2, confirmations)
+    }
+
     @Test fun explicitIntermediateAlarmAndChangingDestinationRequireFreshChoice() {
         var chosen: GtfsSelectedTrip? = null
         compose.setContent {

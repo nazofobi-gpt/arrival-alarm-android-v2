@@ -13,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +46,18 @@ internal fun GtfsTripConsentPanel(
         var destinationExpanded by remember { mutableStateOf(false) }
         var alarmExpanded by remember { mutableStateOf(false) }
         var invalidRoles by remember { mutableStateOf(false) }
+        // A rapid double tap must not issue two saves before the caller sets busy.
+        // Once the parent's busy cycle ends, failed saves can be retried.
+        var confirmationPending by remember { mutableStateOf(false) }
+        var busySeenAfterConfirmation by remember { mutableStateOf(false) }
+        LaunchedEffect(busy, confirmationPending) {
+            if (busy && confirmationPending) {
+                busySeenAfterConfirmation = true
+            } else if (!busy && busySeenAfterConfirmation) {
+                confirmationPending = false
+                busySeenAfterConfirmation = false
+            }
+        }
 
         // Untimed non-timepoint stops remain visible in the trip, but cannot
         // be selected as an actionable destination or arrival-alarm target.
@@ -78,7 +91,7 @@ internal fun GtfsTripConsentPanel(
                 Column {
                     OutlinedButton(
                         onClick = { destinationExpanded = true },
-                        enabled = !busy,
+                        enabled = !busy && !confirmationPending,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                             .testTag("gtfs-destination-picker"),
                     ) {
@@ -91,7 +104,7 @@ internal fun GtfsTripConsentPanel(
                         destinations.forEach { stop ->
                             DropdownMenuItem(
                                 text = { Text("${stop.name} (#${stop.stopSequence})") },
-                                enabled = !busy,
+                                enabled = !busy && !confirmationPending,
                                 onClick = {
                                     destinationSequence = stop.stopSequence
                                     alarmOverride = null
@@ -109,7 +122,7 @@ internal fun GtfsTripConsentPanel(
                     Column {
                         OutlinedButton(
                             onClick = { alarmExpanded = true },
-                            enabled = !busy,
+                            enabled = !busy && !confirmationPending,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                                 .testTag("gtfs-alarm-target-picker"),
                         ) {
@@ -122,7 +135,7 @@ internal fun GtfsTripConsentPanel(
                             alarmStops.forEach { stop ->
                                 DropdownMenuItem(
                                     text = { Text("${stop.name} (#${stop.stopSequence})") },
-                                    enabled = !busy,
+                                    enabled = !busy && !confirmationPending,
                                     onClick = {
                                         alarmOverride = stop.stopSequence
                                         invalidRoles = false
@@ -155,11 +168,16 @@ internal fun GtfsTripConsentPanel(
                             destinationSequence = selected.stopSequence,
                             alarmTargetSequence = alarm?.stopSequence,
                         )) {
-                            is GtfsTripConsentDraft.Ready -> onConfirm(draft.selection)
+                            is GtfsTripConsentDraft.Ready -> {
+                                if (!confirmationPending) {
+                                    confirmationPending = true
+                                    onConfirm(draft.selection)
+                                }
+                            }
                             is GtfsTripConsentDraft.Rejected -> invalidRoles = true
                         }
                     },
-                    enabled = destination != null && boardingActionable && !busy,
+                    enabled = destination != null && boardingActionable && !busy && !confirmationPending,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                         .testTag("gtfs-consent-confirm"),
                 ) {
