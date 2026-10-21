@@ -103,3 +103,40 @@ object TripStopRoleValidator {
         )
     }
 }
+
+/**
+ * Counts real, ordered GTFS stop occurrences from confirmed boarding to the
+ * selected alarm stop, inclusive of the alarm stop. GTFS stop_sequence values
+ * are identifiers/order keys, not consecutive ordinal stop counts.
+ *
+ * This is planned journey information, never live GPS/realtime progress.
+ * Fail closed when the persisted roles do not match the current verified trip.
+ */
+internal fun plannedPhysicalStopsFromBoardingToAlarm(
+    selection: GtfsSelectedTrip,
+    detail: GtfsTripDetail,
+): Int? {
+    if (selection.identity != detail.identity) return null
+    val validated = TripStopRoleValidator.validate(
+        detail,
+        TripStopRoles(
+            selection.boarding.sequence,
+            selection.destination.sequence,
+            selection.alarmTarget.sequence,
+        ),
+    ) as? TripStopRoleResult.Accepted ?: return null
+    if (validated.roles.boarding.stopId != selection.boarding.stopId ||
+        validated.roles.destination.stopId != selection.destination.stopId ||
+        validated.roles.alarmTarget.stopId != selection.alarmTarget.stopId
+    ) return null
+
+    val boardingIndex = detail.stops.indexOfFirst {
+        it.stopSequence == selection.boarding.sequence
+    }
+    val alarmIndex = detail.stops.indexOfFirst {
+        it.stopSequence == selection.alarmTarget.sequence
+    }
+    return if (boardingIndex >= 0 && alarmIndex > boardingIndex) {
+        alarmIndex - boardingIndex
+    } else null
+}

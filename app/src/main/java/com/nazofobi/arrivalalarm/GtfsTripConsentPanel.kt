@@ -204,6 +204,7 @@ internal fun GtfsConfirmedTripSummary(
         alarmTarget.stopSequence <= boarding.stopSequence ||
         alarmTarget.stopSequence > destination.stopSequence
     ) return
+    val plannedStopCount = plannedPhysicalStopsFromBoardingToAlarm(selection, detail) ?: return
 
     Card(modifier = modifier.fillMaxWidth().testTag("gtfs-confirmed-trip-summary")) {
         Column(
@@ -225,6 +226,10 @@ internal fun GtfsConfirmedTripSummary(
             Text(
                 "${stringResource(R.string.gtfs_consent_alarm_target)}: ${alarmTarget.name}",
                 modifier = Modifier.testTag("gtfs-confirmed-alarm-target"),
+            )
+            Text(
+                stringResource(R.string.gtfs_confirmed_planned_stops_until_alarm, plannedStopCount),
+                modifier = Modifier.testTag("gtfs-confirmed-planned-stop-count"),
             )
             Text(
                 stringResource(R.string.gtfs_consent_no_automatic_alarm),
