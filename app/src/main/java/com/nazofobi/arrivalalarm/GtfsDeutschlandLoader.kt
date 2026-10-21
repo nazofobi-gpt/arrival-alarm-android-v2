@@ -63,14 +63,21 @@ object GtfsDeutschlandLoader {
         val stops = files["stops.txt"].orEmpty().mapNotNull { row ->
             val id=row["stop_id"]?:return@mapNotNull null; val name=row["stop_name"]?:return@mapNotNull null
             val lat=row["stop_lat"]?.toDoubleOrNull()?:return@mapNotNull null; val lon=row["stop_lon"]?.toDoubleOrNull()?:return@mapNotNull null
+            // A syntactically numeric value (NaN/Infinity) is not usable GPS evidence.
+            if (!lat.isFinite() || lat !in -90.0..90.0 ||
+                !lon.isFinite() || lon !in -180.0..180.0) return@mapNotNull null
             CatalogStop(id,provider.id,name,lat,lon)
         }
+        val validStopIds = stops.mapTo(hashSetOf()) { it.id }
         val routesById=files["routes.txt"].orEmpty().associateBy{it["route_id"].orEmpty()}; val trips=files["trips.txt"].orEmpty()
         val stopTimesByTrip=files["stop_times.txt"].orEmpty().groupBy{it["trip_id"].orEmpty()}; val catalogRoutes=mutableListOf<CatalogRoute>(); val catalogTrips=mutableListOf<CatalogTrip>()
         trips.forEach { trip ->
             val tripId=trip["trip_id"]?:return@forEach; val routeId=trip["route_id"]?:return@forEach; val routeRow=routesById[routeId]?:return@forEach
             val ordered=stopTimesByTrip[tripId].orEmpty().sortedBy{it["stop_sequence"]?.toIntOrNull()?:Int.MAX_VALUE}; if(ordered.size<2)return@forEach
-            val stopIds=ordered.mapNotNull{it["stop_id"]}; val direction=trip["trip_headsign"].orEmpty().ifBlank{routeRow["route_long_name"].orEmpty()}; val shortName=routeRow["route_short_name"].orEmpty().ifBlank{routeRow["route_long_name"].orEmpty()}
+            val stopIds=ordered.mapNotNull{it["stop_id"]}
+            // Never publish a journey with an invalid or absent stop reference.
+            if (stopIds.size != ordered.size || stopIds.any { it.isBlank() || it !in validStopIds }) return@forEach
+            val direction=trip["trip_headsign"].orEmpty().ifBlank{routeRow["route_long_name"].orEmpty()}; val shortName=routeRow["route_short_name"].orEmpty().ifBlank{routeRow["route_long_name"].orEmpty()}
             val uniqueRouteId="$routeId:$tripId"; catalogRoutes+=CatalogRoute(uniqueRouteId,provider.id,shortName,direction,stopIds); catalogTrips+=CatalogTrip(tripId,provider.id,uniqueRouteId,ordered.first()["departure_time"].orEmpty())
         }
         return CatalogSnapshot(listOf(provider),stops,catalogRoutes,catalogTrips,fetchedAt,stale=false)
