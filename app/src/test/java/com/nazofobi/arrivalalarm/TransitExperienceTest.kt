@@ -14,6 +14,18 @@ class TransitExperienceTest {
         Departure("a","1","A",1_200)
     )
 
+    @Test fun invalidCurrentClockCannotPresentPastDeparturesAsUpcoming() {
+        val engine = TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures = true))
+        val departure = Departure("past", "RE 1", "Bremen", 1_200L)
+        for (invalidClock in listOf(0L, -1L, Long.MIN_VALUE,
+            MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS + 1L, Long.MAX_VALUE)) {
+            assertTrue(engine.departureBoard(listOf(departure), invalidClock).isEmpty())
+            assertTrue(engine.alternateDepartures(listOf(departure), "other", invalidClock).isEmpty())
+        }
+        assertEquals(listOf("past"), engine.departureBoard(listOf(departure), 1_000L)
+            .map { it.tripId })
+    }
+
     @Test fun boardUsesRealtimeWhenSupportedAndFiltersPastAndCancelled() {
         val engine=TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures=true))
         val board=engine.departureBoard(departures,now)
