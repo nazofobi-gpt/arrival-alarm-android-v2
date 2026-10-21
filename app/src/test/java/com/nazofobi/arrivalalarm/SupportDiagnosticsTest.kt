@@ -68,6 +68,33 @@ class SupportDiagnosticsTest {
         ).contains("feed_age_bucket=unknown"))
     }
 
+    @Test fun impossibleUtcClocksNeverClaimFeedAge() {
+        val validFetchedAt = 1_700_000_000L
+        val validNow = validFetchedAt + 100L
+        val validFeed = state(NationwideDataState.Ready(10, validFetchedAt, "private-source"))
+
+        // Impossible positive device times must not be misreported as over_7d.
+        for (invalidNow in listOf(253_402_300_800L, Long.MAX_VALUE)) {
+            val report = SupportDiagnostics.render(validFeed, invalidNow)
+            assertTrue(report.contains("feed_age_bucket=unknown\\n"))
+            assertFalse(report.contains("feed_age_bucket=over_7d\\n"))
+        }
+
+        // Impossible positive feed times must not look like ordinary clock skew.
+        for (invalidFetchedAt in listOf(253_402_300_800L, Long.MAX_VALUE)) {
+            val report = SupportDiagnostics.render(
+                state(NationwideDataState.Ready(10, invalidFetchedAt, "private-source")),
+                validNow,
+            )
+            assertTrue(report.contains("feed_age_bucket=unknown\\n"))
+            assertFalse(report.contains("feed_age_bucket=clock_mismatch\\n"))
+        }
+
+        assertTrue(SupportDiagnostics.render(validFeed, validNow).contains(
+            "feed_age_bucket=under_24h\\n"
+        ))
+    }
+
     @Test fun outputHasOnlyFixedReviewedKeys() {
         val report = SupportDiagnostics.render(state(NationwideDataState.Idle), 100L)
         val keys = report.trim().lines().map { it.substringBefore('=') }.toSet()
