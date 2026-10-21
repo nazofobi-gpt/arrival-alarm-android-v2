@@ -22,11 +22,30 @@ enum class TripStopRoleProblem {
     BOARDING_NOT_ALLOWED,
     ALIGHTING_NOT_ALLOWED,
     WRONG_STOP_ORDER,
+    MISSING_ACTIONABLE_STOP_TIME,
 }
 
 sealed interface TripStopRoleResult {
     data class Accepted(val roles: ConfirmedTripStopRoles) : TripStopRoleResult
     data class Rejected(val problem: TripStopRoleProblem) : TripStopRoleResult
+}
+
+/**
+ * Some GTFS non-timepoint stops have neither arrival nor departure times.
+ * They may remain in the displayed itinerary, but cannot be confirmed as
+ * timed boarding, destination or alarm events. A malformed supplied time
+ * must also fail closed even if the other clock is populated.
+ */
+internal fun GtfsTripDetailStop.hasActionableScheduleClock(): Boolean {
+    val clocks = listOfNotNull(scheduledArrival, scheduledDeparture)
+    return clocks.isNotEmpty() && clocks.all { clock ->
+        try {
+            GtfsServiceTime.parse(clock)
+            true
+        } catch (_: IllegalArgumentException) {
+            false
+        }
+    }
 }
 
 /**
@@ -65,6 +84,9 @@ object TripStopRoleValidator {
             alarm.stopSequence <= boarding.stopSequence ||
             alarm.stopSequence > destination.stopSequence
         ) return reject(TripStopRoleProblem.WRONG_STOP_ORDER)
+        if (listOf(boarding, destination, alarm).any { !it.hasActionableScheduleClock() }) {
+            return reject(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME)
+        }
 
         return TripStopRoleResult.Accepted(
             ConfirmedTripStopRoles(detail.identity, boarding, destination, alarm)
