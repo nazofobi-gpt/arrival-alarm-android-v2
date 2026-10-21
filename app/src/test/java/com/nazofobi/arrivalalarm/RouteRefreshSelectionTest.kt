@@ -69,9 +69,52 @@ class RouteRefreshSelectionTest {
             beyondSupportedUtc.id, listOf(beyondSupportedUtc), listOf(beyondSupportedUtc),
         ))
 
-        val supportedBoundary = option().copy(departureEpochMillis = 253_402_300_799_999L)
+        // This fixture must have a coherent arrival as well as a valid departure:
+        // retaining a route with year-9999 boarding and year-2026 arrival is unsafe.
+        val supportedBoundary = option().copy(
+            departureEpochMillis = 253_402_300_799_999L,
+            arrivalEpochMillis = 253_402_300_799_999L,
+        )
         assertEquals(supportedBoundary.id, retainSelectedRouteAfterRefresh(
             supportedBoundary.id, listOf(supportedBoundary), listOf(supportedBoundary),
+        ))
+    }
+
+    @Test
+    fun arrivalBeforeBoardingInEitherSnapshotInvalidatesRetainedSelection() {
+        val old = option()
+        val contradictory = old.copy(arrivalEpochMillis = old.departureEpochMillis!! - 1L)
+        assertNull(retainSelectedRouteAfterRefresh(
+            old.id, listOf(old), listOf(contradictory),
+        ))
+        assertNull(retainSelectedRouteAfterRefresh(
+            old.id, listOf(contradictory), listOf(old),
+        ))
+        assertNull(retainSelectedRouteAfterRefresh(
+            old.id, listOf(contradictory), listOf(contradictory),
+        ))
+    }
+
+    @Test
+    fun unsupportedArrivalEpochInEitherSnapshotInvalidatesRetainedSelection() {
+        val old = option()
+        for (invalidEpoch in listOf(253_402_300_800_000L, Long.MAX_VALUE)) {
+            val invalid = old.copy(arrivalEpochMillis = invalidEpoch)
+            assertNull(retainSelectedRouteAfterRefresh(
+                old.id, listOf(old), listOf(invalid),
+            ))
+            assertNull(retainSelectedRouteAfterRefresh(
+                old.id, listOf(invalid), listOf(old),
+            ))
+        }
+    }
+
+    @Test
+    fun arrivalDelayAfterSameBoardingStillRetainsSelection() {
+        val old = option()
+        val delayed = old.copy(arrivalEpochMillis = old.arrivalEpochMillis!! + 300_000L)
+        assertEquals(old.id, retainSelectedRouteAfterRefresh(
+            old.id, listOf(old), listOf(delayed),
         ))
     }
 
