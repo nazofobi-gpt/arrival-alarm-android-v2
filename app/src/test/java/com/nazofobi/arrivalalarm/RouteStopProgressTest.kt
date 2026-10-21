@@ -319,8 +319,8 @@ class RouteStopProgressTest {
 
         val now = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
         for (invalid in listOf("-12:01", "-13:00", "-13:30", "-14:00")) {
-            val malformed = "2026-09-26T08:10:00$" + "{invalid}"
-            assertNull("Provider offset $" + "{invalid} must be rejected",
+            val malformed = "2026-09-26T08:10:00" + invalid
+            assertNull("Provider offset " + invalid + " must be rejected",
                 malformed.toTransitEpochSecondsOrNull())
 
             val onlyMalformed = RouteStopProgressTracker().resolve(
