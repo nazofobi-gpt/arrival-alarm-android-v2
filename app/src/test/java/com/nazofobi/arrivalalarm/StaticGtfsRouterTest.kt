@@ -290,6 +290,45 @@ class StaticGtfsRouterTest {
         assertTrue(laterResult is StaticRouterResult.Journeys)
     }
 
+    @Test fun nearbyProviderCannotBypassDistanceBoundary() {
+        val x = stop("X", lat = 52.0, lon = 8.0)
+        val y = stop("Y", lat = 52.001, lon = 8.0)
+        val base = baseTransferData(targetStop = "Y", secondDeparture = "10:12:00").copy(
+            stops = mapOf("X" to x, "Y" to y),
+        )
+
+        fun routeWithUntrustedDistance(distanceMeters: Int): StaticRouterResult {
+            // Simulate a provider returning an invalid/out-of-radius row despite the query radius.
+            val untrusted = object : StaticGtfsScheduleData by base {
+                override fun nearbyStops(
+                    stopId: String,
+                    radiusMeters: Int,
+                    limit: Int,
+                ): List<GtfsScheduleNearbyStop> = listOf(GtfsScheduleNearbyStop(y, distanceMeters))
+            }
+            return StaticGtfsRouter(
+                untrusted,
+                zone,
+                implicitTransferSeconds = 60,
+                maxImplicitTransferRadiusMeters = 300,
+                implicitWalkingMetersPerSecond = 1.0,
+            ).route(
+                listOf(StaticRouterAccess("A")),
+                listOf(StaticRouterAccess("B")),
+                date,
+                at("09:55:00"),
+            )
+        }
+
+        for (invalidMeters in listOf(-1, 301, Int.MAX_VALUE)) {
+            assertTrue(
+                "Invalid nearby distance $invalidMeters must not create a transfer",
+                routeWithUntrustedDistance(invalidMeters) is StaticRouterResult.NoPath,
+            )
+        }
+        assertTrue(routeWithUntrustedDistance(100) is StaticRouterResult.Journeys)
+    }
+
     @Test fun explicitRulesRemainAuthoritativeOverImplicitNearbyTransfer() {
         val x = stop("X", lat = 52.0, lon = 8.0)
         val y = stop("Y", lat = 52.0005, lon = 8.0)
