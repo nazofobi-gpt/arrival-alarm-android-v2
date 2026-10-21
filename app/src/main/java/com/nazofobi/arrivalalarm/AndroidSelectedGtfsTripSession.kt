@@ -106,7 +106,8 @@ class AndroidSelectedGtfsTripSession(context: Context) : AutoCloseable {
                 // timetable rows before asking the rider to confirm stop roles.
                 // Match the same Europe/Berlin GTFS service-time conversion used
                 // when creating scheduled station departures.
-                val boardingClock = boarding.scheduledDeparture ?: boarding.scheduledArrival
+                // Arrival time alone is not evidence of a boardable departure.
+                val boardingClock = boarding.scheduledDeparture
                 val verifiedEpochSeconds = try {
                     boardingClock?.let {
                         GtfsServiceTime.parse(it)
@@ -134,7 +135,8 @@ class AndroidSelectedGtfsTripSession(context: Context) : AutoCloseable {
                 // inventing a destination from a repeated stop name or ID.
                 if (detail.stops.none { stop ->
                         stop.stopSequence > boardingSequence &&
-                            (stop.dropOffType == null || stop.dropOffType == 0)
+                            (stop.dropOffType == null || stop.dropOffType == 0) &&
+                            stop.hasActionableArrivalClock()
                     }) {
                     return@synchronized reject(
                         GtfsDepartureInspectionFailure.NO_DOWNSTREAM_ALIGHTING_STOP,
