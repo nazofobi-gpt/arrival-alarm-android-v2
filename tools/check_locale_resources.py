@@ -12,7 +12,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 LOCALES = ("de", "en")
-PLACEHOLDER = re.compile(r"%(?:([1-9][0-9]*)\$)?([-#+ 0,(<]*)[0-9]*(?:\.[0-9]+)?([tT][A-Za-z]|[A-Za-z%])")
+PLACEHOLDER = re.compile(r"%(?:([1-9][0-9]*)\$)?([-#+ 0,(<]*)[0-9]*(\.[0-9]+)?([tT][A-Za-z]|[A-Za-z%])")
 
 
 @dataclass(frozen=True)
@@ -42,7 +42,7 @@ def placeholders(value: str) -> Counter[tuple[int, str]]:
         match = PLACEHOLDER.match(value, start)
         if match is None:
             raise ValueError(f"malformed format argument at offset {start}")
-        conversion = match.group(3)
+        conversion = match.group(4)
         # Java Formatter throws DuplicateFormatFlagsException when a flag repeats.
         # Reject these tokens even if all translations contain the same invalid form.
         flags = match.group(2)
@@ -53,6 +53,11 @@ def placeholders(value: str) -> Counter[tuple[int, str]]:
                 raise ValueError(f"unsupported date/time conversion %{conversion} at offset {start}")
         elif conversion not in VALID_CONVERSIONS:
             raise ValueError(f"unsupported format conversion %{conversion} at offset {start}")
+        # Java Formatter accepts precision for strings, booleans, hashes and
+        # floating-point conversions, but not integral, character, date/time
+        # or literal-percent conversions. Identical broken locales are still broken.
+        if match.group(3) is not None and (len(conversion) == 2 or conversion in "cCdoxX%"):
+            raise ValueError(f"invalid precision for %{conversion} at offset {start}")
         if conversion.lower() == "s":
             # Ordinary Android String arguments do not implement Formattable:
             # Java Formatter rejects # as well as numeric/sign/grouping flags.
