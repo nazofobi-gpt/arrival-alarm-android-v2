@@ -49,7 +49,7 @@ class LocaleResourceContractTest(unittest.TestCase):
     def test_invalid_java_string_format_flags_are_rejected(self):
         # Confirmed against Java 21 String.format: these raise
         # FormatFlagsConversionMismatchException for a String argument.
-        for token in ("%0s", "%05s", "% s", "%,s", "%(s", "%+s"):
+        for token in ("%0s", "%05s", "% s", "%,s", "%(s", "%+s", "%#s", "%#S", "%1$#10s"):
             with self.subTest(token=token):
                 with self.assertRaisesRegex(ValueError, "invalid string format flags"):
                     placeholders(token)
@@ -60,6 +60,15 @@ class LocaleResourceContractTest(unittest.TestCase):
             with self.subTest(token=token):
                 with self.assertRaisesRegex(ValueError, "duplicate format flags"):
                     placeholders(token)
+
+    def test_matching_invalid_sharp_string_flags_fail_locale_gate(self):
+        # A string with the # flag throws FormatFlagsConversionMismatchException
+        # even when each translation contains the same placeholder.
+        for locale in ("values", "values-de", "values-en"):
+            self.write(locale, '<string name="arrival">Stop %1$#10s</string>')
+        self.assertTrue(
+            any("invalid format for arrival" in error for error in validate(self.root))
+        )
 
     def test_matching_duplicate_flags_across_locales_still_fail(self):
         for locale in ("values", "values-de", "values-en"):
