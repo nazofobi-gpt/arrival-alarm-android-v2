@@ -350,4 +350,28 @@ class GtfsTripConsentPanelInstrumentedTest {
         compose.onNodeWithTag("gtfs-consent-confirm").assertIsNotEnabled()
     }
 
+
+    @Test fun confirmedSummaryCountsSparseAndRepeatedGtfsStopOccurrences() {
+        val sparseLoop = detail.copy(stops = listOf(
+            stop(10).copy(stopId = "loop-station"),
+            stop(50).copy(stopId = "loop-station"),
+            stop(90),
+        ))
+        val selection = GtfsSelectedTrip(
+            identity,
+            GtfsSelectedStopRef(10, "loop-station"),
+            GtfsSelectedStopRef(90, "stop-90"),
+            GtfsSelectedStopRef(90, "stop-90"),
+        )
+        compose.setContent {
+            GtfsConfirmedTripSummary(GtfsSelectionRestore.Verified(selection, sparseLoop))
+        }
+        compose.onNodeWithTag("gtfs-confirmed-trip-summary").assertExists()
+        // Three actual GTFS stop occurrences: two after boarding to the alarm
+        // target, irrespective of sequence gaps and a repeated physical stop ID.
+        compose.onNodeWithTag("gtfs-confirmed-planned-stop-count")
+            .assertTextContains("2", substring = true)
+        compose.onNodeWithTag("gtfs-consent-confirm").assertDoesNotExist()
+    }
+
 }
