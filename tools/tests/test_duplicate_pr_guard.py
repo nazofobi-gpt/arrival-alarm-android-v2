@@ -74,6 +74,17 @@ class DuplicateGuardTest(unittest.TestCase):
                 self.assertTrue(any("Work-Unit" in error for error in errors))
                 self.assertTrue(any("Overlap-Review" in error for error in errors))
 
+    def test_malformed_or_naive_creation_times_cannot_bypass_new_pr_metadata(self):
+        malformed = ("not-a-time", "2026-10-10T12:00:00", 42, {}, [])
+        for created in malformed:
+            with self.subTest(created=created):
+                current = pr(498, "", "fix(G-173): reject invalid metadata", created=created)
+                errors, _ = guard.analyze(current, [], [])
+                self.assertTrue(any("Work-Unit" in error for error in errors))
+                self.assertTrue(any("Overlap-Review" in error for error in errors))
+        self.assertFalse(guard.is_new(pr(90, created="2026-10-10T12:00:00Z")))
+        self.assertTrue(guard.is_new(pr(498, created="2026-10-20T12:00:00Z")))
+
     def test_missing_metadata_is_required_only_for_new_pr(self):
         new = pr(402, "", "fix(G-168): route")
         old = pr(90, "", "fix(G-168): route", created="2026-10-11T12:00:00Z")
