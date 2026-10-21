@@ -181,7 +181,11 @@ internal fun String?.toTransitEpochSecondsOrNull(): Long? {
                 val sign = if (match.groupValues[9] == "-") -1 else 1
                 val offsetHours = match.groupValues[10].toInt()
                 val offsetMinutes = match.groupValues[11].toInt()
-                require(offsetHours <= 14 && offsetMinutes <= 59 && (offsetHours != 14 || offsetMinutes == 0))
+                // The current civil UTC offset range is -12:00 through +14:00.
+                // A forged -13/-14 hour feed must not move the rider's stop progress.
+                val maxHours = if (sign < 0) 12 else 14
+                require(offsetHours <= maxHours && offsetMinutes <= 59 &&
+                    (offsetHours != maxHours || offsetMinutes == 0))
                 sign * (offsetHours * 3_600 + offsetMinutes * 60)
             }
         }
