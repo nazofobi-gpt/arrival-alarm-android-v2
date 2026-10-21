@@ -60,6 +60,34 @@ class GtfsDeutschlandLoaderTest {
         )
     }
 
+
+    @Test fun multilineQuotedStopNamesAreNotSplitIntoPhantomRows() {
+        val zip = zipOf(
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,\"Lohne\nZOB\",52.66,8.23\ns2,\"Bremen \"\"Hbf\"\"\",53.08,8.80\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,departure_time,stop_id,stop_sequence\nt1,10:00:00,s1,1\nt1,11:00:00,s2,2\n",
+        )
+        val snapshot = GtfsDeutschlandLoader.parse(zip, "fixture", "2026-10-21")
+        assertEquals(2, snapshot.stops.size)
+        assertEquals("Lohne\nZOB", snapshot.stops.single { it.id == "s1" }.name)
+        assertEquals("Bremen \"Hbf\"", snapshot.stops.single { it.id == "s2" }.name)
+        assertEquals(listOf("s1", "s2"), snapshot.routes.single().stopIds)
+    }
+
+    @Test fun unterminatedQuotedGtfsRecordRejectsMalformedFeed() {
+        val zip = zipOf(
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,\"unterminated\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,stop_id,stop_sequence\nt1,s1,1\n",
+        )
+        val failure = runCatching {
+            GtfsDeutschlandLoader.parse(zip, "malformed", "2026-10-21")
+        }.exceptionOrNull()
+        assertTrue(failure is IllegalStateException && failure.message.orEmpty().contains("unterminated"))
+    }
+
     private fun zipOf(vararg files: Pair<String, String>): ByteArray {
         val bytes = ByteArrayOutputStream()
         ZipOutputStream(bytes).use { zip -> files.forEach { (name, content) -> zip.putNextEntry(ZipEntry(name)); zip.write(content.toByteArray()); zip.closeEntry() } }

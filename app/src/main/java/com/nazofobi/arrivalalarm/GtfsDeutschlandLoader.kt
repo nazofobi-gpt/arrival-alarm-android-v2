@@ -2,6 +2,8 @@ package com.nazofobi.arrivalalarm
 
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.BufferedReader
+import java.io.StringReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.text.SimpleDateFormat
@@ -49,7 +51,7 @@ object GtfsDeutschlandLoader {
                         if (count < 0) break
                         entryBytes.write(buffer, 0, count)
                     }
-                    files[name] = parseCsv(entryBytes.toString(Charsets.UTF_8.name()).lineSequence().toList())
+                    files[name] = parseCsv(entryBytes.toString(Charsets.UTF_8.name()))
                 }
                 zip.closeEntry()
             }
@@ -79,6 +81,23 @@ object GtfsDeutschlandLoader {
             timeZone = TimeZone.getTimeZone("UTC")
         }.format(Date())
 
-    private fun parseCsv(lines:List<String>):List<Map<String,String>> { if(lines.isEmpty())return emptyList(); val header=csvLine(lines.first()).map{it.removePrefix("\uFEFF")}; return lines.drop(1).filter{it.isNotBlank()}.map{line->val values=csvLine(line);header.mapIndexed{index,key->key to values.getOrElse(index){""}}.toMap()} }
+    // Parse logical CSV records: a quoted GTFS stop_name can contain newlines.
+    // The shared bounded reader also rejects malformed quoting before ingestion.
+    private fun parseCsv(contents: String): List<Map<String, String>> {
+        val records = gtfsCsvRecords(BufferedReader(StringReader(contents))).iterator()
+        if (!records.hasNext()) return emptyList()
+        val header = csvLine(records.next()).map { it.removePrefix("\uFEFF") }
+        return buildList {
+            while (records.hasNext()) {
+                val record = records.next()
+                if (record.isBlank()) continue
+                val values = csvLine(record)
+                add(header.mapIndexed { index, key ->
+                    key to values.getOrElse(index) { "" }
+                }.toMap())
+            }
+        }
+    }
+
     private fun csvLine(line:String):List<String>{val out=mutableListOf<String>();val current=StringBuilder();var quoted=false;var i=0;while(i<line.length){val c=line[i];when{c=='"'&&quoted&&i+1<line.length&&line[i+1]=='"'->{current.append('"');i++};c=='"'->quoted=!quoted;c==','&&!quoted->{out+=current.toString();current.clear()};else->current.append(c)};i++};out+=current.toString();return out}
 }
