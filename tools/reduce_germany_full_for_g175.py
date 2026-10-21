@@ -12,6 +12,7 @@ import json
 import math
 import sys
 import zipfile
+from pathlib import Path
 from collections import defaultdict
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -125,6 +126,22 @@ def write_csv(zf, filename, fieldnames, records):
     writer.writeheader()
     writer.writerows(records)
     zf.writestr(filename, buffer.getvalue().encode("utf-8"))
+
+def paths_alias(left, right):
+    first, second = Path(left), Path(right)
+    return first.resolve() == second.resolve() or (
+        first.is_file() and second.is_file() and first.samefile(second)
+    )
+
+
+for left_name, left, right_name, right in (
+    ("SOURCE", SOURCE, "OUTPUT", OUTPUT),
+    ("SOURCE", SOURCE, "REPORT", REPORT),
+    ("OUTPUT", OUTPUT, "REPORT", REPORT),
+):
+    if paths_alias(left, right):
+        raise SystemExit(f"{left_name} and {right_name} must be different files")
+
 
 target_day = next_weekday()
 try:
