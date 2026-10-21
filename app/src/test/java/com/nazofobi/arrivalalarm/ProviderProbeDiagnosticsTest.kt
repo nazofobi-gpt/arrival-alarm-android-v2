@@ -192,6 +192,38 @@ class ProviderProbeDiagnosticsTest {
     }
 
 
+    @Test fun matchingUnset1970ClocksCannotAuthenticateHealth() {
+        // Both timestamps may agree shortly after device boot with a reset wall clock.
+        val now = 90L
+        val health = TransitProviderHealth(
+            providerId = ArrivalAlarmTransitProviders.GermanyRealtime.id,
+            state = TransitProviderHealthState.READY,
+            checkedAtEpochSeconds = now,
+            detail = "private-diagnostic",
+        )
+        val summary = ProviderProbeDiagnostics.renderAt(health, 120L, now)
+        assertEquals("realtime", summary.value("provider_role"))
+        assertEquals("not_measured", summary.value("provider_state"))
+        assertEquals("not_measured", summary.value("latency_bucket"))
+        assertFalse(summary.contains("private-diagnostic"))
+    }
+
+    @Test fun clockTrustFloorIsInclusive() {
+        val epoch = 946_684_800L
+        val health = TransitProviderHealth(
+            providerId = ArrivalAlarmTransitProviders.LocalStatic.id,
+            state = TransitProviderHealthState.READY,
+            checkedAtEpochSeconds = epoch,
+        )
+        val older = ProviderProbeDiagnostics.renderAt(health, 250L, epoch - 1L)
+        assertEquals("not_measured", older.value("provider_state"))
+        assertEquals("not_measured", older.value("latency_bucket"))
+
+        val exactlyAtFloor = ProviderProbeDiagnostics.renderAt(health, 250L, epoch)
+        assertEquals("ready", exactlyAtFloor.value("provider_state"))
+        assertEquals("250ms_to_1s", exactlyAtFloor.value("latency_bucket"))
+    }
+
     @Test fun invalidDeviceClockDoesNotAuthenticateProviderMeasurement() {
         val health = TransitProviderHealth(
             providerId = ArrivalAlarmTransitProviders.GermanyRealtime.id,

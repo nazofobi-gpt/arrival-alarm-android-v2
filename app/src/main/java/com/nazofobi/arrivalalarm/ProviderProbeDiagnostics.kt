@@ -12,6 +12,9 @@ internal object ProviderProbeDiagnostics {
     private const val MAX_HEALTH_CHECK_AGE_SECONDS = 86_400L
     // Small device/provider clock differences must not invalidate a fresh check.
     private const val MAX_PROVIDER_FUTURE_SKEW_SECONDS = 30L
+    // An unset device clock near 1970 can agree with an equally bogus provider timestamp.
+    // Real provider measurements for this Android app cannot predate the year 2000.
+    private const val MIN_TRUSTWORTHY_HEALTH_EPOCH_SECONDS = 946_684_800L
 
     fun render(health: TransitProviderHealth?, latencyMillis: Long?): String =
         renderAt(health, latencyMillis, System.currentTimeMillis() / 1_000L)
@@ -36,7 +39,9 @@ internal object ProviderProbeDiagnostics {
         // Compare positive epochs by subtraction to avoid Long overflow near its limit.
         // Reject physically impossible device/provider epochs even when they agree.
         // A matching corrupted clock must never authenticate provider health.
-        val validCheckTime = nowEpochSeconds.isDisplayableDepartureEpochSeconds() &&
+        val validCheckTime = nowEpochSeconds >= MIN_TRUSTWORTHY_HEALTH_EPOCH_SECONDS &&
+            checkedAt >= MIN_TRUSTWORTHY_HEALTH_EPOCH_SECONDS &&
+            nowEpochSeconds.isDisplayableDepartureEpochSeconds() &&
             checkedAt.isDisplayableDepartureEpochSeconds() && when {
             checkedAt >= nowEpochSeconds ->
                 checkedAt - nowEpochSeconds <= MAX_PROVIDER_FUTURE_SKEW_SECONDS
