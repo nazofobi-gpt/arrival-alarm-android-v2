@@ -67,6 +67,13 @@ def validate_manifest(source: str) -> list[str]:
         errors.append("android:allowBackup must explicitly be false")
     if app.get(ANDROID + "usesCleartextTraffic") != "false":
         errors.append("android:usesCleartextTraffic must explicitly be false")
+    # Source manifests used for a distributable app must not force a debug or
+    # test-only installation. A resource reference is unresolved here, so fail
+    # closed rather than claiming a release-safe value without evidence.
+    for attribute in ("debuggable", "testOnly"):
+        value = app.get(ANDROID + attribute)
+        if value not in (None, "false"):
+            errors.append(f"application android:{attribute} must be absent or false")
     # Disabled application components cannot run the location foreground service.
     if app.get(ANDROID + "enabled") not in (None, "true"):
         errors.append("application must be enabled for tracking")
