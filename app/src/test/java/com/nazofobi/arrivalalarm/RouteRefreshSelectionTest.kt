@@ -69,7 +69,12 @@ class RouteRefreshSelectionTest {
             beyondSupportedUtc.id, listOf(beyondSupportedUtc), listOf(beyondSupportedUtc),
         ))
 
-        val supportedBoundary = option().copy(departureEpochMillis = 253_402_300_799_999L)
+        // This fixture must have a coherent arrival as well as a valid departure:
+        // retaining a route with year-9999 boarding and year-2026 arrival is unsafe.
+        val supportedBoundary = option().copy(
+            departureEpochMillis = 253_402_300_799_999L,
+            arrivalEpochMillis = 253_402_300_799_999L,
+        )
         assertEquals(supportedBoundary.id, retainSelectedRouteAfterRefresh(
             supportedBoundary.id, listOf(supportedBoundary), listOf(supportedBoundary),
         ))
