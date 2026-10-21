@@ -224,6 +224,48 @@ class AndroidSelectedGtfsTripSessionInstrumentedTest {
         )
     }
 
+    @Test fun boardInspectionRejectsArrivalOnlyBoardingClock() = runBlocking {
+        seedSchedule()
+        NationwideTransitIndex(context).use { index ->
+            index.writableDatabase.execSQL(
+                "UPDATE stop_times SET departure_time=NULL WHERE trip_id='T' AND stop_sequence=10"
+            )
+        }
+        AndroidSelectedGtfsTripSession(context).use { session ->
+            // The card's timestamp matching a stop's arrival cannot prove boarding.
+            val arrivalOnlyCard = scheduledDeparture().copy(
+                scheduledEpochSeconds = serviceTimeEpoch("08:00:00"),
+            )
+            assertEquals(
+                GtfsDepartureInspection.Rejected(
+                    GtfsDepartureInspectionFailure.SOURCE_EVIDENCE_MISMATCH,
+                ),
+                session.inspect(arrivalOnlyCard, "A"),
+            )
+            assertEquals(GtfsSelectionRestore.Empty, session.restore())
+        }
+    }
+
+    @Test fun boardInspectionRejectsDownstreamStopsWithoutArrivalClocks() = runBlocking {
+        seedSchedule()
+        NationwideTransitIndex(context).use { index ->
+            index.writableDatabase.execSQL(
+                "UPDATE stop_times SET arrival_time=NULL WHERE trip_id='T' AND stop_sequence>10"
+            )
+        }
+        AndroidSelectedGtfsTripSession(context).use { session ->
+            // Later physical stops are not actionable alighting choices without
+            // a provider-backed arrival clock, even if departure clocks exist.
+            assertEquals(
+                GtfsDepartureInspection.Rejected(
+                    GtfsDepartureInspectionFailure.NO_DOWNSTREAM_ALIGHTING_STOP,
+                ),
+                session.inspect(scheduledDeparture(), "A"),
+            )
+            assertEquals(GtfsSelectionRestore.Empty, session.restore())
+        }
+    }
+
     @Test fun boardInspectionRejectsTerminalAndNonAlightableDownstreamStops() = runBlocking {
         seedSchedule()
         AndroidSelectedGtfsTripSession(context).use { session ->
