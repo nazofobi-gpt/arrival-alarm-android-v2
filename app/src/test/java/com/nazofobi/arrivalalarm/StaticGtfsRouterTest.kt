@@ -220,6 +220,54 @@ class StaticGtfsRouterTest {
         )
     }
 
+    @Test fun implicitSiblingTransferRejectsInvalidStopCoordinates() {
+        val parent = stop("P", locationType = 1, lat = 52.0, lon = 8.0)
+        val scenarios = listOf(
+            52.0 to Double.NaN,
+            Double.POSITIVE_INFINITY to 52.0002,
+            52.0 to 91.0,
+            -91.0 to 52.0002,
+        )
+        for ((fromLatitude, toLatitude) in scenarios) {
+            val x = stop("X", parent = "P", lat = fromLatitude, lon = 8.0)
+            val y = stop("Y", parent = "P", lat = toLatitude, lon = 8.0)
+            val data = baseTransferData(targetStop = "Y").copy(
+                stops = mapOf("P" to parent, "X" to x, "Y" to y),
+                children = mapOf("P" to listOf(x, y)),
+            )
+            val result = StaticGtfsRouter(data, zone, implicitTransferSeconds = 60).route(
+                listOf(StaticRouterAccess("A")),
+                listOf(StaticRouterAccess("B")),
+                date,
+                at("09:55:00"),
+            )
+            assertTrue("Invalid sibling coordinates must not create a transfer", result is StaticRouterResult.NoPath)
+        }
+    }
+
+    @Test fun implicitNearbyTransferRejectsInvalidGeometryEvenWithReportedDistance() {
+        val validX = stop("X", lat = 52.0, lon = 8.0)
+        val validY = stop("Y", lat = 52.0002, lon = 8.0)
+        for ((from, to) in listOf(
+            validX to validY.copy(longitude = Double.NaN),
+            validX.copy(latitude = Double.NEGATIVE_INFINITY) to validY,
+            validX to validY.copy(longitude = 181.0),
+        )) {
+            val data = baseTransferData(targetStop = "Y").copy(
+                stops = mapOf("X" to from, "Y" to to),
+                nearby = listOf(GtfsScheduleNearbyStop(to, 100)),
+            )
+            val result = StaticGtfsRouter(data, zone, implicitTransferSeconds = 60).route(
+                listOf(StaticRouterAccess("A")),
+                listOf(StaticRouterAccess("B")),
+                date,
+                at("09:55:00"),
+            )
+            assertTrue("Nearby distance without valid coordinates must not create a transfer",
+                result is StaticRouterResult.NoPath)
+        }
+    }
+
     @Test fun implicitNearbyTransferUsesRadiusAndDistanceDerivedWalkTime() {
         val x = stop("X", lat = 52.0, lon = 8.0)
         val y = stop("Y", lat = 52.001, lon = 8.0)
