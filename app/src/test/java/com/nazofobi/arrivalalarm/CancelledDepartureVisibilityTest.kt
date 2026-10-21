@@ -137,7 +137,7 @@ class CancelledDepartureVisibilityTest {
         assertTrue(upcomingCancelledDepartures(source, 1_000L, limit = 0).isEmpty())
         assertTrue(upcomingCancelledDepartures(source, 1_000L, limit = -10).isEmpty())
     }
-    @Test fun invalidCancelledScheduleNeverAppearsEvenWithOldClock() {
+    @Test fun invalidCancelledScheduleNeverAppearsWithValidClock() {
         val invalid = listOf(0L, -1L, Long.MIN_VALUE, Long.MAX_VALUE,
             MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS + 1)
         val samples = invalid.mapIndexed { index, epoch ->
@@ -145,8 +145,23 @@ class CancelledDepartureVisibilityTest {
         } + cancelled("valid", 1_200L)
         assertEquals(
             listOf("valid"),
-            upcomingCancelledDepartures(samples, nowEpochSeconds = -100L)
+            upcomingCancelledDepartures(samples, nowEpochSeconds = 1_000L)
                 .map { it.tripId },
+        )
+    }
+
+    @Test fun invalidDeviceClockNeverReportsCancelledTripsAsUpcoming() {
+        val upcoming = listOf(cancelled("today", 1_200L), cancelled("later", 1_800L))
+        val invalidClocks = listOf(
+            0L, -1L, Long.MIN_VALUE,
+            MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS + 1L, Long.MAX_VALUE,
+        )
+        for (invalidClock in invalidClocks) {
+            assertTrue(upcomingCancelledDepartures(upcoming, nowEpochSeconds = invalidClock).isEmpty())
+        }
+        assertEquals(
+            listOf("today", "later"),
+            upcomingCancelledDepartures(upcoming, nowEpochSeconds = 1_000L).map { it.tripId },
         )
     }
 
