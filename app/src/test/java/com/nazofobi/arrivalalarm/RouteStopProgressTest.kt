@@ -477,4 +477,43 @@ class RouteStopProgressTest {
         assertEquals("Verified", result.current?.name)
         assertEquals(0, result.remainingStops)
     }
+
+    @Test fun resetOrOutOfRangeProviderStopClocksCannotInventJourneyProgress() {
+        val now = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
+        val tracker = RouteStopProgressTracker()
+        val invalid = listOf(
+            "1970-01-01T00:00:00Z",
+            "1999-12-31T23:59:59Z",
+            // A valid civil offset may nevertheless place UTC beyond the trusted range.
+            "9999-12-31T23:59:59-01:00",
+        )
+        for (timestamp in invalid) {
+            assertNull("Provider clock $timestamp must fail closed",
+                timestamp.toTransitEpochSecondsOrNull())
+            for (realtime in listOf(false, true)) {
+                val stop = if (realtime) {
+                    RouteStop(id = "b", name = "Unverified", arrival = timestamp)
+                } else {
+                    RouteStop(id = "b", name = "Unverified", plannedArrival = timestamp)
+                }
+                val progress = tracker.resolve(listOf(stop), now, trustRealtime = realtime)
+                assertFalse(progress.resolvedByProviderTime)
+                assertNull(progress.previous)
+                assertNull(progress.current)
+                assertNull(progress.next)
+                assertNull(progress.remainingStops)
+            }
+        }
+    }
+
+    @Test fun providerStopEpochBoundsApplyAfterUtcOffsetConversion() {
+        assertEquals(
+            946_684_800L,
+            "1999-12-31T23:00:00-01:00".toTransitEpochSecondsOrNull(),
+        )
+        assertEquals(
+            253_402_300_799L,
+            "9999-12-31T23:59:59Z".toTransitEpochSecondsOrNull(),
+        )
+    }
 }
