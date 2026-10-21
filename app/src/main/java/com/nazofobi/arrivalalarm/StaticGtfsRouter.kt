@@ -661,9 +661,12 @@ class StaticGtfsRouter(
             stopId = alightStopId,
             radiusMeters = maxImplicitTransferRadiusMeters,
             limit = maxImplicitTransferCandidates,
-        ).take(maxImplicitTransferCandidates).forEach { nearby ->
-            offer(nearby.stop, nearby.stop.id, nearby.distanceMeters)
-        }
+        ).asSequence()
+            .filter { it.distanceMeters in 0..maxImplicitTransferRadiusMeters }
+            .take(maxImplicitTransferCandidates)
+            .forEach { nearby ->
+                offer(nearby.stop, nearby.stop.id, nearby.distanceMeters)
+            }
 
         return targets.values.toList()
     }
