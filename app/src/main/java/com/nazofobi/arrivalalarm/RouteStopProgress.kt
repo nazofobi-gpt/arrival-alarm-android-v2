@@ -25,13 +25,21 @@ data class RouteStopProgress(
  * Between stops, current remains null rather than pretending that the vehicle is physically
  * at a stop. The last passed stop is previous and the first future stop is next.
  */
+private const val MIN_TRUSTED_PROGRESS_EPOCH_SECONDS = 946_684_800L // 2000-01-01 UTC
+private const val MAX_TRUSTED_PROGRESS_EPOCH_SECONDS = 253_402_300_799L // 9999-12-31 UTC
+
 class RouteStopProgressTracker {
     fun resolve(
         stops: List<RouteStop>,
         nowEpochSeconds: Long,
         trustRealtime: Boolean = true,
     ): RouteStopProgress {
-        if (stops.isEmpty()) return RouteStopProgress()
+        // An unset/reset device clock must not turn an otherwise valid timetable
+        // into a fabricated current/next stop or remaining-stop count.
+        if (stops.isEmpty() ||
+            nowEpochSeconds < MIN_TRUSTED_PROGRESS_EPOCH_SECONDS ||
+            nowEpochSeconds > MAX_TRUSTED_PROGRESS_EPOCH_SECONDS
+        ) return RouteStopProgress()
 
         val windows = stops.map { stop ->
             val actualArrival = if (trustRealtime) stop.arrival.toTransitEpochSecondsOrNull() else null
