@@ -291,6 +291,28 @@ class LocaleResourceContractTest(unittest.TestCase):
         )
 
 
+    def test_java_formatter_rejects_unsupported_precision(self):
+        # Java 21 String.format throws IllegalFormatPrecisionException for
+        # each token, even when every translation repeats the same mistake.
+        for token in ("%.2d", "%1$.2o", "%.2x", "%.3X", "%.2c",
+                      "%1$.2C", "%1$.2tH", "%.2%"):
+            with self.subTest(token=token):
+                with self.assertRaisesRegex(ValueError, "invalid precision"):
+                    placeholders(token)
+
+    def test_matching_invalid_precision_across_locales_is_rejected(self):
+        for locale in ("values", "values-de", "values-en"):
+            self.write(locale, '<string name="arrival">Next stop in %1$.2d min</string>')
+        self.assertTrue(any(
+            "invalid precision" in error for error in validate(self.root)
+        ))
+
+    def test_valid_string_and_floating_precision_still_pass(self):
+        self.assertEqual(
+            {(1, "s"): 1, (2, "f"): 1},
+            dict(placeholders("%1$.2s / %2$.3f")),
+        )
+
     def test_java_formatter_line_separator_rejects_width_precision_and_flags(self):
         for token in ("%5n", "%.2n", "%-5n", "%1$5n"):
             with self.subTest(token=token):
