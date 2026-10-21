@@ -18,7 +18,9 @@ internal object SupportDiagnostics {
             is NationwideDataState.Error -> "error"
         }
         val feedAge = when {
-            ready == null || ready.stopCount <= 0 || ready.fetchedAtEpochSeconds <= 0L || nowEpochSeconds <= 0L -> "unknown"
+            ready == null || ready.stopCount <= 0 ||
+                !ready.fetchedAtEpochSeconds.isDisplayableDepartureEpochSeconds() ||
+                !nowEpochSeconds.isDisplayableDepartureEpochSeconds() -> "unknown"
             nowEpochSeconds < ready.fetchedAtEpochSeconds -> "clock_mismatch"
             nowEpochSeconds - ready.fetchedAtEpochSeconds < 86_400L -> "under_24h"
             nowEpochSeconds - ready.fetchedAtEpochSeconds < 604_800L -> "1_to_7d"
