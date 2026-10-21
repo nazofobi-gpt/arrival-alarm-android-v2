@@ -311,6 +311,41 @@ class RouteStopProgressTest {
         )
     }
 
+    @Test fun negativeCivilUtcOffsetBoundsFailClosedOrUseVerifiedSchedule() {
+        val validNegativeEdge = "2026-09-26T08:10:00-12:00"
+        val validUtcEquivalent = "2026-09-26T20:10:00Z"
+        assertEquals(validUtcEquivalent.toTransitEpochSecondsOrNull(),
+            validNegativeEdge.toTransitEpochSecondsOrNull())
+
+        val now = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
+        for (invalid in listOf("-12:01", "-13:00", "-13:30", "-14:00")) {
+            val malformed = "2026-09-26T08:10:00$" + "{invalid}"
+            assertNull("Provider offset $" + "{invalid} must be rejected",
+                malformed.toTransitEpochSecondsOrNull())
+
+            val onlyMalformed = RouteStopProgressTracker().resolve(
+                listOf(RouteStop(id = "a", name = "Unverified", departure = malformed)),
+                now,
+            )
+            assertFalse(onlyMalformed.resolvedByProviderTime)
+            assertNull(onlyMalformed.current)
+            assertNull(onlyMalformed.next)
+
+            val withSchedule = RouteStopProgressTracker().resolve(
+                listOf(RouteStop(
+                    id = "a", name = "Lohne",
+                    departure = malformed,
+                    plannedDeparture = "2026-09-26T08:00:00+02:00",
+                )),
+                now,
+            )
+            assertTrue(withSchedule.resolvedByProviderTime)
+            assertEquals(TransitTimingBasis.SCHEDULED, withSchedule.timingBasis)
+            assertEquals("Lohne", withSchedule.previous?.name)
+            assertNull(withSchedule.current)
+        }
+    }
+
     @Test fun untimedIntermediateStopCannotBeSkippedAsNext() {
         val observations = listOf(
             RouteStop(id = "a", name = "First", plannedDeparture = "2026-09-26T08:00:00+02:00"),
