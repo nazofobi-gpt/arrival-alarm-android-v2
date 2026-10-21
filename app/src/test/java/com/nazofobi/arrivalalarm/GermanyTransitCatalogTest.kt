@@ -43,6 +43,22 @@ class GermanyTransitCatalogTest {
         assertEquals(listOf("valid"), result.map { it.stop.id })
     }
 
+    @Test fun nearlyAntipodalValidCoordinatesCannotCrashDistanceRounding() {
+        // Spherical roundoff makes the raw haversine term 1.0000000000000004.
+        // Without clamping, sqrt(1 - a) becomes NaN and roundToInt() throws.
+        val antipodal = CatalogStop(
+            "antipodal", "gtfs", "Far stop",
+            59.0670108474441, -35.58357680931971,
+        )
+        val localCatalog = GermanyTransitCatalog(
+            TestGermanyTransitFixtures.snapshot.copy(stops = listOf(antipodal)),
+        )
+
+        val nearby = localCatalog.nearestStops(-59.06701098810696, 144.41642361996526)
+        assertEquals(listOf("antipodal"), nearby.map { it.stop.id })
+        assertTrue(nearby.single().distanceMeters in 20_000_000..20_020_000)
+    }
+
     @Test fun boundedTripSearchPreservesFirstRouteForDuplicateIds() {
         val primary = CatalogRoute("duplicate", "gtfs", "First", "Center", emptyList())
         val laterDuplicate = primary.copy(shortName = "Second")
