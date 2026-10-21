@@ -199,6 +199,16 @@ class RouteRefreshSelectionTest {
     }
 
     @Test
+    fun blankRouteKeysCannotRetainTripConsentOnRefresh() {
+        val valid = option()
+        for (blank in listOf("", " ", "\t")) {
+            val corrupted = valid.copy(id = blank)
+            assertNull(retainSelectedRouteAfterRefresh(blank, listOf(corrupted), listOf(corrupted)))
+        }
+        assertNull(retainSelectedRouteAfterRefresh("", listOf(valid), listOf(valid)))
+    }
+
+    @Test
     fun missingOrAmbiguousCandidateDoesNotSelectAnotherRoute() {
         val old = option()
         assertNull(retainSelectedRouteAfterRefresh(null, listOf(old), listOf(old)))

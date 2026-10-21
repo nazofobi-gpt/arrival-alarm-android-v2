@@ -16,7 +16,8 @@ internal fun retainSelectedRouteAfterRefresh(
     previousOptions: List<RouteOption>,
     updatedOptions: List<RouteOption>,
 ): String? {
-    val id = selectedRouteId ?: return null
+    // A blank UI key is not an identifiable itinerary and must never preserve consent.
+    val id = selectedRouteId?.takeIf { it.isNotBlank() } ?: return null
     val previous = previousOptions.singleOrNull { it.id == id } ?: return null
     val updated = updatedOptions.singleOrNull { it.id == id } ?: return null
 
