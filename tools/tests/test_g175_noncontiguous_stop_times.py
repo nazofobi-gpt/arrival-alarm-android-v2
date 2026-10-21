@@ -31,7 +31,8 @@ def put_csv(archive, filename, fields, records):
 
 
 class NoncontiguousStopTimesTest(unittest.TestCase):
-    def run_fixture(self, split_first_trip, missing_selected_route=False):
+    def run_fixture(self, split_first_trip, missing_selected_route=False,
+                    partially_missing_selected_route=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "source.zip"
@@ -67,7 +68,8 @@ class NoncontiguousStopTimesTest(unittest.TestCase):
                         else [("R", "Regional", "2")])
                 put_csv(archive, "trips.txt",
                         ("route_id", "service_id", "trip_id"),
-                        [("R", "S", name) for name in trips])
+                        [("R2" if partially_missing_selected_route and name == "T3"
+                          else "R", "S", name) for name in trips])
                 put_csv(archive, "stop_times.txt",
                         ("trip_id", "arrival_time", "departure_time",
                          "stop_id", "stop_sequence"), ordered)
@@ -95,6 +97,16 @@ class NoncontiguousStopTimesTest(unittest.TestCase):
         result, exists, report = self.run_fixture(split_first_trip=True)
         self.assertNotEqual(0, result.returncode)
         self.assertIn("noncontiguous stop_times for trip T0", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertFalse(exists)
+        self.assertIsNone(report)
+
+    def test_partially_missing_selected_routes_fail_without_outputs(self):
+        result, exists, report = self.run_fixture(
+            split_first_trip=False, partially_missing_selected_route=True
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("missing selected GTFS routes: [\'R2\']", result.stderr)
         self.assertNotIn("Traceback", result.stderr)
         self.assertFalse(exists)
         self.assertIsNone(report)
