@@ -591,7 +591,7 @@ class ArrivalProgressControllerTest {
 
         // Two accurate but outdated callbacks must not create an arrival.
         controller.onLocation(gps(stale))
-        controller.onLocation(gps(stale + 1L))
+        controller.onLocation(gps(stale - 1L))
         assertEquals(0, controller.state.arrivalEventCount)
         assertEquals(0, controller.state.consecutiveInsideThreshold)
 
