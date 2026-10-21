@@ -113,7 +113,10 @@ internal object NearbyStationCanonicalizer {
         val p2 = Math.toRadians(lat2)
         val dp = Math.toRadians(lat2 - lat1)
         val dl = Math.toRadians(lon2 - lon1)
-        val a = sin(dp / 2).pow(2) + cos(p1) * cos(p2) * sin(dl / 2).pow(2)
+        // Clamp spherical floating-point roundoff before square-rooting 1-a.
+        // This is the second distance calculation, after catalog candidate mapping.
+        val a = (sin(dp / 2).pow(2) + cos(p1) * cos(p2) * sin(dl / 2).pow(2))
+            .coerceIn(0.0, 1.0)
         return 2 * radius * atan2(sqrt(a), sqrt(1 - a))
     }
 }
