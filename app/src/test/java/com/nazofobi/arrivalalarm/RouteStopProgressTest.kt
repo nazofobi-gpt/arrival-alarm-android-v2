@@ -7,6 +7,28 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RouteStopProgressTest {
+    @Test fun unknownMinusZeroOffsetCannotBeUsedForStopProgress() {
+        val unknownOffset = "2026-09-26T08:10:00-00:00"
+        // RFC 3339 distinguishes unknown -00:00 from known UTC +00:00/Z.
+        assertNull(unknownOffset.toTransitEpochSecondsOrNull())
+        assertNull("2026-09-26T08:10:00-0000".toTransitEpochSecondsOrNull())
+        assertEquals(
+            "2026-09-26T08:10:00Z".toTransitEpochSecondsOrNull(),
+            "2026-09-26T08:10:00+00:00".toTransitEpochSecondsOrNull(),
+        )
+
+        val now = "2026-09-26T08:10:00Z".toTransitEpochSecondsOrNull()!!
+        val progress = RouteStopProgressTracker().resolve(
+            listOf(RouteStop(id = "unverified", name = "Unknown", plannedDeparture = unknownOffset)),
+            now,
+            trustRealtime = false,
+        )
+        assertFalse(progress.resolvedByProviderTime)
+        assertNull(progress.current)
+        assertNull(progress.next)
+        assertNull(progress.remainingStops)
+    }
+
     private val stops = listOf(
         RouteStop(
             id = "a",

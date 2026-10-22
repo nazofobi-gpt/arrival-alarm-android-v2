@@ -189,6 +189,9 @@ internal fun String?.toTransitEpochSecondsOrNull(): Long? {
                 val sign = if (match.groupValues[9] == "-") -1 else 1
                 val offsetHours = match.groupValues[10].toInt()
                 val offsetMinutes = match.groupValues[11].toInt()
+                // RFC 3339 -00:00 means the local UTC offset is unknown, not UTC.
+                // An unknown instant is not safe evidence for stop progression.
+                require(!(sign < 0 && offsetHours == 0 && offsetMinutes == 0))
                 // The current civil UTC offset range is -12:00 through +14:00.
                 // A forged -13/-14 hour feed must not move the rider's stop progress.
                 val maxHours = if (sign < 0) 12 else 14
