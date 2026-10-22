@@ -172,8 +172,13 @@ class RouteStopProgressTracker {
     )
 }
 
+// A provider feed must not force scanning/allocating an unbounded timestamp value.
+// Normal RFC3339 stop instants (including nanosecond fractions) fit within this limit.
+private const val MAX_TRANSIT_TIMESTAMP_CHARACTERS = 64
+
 internal fun String?.toTransitEpochSecondsOrNull(): Long? {
-    val value = this?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val value = this?.takeIf { it.length <= MAX_TRANSIT_TIMESTAMP_CHARACTERS }
+        ?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     val match = ISO_TRANSIT_TIMESTAMP.matchEntire(value) ?: return null
     return runCatching {
         val year = match.groupValues[1].toInt()
