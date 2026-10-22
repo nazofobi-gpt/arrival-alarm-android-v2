@@ -39,7 +39,7 @@ internal object SupportDiagnostics {
             "audio_route=${state.audioRoute.name.lowercase(Locale.ROOT)}",
             "tracking_armed=${flag(state.backgroundJourneyActive)}",
             "connector_configured=${flag(state.connectorConfigured)}",
-            "connector_connected=${flag(state.connectorConnected)}",
+            "connector_connected=${flag(state.connectorConfigured && state.connectorConnected)}",
             "transit_index=${dataStatus}",
             "installed_stop_count=${ready?.stopCount?.coerceAtLeast(0) ?: "unknown"}",
             "feed_age_bucket=${feedAge}",
