@@ -7,6 +7,33 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RouteStopProgressTest {
+    @Test fun oversizedProviderTimestampFailsClosedBeforeStopProgress() {
+        val legitimate = "2026-09-26T08:10:00Z"
+        val untrusted = listOf(
+            " ".repeat(256) + legitimate,
+            "2026-09-26T08:10:00." + "1".repeat(256) + "Z",
+        )
+        val now = legitimate.toTransitEpochSecondsOrNull()!!
+        for (timestamp in untrusted) {
+            assertNull("Overlong provider timestamp must be rejected", timestamp.toTransitEpochSecondsOrNull())
+            val progress = RouteStopProgressTracker().resolve(
+                listOf(RouteStop(id = "x", name = "Unverified", plannedArrival = timestamp)),
+                now,
+                trustRealtime = false,
+            )
+            assertFalse(progress.resolvedByProviderTime)
+            assertNull(progress.current)
+            assertNull(progress.next)
+            assertNull(progress.remainingStops)
+        }
+
+        // Ordinary fractional precision remains supported by the bounded parser.
+        assertEquals(
+            now,
+            "2026-09-26T08:10:00.123456789Z".toTransitEpochSecondsOrNull(),
+        )
+    }
+
     @Test fun unknownMinusZeroOffsetCannotBeUsedForStopProgress() {
         val unknownOffset = "2026-09-26T08:10:00-00:00"
         // RFC 3339 distinguishes unknown -00:00 from known UTC +00:00/Z.
