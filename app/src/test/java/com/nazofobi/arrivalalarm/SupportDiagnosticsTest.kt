@@ -95,6 +95,25 @@ class SupportDiagnosticsTest {
         ))
     }
 
+    @Test fun unconfiguredConnectorNeverReportsConnectedFromStaleSessionFlag() {
+        val inconsistent = state(NationwideDataState.Idle).copy(
+            connectorConfigured = false,
+            connectorConnected = true,
+        )
+        val redacted = SupportDiagnostics.render(inconsistent, 1_700_000_000L)
+        assertTrue(redacted.contains("connector_configured=no\n"))
+        assertTrue(redacted.contains("connector_connected=no\n"))
+
+        val genuinelyConnected = inconsistent.copy(connectorConfigured = true)
+        val current = SupportDiagnostics.render(genuinelyConnected, 1_700_000_000L)
+        assertTrue(current.contains("connector_configured=yes\n"))
+        assertTrue(current.contains("connector_connected=yes\n"))
+
+        val disconnected = genuinelyConnected.copy(connectorConnected = false)
+        val absent = SupportDiagnostics.render(disconnected, 1_700_000_000L)
+        assertTrue(absent.contains("connector_connected=no\n"))
+    }
+
     @Test fun outputHasOnlyFixedReviewedKeys() {
         val report = SupportDiagnostics.render(state(NationwideDataState.Idle), 100L)
         val keys = report.trim().lines().map { it.substringBefore('=') }.toSet()
