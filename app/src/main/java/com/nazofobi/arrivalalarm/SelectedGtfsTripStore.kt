@@ -43,10 +43,10 @@ class SelectedGtfsTripStore(
         val verified = validate(selection) as? GtfsSelectionRestore.Verified ?: return false
         return try {
             // Snapshot the exact static timetable validated when confirming the trip.
-            preferences.edit().putString(
-                KEY,
-                encode(selection, scheduleFingerprint(verified.detail)).toString(),
-            ).commit()
+            val snapshot = encode(selection, scheduleFingerprint(verified.detail)).toString()
+            // A successful save must always be small enough to restore safely.
+            if (snapshot.length > MAX_SNAPSHOT_CHARS) return false
+            preferences.edit().putString(KEY, snapshot).commit()
         } catch (_: RuntimeException) {
             false
         }
@@ -59,6 +59,10 @@ class SelectedGtfsTripStore(
         } catch (_: RuntimeException) {
             return GtfsSelectionRestore.Rejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT)
         } ?: return GtfsSelectionRestore.Rejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT)
+        // Reject oversized local snapshots before any JSON allocation or parsing.
+        if (raw.length > MAX_SNAPSHOT_CHARS) {
+            return GtfsSelectionRestore.Rejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT)
+        }
         // Earlier snapshots did not fingerprint all physical stop coordinates and
         // pickup/drop-off rules. They cannot safely inherit the user's approval.
         val version = try { JSONObject(raw).opt("version") as? Int } catch (_: JSONException) { null }
@@ -243,6 +247,8 @@ class SelectedGtfsTripStore(
     companion object {
         internal const val KEY = "selected_gtfs_trip_v1"
         private const val VERSION = 4
+        // Bounds malformed/corrupt SharedPreferences payloads without constraining normal IDs.
+        private const val MAX_SNAPSHOT_CHARS = 65_536
         private val FINGERPRINT_REGEX = Regex("^[a-f0-9]{64}$")
     }
 }
