@@ -139,6 +139,35 @@ class SelectedGtfsTripStoreInstrumentedTest {
         assertRejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT, store().restore())
     }
 
+    @Test fun oversizedStoredSnapshotIsRejectedWithoutJsonParsingOrResolving() {
+        val oversized = "{".repeat(70_000)
+        assertTrue(preferences.edit().putString(SelectedGtfsTripStore.KEY, oversized).commit())
+        var resolverCalled = false
+        val guarded = store {
+            resolverCalled = true
+            GtfsTripDetailResult.Available(detail())
+        }
+
+        assertRejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT, guarded.restore())
+        assertFalse(resolverCalled)
+        // Invalid evidence stays intact for explicit recovery; no phantom journey is armed.
+        assertEquals(oversized, preferences.getString(SelectedGtfsTripStore.KEY, null))
+    }
+
+    @Test fun oversizedSelectionCannotReplacePreviouslyConfirmedTrip() {
+        val normal = store()
+        assertTrue(normal.save(selected))
+        val before = preferences.getString(SelectedGtfsTripStore.KEY, null)
+        val oversized = selected.copy(identity = identity.copy(tripId = "x".repeat(70_000)))
+        val withOversizedIdentity = store { trip ->
+            GtfsTripDetailResult.Available(detail(trip = trip))
+        }
+
+        assertFalse(withOversizedIdentity.save(oversized))
+        assertEquals(before, preferences.getString(SelectedGtfsTripStore.KEY, null))
+        assertTrue(normal.restore() is GtfsSelectionRestore.Verified)
+    }
+
     @Test fun invalidRoleOrderingNeverOverwritesKnownGoodChoice() {
         assertTrue(store().save(selected))
         val original = preferences.getString(SelectedGtfsTripStore.KEY, null)
