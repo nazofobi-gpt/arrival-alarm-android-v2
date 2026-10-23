@@ -103,6 +103,37 @@ class GtfsTripConsentPanelInstrumentedTest {
         assertEquals(2, confirmations)
     }
 
+    @Test fun fastFailedSaveCanBeRetriedEvenWhenBusyFrameWasNeverObserved() {
+        val busy = mutableStateOf(false)
+        val completionRevision = mutableStateOf(0L)
+        var confirmations = 0
+        compose.setContent {
+            GtfsTripConsentPanel(
+                preview = GtfsDepartureInspection.Ready(detail, detail.stops.first()),
+                busy = busy.value,
+                completionRevision = completionRevision.value,
+                onConfirm = { confirmations++ },
+                onDismiss = {},
+            )
+        }
+        compose.onNodeWithTag("gtfs-destination-picker").performClick()
+        compose.onNodeWithTag("gtfs-destination-30").performClick()
+        compose.onNodeWithTag("gtfs-consent-confirm").performClick()
+        assertEquals(1, confirmations)
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsNotEnabled()
+
+        // Parent starts and finishes IO before Compose renders busy=true.
+        // The completion token still reflects that the first attempt has ended.
+        compose.runOnUiThread {
+            busy.value = true
+            busy.value = false
+            completionRevision.value += 1L
+        }
+        compose.waitForIdle()
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsEnabled().performClick()
+        assertEquals(2, confirmations)
+    }
+
     @Test fun explicitIntermediateAlarmAndChangingDestinationRequireFreshChoice() {
         var chosen: GtfsSelectedTrip? = null
         compose.setContent {
