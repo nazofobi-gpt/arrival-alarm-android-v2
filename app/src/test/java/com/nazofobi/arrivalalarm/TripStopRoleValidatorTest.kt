@@ -316,4 +316,51 @@ class TripStopRoleValidatorTest {
         assertEquals(null, plannedPhysicalStopsFromBoardingToAlarm(chosen, invalidAlarmClock))
     }
 
+
+    @Test fun unselectedIntermediateStopCannotReverseSelectedServiceDay() {
+        val earlyIntermediate = detail.copy(stops = detail.stops.map { stop ->
+            if (stop.stopSequence == 7) stop.copy(
+                scheduledArrival = "07:59:00", scheduledDeparture = "08:00:00",
+            ) else stop
+        })
+        // Boarding 08:01 and destination 08:20 appear correct independently.
+        // An unrelated intermediate clock must not authorize an impossible trip.
+        assertEquals(
+            TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME,
+            rejected(earlyIntermediate, TripStopRoles(2, 13, 13)),
+        )
+
+        val lateIntermediate = detail.copy(stops = detail.stops.map { stop ->
+            if (stop.stopSequence == 7) stop.copy(
+                scheduledArrival = "08:25:00", scheduledDeparture = "08:26:00",
+            ) else stop
+        })
+        assertEquals(
+            TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME,
+            rejected(lateIntermediate, TripStopRoles(2, 13, 13)),
+        )
+
+        val malformedIntermediate = detail.copy(stops = detail.stops.map { stop ->
+            if (stop.stopSequence == 7) stop.copy(
+                scheduledArrival = "invalid", scheduledDeparture = "08:11:00",
+            ) else stop
+        })
+        assertEquals(
+            TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME,
+            rejected(malformedIntermediate, TripStopRoles(2, 13, 13)),
+        )
+
+        // A non-timepoint intermediate stop is not a reason to reject an
+        // otherwise valid, ordered service-day trip.
+        val untimedIntermediate = detail.copy(stops = detail.stops.map { stop ->
+            if (stop.stopSequence == 7) stop.copy(
+                scheduledArrival = null, scheduledDeparture = null,
+            ) else stop
+        })
+        assertTrue(
+            TripStopRoleValidator.validate(untimedIntermediate, TripStopRoles(2, 13, 13))
+                is TripStopRoleResult.Accepted,
+        )
+    }
+
 }

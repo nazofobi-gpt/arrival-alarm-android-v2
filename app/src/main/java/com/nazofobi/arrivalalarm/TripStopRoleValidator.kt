@@ -116,6 +116,42 @@ object TripStopRoleValidator {
             return reject(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME)
         }
 
+        // A plausible boarding/alarm/destination clock is not sufficient if an
+        // unselected intermediate stop runs backwards in GTFS service-day time.
+        // Untimed non-timepoint stops remain legal: compare only known events.
+        var lastKnownSeconds = boardingDeparture
+        for (stop in stops) {
+            if (stop.stopSequence <= boarding.stopSequence) continue
+            if (stop.stopSequence > destination.stopSequence) break
+
+            val arrival = try {
+                stop.scheduledArrival?.let {
+                    GtfsServiceTime.parse(it).secondsFromServiceDayStart
+                }
+            } catch (_: IllegalArgumentException) {
+                return reject(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME)
+            }
+            val departure = try {
+                stop.scheduledDeparture?.let {
+                    GtfsServiceTime.parse(it).secondsFromServiceDayStart
+                }
+            } catch (_: IllegalArgumentException) {
+                return reject(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME)
+            }
+            if (arrival != null) {
+                if (arrival < lastKnownSeconds) {
+                    return reject(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME)
+                }
+                lastKnownSeconds = arrival
+            }
+            if (departure != null) {
+                if (departure < lastKnownSeconds) {
+                    return reject(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME)
+                }
+                lastKnownSeconds = departure
+            }
+        }
+
         return TripStopRoleResult.Accepted(
             ConfirmedTripStopRoles(detail.identity, boarding, destination, alarm)
         )
