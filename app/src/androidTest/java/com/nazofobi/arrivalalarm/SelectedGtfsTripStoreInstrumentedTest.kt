@@ -210,7 +210,9 @@ class SelectedGtfsTripStoreInstrumentedTest {
         val revised = detail().copy(
             stops = listOf(
                 stop(2, "Lohne"),
-                stop(7, "Transfer").copy(scheduledArrival = "09:15:00"),
+                stop(7, "Transfer").copy(
+                    scheduledArrival = "09:15:00", scheduledDeparture = "09:16:00",
+                ),
                 stop(13, "Achim"),
             ),
         )
