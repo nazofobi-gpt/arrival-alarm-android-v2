@@ -511,7 +511,7 @@ class ProductionRealtimeStationOverlayTest {
             stopOnly.copy(trip = tripScoped),
             stopOnly.copy(agencyId = "provider-agency"),
             stopOnly.copy(directionId = 1),
-            stopOnly.copy(validity = GermanyRealtimeAlertSelectorValidity.INVALID),
+            stopOnly.copy(validity = GermanyRealtimeAlertSelectorValidity.UNMATCHABLE_EMPTY),
         )) {
             val unverified = overlay(alertResult(selector)).enrich("A", emptyList())
             assertTrue(unverified.departures.isEmpty())
