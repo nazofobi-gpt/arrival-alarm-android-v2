@@ -204,6 +204,39 @@ class TransitProviderContractTest {
     }
 
     @Test
+    fun matchingPhysicallyImpossibleClocksCannotClaimFreshProviderData() {
+        val impossible = listOf(
+            MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS + 1L,
+            Long.MAX_VALUE,
+        )
+        for (epoch in impossible) {
+            val sameClock = TransitProviderFreshness.evaluate(
+                updatedAtEpochSeconds = epoch,
+                nowEpochSeconds = epoch,
+                staleAfterSeconds = 86_400L,
+            )
+            val withinSkew = TransitProviderFreshness.evaluate(
+                updatedAtEpochSeconds = epoch,
+                nowEpochSeconds = epoch - 10L,
+                staleAfterSeconds = 86_400L,
+            )
+            for (result in listOf(sameClock, withinSkew)) {
+                assertEquals(TransitProviderFreshnessState.UNKNOWN, result.state)
+                assertNull(result.ageSeconds)
+                assertNull(result.updatedAtEpochSeconds)
+            }
+        }
+
+        // The representable upper boundary itself is not rejected by this guard.
+        val boundary = TransitProviderFreshness.evaluate(
+            updatedAtEpochSeconds = MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS,
+            nowEpochSeconds = MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS,
+            staleAfterSeconds = 0L,
+        )
+        assertEquals(TransitProviderFreshnessState.FRESH, boundary.state)
+    }
+
+    @Test
     fun farFutureProviderTimestampCannotMasqueradeAsFresh() {
         val invalid = TransitProviderFreshness.evaluate(
             updatedAtEpochSeconds = Long.MAX_VALUE,
