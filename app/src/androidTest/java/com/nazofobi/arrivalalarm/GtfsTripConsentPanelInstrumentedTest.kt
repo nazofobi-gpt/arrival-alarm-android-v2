@@ -26,19 +26,33 @@ class GtfsTripConsentPanelInstrumentedTest {
         directionId = 0,
     )
 
-    private fun stop(sequence: Int, dropOff: Int? = null) = GtfsTripDetailStop(
-        stopSequence = sequence,
-        stopId = "stop-$sequence",
-        name = "Stop $sequence",
-        parentStationId = null,
-        platformCode = null,
-        wheelchairBoarding = null,
-        scheduledArrival = "08:00:00",
-        scheduledDeparture = "08:01:00",
-        latitude = 52.66,
-        longitude = 8.24,
-        dropOffType = dropOff,
-    )
+    private fun stop(sequence: Int, dropOff: Int? = null): GtfsTripDetailStop {
+        // A consent fixture must be chronologically valid unless the test
+        // deliberately supplies an invalid scheduled arrival or departure.
+        val minute = when (sequence) {
+            10 -> 0
+            20 -> 10
+            30 -> 20
+            50 -> 30
+            90 -> 40
+            else -> error("Unexpected fixture stop sequence: $sequence")
+        }
+        val arrival = minute.toString().padStart(2, '0')
+        val departure = (minute + 1).toString().padStart(2, '0')
+        return GtfsTripDetailStop(
+            stopSequence = sequence,
+            stopId = "stop-$sequence",
+            name = "Stop $sequence",
+            parentStationId = null,
+            platformCode = null,
+            wheelchairBoarding = null,
+            scheduledArrival = "08:$arrival:00",
+            scheduledDeparture = "08:$departure:00",
+            latitude = 52.66,
+            longitude = 8.24,
+            dropOffType = dropOff,
+        )
+    }
 
     private val detail = GtfsTripDetail(
         identity,

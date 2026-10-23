@@ -103,6 +103,19 @@ object TripStopRoleValidator {
             return reject(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME)
         }
 
+        // A callback may supply a pre-resolved detail without the normal resolver's
+        // cross-stop chronology validation. Do not confirm a trip where boarding
+        // happens after the selected alarm or destination arrival.
+        val boardingDeparture = GtfsServiceTime.parse(boarding.scheduledDeparture!!)
+            .secondsFromServiceDayStart
+        val alarmArrival = GtfsServiceTime.parse(alarm.scheduledArrival!!)
+            .secondsFromServiceDayStart
+        val destinationArrival = GtfsServiceTime.parse(destination.scheduledArrival!!)
+            .secondsFromServiceDayStart
+        if (boardingDeparture > alarmArrival || alarmArrival > destinationArrival) {
+            return reject(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME)
+        }
+
         return TripStopRoleResult.Accepted(
             ConfirmedTripStopRoles(detail.identity, boarding, destination, alarm)
         )

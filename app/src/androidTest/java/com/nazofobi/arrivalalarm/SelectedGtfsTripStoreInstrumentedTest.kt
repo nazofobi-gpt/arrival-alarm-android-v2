@@ -36,18 +36,31 @@ class SelectedGtfsTripStoreInstrumentedTest {
         assertTrue(preferences.edit().clear().commit())
     }
 
-    private fun stop(sequence: Int, id: String) = GtfsTripDetailStop(
-        stopSequence = sequence,
-        stopId = id,
-        name = id,
-        parentStationId = null,
-        platformCode = null,
-        wheelchairBoarding = null,
-        scheduledArrival = "08:00:00",
-        scheduledDeparture = "08:01:00",
-        latitude = 52.665,
-        longitude = 8.237,
-    )
+    private fun stop(sequence: Int, id: String): GtfsTripDetailStop {
+        // Every ordinary fixture represents a feasible GTFS service-day journey.
+        // Invalid stop chronology must be introduced explicitly by each negative test.
+        val minute = when (sequence) {
+            2 -> 0
+            5 -> 5
+            7 -> 10
+            13 -> 20
+            else -> error("Unexpected fixture stop sequence: $sequence")
+        }
+        val arrival = minute.toString().padStart(2, '0')
+        val departure = (minute + 1).toString().padStart(2, '0')
+        return GtfsTripDetailStop(
+            stopSequence = sequence,
+            stopId = id,
+            name = id,
+            parentStationId = null,
+            platformCode = null,
+            wheelchairBoarding = null,
+            scheduledArrival = "08:$arrival:00",
+            scheduledDeparture = "08:$departure:00",
+            latitude = 52.665,
+            longitude = 8.237,
+        )
+    }
 
     private fun detail(
         trip: GtfsTripInstanceIdentity = identity,
@@ -211,7 +224,7 @@ class SelectedGtfsTripStoreInstrumentedTest {
             stops = listOf(
                 stop(2, "Lohne"),
                 stop(7, "Transfer").copy(
-                    scheduledArrival = "09:15:00", scheduledDeparture = "09:16:00",
+                    scheduledArrival = "08:15:00", scheduledDeparture = "08:16:00",
                 ),
                 stop(13, "Achim"),
             ),
@@ -232,7 +245,7 @@ class SelectedGtfsTripStoreInstrumentedTest {
         assertTrue(initial.save(selected))
         val revised = original.copy(
             stops = original.stops.map { stop ->
-                if (stop.stopSequence == 5) stop.copy(scheduledDeparture = "08:22:00") else stop
+                if (stop.stopSequence == 5) stop.copy(scheduledDeparture = "08:06:30") else stop
             },
         )
         assertRejected(
