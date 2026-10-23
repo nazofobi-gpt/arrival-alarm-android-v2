@@ -40,6 +40,17 @@ class SelectedGtfsTripStore(
     private val resolveTrip: (GtfsTripInstanceIdentity) -> GtfsTripDetailResult,
 ) {
     fun save(selection: GtfsSelectedTrip): Boolean {
+        // A snapshot cannot fit if its raw identity and stop references already
+        // exceed the persistence bound. Avoid resolving an impossible selection.
+        val rawReferenceChars = listOf(
+            selection.identity.tripId,
+            selection.identity.serviceId,
+            selection.identity.routeId,
+            selection.boarding.stopId,
+            selection.destination.stopId,
+            selection.alarmTarget.stopId,
+        ).sumOf { it.length.toLong() }
+        if (rawReferenceChars > MAX_SNAPSHOT_CHARS) return false
         val verified = validate(selection) as? GtfsSelectionRestore.Verified ?: return false
         return try {
             // Snapshot the exact static timetable validated when confirming the trip.
