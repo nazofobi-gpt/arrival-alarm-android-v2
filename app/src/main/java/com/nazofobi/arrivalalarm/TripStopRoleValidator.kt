@@ -103,6 +103,22 @@ object TripStopRoleValidator {
             return reject(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME)
         }
 
+        // Sequence order alone is not evidence of a physically possible trip:
+        // direct consent callbacks may bypass the full GTFS detail resolver.
+        // Compare GTFS service-day seconds, including legitimate 24:xx times.
+        val boardingSeconds = GtfsServiceTime.parse(
+            boarding.scheduledDeparture ?: return reject(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME),
+        ).secondsFromServiceDayStart
+        val alarmSeconds = GtfsServiceTime.parse(
+            alarm.scheduledArrival ?: return reject(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME),
+        ).secondsFromServiceDayStart
+        val destinationSeconds = GtfsServiceTime.parse(
+            destination.scheduledArrival ?: return reject(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME),
+        ).secondsFromServiceDayStart
+        if (boardingSeconds > alarmSeconds || alarmSeconds > destinationSeconds) {
+            return reject(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME)
+        }
+
         return TripStopRoleResult.Accepted(
             ConfirmedTripStopRoles(detail.identity, boarding, destination, alarm)
         )
