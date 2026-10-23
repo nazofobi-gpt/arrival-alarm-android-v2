@@ -84,6 +84,18 @@ internal fun GtfsTripConsentPanel(
         val alarm = alarmStops.singleOrNull { it.stopSequence == alarmOverride }
             ?: destination
 
+        // Preview the same source-backed stop-role contract enforced at persistence.
+        // An impossible service-day clock must disable consent before the rider taps Save,
+        // rather than offer a button that can only reject after the tap.
+        // Keep invalid destination choices visible so the feed defect is explicit.
+        val consentReady = destination != null && boardingActionable &&
+            buildGtfsTripConsentDraft(
+                detail = detail,
+                boardingSequence = boarding.stopSequence,
+                destinationSequence = destination.stopSequence,
+                alarmTargetSequence = alarm?.stopSequence,
+            ) is GtfsTripConsentDraft.Ready
+
         Card(modifier = modifier.fillMaxWidth().testTag("gtfs-consent-panel")) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -156,7 +168,9 @@ internal fun GtfsTripConsentPanel(
                     }
                 }
 
-                if (invalidRoles || destinations.isEmpty() || !boardingActionable) {
+                if (invalidRoles || destinations.isEmpty() || !boardingActionable ||
+                    (destination != null && !consentReady)
+                ) {
                     Text(
                         stringResource(R.string.gtfs_consent_invalid),
                         color = MaterialTheme.colorScheme.error,
@@ -186,7 +200,7 @@ internal fun GtfsTripConsentPanel(
                             is GtfsTripConsentDraft.Rejected -> invalidRoles = true
                         }
                     },
-                    enabled = destination != null && boardingActionable && !busy && !confirmationPending,
+                    enabled = consentReady && !busy && !confirmationPending,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                         .testTag("gtfs-consent-confirm"),
                 ) {
