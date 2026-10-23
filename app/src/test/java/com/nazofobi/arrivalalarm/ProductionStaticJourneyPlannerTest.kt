@@ -1,11 +1,23 @@
 package com.nazofobi.arrivalalarm
 
+import java.util.Locale
 import java.util.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ProductionStaticJourneyPlannerTest {
+    @Test
+    fun nonpositiveStaticJourneyLimitNeverSynthesizesARequestedOption() {
+        for (invalid in listOf(0, -1, Int.MIN_VALUE)) {
+            assertEquals(0, boundedStaticJourneyOptionLimit(invalid))
+        }
+        assertEquals(1, boundedStaticJourneyOptionLimit(1))
+        assertEquals(3, boundedStaticJourneyOptionLimit(3))
+        assertEquals(6, boundedStaticJourneyOptionLimit(6))
+        assertEquals(6, boundedStaticJourneyOptionLimit(Int.MAX_VALUE))
+    }
+
     private val zone = TimeZone.getTimeZone("Europe/Berlin")
     private val date = GtfsServiceDate(2026, 10, 4)
 
@@ -60,6 +72,8 @@ class ProductionStaticJourneyPlannerTest {
         assertEquals("Berlin", option.direction)
         assertEquals("08:00", option.departure)
         assertEquals("08:47", option.arrival)
+        assertEquals(journey.legs.first().departureEpochMillis, option.departureEpochMillis)
+        assertEquals(journey.arrivalEpochMillis, option.arrivalEpochMillis)
         assertEquals(3, option.walkingMinutes)
         assertEquals(1, option.transfers)
         assertEquals(listOf("T1", "T2"), option.tripIds)
@@ -120,6 +134,125 @@ class ProductionStaticJourneyPlannerTest {
         assertEquals("2026-10-04T09:10:00+02:00", option.stops.last().plannedArrival)
     }
 
+    @Test
+    fun longCircularRouteWithRepeatedStopsSelectsBoundedEarliestPair() {
+        // 2,048 stop_times is the production mapper cap. Alternating A/B
+        // used to produce over a million comparisons in the nested scan.
+        val times = (0 until 2_048).map { minute ->
+            val time = "%02d:%02d:00".format(Locale.ROOT, minute / 60, minute % 60)
+            st("LOOP", minute + 1, if (minute % 2 == 0) "A" else "B", time, time)
+        }
+        val data = FakeRouteOptionData(
+            routes = mapOf("R" to GtfsScheduleRoute("R", null, "Ring", null, 3)),
+            trips = mapOf("LOOP" to trip("LOOP", "R", "Ring")),
+            stops = mapOf("A" to stop("A", "Board"), "B" to stop("B", "Alight")),
+            stopTimes = mapOf("LOOP" to times),
+        )
+        val journey = StaticTransitJourney(
+            id = "loop",
+            access = StaticRouterAccess("A"),
+            egress = StaticRouterAccess("B"),
+            legs = listOf(
+                StaticTransitLeg("LOOP", "R", "A", "B", at("00:00:00"), at("00:01:00")),
+            ),
+            arrivalEpochMillis = at("00:01:00"),
+        )
+
+        val option = StaticRouteOptionMapper(data, zone).map(
+            journey, MapPoint(0.0, 0.0, "Board"), MapPoint(0.0, 0.0, "Alight"), date, 1L,
+        )
+
+        assertEquals(listOf("A", "B"), option.stops.map { it.id })
+        assertEquals("2026-10-04T00:01:00+02:00", option.stops.last().plannedArrival)
+    }
+
+    @Test
+    fun equallyTimedRepeatedStopPairsPreserveEarliestBoardingAndAlightingRows() {
+        val data = FakeRouteOptionData(
+            routes = mapOf("R" to GtfsScheduleRoute("R", null, "Ring", null, 3)),
+            trips = mapOf("LOOP" to trip("LOOP", "R", "Ring")),
+            stops = listOf("A", "X", "B", "Y").associateWith { stop(it, it) },
+            stopTimes = mapOf(
+                "LOOP" to listOf(
+                    st("LOOP", 1, "A", "08:00:00", "08:00:00"),
+                    st("LOOP", 2, "X", "08:04:00", "08:04:00"),
+                    st("LOOP", 3, "B", "08:10:00", "08:10:00"),
+                    st("LOOP", 4, "A", "08:20:00", "08:20:00"),
+                    st("LOOP", 5, "Y", "08:24:00", "08:24:00"),
+                    st("LOOP", 6, "B", "08:30:00", "08:30:00"),
+                ),
+            ),
+        )
+        val journey = StaticTransitJourney(
+            id = "tie",
+            access = StaticRouterAccess("A"),
+            egress = StaticRouterAccess("B"),
+            legs = listOf(
+                StaticTransitLeg("LOOP", "R", "A", "B", at("08:00:00"), at("08:10:00")),
+            ),
+            arrivalEpochMillis = at("08:10:00"),
+        )
+
+        val option = StaticRouteOptionMapper(data, zone).map(
+            journey, MapPoint(0.0, 0.0, "A"), MapPoint(0.0, 0.0, "B"), date, 1L,
+        )
+
+        assertEquals(listOf("A", "X", "B"), option.stops.map { it.id })
+    }
+
+    @Test
+    fun repeatedLoopStopsReuseMetadataLookupsIncludingMissingStops() {
+        val times = (0 until 128).map { minute ->
+            val time = "%02d:%02d:00".format(Locale.ROOT, minute / 60, minute % 60)
+            st("LOOP", minute + 1, if (minute % 2 == 0) "A" else "B", time, time)
+        }
+        val data = FakeRouteOptionData(
+            routes = mapOf("R" to GtfsScheduleRoute("R", null, "Ring", null, 3)),
+            trips = mapOf("LOOP" to trip("LOOP", "R", "Ring")),
+            // B is deliberately absent: missing metadata must be memoized too.
+            stops = mapOf("A" to stop("A", "Board")),
+            stopTimes = mapOf("LOOP" to times),
+        )
+        val journey = StaticTransitJourney(
+            id = "metadata-cache",
+            access = StaticRouterAccess("A"),
+            egress = StaticRouterAccess("B"),
+            legs = listOf(
+                StaticTransitLeg("LOOP", "R", "A", "B", at("00:00:00"), at("02:07:00")),
+            ),
+            arrivalEpochMillis = at("02:07:00"),
+        )
+
+        val option = StaticRouteOptionMapper(data, zone).map(
+            journey, MapPoint(0.0, 0.0, "A"), MapPoint(0.0, 0.0, "B"), date, 1L,
+        )
+
+        assertEquals(times.map { it.stopId }, option.stops.map { it.id })
+        assertEquals("B", option.stops.last().name)
+        assertEquals(mapOf("A" to 1, "B" to 1), data.stopLookupCounts)
+    }
+
+    @Test
+    fun routingDateCandidatesIncludeTomorrowAcrossDaylightSavingChange() {
+        val saturday = GtfsServiceDate(2026, 10, 24)
+        val beforeDst = GtfsServiceTime.parse("23:50:00").resolve(saturday, zone).epochMillis
+        assertEquals(
+            listOf(
+                GtfsServiceDate(2026, 10, 23),
+                saturday,
+                GtfsServiceDate(2026, 10, 25),
+            ),
+            staticRoutingServiceDates(beforeDst, zone),
+        )
+
+        val sunday = GtfsServiceDate(2026, 10, 25)
+        val afterDst = GtfsServiceTime.parse("23:50:00").resolve(sunday, zone).epochMillis
+        assertEquals(
+            listOf(saturday, sunday, GtfsServiceDate(2026, 10, 26)),
+            staticRoutingServiceDates(afterDst, zone),
+        )
+    }
+
     private fun at(raw: String): Long =
         GtfsServiceTime.parse(raw).resolve(date, zone).epochMillis
 
@@ -155,7 +288,12 @@ class ProductionStaticJourneyPlannerTest {
     ) : StaticRouteOptionData {
         override fun route(routeId: String) = routes[routeId]
         override fun trip(tripId: String) = trips[tripId]
-        override fun stop(stopId: String) = stops[stopId]
+        val stopLookupCounts = mutableMapOf<String, Int>()
+
+        override fun stop(stopId: String): GtfsScheduleStop? {
+            stopLookupCounts[stopId] = (stopLookupCounts[stopId] ?: 0) + 1
+            return stops[stopId]
+        }
         override fun stopTimesForTrip(tripId: String, limit: Int) =
             stopTimes[tripId].orEmpty().take(limit)
     }

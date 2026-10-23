@@ -89,6 +89,47 @@ class TransitProviderContractTest {
     }
 
     @Test
+    fun futureProviderTimestampWithinAllowedSkewRemainsFresh() {
+        val result = TransitProviderFreshness.evaluate(
+            updatedAtEpochSeconds = 1_030,
+            nowEpochSeconds = 1_000,
+            staleAfterSeconds = 0,
+        )
+
+        assertEquals(TransitProviderFreshnessState.FRESH, result.state)
+        assertEquals(0L, result.ageSeconds)
+        assertEquals(1_030L, result.updatedAtEpochSeconds)
+    }
+
+    @Test
+    fun futureProviderTimestampBeyondSkewIsUntrusted() {
+        for (futureOffset in listOf(31L, 3_600L, 86_400L)) {
+            val result = TransitProviderFreshness.evaluate(
+                updatedAtEpochSeconds = 1_000L + futureOffset,
+                nowEpochSeconds = 1_000L,
+                staleAfterSeconds = 3_600L,
+            )
+
+            assertEquals(TransitProviderFreshnessState.UNKNOWN, result.state)
+            assertNull(result.ageSeconds)
+            assertNull(result.updatedAtEpochSeconds)
+        }
+    }
+
+    @Test
+    fun nonApplicableProviderDoesNotBecomeUnknownBecauseOfFutureTimestamp() {
+        val result = TransitProviderFreshness.evaluate(
+            updatedAtEpochSeconds = 9_999,
+            nowEpochSeconds = 1_000,
+            staleAfterSeconds = 60,
+            applicable = false,
+        )
+
+        assertEquals(TransitProviderFreshnessState.NOT_APPLICABLE, result.state)
+        assertNull(result.ageSeconds)
+    }
+
+    @Test
     fun providerHealthAndCapabilitiesRemainQueryable() {
         val health = TransitProviderHealth(
             providerId = ArrivalAlarmTransitProviders.GermanyRealtime.id,
@@ -109,5 +150,69 @@ class TransitProviderContractTest {
                 TransitProviderCapability.STATIC_ROUTING,
             )
         )
+    }
+
+    @Test
+    fun providerFreshnessAcceptsOnlyBoundedPositiveClockSkew() {
+        val withinSkew = TransitProviderFreshness.evaluate(
+            updatedAtEpochSeconds = 1_030,
+            nowEpochSeconds = 1_000,
+            staleAfterSeconds = 60,
+        )
+        val outsideSkew = TransitProviderFreshness.evaluate(
+            updatedAtEpochSeconds = 1_031,
+            nowEpochSeconds = 1_000,
+            staleAfterSeconds = 60,
+        )
+
+        assertEquals(TransitProviderFreshnessState.FRESH, withinSkew.state)
+        assertEquals(0L, withinSkew.ageSeconds)
+        assertEquals(1_030L, withinSkew.updatedAtEpochSeconds)
+        assertEquals(TransitProviderFreshnessState.UNKNOWN, outsideSkew.state)
+        assertNull(outsideSkew.ageSeconds)
+        assertNull(outsideSkew.updatedAtEpochSeconds)
+    }
+
+
+    @Test
+    fun zeroEpochSentinelsCannotClaimFreshTransitEvidence() {
+        for ((lastUpdate, now) in listOf(
+            0L to 100L,
+            5L to 0L,
+            0L to 0L,
+        )) {
+            val result = TransitProviderFreshness.evaluate(
+                updatedAtEpochSeconds = lastUpdate,
+                nowEpochSeconds = now,
+                staleAfterSeconds = 1_000L,
+            )
+            assertEquals(TransitProviderFreshnessState.UNKNOWN, result.state)
+            assertNull(result.ageSeconds)
+            assertNull(result.updatedAtEpochSeconds)
+        }
+    }
+
+    @Test
+    fun earliestPositiveEpochRemainsValidFreshnessEvidence() {
+        val result = TransitProviderFreshness.evaluate(
+            updatedAtEpochSeconds = 1L,
+            nowEpochSeconds = 1L,
+            staleAfterSeconds = 0L,
+        )
+        assertEquals(TransitProviderFreshnessState.FRESH, result.state)
+        assertEquals(0L, result.ageSeconds)
+    }
+
+    @Test
+    fun farFutureProviderTimestampCannotMasqueradeAsFresh() {
+        val invalid = TransitProviderFreshness.evaluate(
+            updatedAtEpochSeconds = Long.MAX_VALUE,
+            nowEpochSeconds = 0L,
+            staleAfterSeconds = 60,
+        )
+
+        assertEquals(TransitProviderFreshnessState.UNKNOWN, invalid.state)
+        assertNull(invalid.ageSeconds)
+        assertNull(invalid.updatedAtEpochSeconds)
     }
 }

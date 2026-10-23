@@ -34,12 +34,25 @@ fun LiveTripPanel(
     nowEpochSeconds: Long,
     modifier: Modifier = Modifier,
 ) {
-    val progress = RouteStopProgressTracker().resolve(selectedRoute.stops, nowEpochSeconds)
+    val trustedRealtime = isTrustedRealtimeForJourney(
+        state = selectedRoute.realtime?.state,
+        routeOffline = routeOffline,
+        cancelledTripIds = selectedRoute.realtime?.cancelledTripIds.orEmpty(),
+    )
+    val progress = RouteStopProgressTracker().resolve(
+        stops = selectedRoute.stops,
+        nowEpochSeconds = nowEpochSeconds,
+        trustRealtime = trustedRealtime,
+    )
     val target = selectedRoute.stops.lastOrNull()
     val targetLabel = target?.name ?: selectedRoute.destination.label
-    val targetTime = routeStopClock(
+    val targetTimeSource = if (trustedRealtime) {
         target?.arrival ?: target?.plannedArrival ?: selectedRoute.arrival
-    )
+    } else {
+        target?.plannedArrival ?: target?.plannedDeparture
+            ?: selectedRoute.arrival.takeIf { target == null }
+    }
+    val targetTime = routeStopClock(targetTimeSource)
 
     Card(
         modifier = modifier
@@ -118,7 +131,7 @@ fun LiveTripPanel(
                     value = progress.current.name,
                     tag = "live-trip-current",
                 )
-                progress.resolvedByProviderTime && (progress.previous != null || progress.next != null) ->
+                progress.resolvedByProviderTime && progress.previous != null && progress.next != null ->
                     Text(
                         text = stringResource(R.string.live_trip_between_stops),
                         style = MaterialTheme.typography.bodyMedium,
@@ -138,6 +151,18 @@ fun LiveTripPanel(
                     label = stringResource(R.string.live_trip_next),
                     value = it.name,
                     tag = "live-trip-next",
+                )
+            }
+
+            // The count is schedule/provider-time derived, not a GPS vehicle position.
+            // Unknown or contradictory stop evidence must not produce a guessed count.
+            progress.remainingStops?.takeIf {
+                progress.resolvedByProviderTime && it >= 0
+            }?.let { remaining ->
+                LiveTripFact(
+                    label = stringResource(R.string.live_trip_remaining_stops),
+                    value = remaining.toString(),
+                    tag = "live-trip-remaining-stops",
                 )
             }
 
@@ -218,13 +243,28 @@ private fun guidanceUiStatus(state: GuidanceReliabilityState): String = stringRe
     }
 )
 
-private fun routeStopClock(value: String?): String? {
+/**
+ * Show a destination clock only after validating the complete provider value.
+ * Prefix slicing can turn malformed payloads (e.g. 08:45garbage) into false ETAs.
+ * ISO timestamps are parsed with the existing strict transit validator; GTFS
+ * clock-only values may cross midnight, but cannot exceed the 47-hour UI bound.
+ */
+internal fun routeStopClock(value: String?): String? {
     val raw = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-    val time = raw.substringAfter('T', raw)
-    val candidate = time.take(5)
-    return candidate.takeIf {
-        candidate.length == 5 && candidate[2] == ':' &&
-            candidate.take(2).toIntOrNull() != null &&
-            candidate.drop(3).toIntOrNull() != null
+    if ('T' in raw) {
+        if (raw.toTransitEpochSecondsOrNull() == null) return null
+        return raw.substringAfter('T').take(5)
     }
+
+    val fullClock = when {
+        GTFS_DISPLAY_HH_MM.matches(raw) -> "$raw:00"
+        GTFS_DISPLAY_HH_MM_SS.matches(raw) -> raw
+        else -> return null
+    }
+    val time = runCatching { GtfsServiceTime.parse(fullClock) }.getOrNull() ?: return null
+    if (time.hour !in 0..47) return null
+    return "%02d:%02d".format(java.util.Locale.ROOT, time.hour, time.minute)
 }
+
+private val GTFS_DISPLAY_HH_MM = Regex("""^\d{1,2}:[0-5]\d$""")
+private val GTFS_DISPLAY_HH_MM_SS = Regex("""^\d{1,2}:[0-5]\d:[0-5]\d$""")

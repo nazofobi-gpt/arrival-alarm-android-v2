@@ -165,10 +165,20 @@ class StaticGtfsRouter(
         serviceDate: GtfsServiceDate,
         departureEpochMillis: Long,
     ): StaticRouterResult {
-        val from = origins.distinctBy { it.stopId }.take(16)
-        val to = destinations.distinctBy { it.stopId }.take(16)
+        // A stop may be supplied by multiple access/egress strategies. Preserve the
+        // shortest feasible walk rather than whichever duplicate arrived first.
+        // Rank before the bounded selection so a nearby stop is not dropped merely
+        // because more distant candidates came earlier in the input list.
+        val walkOrder = compareBy<StaticRouterAccess> { it.walkSeconds }.thenBy { it.stopId }
+        val from = origins.sortedWith(walkOrder).distinctBy { it.stopId }.take(16)
+        val to = destinations.sortedWith(walkOrder).distinctBy { it.stopId }.take(16)
         if (from.isEmpty() || to.isEmpty()) return StaticRouterResult.NoPath
-        if (from.any { a -> to.any { b -> a.stopId == b.stopId } }) return StaticRouterResult.SameOrigin
+        // Nearby access/egress windows commonly overlap at adjacent stations. A shared
+        // candidate must not hide a valid journey between two different stops.
+        // SameOrigin is unambiguous only for an identical single-stop request.
+        if (from.size == 1 && to.size == 1 && from[0].stopId == to[0].stopId) {
+            return StaticRouterResult.SameOrigin
+        }
 
         val destinationByStop = to.associateBy { it.stopId }
         val found = mutableListOf<StaticTransitJourney>()
@@ -616,7 +626,16 @@ class StaticGtfsRouter(
         val source = data.stop(alightStopId)
         val targets = linkedMapOf<String, TransferTarget>()
 
-        fun offer(stop: GtfsScheduleStop?, stopId: String, knownDistanceMeters: Int? = null) {
+        fun offer(
+            stop: GtfsScheduleStop?,
+            stopId: String,
+            knownDistanceMeters: Int? = null,
+            requireValidGeometry: Boolean = false,
+        ) {
+            // Implicit platform/nearby links need actual usable geometry. In Kotlin
+            // NaN.toInt() becomes zero and could fabricate a short transfer.
+            if (requireValidGeometry && (source == null || stop == null ||
+                    !hasValidTransferCoordinates(source) || !hasValidTransferCoordinates(stop))) return
             val walkSeconds = if (stopId == alightStopId) {
                 implicitTransferSeconds
             } else {
@@ -643,7 +662,7 @@ class StaticGtfsRouter(
         }
         if (siblingParentId != null) {
             data.childStops(siblingParentId, maxChildStops).forEach { sibling ->
-                if (sibling.id != alightStopId) offer(sibling, sibling.id)
+                if (sibling.id != alightStopId) offer(sibling, sibling.id, requireValidGeometry = true)
             }
         }
 
@@ -651,12 +670,19 @@ class StaticGtfsRouter(
             stopId = alightStopId,
             radiusMeters = maxImplicitTransferRadiusMeters,
             limit = maxImplicitTransferCandidates,
-        ).take(maxImplicitTransferCandidates).forEach { nearby ->
-            offer(nearby.stop, nearby.stop.id, nearby.distanceMeters)
-        }
+        ).asSequence()
+            .filter { it.distanceMeters in 0..maxImplicitTransferRadiusMeters }
+            .take(maxImplicitTransferCandidates)
+            .forEach { nearby ->
+                offer(nearby.stop, nearby.stop.id, nearby.distanceMeters, requireValidGeometry = true)
+            }
 
         return targets.values.toList()
     }
+
+    private fun hasValidTransferCoordinates(stop: GtfsScheduleStop): Boolean =
+        stop.latitude.isFinite() && stop.longitude.isFinite() &&
+            stop.latitude in -90.0..90.0 && stop.longitude in -180.0..180.0
 
     private fun implicitTransferWalkSeconds(
         from: GtfsScheduleStop?,
@@ -788,7 +814,10 @@ class StaticGtfsRouter(
     private fun serviceSeconds(epochMillis: Long, serviceDate: GtfsServiceDate): Int? {
         val anchor = GtfsServiceTime.parse("00:00:00").resolve(serviceDate, agencyTimeZone).epochMillis
         val deltaMillis = epochMillis - anchor
-        if (deltaMillis < 0L) return null
+        // A route can start before the next civil service-day anchor (e.g. 23:50
+        // today, boarding a 00:10 trip tomorrow). Query that date from its first
+        // second rather than suppressing valid after-midnight service.
+        if (deltaMillis < 0L) return 0
         val seconds = deltaMillis / 1_000L + if (deltaMillis % 1_000L == 0L) 0L else 1L
         return seconds.takeIf { it <= Int.MAX_VALUE }?.toInt()
     }

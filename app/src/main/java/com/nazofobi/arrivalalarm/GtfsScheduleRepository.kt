@@ -132,6 +132,7 @@ class GtfsScheduleRepository(
 
     fun childStops(parentStationId: String, limit: Int = 64): List<GtfsScheduleStop> {
         if (parentStationId.isBlank()) return emptyList()
+        if (limit <= 0) return emptyList()
         val boundedLimit = limit.coerceIn(1, MAX_CHILD_STOPS)
         return index.readableDatabase.rawQuery(
             """
@@ -161,6 +162,7 @@ class GtfsScheduleRepository(
         val latDelta = boundedRadius / 111_320.0
         val lonScale = (111_320.0 * cos(Math.toRadians(origin.latitude))).coerceAtLeast(1_000.0)
         val lonDelta = (boundedRadius / lonScale).coerceAtMost(180.0)
+        val longitudeWeight = (lonScale / 111_320.0).let { it * it }
         val scanLimit = (boundedLimit * NEARBY_SCAN_MULTIPLIER).coerceAtMost(MAX_NEARBY_SCAN_ROWS)
 
         return index.readableDatabase.rawQuery(
@@ -171,7 +173,10 @@ class GtfsScheduleRepository(
               AND lat BETWEEN ? AND ?
               AND lon BETWEEN ? AND ?
               AND (location_type IS NULL OR location_type=0)
-            ORDER BY lat,lon,id
+            -- Rank the bounding-box candidates before applying the SQL cap. Ordering by
+            -- latitude alone can discard a closer stop north of a dense station.
+            -- Exact metre distances are still used for the final returned ordering.
+            ORDER BY ((lat-?)*(lat-?) + (lon-?)*(lon-?)*?), id
             LIMIT ?
             """.trimIndent(),
             arrayOf(
@@ -180,6 +185,11 @@ class GtfsScheduleRepository(
                 (origin.latitude + latDelta).toString(),
                 (origin.longitude - lonDelta).toString(),
                 (origin.longitude + lonDelta).toString(),
+                origin.latitude.toString(),
+                origin.latitude.toString(),
+                origin.longitude.toString(),
+                origin.longitude.toString(),
+                longitudeWeight.toString(),
                 scanLimit.toString(),
             ),
         ).use { cursor ->
@@ -217,6 +227,7 @@ class GtfsScheduleRepository(
     ): List<GtfsScheduleRoute> {
         val normalizedAgency = agencyId?.takeIf { it.isNotBlank() }
         if (normalizedAgency == null && routeType == null) return emptyList()
+        if (limit <= 0) return emptyList()
         val boundedLimit = limit.coerceIn(1, MAX_SELECTOR_ROUTES)
         val where: String
         val args: Array<String>
@@ -271,6 +282,7 @@ class GtfsScheduleRepository(
         limit: Int = 64,
     ): List<GtfsScheduleTrip> {
         if (routeId.isBlank()) return emptyList()
+        if (limit <= 0) return emptyList()
         val boundedLimit = limit.coerceIn(1, MAX_SELECTOR_TRIPS)
         return index.readableDatabase.rawQuery(
             """
@@ -290,6 +302,7 @@ class GtfsScheduleRepository(
 
     fun stopTimesForTrip(tripId: String, limit: Int = 512): List<GtfsScheduleStopTime> {
         if (tripId.isBlank()) return emptyList()
+        if (limit <= 0) return emptyList()
         val boundedLimit = limit.coerceIn(1, MAX_STOP_TIMES)
         return index.readableDatabase.rawQuery(
             """
@@ -309,6 +322,7 @@ class GtfsScheduleRepository(
 
     fun candidateTripsAtStop(stopId: String, limit: Int = 128): List<GtfsScheduleTripCandidate> {
         if (stopId.isBlank()) return emptyList()
+        if (limit <= 0) return emptyList()
         val boundedLimit = limit.coerceIn(1, MAX_TRIP_CANDIDATES)
         return index.readableDatabase.rawQuery(
             """
@@ -356,6 +370,7 @@ class GtfsScheduleRepository(
         limit: Int = 128,
     ): List<GtfsScheduleTripCandidate> {
         if (stopId.isBlank() || earliestBoardSeconds < 0) return emptyList()
+        if (limit <= 0) return emptyList()
         val boundedLimit = limit.coerceIn(1, MAX_TRIP_CANDIDATES)
         val serviceDateRaw = serviceDate.toString()
         val weekdayColumn = when (serviceDate.weekday) {
@@ -466,6 +481,7 @@ class GtfsScheduleRepository(
         limit: Int = 64,
     ): List<GtfsScheduleFrequency> {
         if (tripId.isBlank()) return emptyList()
+        if (limit <= 0) return emptyList()
         val boundedLimit = limit.coerceIn(1, MAX_FREQUENCIES)
         val startSeconds = """
             (
@@ -513,6 +529,7 @@ class GtfsScheduleRepository(
         limit: Int = 128,
     ): List<GtfsScheduleTrip> {
         if (blockId.isBlank() || serviceId.isBlank()) return emptyList()
+        if (limit <= 0) return emptyList()
         val boundedLimit = limit.coerceIn(1, MAX_BLOCK_TRIPS)
         return index.readableDatabase.rawQuery(
             """
@@ -535,6 +552,7 @@ class GtfsScheduleRepository(
         limit: Int = 128,
     ): List<GtfsScheduleTransfer> {
         if (fromTripId.isBlank()) return emptyList()
+        if (limit <= 0) return emptyList()
         val boundedLimit = limit.coerceIn(1, MAX_LINKED_TRANSFERS)
         return index.readableDatabase.rawQuery(
             """
@@ -567,6 +585,7 @@ class GtfsScheduleRepository(
 
     fun transfersFromStop(stopId: String, limit: Int = 128): List<GtfsScheduleTransfer> {
         if (stopId.isBlank()) return emptyList()
+        if (limit <= 0) return emptyList()
         val boundedLimit = limit.coerceIn(1, MAX_TRANSFERS)
         return index.readableDatabase.rawQuery(
             """
@@ -599,6 +618,7 @@ class GtfsScheduleRepository(
 
     fun shapePoints(shapeId: String, limit: Int = 2_048): List<GtfsScheduleShapePoint> {
         if (shapeId.isBlank()) return emptyList()
+        if (limit <= 0) return emptyList()
         val boundedLimit = limit.coerceIn(1, MAX_SHAPE_POINTS)
         return index.readableDatabase.rawQuery(
             """

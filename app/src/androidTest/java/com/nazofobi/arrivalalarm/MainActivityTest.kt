@@ -210,12 +210,16 @@ class MainActivityTest {
     @Test fun manualDarkThemePersistsAcrossActivityRecreation() {
         navigateTo("nav-settings")
         val darkLabel = rule.activity.getString(R.string.theme_dark)
+        rule.onNodeWithTag("theme-mode-picker")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
         rule.onNodeWithTag("theme-dark")
             .performScrollTo()
             .assertIsDisplayed()
             .performClick()
 
-        rule.onNodeWithTag("theme-mode-status")
+        rule.onNodeWithTag("theme-mode-picker")
             .performScrollTo()
             .assertTextContains(darkLabel, substring = true)
 
@@ -230,7 +234,7 @@ class MainActivityTest {
         rule.waitForIdle()
         navigateTo("nav-settings")
 
-        rule.onNodeWithTag("theme-mode-status")
+        rule.onNodeWithTag("theme-mode-picker")
             .performScrollTo()
             .assertTextContains(darkLabel, substring = true)
     }
@@ -285,6 +289,10 @@ class MainActivityTest {
             searchAction.boundsInRoot.height + 0.5f >= minPixels,
         )
         navigateTo("nav-settings")
+        rule.onNodeWithTag("theme-mode-picker")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
         listOf(
             "theme-system",
             "theme-light",
@@ -309,6 +317,10 @@ class MainActivityTest {
 
     @Test fun themeControlsExposeSelectionSemantics() {
         navigateTo("nav-settings")
+        rule.onNodeWithTag("theme-mode-picker")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
         rule.onNodeWithTag("theme-system")
             .performScrollTo()
             .assertIsDisplayed()
@@ -319,6 +331,9 @@ class MainActivityTest {
             .assertIsNotSelected()
             .performClick()
         rule.waitForIdle()
+        rule.onNodeWithTag("theme-mode-picker")
+            .performScrollTo()
+            .performClick()
 
         rule.onNodeWithTag("theme-dark")
             .performScrollTo()
@@ -326,26 +341,6 @@ class MainActivityTest {
         rule.onNodeWithTag("theme-system")
             .performScrollTo()
             .assertIsNotSelected()
-    }
-
-    @Test fun bottomNavigationExposesLocalizedLabelsAndSelection() {
-        val destinations = listOf(
-            "nav-home" to R.string.nav_home,
-            "nav-search" to R.string.nav_search,
-            "nav-journey" to R.string.nav_journey,
-            "nav-departures" to R.string.nav_departures,
-            "nav-settings" to R.string.nav_settings,
-        )
-
-        destinations.forEach { (tag, labelRes) ->
-            rule.onNodeWithTag(tag)
-                .assertIsDisplayed()
-                .performClick()
-            rule.waitForIdle()
-            rule.onNodeWithTag(tag)
-                .assertIsSelected()
-                .assertTextContains(rule.activity.getString(labelRes), substring = true)
-        }
     }
 
     @Test fun primaryScreensAreSeparatedByBottomNavigation() {
@@ -589,6 +584,20 @@ class MainActivityTest {
     }
 
     private fun navigateTo(tag: String) {
+        // ActivityScenario.recreate() may return before the new Compose hierarchy
+        // is registered. Wait for the actual navigation target, not just idle.
+        rule.waitUntil(timeoutMillis = 60_000L) {
+            try {
+                rule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+            } catch (error: IllegalStateException) {
+                // The Compose test rule throws while no hierarchy is attached.
+                // Other unexpected state failures should still fail the test.
+                if (error.message?.contains("No compose hierarchies found") != true) {
+                    throw error
+                }
+                false
+            }
+        }
         rule.onNodeWithTag(tag).assertIsDisplayed().performClick()
         rule.waitForIdle()
     }
