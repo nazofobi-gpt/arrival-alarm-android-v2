@@ -234,6 +234,7 @@ fun ArrivalAlarmApp(
     var gtfsPreview by remember { mutableStateOf<GtfsDepartureInspection.Ready?>(null) }
     var gtfsConfirmed by remember { mutableStateOf<GtfsSelectionRestore.Verified?>(null) }
     var gtfsConsentBusy by remember { mutableStateOf(false) }
+    var gtfsConsentCompletionRevision by remember { mutableStateOf(0L) }
     var gtfsConsentStatus by remember { mutableStateOf<String?>(null) }
     var liveNowEpochSeconds by remember { mutableStateOf(System.currentTimeMillis() / 1_000) }
     var readinessRefreshTick by remember { mutableStateOf(0) }
@@ -1266,6 +1267,7 @@ fun ArrivalAlarmApp(
                         GtfsTripConsentPanel(
                             preview = preview,
                             busy = gtfsConsentBusy,
+                            completionRevision = gtfsConsentCompletionRevision,
                             onDismiss = {
                                 gtfsConsentGate.invalidate()
                                 gtfsPreview = null
@@ -1289,6 +1291,7 @@ fun ArrivalAlarmApp(
                                         }
                                     } else null
                                     gtfsConsentGate.commitIfCurrent(token) {
+                                        gtfsConsentCompletionRevision += 1L
                                         gtfsConsentBusy = false
                                         if (verified is GtfsSelectionRestore.Verified &&
                                             verified.selection == selection
