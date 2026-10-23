@@ -480,6 +480,50 @@ class ProductionRealtimeStationOverlayTest {
         )
     }
 
+
+    @Test
+    fun exactStopAlertSurvivesEmptyBoardWithoutLeakingRouteOrTripScopedAlerts() {
+        val stopOnly = GermanyRealtimeAlertSelector(
+            agencyId = null,
+            routeId = null,
+            routeType = null,
+            directionId = null,
+            stopId = "A",
+            trip = null,
+            validity = GermanyRealtimeAlertSelectorValidity.VALID,
+        )
+        val exact = overlay(alertResult(stopOnly)).enrich("A", emptyList())
+        assertTrue(exact.departures.isEmpty())
+        assertEquals(listOf("scoped-alert"), exact.alerts.map { it.id })
+        assertEquals(StationRealtimeState.FRESH_MATCHED, exact.realtimeState)
+
+        val tripScoped = GermanyRealtimeTripSelector(
+            tripId = "T1",
+            routeId = "R1",
+            directionId = null,
+            startTime = null,
+            startDate = null,
+            scheduleRelationship = null,
+            validity = GermanyRealtimeTripSelectorValidity.VALID_ID_BASED,
+        )
+        for (selector in listOf(
+            stopOnly.copy(routeId = "R1"),
+            stopOnly.copy(trip = tripScoped),
+            stopOnly.copy(agencyId = "provider-agency"),
+            stopOnly.copy(directionId = 1),
+            stopOnly.copy(validity = GermanyRealtimeAlertSelectorValidity.INVALID),
+        )) {
+            val unverified = overlay(alertResult(selector)).enrich("A", emptyList())
+            assertTrue(unverified.departures.isEmpty())
+            assertTrue(unverified.alerts.isEmpty())
+            assertEquals(StationRealtimeState.FRESH_NO_MATCH, unverified.realtimeState)
+        }
+
+        val wrongStop = overlay(alertResult(stopOnly)).enrich("B", emptyList())
+        assertTrue(wrongStop.alerts.isEmpty())
+        assertEquals(StationRealtimeState.FRESH_NO_MATCH, wrongStop.realtimeState)
+    }
+
     private fun alertResult(selector: GermanyRealtimeAlertSelector) =
         GermanyRealtimeOverlayResult.Matched(
             tripOverlays = emptyList(),
