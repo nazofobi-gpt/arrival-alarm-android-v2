@@ -37,14 +37,19 @@ sealed interface TripStopRoleResult {
  * must also fail closed even if the other clock is populated.
  */
 internal fun GtfsTripDetailStop.hasActionableScheduleClock(): Boolean {
-    val clocks = listOfNotNull(scheduledArrival, scheduledDeparture)
-    return clocks.isNotEmpty() && clocks.all { clock ->
-        try {
-            GtfsServiceTime.parse(clock)
-            true
-        } catch (_: IllegalArgumentException) {
-            false
+    if (scheduledArrival == null && scheduledDeparture == null) return false
+    return try {
+        val arrival = scheduledArrival?.let {
+            GtfsServiceTime.parse(it).secondsFromServiceDayStart
         }
+        val departure = scheduledDeparture?.let {
+            GtfsServiceTime.parse(it).secondsFromServiceDayStart
+        }
+        // A malformed or inverted dwell interval cannot authorize boarding or an alarm,
+        // even if only one of its clocks is required for the selected role.
+        arrival == null || departure == null || arrival <= departure
+    } catch (_: IllegalArgumentException) {
+        false
     }
 }
 
