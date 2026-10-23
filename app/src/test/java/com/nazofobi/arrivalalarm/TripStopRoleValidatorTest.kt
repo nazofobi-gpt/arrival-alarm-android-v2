@@ -160,6 +160,34 @@ class TripStopRoleValidatorTest {
     }
 
 
+    @Test fun invertedProviderStopWindowNeverAuthorizesBoardingOrAlarm() {
+        // A callback-provided detail may bypass the normal resolver chronology checks.
+        // Consent still cannot use any selected role from an impossible dwell interval.
+        for (sequence in listOf(2, 7, 13)) {
+            val inverted = detail.copy(stops = detail.stops.map { stop ->
+                if (stop.stopSequence == sequence) {
+                    stop.copy(scheduledArrival = "08:20:00", scheduledDeparture = "08:10:00")
+                } else stop
+            })
+            assertEquals(
+                "Inverted clock at selected stop " + sequence,
+                TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME,
+                rejected(inverted, TripStopRoles(2, 13, 7)),
+            )
+        }
+
+        // GTFS uses service-day seconds, not a naive 00:00 clock reset.
+        val overnight = detail.copy(stops = detail.stops.map { stop ->
+            if (stop.stopSequence == 7) {
+                stop.copy(scheduledArrival = "23:59:00", scheduledDeparture = "24:02:00")
+            } else stop
+        })
+        assertTrue(
+            TripStopRoleValidator.validate(overnight, TripStopRoles(2, 13, 7))
+                is TripStopRoleResult.Accepted,
+        )
+    }
+
     @Test fun roleSpecificClocksRejectOppositeDirectionOnlySchedule() {
         val onlyArrivalAtBoarding = detail.copy(stops = detail.stops.map {
             if (it.stopSequence == 2) it.copy(scheduledDeparture = null) else it
