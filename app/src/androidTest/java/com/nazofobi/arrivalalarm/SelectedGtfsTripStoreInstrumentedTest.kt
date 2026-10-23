@@ -159,11 +159,14 @@ class SelectedGtfsTripStoreInstrumentedTest {
         assertTrue(normal.save(selected))
         val before = preferences.getString(SelectedGtfsTripStore.KEY, null)
         val oversized = selected.copy(identity = identity.copy(tripId = "x".repeat(70_000)))
+        var resolverCalled = false
         val withOversizedIdentity = store { trip ->
+            resolverCalled = true
             GtfsTripDetailResult.Available(detail(trip = trip))
         }
 
         assertFalse(withOversizedIdentity.save(oversized))
+        assertFalse(resolverCalled)
         assertEquals(before, preferences.getString(SelectedGtfsTripStore.KEY, null))
         assertTrue(normal.restore() is GtfsSelectionRestore.Verified)
     }
