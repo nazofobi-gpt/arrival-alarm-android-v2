@@ -7,6 +7,9 @@ import java.util.Locale
  * journey history, endpoint URLs, raw provider errors or authentication state.
  */
 internal object SupportDiagnostics {
+    // Reset device/provider clocks (for example 1970) are not feed-age evidence.
+    private const val MIN_TRUSTWORTHY_FEED_EPOCH_SECONDS = 946_684_800L
+
     fun render(state: SettingsReadinessState, nowEpochSeconds: Long): String {
         val ready = state.dataState as? NationwideDataState.Ready
         val dataStatus = when (val data = state.dataState) {
@@ -20,7 +23,9 @@ internal object SupportDiagnostics {
         val feedAge = when {
             ready == null || ready.stopCount <= 0 ||
                 !ready.fetchedAtEpochSeconds.isDisplayableDepartureEpochSeconds() ||
-                !nowEpochSeconds.isDisplayableDepartureEpochSeconds() -> "unknown"
+                !nowEpochSeconds.isDisplayableDepartureEpochSeconds() ||
+                ready.fetchedAtEpochSeconds < MIN_TRUSTWORTHY_FEED_EPOCH_SECONDS ||
+                nowEpochSeconds < MIN_TRUSTWORTHY_FEED_EPOCH_SECONDS -> "unknown"
             nowEpochSeconds < ready.fetchedAtEpochSeconds -> "clock_mismatch"
             nowEpochSeconds - ready.fetchedAtEpochSeconds < 86_400L -> "under_24h"
             nowEpochSeconds - ready.fetchedAtEpochSeconds < 604_800L -> "1_to_7d"
