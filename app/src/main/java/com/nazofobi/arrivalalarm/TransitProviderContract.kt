@@ -111,6 +111,13 @@ data class TransitProviderFreshness(
             if (updatedAtEpochSeconds == 0L || nowEpochSeconds == 0L) {
                 return TransitProviderFreshness(TransitProviderFreshnessState.UNKNOWN)
             }
+            // Matching corrupted, far-future clocks must not attest data freshness.
+            // Preserve early positive synthetic epochs for deterministic callers.
+            if (updatedAtEpochSeconds > MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS ||
+                nowEpochSeconds > MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS
+            ) {
+                return TransitProviderFreshness(TransitProviderFreshnessState.UNKNOWN)
+            }
             // Never label a substantially future-dated provider snapshot as FRESH.
             // A small positive skew accounts for unsynchronized device/provider clocks.
             if (updatedAtEpochSeconds > nowEpochSeconds &&
