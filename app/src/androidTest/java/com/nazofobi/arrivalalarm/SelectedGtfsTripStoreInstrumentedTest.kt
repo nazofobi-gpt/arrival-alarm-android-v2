@@ -184,22 +184,41 @@ class SelectedGtfsTripStoreInstrumentedTest {
         assertTrue(normal.restore() is GtfsSelectionRestore.Verified)
     }
 
-    @Test fun blankTripServiceOrRouteIdFailsBeforeResolverAndPreservesSelection() {
+    @Test fun blankTripServiceOrRouteIdCannotBeConstructedOrMutateSelection() {
         val verifiedStore = store()
         assertTrue(verifiedStore.save(selected))
         val original = preferences.getString(SelectedGtfsTripStore.KEY, null)
-        val invalidIdentities = listOf(
-            identity.copy(tripId = " "),
-            identity.copy(serviceId = ""),
-            identity.copy(routeId = "\t"),
+        // GtfsTripInstanceIdentity validates these fields at construction.
+        // An invalid identity cannot be passed to SelectedGtfsTripStore.save().
+        val invalidFactories = listOf<() -> GtfsTripInstanceIdentity>(
+            { identity.copy(tripId = " ") },
+            { identity.copy(serviceId = "") },
+            { identity.copy(routeId = "\t") },
         )
-        for (invalid in invalidIdentities) {
+        for (factory in invalidFactories) {
+            val failure = runCatching { factory() }.exceptionOrNull()
+            assertTrue(failure is IllegalArgumentException)
+            assertEquals(original, preferences.getString(SelectedGtfsTripStore.KEY, null))
+        }
+        assertTrue(verifiedStore.restore() is GtfsSelectionRestore.Verified)
+    }
+
+    @Test fun blankStopReferencesFailBeforeResolverAndPreserveSelection() {
+        val verifiedStore = store()
+        assertTrue(verifiedStore.save(selected))
+        val original = preferences.getString(SelectedGtfsTripStore.KEY, null)
+        val invalidSelections = listOf(
+            selected.copy(boarding = selected.boarding.copy(stopId = " ")),
+            selected.copy(destination = selected.destination.copy(stopId = "")),
+            selected.copy(alarmTarget = selected.alarmTarget.copy(stopId = "\t")),
+        )
+        for (invalid in invalidSelections) {
             var resolverCalled = false
-            val permissiveResolver = store { requested ->
+            val guardedStore = store { requested ->
                 resolverCalled = true
                 GtfsTripDetailResult.Available(detail(trip = requested))
             }
-            assertFalse(permissiveResolver.save(selected.copy(identity = invalid)))
+            assertFalse(guardedStore.save(invalid))
             assertFalse(resolverCalled)
             assertEquals(original, preferences.getString(SelectedGtfsTripStore.KEY, null))
         }
