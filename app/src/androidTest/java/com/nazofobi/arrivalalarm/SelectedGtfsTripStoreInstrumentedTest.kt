@@ -184,6 +184,28 @@ class SelectedGtfsTripStoreInstrumentedTest {
         assertTrue(normal.restore() is GtfsSelectionRestore.Verified)
     }
 
+    @Test fun blankTripServiceOrRouteIdFailsBeforeResolverAndPreservesSelection() {
+        val verifiedStore = store()
+        assertTrue(verifiedStore.save(selected))
+        val original = preferences.getString(SelectedGtfsTripStore.KEY, null)
+        val invalidIdentities = listOf(
+            identity.copy(tripId = " "),
+            identity.copy(serviceId = ""),
+            identity.copy(routeId = "\t"),
+        )
+        for (invalid in invalidIdentities) {
+            var resolverCalled = false
+            val permissiveResolver = store { requested ->
+                resolverCalled = true
+                GtfsTripDetailResult.Available(detail(trip = requested))
+            }
+            assertFalse(permissiveResolver.save(selected.copy(identity = invalid)))
+            assertFalse(resolverCalled)
+            assertEquals(original, preferences.getString(SelectedGtfsTripStore.KEY, null))
+        }
+        assertTrue(verifiedStore.restore() is GtfsSelectionRestore.Verified)
+    }
+
     @Test fun invalidRoleOrderingNeverOverwritesKnownGoodChoice() {
         assertTrue(store().save(selected))
         val original = preferences.getString(SelectedGtfsTripStore.KEY, null)
