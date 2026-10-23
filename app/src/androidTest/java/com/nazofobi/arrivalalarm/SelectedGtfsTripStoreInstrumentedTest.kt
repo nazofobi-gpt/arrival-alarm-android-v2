@@ -225,6 +225,42 @@ class SelectedGtfsTripStoreInstrumentedTest {
         assertTrue(verifiedStore.restore() is GtfsSelectionRestore.Verified)
     }
 
+    @Test fun blankPersistedTripIdentityFailsClosedBeforeResolver() {
+        val verifiedStore = store()
+        assertTrue(verifiedStore.save(selected))
+        val original = requireNotNull(preferences.getString(SelectedGtfsTripStore.KEY, null))
+        val malformedPreferences = context.getSharedPreferences(
+            "g180_blank_identity_snapshot_test", Context.MODE_PRIVATE,
+        )
+
+        // A corrupted stored snapshot must never resolve a different vehicle or
+        // overwrite the user's last verified selection, even with a permissive resolver.
+        for ((field, blank) in listOf(
+            "trip_id" to " ",
+            "service_id" to "",
+            "route_id" to "\t",
+        )) {
+            assertTrue(malformedPreferences.edit().clear().commit())
+            val invalidSnapshot = JSONObject(original).apply { put(field, blank) }.toString()
+            assertTrue(malformedPreferences.edit()
+                .putString(SelectedGtfsTripStore.KEY, invalidSnapshot).commit())
+
+            var resolverCalled = false
+            val guarded = SelectedGtfsTripStore(malformedPreferences) { requested ->
+                resolverCalled = true
+                GtfsTripDetailResult.Available(detail(trip = requested))
+            }
+            assertRejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT, guarded.restore())
+            assertFalse(resolverCalled)
+            assertEquals(
+                invalidSnapshot,
+                malformedPreferences.getString(SelectedGtfsTripStore.KEY, null),
+            )
+            assertEquals(original, preferences.getString(SelectedGtfsTripStore.KEY, null))
+        }
+        assertTrue(verifiedStore.restore() is GtfsSelectionRestore.Verified)
+    }
+
     @Test fun invalidRoleOrderingNeverOverwritesKnownGoodChoice() {
         assertTrue(store().save(selected))
         val original = preferences.getString(SelectedGtfsTripStore.KEY, null)
