@@ -38,6 +38,25 @@ class ArrivalLocationQualityTest {
         assertFalse(ArrivalLocationQuality.confirmsArrival(evidence(), radiusMeters = -1.0))
     }
 
+    @Test fun malformedGpsCoordinatesCannotMasqueradeAsArrival() {
+        val destination = GeoPoint(53.08, 8.81)
+        // Haversine is periodic: adding 360 degrees of latitude maps back to
+        // nearly zero calculated distance unless the raw fix is validated first.
+        val corrupt = GeoPoint(destination.latitude + 360.0, destination.longitude)
+        assertTrue(ArrivalProgressController.distanceMeters(corrupt, destination) < 1.0)
+        assertFalse(ArrivalLocationQuality.hasValidCoordinates(corrupt.latitude, corrupt.longitude))
+        assertFalse(ArrivalLocationQuality.hasValidCoordinates(90.01, 8.81))
+        assertFalse(ArrivalLocationQuality.hasValidCoordinates(53.08, -180.01))
+        assertFalse(ArrivalLocationQuality.hasValidCoordinates(Double.NaN, 8.81))
+        assertFalse(ArrivalLocationQuality.hasValidCoordinates(53.08, Double.POSITIVE_INFINITY))
+    }
+
+    @Test fun validGpsCoordinateBoundariesArePreserved() {
+        assertTrue(ArrivalLocationQuality.hasValidCoordinates(53.08, 8.81))
+        assertTrue(ArrivalLocationQuality.hasValidCoordinates(-90.0, -180.0))
+        assertTrue(ArrivalLocationQuality.hasValidCoordinates(90.0, 180.0))
+    }
+
     @Test fun lowConfidenceLocationUpdatesDistanceWithoutFiringAlarm() {
         val journey = JourneyController()
         journey.selectStart(GeoPoint(53.08, 8.81))

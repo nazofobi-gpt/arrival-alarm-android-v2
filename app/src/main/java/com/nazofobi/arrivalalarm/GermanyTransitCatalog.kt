@@ -40,16 +40,92 @@ data class CatalogSnapshot(val providers:List<TransitProvider>,val stops:List<Ca
  * There is deliberately no fixture default: production must opt into a real data source.
  */
 class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
-    fun searchStops(query:String,limit:Int=20):List<CatalogStop>{ val q=query.trim(); if(q.isEmpty())return emptyList(); return snapshot.stops.filter{it.name.contains(q,true)}.take(limit) }
-    fun searchRoutes(query:String,limit:Int=20):List<CatalogRoute>{ val q=query.trim(); if(q.isEmpty())return emptyList(); return snapshot.routes.filter{it.shortName.contains(q,true)||it.direction.contains(q,true)}.take(limit) }
-    fun searchTrips(query:String,limit:Int=20):List<Pair<CatalogTrip,CatalogRoute>> { val q=query.trim(); if(q.isEmpty()) return emptyList(); return snapshot.trips.mapNotNull { trip -> snapshot.routes.firstOrNull { it.id==trip.routeId }?.let { trip to it } }.filter { (trip,route) -> trip.id.contains(q,true)||trip.departure.contains(q,true)||route.shortName.contains(q,true)||route.direction.contains(q,true) }.take(limit) }
-    fun tripsForRoute(routeId:String)=snapshot.trips.filter{it.routeId==routeId}
-    fun routesServing(originStopId:String,destinationStopId:String):List<CatalogRoute> = snapshot.routes.filter { route -> val a=route.stopIds.indexOf(originStopId); val b=route.stopIds.indexOf(destinationStopId); a>=0 && b>a }
-    fun nearestStops(latitude:Double,longitude:Double,limit:Int=5):List<NearbyStop> =
-        NearbyStationCanonicalizer.canonicalize(
+    // Preserve the first route when a malformed feed has duplicate route IDs.
+    // Use provider + route ID so unrelated feeds cannot cross-associate trips.
+    // Lookup once rather than scanning every route for every trip search result.
+    private val routesByProviderAndId = snapshot.routes.asReversed().associateBy { it.providerId to it.id }
+
+    fun searchStops(query:String,limit:Int=20):List<CatalogStop> {
+        val q = query.trim()
+        if (q.isEmpty() || limit <= 0) return emptyList()
+        return snapshot.stops.asSequence().filter { it.name.contains(q, true) }
+            .distinctBy { it.providerId to it.id }
+            .take(limit).toList()
+    }
+
+    fun searchRoutes(query:String,limit:Int=20):List<CatalogRoute> {
+        val q = query.trim()
+        if (q.isEmpty() || limit <= 0) return emptyList()
+        return snapshot.routes.asSequence().filter {
+            it.shortName.contains(q, true) || it.direction.contains(q, true)
+        }.distinctBy { it.providerId to it.id }.take(limit).toList()
+    }
+
+    fun searchTrips(query:String,limit:Int=20):List<Pair<CatalogTrip,CatalogRoute>> {
+        val q = query.trim()
+        if (q.isEmpty() || limit <= 0) return emptyList()
+        return snapshot.trips.asSequence()
+            .mapNotNull { trip -> routesByProviderAndId[trip.providerId to trip.routeId]?.let { trip to it } }
+            .filter { (trip, route) ->
+                trip.id.contains(q, true) || trip.departure.contains(q, true) ||
+                    route.shortName.contains(q, true) || route.direction.contains(q, true)
+            }
+            .distinctBy { (trip, _) -> trip.providerId to trip.id }
+            .take(limit)
+            .toList()
+    }
+
+    // A GTFS route ID is only unique within one provider. Legacy callers lacking
+    // provider context must not accidentally return trips from two transit feeds.
+    fun tripsForRoute(routeId: String): List<CatalogTrip> {
+        val providers = snapshot.routes.asSequence()
+            .filter { it.id == routeId }
+            .map { it.providerId }
+            .distinct()
+            .take(2)
+            .toList()
+        return if (providers.size == 1) tripsForRoute(providers.single(), routeId) else emptyList()
+    }
+
+    fun tripsForRoute(providerId: String, routeId: String): List<CatalogTrip> {
+        if (providerId.isBlank() || routeId.isBlank() ||
+            (providerId to routeId) !in routesByProviderAndId
+        ) return emptyList()
+        return snapshot.trips.filter { it.providerId == providerId && it.routeId == routeId }
+    }
+    /**
+     * GTFS stop IDs are provider-local. A route must match the selected origin
+     * and destination in the same provider, not just two coincidentally equal IDs.
+     * Cross-provider travel requires an explicit transfer graph, which this
+     * direct-route catalog does not implement.
+     */
+    fun routesServing(originStop: CatalogStop, destinationStop: CatalogStop): List<CatalogRoute> {
+        if (originStop.providerId.isBlank() || originStop.providerId != destinationStop.providerId ||
+            originStop.id.isBlank() || destinationStop.id.isBlank()
+        ) return emptyList()
+        return snapshot.routes.filter { route ->
+            if (route.providerId != originStop.providerId) return@filter false
+            val boarding = route.stopIds.indexOf(originStop.id)
+            // A loop may revisit the alighting stop after boarding.
+            val alighting = route.stopIds.lastIndexOf(destinationStop.id)
+            boarding >= 0 && alighting > boarding
+        }
+    }
+
+    fun nearestStops(latitude:Double,longitude:Double,limit:Int=5):List<NearbyStop> {
+        // Bad GPS/provider coordinates must not crash distance rounding or reach map UI.
+        if (limit <= 0 || !latitude.isFinite() || latitude !in -90.0..90.0 ||
+            !longitude.isFinite() || longitude !in -180.0..180.0
+        ) return emptyList()
+        return NearbyStationCanonicalizer.canonicalize(
             latitude = latitude,
             longitude = longitude,
-            candidates = snapshot.stops.map { stop ->
+            candidates = snapshot.stops.asSequence()
+                .filter { stop ->
+                    stop.latitude.isFinite() && stop.latitude in -90.0..90.0 &&
+                        stop.longitude.isFinite() && stop.longitude in -180.0..180.0
+                }
+                .map { stop ->
                 NearbyStop(
                     stop = stop,
                     distanceMeters = haversineMeters(
@@ -65,9 +141,12 @@ class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
                         stop.longitude,
                     ),
                 )
-            },
+            }
+                .toList(),
             limit = limit,
         )
+    }
+
     private fun stationKey(stop: CatalogStop): String {
         stop.parentStationId?.trim()?.takeIf { it.isNotEmpty() }?.let { return "parent:$it" }
         val normalizedName = stop.name
@@ -90,5 +169,5 @@ class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
 
     fun provider(id:String)=snapshot.providers.firstOrNull{it.id==id}
     fun isStale()=snapshot.stale
-    private fun haversineMeters(lat1:Double,lon1:Double,lat2:Double,lon2:Double):Double { val r=6_371_000.0; val p1=Math.toRadians(lat1); val p2=Math.toRadians(lat2); val dp=Math.toRadians(lat2-lat1); val dl=Math.toRadians(lon2-lon1); val a=sin(dp/2).pow(2)+cos(p1)*cos(p2)*sin(dl/2).pow(2); return 2*r*atan2(sqrt(a),sqrt(1-a)) }
+    private fun haversineMeters(lat1:Double,lon1:Double,lat2:Double,lon2:Double):Double { val r=6_371_000.0; val p1=Math.toRadians(lat1); val p2=Math.toRadians(lat2); val dp=Math.toRadians(lat2-lat1); val dl=Math.toRadians(lon2-lon1); val a=(sin(dp/2).pow(2)+cos(p1)*cos(p2)*sin(dl/2).pow(2)).coerceIn(0.0,1.0); return 2*r*atan2(sqrt(a),sqrt(1-a)) }
 }

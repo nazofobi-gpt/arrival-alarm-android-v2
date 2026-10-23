@@ -9,6 +9,11 @@ import java.util.TimeZone
 import kotlin.math.abs
 import kotlin.math.ceil
 
+/** Reject untrusted GPS/map coordinates before either local nearest-stop or live routing. */
+internal fun validTransitJourneyCoordinates(latitude: Double, longitude: Double): Boolean =
+    latitude.isFinite() && longitude.isFinite() &&
+        latitude in -90.0..90.0 && longitude in -180.0..180.0
+
 sealed interface LocalStaticJourneyOutcome {
     data class Results(val options: List<RouteOption>) : LocalStaticJourneyOutcome
     data object SameOrigin : LocalStaticJourneyOutcome
@@ -94,6 +99,8 @@ internal class StaticRouteOptionMapper(
             stops = routeStops,
             refreshToken = null,
             sourceUpdatedAtEpochSeconds = sourceUpdatedAtEpochSeconds,
+            departureEpochMillis = journey.legs.firstOrNull()?.departureEpochMillis,
+            arrivalEpochMillis = journey.arrivalEpochMillis,
         )
     }
 
@@ -107,8 +114,16 @@ internal class StaticRouteOptionMapper(
             endpoint(leg.toStopId, arrivalMillis = leg.arrivalEpochMillis),
         )
         val (fromIndex, toIndex, shiftMillis) = pair
+        // A circular journey may revisit one stop hundreds of times. Reuse
+        // stop metadata within this leg instead of repeating repository reads.
+        // containsKey also caches absent stops (null), unlike getOrPut.
+        val stopsById = HashMap<String, GtfsScheduleStop?>()
         return stopTimes.subList(fromIndex, toIndex + 1).map { stopTime ->
-            val stop = data.stop(stopTime.stopId)
+            val stop = if (stopsById.containsKey(stopTime.stopId)) {
+                stopsById[stopTime.stopId]
+            } else {
+                data.stop(stopTime.stopId).also { stopsById[stopTime.stopId] = it }
+            }
             RouteStop(
                 id = stopTime.stopId,
                 name = stop?.name ?: stopTime.stopId,
@@ -235,6 +250,27 @@ internal class StaticRouteOptionMapper(
     }
 }
 
+/** Calendar-day candidates for service selection; use civil days, not fixed 24-hour offsets
+ * (which would drift across Europe/Berlin daylight-saving transitions).
+ * Yesterday retains GTFS 24+ hour trips; tomorrow captures departures after midnight.
+ */
+internal fun staticRoutingServiceDates(epochMillis: Long, timeZone: TimeZone): List<GtfsServiceDate> =
+    (-1..1).map { offset ->
+        val calendar = GregorianCalendar(timeZone).apply {
+            timeInMillis = epochMillis
+            add(Calendar.DAY_OF_MONTH, offset)
+        }
+        GtfsServiceDate(
+            year = calendar.get(Calendar.YEAR),
+            month = calendar.get(Calendar.MONTH) + 1,
+            day = calendar.get(Calendar.DAY_OF_MONTH),
+        )
+    }
+
+/** Only requested positive route-option limits may initiate timetable routing. */
+internal fun boundedStaticJourneyOptionLimit(requested: Int): Int =
+    requested.coerceIn(0, 6)
+
 class ProductionStaticJourneyPlanner(
     private val index: NationwideTransitIndex,
     agencyTimeZone: TimeZone = TimeZone.getTimeZone("Europe/Berlin"),
@@ -261,8 +297,12 @@ class ProductionStaticJourneyPlanner(
         destination: MapPoint,
         limit: Int = 3,
     ): LocalStaticJourneyOutcome {
+        if (!validTransitJourneyCoordinates(origin.latitude, origin.longitude) ||
+            !validTransitJourneyCoordinates(destination.latitude, destination.longitude)
+        ) return LocalStaticJourneyOutcome.NoPath
+        val boundedLimit = boundedStaticJourneyOptionLimit(limit)
+        if (boundedLimit == 0) return LocalStaticJourneyOutcome.NoPath
         if (!index.isReady()) return LocalStaticJourneyOutcome.Unavailable
-        val boundedLimit = limit.coerceIn(1, 6)
         val originNearby = index.nearest(
             origin.latitude,
             origin.longitude,
@@ -346,20 +386,5 @@ class ProductionStaticJourneyPlanner(
         ceil(distanceMeters.coerceAtLeast(0) / walkingMetersPerSecond).toInt()
 
     private fun serviceDates(epochMillis: Long): List<GtfsServiceDate> =
-        listOf(
-            serviceDate(epochMillis, dayOffset = -1),
-            serviceDate(epochMillis),
-        )
-
-    private fun serviceDate(epochMillis: Long, dayOffset: Int = 0): GtfsServiceDate {
-        val calendar = GregorianCalendar(timeZone).apply {
-            timeInMillis = epochMillis
-            add(Calendar.DAY_OF_MONTH, dayOffset)
-        }
-        return GtfsServiceDate(
-            year = calendar.get(Calendar.YEAR),
-            month = calendar.get(Calendar.MONTH) + 1,
-            day = calendar.get(Calendar.DAY_OF_MONTH),
-        )
-    }
+        staticRoutingServiceDates(epochMillis, timeZone)
 }

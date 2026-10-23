@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="gtfs_confirmed_planned_stops_until_alarm">Planned stops from boarding to alarm target: %1$d</string>
+</resources>

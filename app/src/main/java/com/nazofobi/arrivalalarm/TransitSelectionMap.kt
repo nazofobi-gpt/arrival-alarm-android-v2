@@ -22,11 +22,14 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.roundToInt
 import org.maplibre.android.MapLibre
 import org.maplibre.android.annotations.Marker
 import org.maplibre.android.annotations.MarkerOptions
 import org.maplibre.android.camera.CameraPosition
+import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
@@ -130,7 +133,11 @@ fun TransitSelectionMap(
         readyMap.clear()
         markerStops.clear()
 
-        currentNearby.take(12).forEach { candidate ->
+        currentNearby.filter { candidate ->
+            isRenderableMapPoint(
+                MapPoint(candidate.stop.latitude, candidate.stop.longitude, candidate.stop.name)
+            )
+        }.take(12).forEach { candidate ->
             val marker = readyMap.addMarker(
                 MarkerOptions()
                     .position(LatLng(candidate.stop.latitude, candidate.stop.longitude))
@@ -139,14 +146,14 @@ fun TransitSelectionMap(
             markerStops[marker.id] = candidate.stop
         }
 
-        origin?.let { point ->
+        origin?.takeIf(::isRenderableMapPoint)?.let { point ->
             readyMap.addMarker(
                 MarkerOptions()
                     .position(LatLng(point.latitude, point.longitude))
                     .title(point.label)
             )
         }
-        destination?.let { point ->
+        destination?.takeIf(::isRenderableMapPoint)?.let { point ->
             readyMap.addMarker(
                 MarkerOptions()
                     .position(LatLng(point.latitude, point.longitude))
@@ -154,10 +161,35 @@ fun TransitSelectionMap(
             )
         }
 
-        readyMap.cameraPosition = CameraPosition.Builder()
-            .target(LatLng(center.latitude, center.longitude))
-            .zoom(if (origin == null && destination == null) 5.5 else 13.0)
-            .build()
+        // Framing only the origin at a fixed zoom hides distant destinations.
+        // Fit actual user-selected endpoints while keeping the map optional.
+        val cameraTargets = selectionMapCameraTargets(center, origin, destination)
+        when (cameraTargets.size) {
+            0 -> Unit // Ignore invalid coordinates instead of crashing MapLibre.
+            1 -> {
+                val point = cameraTargets.single()
+                readyMap.cameraPosition = CameraPosition.Builder()
+                    .target(LatLng(point.latitude, point.longitude))
+                    .zoom(if (origin == null && destination == null) 5.5 else 13.0)
+                    .build()
+            }
+            else -> {
+                val boundsBuilder = LatLngBounds.Builder()
+                cameraTargets.forEach { point ->
+                    boundsBuilder.include(LatLng(point.latitude, point.longitude))
+                }
+                val bounds = boundsBuilder.build()
+                val padding = (40f * mapView.resources.displayMetrics.density).roundToInt()
+                // Bounds updates need a measured MapView; styles may finish early.
+                mapView.post {
+                    if (!destroyed.get() && map === readyMap && styleReady &&
+                        mapView.width > 0 && mapView.height > 0
+                    ) {
+                        readyMap.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, padding))
+                    }
+                }
+            }
+        }
     }
 
     AndroidView(

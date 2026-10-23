@@ -48,7 +48,8 @@ object ConnectorJsonCodec {
                     ConnectorQueuedCommand(
                         commandId = envelope.requiredNonBlank("command_id"),
                         expectedStateVersion = envelope.getLong("expected_state_version"),
-                        userConfirmed = envelope.optBoolean("user_confirmed", false),
+                        // Consent is security-sensitive: a string like "true" is not user approval.
+                        userConfirmed = envelope.opt("user_confirmed") == true,
                         queuedAtEpochSeconds = if (envelope.has("queued_at_epoch_seconds")) {
                             envelope.getLong("queued_at_epoch_seconds")
                         } else {

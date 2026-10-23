@@ -3,8 +3,8 @@ package com.nazofobi.arrivalalarm
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.location.Location
 import android.location.LocationManager
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
 
 /** Production device-location adapter. Never fabricates coordinates when permission/provider data is absent. */
@@ -32,25 +32,39 @@ class AndroidDeviceLocation(private val context: Context) {
         ) == PackageManager.PERMISSION_GRANTED
         if (!fineGranted && !coarseGranted) return null
 
-        val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        return manager.getProviders(true)
-            .mapNotNull { provider ->
-                try {
-                    manager.getLastKnownLocation(provider)
-                } catch (_: SecurityException) {
-                    null
+        val manager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+            ?: return null
+        val providers = try {
+            manager.getProviders(true)
+        } catch (_: SecurityException) {
+            return null
+        }
+        val candidates = providers.mapNotNull { provider ->
+            try {
+                manager.getLastKnownLocation(provider)?.let { location ->
+                    DeviceLocationCandidate(
+                        latitude = location.latitude,
+                        longitude = location.longitude,
+                        accuracyMeters = location.accuracy.takeIf { location.hasAccuracy() },
+                        fixElapsedRealtimeNanos = location.elapsedRealtimeNanos,
+                        observedAtMillis = location.time,
+                        provider = location.provider ?: provider,
+                    )
                 }
+            } catch (_: SecurityException) {
+                null // Permission may have been revoked during the provider read.
+            } catch (_: IllegalArgumentException) {
+                null // A provider may disappear between enumeration and lookup.
             }
-            .filter { it.latitude.isFinite() && it.longitude.isFinite() }
-            .maxWithOrNull(compareBy<Location> { it.time }.thenBy { -it.accuracy })
-            ?.let { location ->
-                Fix(
-                    latitude = location.latitude,
-                    longitude = location.longitude,
-                    accuracyMeters = location.accuracy,
-                    observedAtMillis = location.time,
-                    provider = location.provider ?: "unknown",
-                )
-            }
+        }
+        val best = DeviceLastKnownFixPolicy.select(candidates, SystemClock.elapsedRealtimeNanos())
+            ?: return null
+        return Fix(
+            latitude = best.latitude,
+            longitude = best.longitude,
+            accuracyMeters = best.accuracyMeters!!,
+            observedAtMillis = best.observedAtMillis,
+            provider = best.provider,
+        )
     }
 }
