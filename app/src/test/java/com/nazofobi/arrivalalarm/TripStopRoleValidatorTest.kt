@@ -3,6 +3,7 @@ package com.nazofobi.arrivalalarm
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Locale
 
 class TripStopRoleValidatorTest {
     private val identity = GtfsTripInstanceIdentity(
@@ -15,7 +16,9 @@ class TripStopRoleValidatorTest {
     private fun stop(sequence: Int, id: String) = GtfsTripDetailStop(
         stopSequence = sequence, stopId = id, name = id,
         parentStationId = null, platformCode = null, wheelchairBoarding = null,
-        scheduledArrival = "08:00:00", scheduledDeparture = "08:01:00",
+        // Fixture clocks must follow physical stop order, not merely sequence IDs.
+        scheduledArrival = String.format(Locale.ROOT, "%02d:%02d:00", 8 + sequence / 60, sequence % 60),
+        scheduledDeparture = String.format(Locale.ROOT, "%02d:%02d:30", 8 + sequence / 60, sequence % 60),
         latitude = 52.0, longitude = 8.0,
         pickupType = null, dropOffType = null,
     )
@@ -151,7 +154,10 @@ class TripStopRoleValidatorTest {
             rejected(broken, TripStopRoles(2, 13, 13)),
         )
         val overnight = detail.copy(stops = detail.stops.map {
-            it.copy(scheduledArrival = "24:10:00", scheduledDeparture = "24:11:00")
+            it.copy(
+                scheduledArrival = String.format(Locale.ROOT, "24:%02d:00", it.stopSequence),
+                scheduledDeparture = String.format(Locale.ROOT, "24:%02d:30", it.stopSequence),
+            )
         })
         assertTrue(
             TripStopRoleValidator.validate(overnight, TripStopRoles(2, 13, 13))
@@ -178,12 +184,47 @@ class TripStopRoleValidatorTest {
 
         // GTFS uses service-day seconds, not a naive 00:00 clock reset.
         val overnight = detail.copy(stops = detail.stops.map { stop ->
-            if (stop.stopSequence == 7) {
-                stop.copy(scheduledArrival = "23:59:00", scheduledDeparture = "24:02:00")
-            } else stop
+            when (stop.stopSequence) {
+                7 -> stop.copy(scheduledArrival = "23:59:00", scheduledDeparture = "24:02:00")
+                13 -> stop.copy(scheduledArrival = "24:10:00", scheduledDeparture = "24:11:00")
+                else -> stop
+            }
         })
         assertTrue(
             TripStopRoleValidator.validate(overnight, TripStopRoles(2, 13, 7))
+                is TripStopRoleResult.Accepted,
+        )
+    }
+
+    @Test fun selectedStopClocksMustProgressFromBoardingThroughAlarmToDestination() {
+        // A direct callback may provide stop-sequence order but impossible clock order.
+        val departureAfterAlarm = detail.copy(stops = detail.stops.map {
+            if (it.stopSequence == 2) it.copy(scheduledDeparture = "09:00:00") else it
+        })
+        assertEquals(
+            TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME,
+            rejected(departureAfterAlarm, TripStopRoles(2, 13, 7)),
+        )
+        val alarmAfterDestination = detail.copy(stops = detail.stops.map {
+            if (it.stopSequence == 7) {
+                it.copy(scheduledArrival = "08:59:00", scheduledDeparture = "09:00:00")
+            } else it
+        })
+        assertEquals(
+            TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME,
+            rejected(alarmAfterDestination, TripStopRoles(2, 13, 7)),
+        )
+
+        // Overnight GTFS service clocks are not modulo-24 wall clock values.
+        val midnightTrip = detail.copy(stops = detail.stops.map {
+            when (it.stopSequence) {
+                2 -> it.copy(scheduledArrival = "23:50:00", scheduledDeparture = "23:51:00")
+                7 -> it.copy(scheduledArrival = "24:02:00", scheduledDeparture = "24:03:00")
+                else -> it.copy(scheduledArrival = "24:20:00", scheduledDeparture = "24:21:00")
+            }
+        })
+        assertTrue(
+            TripStopRoleValidator.validate(midnightTrip, TripStopRoles(2, 13, 7))
                 is TripStopRoleResult.Accepted,
         )
     }
