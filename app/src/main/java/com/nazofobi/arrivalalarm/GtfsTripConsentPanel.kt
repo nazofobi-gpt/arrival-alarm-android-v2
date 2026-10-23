@@ -36,6 +36,7 @@ internal fun GtfsTripConsentPanel(
     onConfirm: (GtfsSelectedTrip) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    completionRevision: Long = 0L,
 ) {
     val boarding = preview.boarding
     val detail = preview.detail
@@ -50,12 +51,19 @@ internal fun GtfsTripConsentPanel(
         // Once the parent's busy cycle ends, failed saves can be retried.
         var confirmationPending by remember { mutableStateOf(false) }
         var busySeenAfterConfirmation by remember { mutableStateOf(false) }
-        LaunchedEffect(busy, confirmationPending) {
-            if (busy && confirmationPending) {
-                busySeenAfterConfirmation = true
-            } else if (!busy && busySeenAfterConfirmation) {
-                confirmationPending = false
-                busySeenAfterConfirmation = false
+        var startedAtCompletionRevision by remember { mutableStateOf(completionRevision) }
+        // Fast IO can finish before Compose observes busy=true. A parent completion
+        // revision releases the latch without permitting a second in-flight save.
+        LaunchedEffect(busy, confirmationPending, completionRevision) {
+            if (confirmationPending) {
+                if (busy) {
+                    busySeenAfterConfirmation = true
+                } else if (busySeenAfterConfirmation ||
+                    completionRevision != startedAtCompletionRevision
+                ) {
+                    confirmationPending = false
+                    busySeenAfterConfirmation = false
+                }
             }
         }
 
@@ -170,6 +178,7 @@ internal fun GtfsTripConsentPanel(
                         )) {
                             is GtfsTripConsentDraft.Ready -> {
                                 if (!confirmationPending) {
+                                    startedAtCompletionRevision = completionRevision
                                     confirmationPending = true
                                     onConfirm(draft.selection)
                                 }
