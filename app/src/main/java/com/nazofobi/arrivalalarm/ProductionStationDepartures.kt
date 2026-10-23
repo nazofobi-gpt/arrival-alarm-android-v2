@@ -311,7 +311,9 @@ internal class ProductionRealtimeStationOverlay(
         stopId: String,
         planned: List<Departure>,
     ): ProductionStationDeparturesResult {
-        if (planned.isEmpty()) return ProductionStationDeparturesResult(emptyList())
+        // Even with no scheduled departures, an exact stop-only fresh service alert
+        // can still be relevant. Route/trip-scoped alerts remain gated by the board.
+        if (stopId.isBlank()) return ProductionStationDeparturesResult(planned)
         val overlay = try {
             // A cancelled lookup must never begin provider I/O or run matching.
             if (Thread.currentThread().isInterrupted) {
