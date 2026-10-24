@@ -64,6 +64,11 @@ class RouteOfflineEvidenceTest {
         assertFalse(routeHasTrustedRealtime(routeOffline = true,
             suppliedRealtime = routeHasUsableRealtimeDelta("08:42", "08:15")))
     }
+    @Test fun incidentalClockWhitespaceDoesNotClaimRealtimeDelay() {
+        assertFalse(routeHasUsableRealtimeDelta(" 08:15 ", "\t08:15"))
+        assertTrue(routeHasUsableRealtimeDelta("08:16 ", " 08:15"))
+    }
+
     @Test fun blankRealtimePlatformNeverClaimsARealtimeBadge() {
         for (missing in listOf<String?>(null, "", " ", "\t")) {
             assertFalse(routeHasTrustedRealtimePlatform(routeOffline = false, actualPlatform = missing))
