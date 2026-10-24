@@ -157,6 +157,9 @@ class GtfsScheduleRepository(
     ): List<GtfsScheduleNearbyStop> {
         if (stopId.isBlank() || radiusMeters <= 0 || limit <= 0) return emptyList()
         val origin = stop(stopId) ?: return emptyList()
+        // A corrupt imported stop is not a valid geospatial query anchor.
+        // Keep invalid coordinates out of SQLite ranges and walking estimates.
+        if (!validTransitJourneyCoordinates(origin.latitude, origin.longitude)) return emptyList()
         val boundedRadius = radiusMeters.coerceAtMost(MAX_NEARBY_RADIUS_METERS)
         val boundedLimit = limit.coerceAtMost(MAX_NEARBY_STOPS)
         val latDelta = boundedRadius / 111_320.0
@@ -196,6 +199,9 @@ class GtfsScheduleRepository(
             buildList {
                 while (cursor.moveToNext()) {
                     val candidate = cursor.toStop()
+                    // A malformed stop must not become a plausible nearby transfer
+                    // merely because it happens to fall inside the bounding box.
+                    if (!validTransitJourneyCoordinates(candidate.latitude, candidate.longitude)) continue
                     val distance = distanceMeters(origin, candidate)
                     if (distance <= boundedRadius) add(GtfsScheduleNearbyStop(candidate, distance))
                 }
