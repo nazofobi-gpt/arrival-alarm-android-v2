@@ -27,6 +27,16 @@ data class RouteStop(
     val plannedPlatform: String? = null,
 )
 
+/**
+ * Provider-backed walking access/egress evidence. These fields describe only a
+ * stop and walking duration, not a mapped pedestrian path or transfer walk.
+ */
+data class RouteWalkingLegEvidence(
+    val stopId: String,
+    val stopName: String,
+    val walkSeconds: Int,
+)
+
 data class RouteOption(
     val id: String,
     val origin: MapPoint,
@@ -44,6 +54,9 @@ data class RouteOption(
     val realtime: RouteRealtimeInfo? = null,
     val departureEpochMillis: Long? = null,
     val arrivalEpochMillis: Long? = null,
+    // Null means this provider did not supply separately verified walking legs.
+    val accessWalking: RouteWalkingLegEvidence? = null,
+    val egressWalking: RouteWalkingLegEvidence? = null,
 )
 
 interface GeocodeProvider { fun search(query: String): List<MapPoint> }
