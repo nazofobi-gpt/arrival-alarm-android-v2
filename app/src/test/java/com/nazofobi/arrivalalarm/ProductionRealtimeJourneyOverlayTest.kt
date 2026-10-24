@@ -262,7 +262,10 @@ class ProductionRealtimeJourneyOverlayTest {
 
     @Test
     fun invalidAbsoluteRealtimeEpochsUseScheduledDelayInsteadOfBogusDates() {
-        for (invalidEpoch in listOf(0L, -1L, Long.MIN_VALUE, Long.MAX_VALUE)) {
+        for (invalidEpoch in listOf(
+            0L, -1L, Long.MIN_VALUE, Long.MAX_VALUE,
+            1L, 946_684_799L, 253_402_300_800L,
+        )) {
             val matched = GermanyRealtimeOverlayResult.Matched(
                 tripOverlays = listOf(
                     GermanyRealtimeTripOverlay(

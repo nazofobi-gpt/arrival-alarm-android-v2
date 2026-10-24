@@ -213,7 +213,9 @@ internal class ProductionRealtimeJourneyOverlay(
     ): String? {
         // A GTFS-RT Unix timestamp must be positive and safe to convert to millis.
         // Otherwise use the scheduled time plus delay instead of a bogus date.
-        epochSeconds?.takeIf { it > 0L && it <= Long.MAX_VALUE / 1_000L }
+        epochSeconds?.takeIf {
+            it in MIN_TRUSTED_RT_EPOCH_SECONDS..MAX_TRUSTED_RT_EPOCH_SECONDS
+        }
             ?.let { return iso(it * 1_000L) }
         if (plannedIso == null || delaySeconds == null) return null
         val plannedMillis = parseIsoMillis(plannedIso) ?: return null
@@ -259,6 +261,9 @@ internal class ProductionRealtimeJourneyOverlay(
         provenance.feedTimestampEpochSeconds ?: provenance.fetchedAtEpochSeconds
 
     private companion object {
+        // Match the stop-progress trust window; never display a bogus 1970/future ETA.
+        const val MIN_TRUSTED_RT_EPOCH_SECONDS = 946_684_800L
+        const val MAX_TRUSTED_RT_EPOCH_SECONDS = 253_402_300_799L
         const val ISO_PATTERN = "yyyy-MM-dd'T'HH:mm:ssZ"
     }
 }
