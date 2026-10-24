@@ -23,3 +23,7 @@ internal fun routeHasUsableRealtimeDelta(actual: String?, planned: String?): Boo
 
 internal fun routeHasTrustedRealtime(routeOffline: Boolean, suppliedRealtime: Boolean): Boolean =
     !routeOffline && suppliedRealtime
+
+/** A missing/blank provider platform must never receive a live platform badge. */
+internal fun routeHasTrustedRealtimePlatform(routeOffline: Boolean, actualPlatform: String?): Boolean =
+    routeHasTrustedRealtime(routeOffline, !actualPlatform.isNullOrBlank())
