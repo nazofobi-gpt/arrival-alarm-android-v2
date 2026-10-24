@@ -239,3 +239,22 @@ test("sync connector rejects invalid freshness TTL and future gateway heartbeats
     /stale_device_state/
   );
 });
+
+test("sync connector rejects numeric-looking strings and boolean freshness fields", () => {
+  const store = new InMemoryGatewayStore({ nowEpochSeconds: () => 1000 });
+  const service = new GatewayService(store, { nowEpochSeconds: () => 1000 });
+  store.putSnapshot("user-1", snapshot({ active_trip: { progress_updated_at_epoch_seconds: "990" } }));
+  assert.equal(service.getTripProgress("user-1").progress_stale, true);
+
+  for (const ttl of ["120", true]) {
+    store.putSnapshot("user-1", snapshot({ stale_after_seconds: ttl }));
+    assert.equal(service.getCurrentJourney("user-1").stale, true);
+    assert.throws(
+      () => service.queueWrite("user-1", { type: "cancel_arrival_alarm", idempotency_key: "bad-type" }, 7),
+      /stale_device_state/
+    );
+  }
+  assert.equal(store.pendingCommands("user-1").length, 0);
+  store.putSnapshot("user-1", snapshot({ stale_after_seconds: 120 }));
+  assert.equal(service.getCurrentJourney("user-1").stale, false);
+});
