@@ -40,6 +40,25 @@ class TripStopRoleValidatorTest {
         assertEquals("Transfer", roles.alarmTarget.stopId)
     }
 
+    @Test fun blankTripIdentityCannotAuthorizeBoardingOrAlarmConsent() {
+        // A callback-provided detail may bypass the SelectedGtfsTripStore validator.
+        // Reject unresolved provider IDs even when stops and service times are valid.
+        for (badIdentity in listOf(
+            identity.copy(tripId = ""),
+            identity.copy(serviceId = "  "),
+            identity.copy(routeId = ""),
+        )) {
+            assertEquals(
+                TripStopRoleProblem.INVALID_STOP_SEQUENCE,
+                rejected(detail.copy(identity = badIdentity), TripStopRoles(2, 13, 7)),
+            )
+        }
+        assertTrue(
+            TripStopRoleValidator.validate(detail, TripStopRoles(2, 13, 7))
+                is TripStopRoleResult.Accepted,
+        )
+    }
+
     @Test fun loopTripIsSelectedBySequenceNotAmbiguousStopId() {
         val loop = detail.copy(
             stops = listOf(stop(2, "Lohne"), stop(7, "Lohne"), stop(13, "Achim"))
