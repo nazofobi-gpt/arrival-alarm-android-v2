@@ -28,4 +28,14 @@ class ActiveJourneyLocationProviderSelectionTest {
             listOf("passive", "fused"),
         ))
     }
+
+    @Test fun rankingIgnoresOEMWhitespaceAndCasingButPreservesProviderName() {
+        assertEquals(" GPS ", ActiveJourneyLocationProviderSelection.choose(
+            listOf(" passive ", " Network ", " GPS "),
+        ))
+    }
+
+    @Test fun normalizedPassiveProviderIsStillRejected() {
+        assertNull(ActiveJourneyLocationProviderSelection.choose(listOf(" PASSIVE ")))
+    }
 }
