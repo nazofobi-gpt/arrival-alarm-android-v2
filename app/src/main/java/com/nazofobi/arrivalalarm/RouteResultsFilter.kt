@@ -28,11 +28,12 @@ internal data class RouteResultsFilter(
                 option.destination.longitude.isFinite() &&
                 option.destination.longitude in -180.0..180.0
         }.distinct()
-        // The detail view resolves the selected route by ID. If two different
-        // itineraries claim that ID, selecting either card could open the other.
-        // Exact duplicate rows are harmless, but conflicting IDs fail closed.
-        val ambiguousIds = usable.groupingBy { it.id }.eachCount()
-            .filterValues { count -> count > 1 }.keys
+        // Detail selection resolves against the original candidates by ID.
+        // Include rejected/nonphysical candidates when identifying collisions:
+        // a discarded first match could otherwise shadow a valid-looking card.
+        // Exact duplicate provider rows remain safe.
+        val ambiguousIds = options.groupBy { it.id }
+            .filterValues { candidates -> candidates.distinct().size > 1 }.keys
         val filtered = usable.filter { option ->
             option.id !in ambiguousIds &&
                 (!directOnly || option.transfers == 0) &&
