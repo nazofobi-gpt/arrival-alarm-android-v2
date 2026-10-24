@@ -58,12 +58,17 @@ data class TransitExperienceSnapshot(
     val isOfflineCache: Boolean
 )
 
-class TransitExperienceEngine(private val capabilities: TransitProviderCapabilities) {
+class TransitExperienceEngine(
+    private val capabilities: TransitProviderCapabilities,
+    private val isOfflineCache: Boolean = false,
+) {
     fun departureBoard(departures: List<Departure>, nowEpochSeconds: Long, limit: Int = 8): List<Departure> =
         // An unset device clock cannot establish which scheduled services are upcoming.
         if (!nowEpochSeconds.isDisplayableDepartureEpochSeconds()) emptyList()
         else departures.asSequence()
-            .map { if (capabilities.realtimeDepartures) it else it.copy(realtimeEpochSeconds = null) }
+            // An offline cache cannot prove that an old realtime estimate is still valid.
+            // Use scheduled evidence for ordering, display, and alternate departures.
+            .map { if (capabilities.realtimeDepartures && !isOfflineCache) it else it.copy(realtimeEpochSeconds = null) }
             .filterNot { it.cancelled }
             // A selectable service must have a nonblank trip ID, and attached
             // GTFS proof must agree with its visible trip and route identity.
