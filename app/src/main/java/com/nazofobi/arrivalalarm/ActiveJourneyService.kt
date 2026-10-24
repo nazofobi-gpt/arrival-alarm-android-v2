@@ -243,7 +243,7 @@ class ActiveJourneyService : Service(), LocationListener {
             distanceMeters == null -> "Konum takip ediliyor"
             else -> "Hedefe yaklaşık " + distanceMeters.roundToInt() + " m kaldı"
         }
-        return notificationBuilder(TRACKING_CHANNEL_ID)
+        return JourneyLiveUpdateNotification.decorateOngoingTracking(notificationBuilder(TRACKING_CHANNEL_ID))
             .setContentTitle("Varış alarmı etkin")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_dialog_map)
