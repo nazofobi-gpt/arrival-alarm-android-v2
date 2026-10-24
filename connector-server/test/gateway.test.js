@@ -201,3 +201,41 @@ test("queued command is pinned to the device that published current state", () =
     /device_mismatch/
   );
 });
+
+
+test("sync connector fails closed on future or malformed trip progress timestamps", () => {
+  const store = new InMemoryGatewayStore({ nowEpochSeconds: () => 1000 });
+  const service = new GatewayService(store, { nowEpochSeconds: () => 1000 });
+  for (const timestamp of [1001, "invalid-epoch", 0]) {
+    store.putSnapshot(
+      "user-1",
+      snapshot({ active_trip: { progress_updated_at_epoch_seconds: timestamp } })
+    );
+    const progress = service.getTripProgress("user-1");
+    assert.equal(progress.stale, false);
+    assert.equal(progress.progress_stale, true, String(timestamp));
+  }
+  store.putSnapshot(
+    "user-1",
+    snapshot({ active_trip: { progress_updated_at_epoch_seconds: 990 } })
+  );
+  assert.equal(service.getTripProgress("user-1").progress_stale, false);
+});
+
+test("sync connector rejects invalid freshness TTL and future gateway heartbeats", () => {
+  const store = new InMemoryGatewayStore({ nowEpochSeconds: () => 1000 });
+  const service = new GatewayService(store, { nowEpochSeconds: () => 1000 });
+  store.putSnapshot("user-1", snapshot({ stale_after_seconds: "invalid-ttl" }));
+  assert.equal(service.getCurrentJourney("user-1").stale, true);
+  assert.throws(
+    () => service.queueWrite("user-1", { type: "cancel_arrival_alarm", idempotency_key: "bad-ttl" }, 7),
+    /stale_device_state/
+  );
+  const clockBehind = new GatewayService(store, { nowEpochSeconds: () => 999 });
+  store.putSnapshot("user-1", snapshot());
+  assert.equal(clockBehind.getCurrentJourney("user-1").stale, true);
+  assert.throws(
+    () => clockBehind.queueWrite("user-1", { type: "cancel_arrival_alarm", idempotency_key: "future-heartbeat" }, 7),
+    /stale_device_state/
+  );
+});
