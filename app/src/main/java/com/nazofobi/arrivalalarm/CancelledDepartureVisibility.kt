@@ -17,7 +17,14 @@ internal fun upcomingCancelledDepartures(
     if (!nowEpochSeconds.isDisplayableDepartureEpochSeconds() || limit <= 0) return emptyList()
     return departures.asSequence()
     .filter {
-        it.cancelled && it.scheduledEpochSeconds.isDisplayableDepartureEpochSeconds() &&
+        // A cancelled service must be identifiable and its GTFS instance must not
+        // contradict the visible trip/route. Keep legacy entries with no instance.
+        it.cancelled && it.tripId.isNotBlank() &&
+            (it.gtfsInstance?.let { instance ->
+                instance.tripId == it.tripId &&
+                    (it.routeId == null || it.routeId == instance.routeId)
+            } != false) &&
+            it.scheduledEpochSeconds.isDisplayableDepartureEpochSeconds() &&
             it.scheduledEpochSeconds >= nowEpochSeconds
     }
     // Trip IDs and scheduled times can collide across routes and feeds.

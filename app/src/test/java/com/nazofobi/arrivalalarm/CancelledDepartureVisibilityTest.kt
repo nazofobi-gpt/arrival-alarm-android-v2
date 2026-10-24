@@ -175,4 +175,57 @@ class CancelledDepartureVisibilityTest {
         )
     }
 
+    @Test fun blankOrContradictoryTripIdentitiesCannotBecomeCancelledBoardFacts() {
+        val gtfsInstance = GtfsTripInstanceIdentity(
+            tripId = "verified-trip",
+            serviceDate = GtfsServiceDate.parse("20261020"),
+            serviceId = "weekday",
+            routeId = "route-5",
+            directionId = 0,
+        )
+        val validLegacy = cancelled("legacy-trip", 1_250L)
+        val validVerified = cancelled("verified-trip", 1_350L)
+            .copy(routeId = "route-5", gtfsInstance = gtfsInstance)
+        val malformed = listOf(
+            cancelled("", 1_050L),
+            cancelled("   ", 1_100L),
+            cancelled("other-trip", 1_150L).copy(gtfsInstance = gtfsInstance),
+        )
+
+        assertEquals(
+            listOf(validLegacy, validVerified),
+            upcomingCancelledDepartures(
+                malformed + validVerified + validLegacy,
+                nowEpochSeconds = 1_000L,
+            ),
+        )
+    }
+
+    @Test fun contradictoryGtfsRouteCannotAppearAsCancelledBoardFact() {
+        val instance = GtfsTripInstanceIdentity(
+            tripId = "shared-trip",
+            serviceDate = GtfsServiceDate.parse("20261020"),
+            serviceId = "weekday",
+            routeId = "route-actual",
+            directionId = 1,
+        )
+        val sameTripWrongRoute = cancelled("shared-trip", 1_100L).copy(
+            routeId = "route-other", gtfsInstance = instance,
+        )
+        val blankRoute = sameTripWrongRoute.copy(routeId = "")
+        val validRoute = sameTripWrongRoute.copy(routeId = "route-actual")
+        val unspecifiedVisibleRoute = validRoute.copy(routeId = null, scheduledEpochSeconds = 1_200L)
+        val oldFeedWithoutIdentity = cancelled("legacy-trip", 1_300L).copy(routeId = "legacy-route")
+
+        assertEquals(
+            listOf(validRoute, unspecifiedVisibleRoute, oldFeedWithoutIdentity),
+            upcomingCancelledDepartures(
+                listOf(sameTripWrongRoute, blankRoute, validRoute,
+                    unspecifiedVisibleRoute, oldFeedWithoutIdentity),
+                nowEpochSeconds = 1_000L,
+                limit = 5,
+            ),
+        )
+    }
+
 }
