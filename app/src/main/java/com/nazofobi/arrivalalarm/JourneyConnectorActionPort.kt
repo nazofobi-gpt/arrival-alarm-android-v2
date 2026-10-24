@@ -53,7 +53,15 @@ class JourneyConnectorActionPort(
 
     @Synchronized
     override fun setOrigin(point: MapPoint): ConnectorActionOutcome {
-        controller.selectStart(GeoPoint(point.latitude, point.longitude))
+        val expected = GeoPoint(point.latitude, point.longitude)
+        controller.selectStart(expected)
+        // The domain controller can reject invalid coordinates without changing
+        // the previous selection. Do not publish rejected connector metadata.
+        if (controller.state.phase != JourneyPhase.START_SELECTED ||
+            controller.state.start != expected || controller.state.error != null
+        ) {
+            return ConnectorActionOutcome(false, controller.state.error ?: "Başlangıç güncellenemedi")
+        }
         origin = point.toConnectorStop()
         destination = null
         selectedRoute = null
@@ -67,8 +75,13 @@ class JourneyConnectorActionPort(
         if (controller.state.start == null) {
             return ConnectorActionOutcome(false, "Önce başlangıç seçilmeli")
         }
-        controller.selectDestination(GeoPoint(point.latitude, point.longitude))
-        if (controller.state.phase != JourneyPhase.DESTINATION_SELECTED) {
+        val expected = GeoPoint(point.latitude, point.longitude)
+        controller.selectDestination(expected)
+        // A rejected destination can leave the old DESTINATION_SELECTED phase
+        // intact. Verify that this request actually became authoritative.
+        if (controller.state.phase != JourneyPhase.DESTINATION_SELECTED ||
+            controller.state.destination != expected || controller.state.error != null
+        ) {
             return ConnectorActionOutcome(false, controller.state.error ?: "Varış güncellenemedi")
         }
         destination = point.toConnectorStop()
@@ -112,6 +125,17 @@ class JourneyConnectorActionPort(
     @Synchronized
     override fun setBoardingStop(stop: ConnectorStopState): ConnectorActionOutcome {
         val trip = activeTrip ?: return ConnectorActionOutcome(false, "Önce sefer seçilmeli")
+        // Typed connector callers bypass the JSON decoder. Validate the same
+        // physical stop invariants at this last local mutation boundary.
+        val latitude = stop.latitude
+        val longitude = stop.longitude
+        if (stop.name.isBlank() ||
+            (latitude == null) != (longitude == null) ||
+            (latitude != null && (!latitude.isFinite() || latitude !in -90.0..90.0)) ||
+            (longitude != null && (!longitude.isFinite() || longitude !in -180.0..180.0))
+        ) {
+            return ConnectorActionOutcome(false, "Geçersiz biniş durağı")
+        }
         activeTrip = trip.copy(boardingStop = stop)
         markChanged()
         return ConnectorActionOutcome(true, "Biniş durağı güncellendi")

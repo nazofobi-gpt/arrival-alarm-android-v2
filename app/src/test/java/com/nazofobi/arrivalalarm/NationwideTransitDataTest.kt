@@ -11,6 +11,35 @@ import org.junit.Assert.fail
 import org.junit.Test
 
 class NationwideTransitDataTest {
+
+    @Test fun mergedStopSearchPreservesProvidersSharingTheSameStopId() {
+        val vbbStop = CatalogStop("shared", "vbb", "Central", 52.5200, 13.4050)
+        val mvvStop = CatalogStop("shared", "mvv", "Central", 48.1400, 11.5800)
+        val repeatedVbb = vbbStop.copy(name = "Duplicate feed record")
+        fun location(stop: CatalogStop) = TransitLocationResult(
+            key = providerScopedStopLocationKey(stop),
+            kind = TransitLocationKind.STOP,
+            label = stop.name,
+            latitude = stop.latitude,
+            longitude = stop.longitude,
+            stop = stop,
+        )
+
+        assertEquals("stop:vbb:shared", providerScopedStopLocationKey(vbbStop))
+        assertEquals("stop:mvv:shared", providerScopedStopLocationKey(mvvStop))
+        val merged = mergeTransitLocationResults(
+            local = listOf(location(vbbStop), location(repeatedVbb)),
+            live = listOf(location(mvvStop), location(vbbStop)),
+            limit = 4,
+        )
+        assertEquals(listOf(vbbStop, mvvStop), merged.map { it.stop })
+        assertEquals(2, merged.map { it.key }.toSet().size)
+        assertEquals(listOf(vbbStop), mergeTransitLocationResults(
+            listOf(location(vbbStop), location(mvvStop)), emptyList(), 1,
+        ).map { it.stop })
+        assertTrue(mergeTransitLocationResults(listOf(location(vbbStop)), emptyList(), 0).isEmpty())
+    }
+
     @Test fun csvParserHandlesQuotedCommaAndEscapedQuote() {
         val row = parseCsvLine("id,\"Berlin, Hauptbahnhof\",52.5,13.3,\"A \"\"quoted\"\" value\"")
         assertEquals("id", row[0])

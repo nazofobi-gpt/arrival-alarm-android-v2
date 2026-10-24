@@ -9,10 +9,16 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -44,6 +50,16 @@ fun RouteJourneyPanel(
     mode: RouteJourneyMode = RouteJourneyMode.RESULTS,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val preferences = remember(context) { ArrivalUiPreferences(context) }
+    var directOnly by rememberSaveable { mutableStateOf(preferences.loadDirectOnlyRoutes()) }
+    var fewerTransfersFirst by rememberSaveable {
+        mutableStateOf(preferences.loadFewerTransfersFirst())
+    }
+    var atMostOneTransfer by rememberSaveable {
+        mutableStateOf(preferences.loadAtMostOneTransfer())
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -118,7 +134,47 @@ fun RouteJourneyPanel(
                     }
                 }
 
-                routeOptions.take(3).forEachIndexed { index, option ->
+                val visibleOptions = RouteResultsFilter(
+                    directOnly = directOnly,
+                    fewerTransfersFirst = fewerTransfersFirst,
+                    maxTransfers = if (atMostOneTransfer) 1 else null,
+                ).apply(routeOptions)
+                FilterChip(
+                    selected = directOnly,
+                    onClick = {
+                        directOnly = !directOnly
+                        preferences.saveDirectOnlyRoutes(directOnly)
+                    },
+                    label = { Text(stringResource(R.string.route_direct_only_filter)) },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("route-direct-only-filter"),
+                )
+                FilterChip(
+                    selected = fewerTransfersFirst,
+                    onClick = {
+                        fewerTransfersFirst = !fewerTransfersFirst
+                        preferences.saveFewerTransfersFirst(fewerTransfersFirst)
+                    },
+                    label = { Text(stringResource(R.string.route_fewer_transfers_filter)) },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("route-fewer-transfers-filter"),
+                )
+
+                FilterChip(
+                    selected = atMostOneTransfer,
+                    onClick = {
+                        atMostOneTransfer = !atMostOneTransfer
+                        preferences.saveAtMostOneTransfer(atMostOneTransfer)
+                    },
+                    label = { Text(stringResource(R.string.route_at_most_one_transfer_filter)) },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("route-at-most-one-transfer-filter"),
+                )
+
+                visibleOptions.take(6).forEachIndexed { index, option ->
                     RouteOptionCard(
                         option = option,
                         selected = selectedRouteId == option.id,
@@ -128,9 +184,15 @@ fun RouteJourneyPanel(
                     )
                 }
 
-                if (!routeBusy && routeOptions.isEmpty()) {
+                if (!routeBusy && visibleOptions.isEmpty()) {
                     Text(
-                        text = routeStatus ?: stringResource(R.string.route_not_found),
+                        text = when {
+                            directOnly && routeOptions.isNotEmpty() ->
+                                stringResource(R.string.route_direct_only_empty)
+                            atMostOneTransfer && routeOptions.isNotEmpty() ->
+                                stringResource(R.string.route_at_most_one_transfer_empty)
+                            else -> routeStatus ?: stringResource(R.string.route_not_found)
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.testTag("route-results-empty"),
@@ -174,7 +236,7 @@ private fun RouteOptionCard(
     selectTestTag: String,
     modifier: Modifier = Modifier,
 ) {
-    val duration = routeDurationMinutes(option.departure, option.arrival)
+    val duration = routeDurationMinutes(option)
     val hasRealtime = option.stops.any(::hasRealtimeDelta)
     val realtimeLabel = when {
         option.realtime?.cancelledTripIds?.isNotEmpty() == true ->
@@ -267,7 +329,7 @@ private fun RouteOptionCard(
 
 @Composable
 private fun JourneyDetailCard(option: RouteOption) {
-    val duration = routeDurationMinutes(option.departure, option.arrival)
+    val duration = routeDurationMinutes(option)
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface,
@@ -318,8 +380,23 @@ private fun JourneyDetailCard(option: RouteOption) {
                     testTag = "journey-stop-destination",
                 )
             } else {
-                val visibleStops = option.stops.take(16)
-                visibleStops.forEachIndexed { index, stop ->
+                val expandedStops = remember(option.id) { mutableStateOf(false) }
+                val visibleStopIndices = journeyStopPreviewIndices(option.stops.size, expandedStops.value)
+                visibleStopIndices.forEachIndexed { visibleIndex, stopIndex ->
+                    if (visibleIndex > 0) {
+                        val hiddenCount = stopIndex - visibleStopIndices[visibleIndex - 1] - 1
+                        if (hiddenCount > 0) {
+                            Text(
+                                text = stringResource(R.string.journey_stops_hidden_count, hiddenCount),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.testTag("journey-stops-hidden"),
+                            )
+                            HorizontalDivider()
+                        }
+                    }
+                    val index = stopIndex
+                    val stop = option.stops[stopIndex]
                     val actual = stop.departure ?: stop.arrival
                     val planned = stop.plannedDeparture ?: stop.plannedArrival
                     val displayTime = routeClock(actual ?: planned)
@@ -371,8 +448,25 @@ private fun JourneyDetailCard(option: RouteOption) {
                             )
                         }
                     }
-                    if (index != visibleStops.lastIndex) {
+                    if (visibleIndex != visibleStopIndices.lastIndex) {
                         HorizontalDivider()
+                    }
+                }
+                if (option.stops.size > COLLAPSED_JOURNEY_STOP_LIMIT) {
+                    OutlinedButton(
+                        onClick = { expandedStops.value = !expandedStops.value },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("journey-stops-toggle"),
+                    ) {
+                        Text(
+                            if (expandedStops.value) {
+                                stringResource(R.string.journey_show_fewer_stops)
+                            } else {
+                                stringResource(R.string.journey_show_all_stops_count, option.stops.size)
+                            },
+                        )
                     }
                 }
             }
@@ -465,11 +559,36 @@ internal fun JourneyAlarmControls(
     }
 }
 
+/** Calendar-day-safe duration for scheduled trips; unknown dates fail closed. */
+internal fun routeDurationMinutes(option: RouteOption): Int? {
+    val departure = option.departureEpochMillis
+    val arrival = option.arrivalEpochMillis
+    if (departure != null || arrival != null) {
+        if (departure == null || arrival == null || arrival < departure) return null
+        val elapsedMillis = try {
+            Math.subtractExact(arrival, departure)
+        } catch (_: ArithmeticException) {
+            return null
+        }
+        val minutes = elapsedMillis / 60_000L
+        return minutes.takeIf { it <= Int.MAX_VALUE.toLong() }?.toInt()
+    }
+    return routeDurationMinutes(option.departure, option.arrival)
+}
+
 private fun routeDurationMinutes(departure: String, arrival: String): Int? {
     fun minutes(clock: String): Int? {
         val raw = clock.substringAfter('T', clock)
-        val hour = raw.take(2).toIntOrNull() ?: return null
-        val minute = raw.drop(3).take(2).toIntOrNull() ?: return null
+        // Undated labels must never masquerade as a multi-day schedule.
+        if (raw.length != 5 && raw.length != 8) return null
+        if (raw[2] != ':' || (raw.length == 8 && raw[5] != ':')) return null
+        val hour = raw.substring(0, 2).toIntOrNull() ?: return null
+        val minute = raw.substring(3, 5).toIntOrNull() ?: return null
+        if (hour !in 0..23 || minute !in 0..59) return null
+        if (raw.length == 8) {
+            val seconds = raw.substring(6, 8).toIntOrNull() ?: return null
+            if (seconds !in 0..59) return null
+        }
         return hour * 60 + minute
     }
     val start = minutes(departure) ?: return null
@@ -477,9 +596,21 @@ private fun routeDurationMinutes(departure: String, arrival: String): Int? {
     return if (end >= start) end - start else end + 24 * 60 - start
 }
 
-private fun routeClock(value: String?): String? {
+/** Invalid provider labels must not be displayed as a scheduled stop clock. */
+internal fun routeClock(value: String?): String? {
     val raw = value?.substringAfter('T', value)?.takeIf { it.isNotBlank() } ?: return null
-    return raw.take(5).takeIf { it.length >= 4 }
+    if (raw.length != 5 && raw.length != 8) return null
+    if (raw[2] != ':' || (raw.length == 8 && raw[5] != ':')) return null
+    if (!raw.substring(0, 2).all { it in '0'..'9' } ||
+        !raw.substring(3, 5).all { it in '0'..'9' }) return null
+    val minute = raw.substring(3, 5).toInt()
+    if (minute !in 0..59) return null
+    if (raw.length == 8) {
+        if (!raw.substring(6, 8).all { it in '0'..'9' }) return null
+        if (raw.substring(6, 8).toInt() !in 0..59) return null
+    }
+    // GTFS extended service-day hours (24+) are valid; do not silently wrap them.
+    return raw.substring(0, 5)
 }
 
 private fun hasRealtimeDelta(stop: RouteStop): Boolean =

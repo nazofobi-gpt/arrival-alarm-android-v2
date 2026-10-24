@@ -126,17 +126,27 @@ class ConnectorOAuthCoordinator(
             throw IllegalStateException("connector_oauth_transaction_expired")
         }
 
-        val callback = URI(callbackUri)
+        // URI/percent-decoding failures can include the full callback (and OAuth code).
+        val callback = try {
+            URI(callbackUri)
+        } catch (_: Exception) {
+            throw IllegalStateException("connector_oauth_callback_invalid")
+        }
         requireSameRedirect(callback, URI(CONNECTOR_OAUTH_REDIRECT_URI))
-        val query = parseQuery(callback.rawQuery)
+        val query = try {
+            parseQuery(callback.rawQuery)
+        } catch (_: IllegalArgumentException) {
+            throw IllegalStateException("connector_oauth_callback_invalid")
+        }
         val returnedState = query["state"].orEmpty()
         if (!constantTimeEquals(transaction.state, returnedState)) {
             // Do not consume the real pending authorization for an untrusted forged callback.
             throw IllegalStateException("connector_oauth_state_mismatch")
         }
-        query["error"]?.let { error ->
+        if (query.containsKey("error")) {
             transactionStore.clear()
-            throw IllegalStateException("connector_oauth_" + error)
+            // Provider-controlled error strings may contain codes, tokens or exact locations.
+            throw IllegalStateException("connector_oauth_provider_error")
         }
         val code = query["code"].orEmpty()
         if (code.isBlank()) {
@@ -198,6 +208,16 @@ class ConnectorOAuthCoordinator(
         requireHttpsUrl(metadata.authorizationEndpoint, "authorization_endpoint")
         requireHttpsUrl(metadata.tokenEndpoint, "token_endpoint")
         requireHttpsUrl(metadata.revocationEndpoint, "revocation_endpoint")
+        // A provider must not override app-generated state, PKCE, or device binding.
+        // Reject ambiguous/malformed discovery queries before persisting a transaction.
+        val authorizationParameters = try {
+            parseQuery(URI(metadata.authorizationEndpoint).rawQuery)
+        } catch (_: IllegalArgumentException) {
+            throw IllegalArgumentException("connector_oauth_authorization_query_invalid")
+        }
+        require(authorizationParameters.keys.none {
+            it in RESERVED_AUTHORIZATION_PARAMETERS || it == metadata.deviceIdParameter
+        }) { "connector_oauth_authorization_parameter_collision" }
         require(metadata.clientId.isNotBlank()) { "connector_oauth_client_id_missing" }
         require(metadata.redirectUri == CONNECTOR_OAUTH_REDIRECT_URI) {
             "connector_oauth_redirect_mismatch"
@@ -280,15 +300,19 @@ class ConnectorOAuthCoordinator(
 
         internal fun parseQuery(rawQuery: String?): Map<String, String> {
             if (rawQuery.isNullOrBlank()) return emptyMap()
-            return rawQuery.split("&").mapNotNull { pair ->
+            val parsed = linkedMapOf<String, String>()
+            for (pair in rawQuery.split("&")) {
                 val index = pair.indexOf('=')
                 val rawKey = if (index >= 0) pair.substring(0, index) else pair
                 val rawValue = if (index >= 0) pair.substring(index + 1) else ""
                 val key = URLDecoder.decode(rawKey, StandardCharsets.UTF_8.name())
-                if (key.isBlank()) null else {
-                    key to URLDecoder.decode(rawValue, StandardCharsets.UTF_8.name())
+                if (key.isNotBlank()) {
+                    // Reject ambiguous OAuth parameters, including percent-encoded duplicate keys.
+                    require(!parsed.containsKey(key)) { "connector_oauth_query_duplicate_parameter" }
+                    parsed[key] = URLDecoder.decode(rawValue, StandardCharsets.UTF_8.name())
                 }
-            }.toMap()
+            }
+            return parsed
         }
 
         private fun percentEncode(value: String): String =
@@ -303,6 +327,11 @@ class ConnectorOAuthCoordinator(
             )
 
         private fun requireSameRedirect(actual: URI, expected: URI) {
+            // A fragment is not part of the OAuth callback contract and must not be
+            // silently ignored; reject userinfo and noncanonical ports as well.
+            require(actual.rawFragment == null && actual.rawUserInfo == null && actual.port == -1) {
+                "connector_oauth_redirect_mismatch"
+            }
             require(actual.scheme.equals(expected.scheme, ignoreCase = true)) {
                 "connector_oauth_redirect_mismatch"
             }
@@ -314,6 +343,7 @@ class ConnectorOAuthCoordinator(
         private fun requireHttpsBaseUrl(value: String): String {
             val trimmed = value.trim().trimEnd('/')
             requireHttpsUrl(trimmed, "base_url")
+            require(URI(trimmed).rawQuery == null) { "connector_oauth_base_url_query_forbidden" }
             return trimmed
         }
 
@@ -322,7 +352,9 @@ class ConnectorOAuthCoordinator(
             require(
                 uri != null &&
                     uri.scheme.equals("https", ignoreCase = true) &&
-                    !uri.host.isNullOrBlank()
+                    !uri.host.isNullOrBlank() &&
+                    uri.rawUserInfo == null &&
+                    uri.rawFragment == null
             ) {
                 "connector_oauth_" + name + "_https_required"
             }
