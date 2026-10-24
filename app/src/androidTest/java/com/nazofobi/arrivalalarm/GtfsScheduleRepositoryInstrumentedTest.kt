@@ -450,4 +450,53 @@ class GtfsScheduleRepositoryInstrumentedTest {
 
         index.close()
     }
+
+    @Test
+    fun nearbyTransfersRejectCorruptStoredStopGeometry() {
+        context.deleteDatabase("nationwide_transit.db")
+        val index = NationwideTransitIndex(context)
+        try {
+            val db = index.writableDatabase
+            val entries = listOf(
+                arrayOf("INVALID_LAT", "Bad latitude origin", 91.0, 8.237),
+                arrayOf("LAT_NEAR", "Nearby invalid latitude", 91.0001, 8.237),
+                arrayOf("INVALID_LON", "Bad longitude origin", 52.665, 181.0),
+                arrayOf("LON_NEAR", "Nearby invalid longitude", 52.665, 181.0001),
+                arrayOf("POLAR", "Valid north pole", 90.0, 8.237),
+                arrayOf("BAD_NORTH", "Out-of-range north", 90.0001, 8.237),
+                arrayOf("VALID_SOUTH", "Valid south stop", 89.9999, 8.237),
+                arrayOf("EDGE", "Valid east longitude", 52.665, 180.0),
+                arrayOf("BAD_EAST", "Out-of-range east", 52.665, 180.0001),
+                arrayOf("VALID_WEST", "Valid west stop", 52.665, 179.9999),
+            )
+            for (entry in entries) {
+                db.execSQL(
+                    "INSERT INTO stops(id,name,lat,lon,location_type) VALUES(?,?,?,?,0)",
+                    entry,
+                )
+            }
+
+            val repo = GtfsScheduleRepository(index)
+            // Invalid origin locations cannot become nearby transfer anchors.
+            assertTrue(repo.nearbyStops("INVALID_LAT", radiusMeters = 100).isEmpty())
+            assertTrue(repo.nearbyStops("INVALID_LON", radiusMeters = 100).isEmpty())
+            // A SQL bounding box near the coordinate boundary can include an
+            // out-of-range persisted row; only verified geographic stops survive.
+            assertEquals(
+                listOf("VALID_SOUTH"),
+                repo.nearbyStops("POLAR", radiusMeters = 100).map { it.stop.id },
+            )
+            assertEquals(
+                listOf("VALID_WEST"),
+                repo.nearbyStops("EDGE", radiusMeters = 100).map { it.stop.id },
+            )
+            // A normal, valid origin still provides a real nearby transfer.
+            assertEquals(
+                listOf("VALID_WEST"),
+                repo.nearbyStops("EDGE", radiusMeters = 100, limit = 1).map { it.stop.id },
+            )
+        } finally {
+            index.close()
+        }
+    }
 }
