@@ -388,6 +388,64 @@ class GermanyRealtimeMatcherTest {
         )
     }
 
+    @Test
+    fun providerClockAcceptsAtMostThirtySecondsOfFutureSkew() {
+        val now = 1_800_000_010L
+        val matcher = matcher(FakeRealtimeStaticData())
+        val atLimit = matcher.match(snapshot(feedTimestamp = now + 30L), now)
+            as GermanyRealtimeOverlayResult.NoMatch
+        val beyondLimit = matcher.match(snapshot(feedTimestamp = now + 31L), now)
+            as GermanyRealtimeOverlayResult.NoMatch
+
+        assertEquals(GermanyRealtimeOverlayFreshnessState.FRESH, atLimit.freshness)
+        assertEquals(0L, atLimit.ageSeconds)
+        assertEquals(GermanyRealtimeOverlayFreshnessState.STALE, beyondLimit.freshness)
+    }
+
+    @Test
+    fun missingFeedTimestampUsesFetchedAtWithTheSameFutureSkewLimit() {
+        val now = 1_800_000_010L
+        val matcher = matcher(FakeRealtimeStaticData())
+        val atLimit = snapshot().copy(
+            feedTimestampEpochSeconds = null,
+            fetchedAtEpochSeconds = now + 30L,
+        )
+        val beyondLimit = atLimit.copy(fetchedAtEpochSeconds = now + 31L)
+
+        assertEquals(
+            GermanyRealtimeOverlayFreshnessState.FRESH,
+            (matcher.match(atLimit, now) as GermanyRealtimeOverlayResult.NoMatch).freshness,
+        )
+        assertEquals(
+            GermanyRealtimeOverlayFreshnessState.STALE,
+            (matcher.match(beyondLimit, now) as GermanyRealtimeOverlayResult.NoMatch).freshness,
+        )
+    }
+
+    @Test
+    fun invalidProviderEpochsAndNonpositiveDeviceClocksAreNeverFresh() {
+        val now = 1_800_000_010L
+        val matcher = matcher(FakeRealtimeStaticData())
+        for (invalidEpoch in listOf(0L, -1L, Long.MIN_VALUE, Long.MAX_VALUE)) {
+            val result = matcher.match(snapshot(feedTimestamp = invalidEpoch), now)
+                as GermanyRealtimeOverlayResult.NoMatch
+            assertEquals(
+                "provider epoch=$invalidEpoch",
+                GermanyRealtimeOverlayFreshnessState.STALE,
+                result.freshness,
+            )
+        }
+        for (invalidNow in listOf(0L, -1L)) {
+            val result = matcher.match(snapshot(feedTimestamp = 1L), invalidNow)
+                as GermanyRealtimeOverlayResult.NoMatch
+            assertEquals(
+                "device clock=$invalidNow",
+                GermanyRealtimeOverlayFreshnessState.STALE,
+                result.freshness,
+            )
+        }
+    }
+
     private fun matcher(data: GermanyRealtimeStaticData) =
         GermanyRealtimeMatcher(data, freshWindowSeconds = 120)
 
