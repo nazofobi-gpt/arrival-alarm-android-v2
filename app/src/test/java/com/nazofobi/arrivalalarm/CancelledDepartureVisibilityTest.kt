@@ -175,7 +175,6 @@ class CancelledDepartureVisibilityTest {
         )
     }
 
-
     @Test fun blankOrContradictoryTripIdentitiesCannotBecomeCancelledBoardFacts() {
         val gtfsInstance = GtfsTripInstanceIdentity(
             tripId = "verified-trip",
