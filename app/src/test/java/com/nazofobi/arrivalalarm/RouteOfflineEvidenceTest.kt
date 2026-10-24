@@ -69,6 +69,14 @@ class RouteOfflineEvidenceTest {
         assertTrue(routeHasUsableRealtimeDelta("08:16 ", " 08:15"))
     }
 
+    @Test fun malformedProviderClocksCannotClaimRealtimeDeviation() {
+        assertFalse(routeHasUsableRealtimeDelta("unknown", "08:15"))
+        assertFalse(routeHasUsableRealtimeDelta("08:42", "invalid"))
+        assertFalse(routeHasUsableRealtimeDelta("25:61", "25:00"))
+        // Valid GTFS extended service-day clocks remain usable.
+        assertTrue(routeHasUsableRealtimeDelta("24:15", "23:55"))
+    }
+
     @Test fun blankRealtimePlatformNeverClaimsARealtimeBadge() {
         for (missing in listOf<String?>(null, "", " ", "\t")) {
             assertFalse(routeHasTrustedRealtimePlatform(routeOffline = false, actualPlatform = missing))
