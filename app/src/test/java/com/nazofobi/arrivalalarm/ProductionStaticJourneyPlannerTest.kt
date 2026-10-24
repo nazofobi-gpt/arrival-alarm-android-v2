@@ -18,6 +18,39 @@ class ProductionStaticJourneyPlannerTest {
         assertEquals(6, boundedStaticJourneyOptionLimit(Int.MAX_VALUE))
     }
 
+    @Test
+    fun accessAndEgressWalkingRemainDistinctAndTotalDoesNotOverflow() {
+        val data = FakeRouteOptionData(
+            routes = emptyMap(), trips = emptyMap(), stops = emptyMap(), stopTimes = emptyMap(),
+        )
+        val huge = StaticTransitJourney(
+            id = "bounded-walk",
+            access = StaticRouterAccess("origin-stop", Int.MAX_VALUE),
+            egress = StaticRouterAccess("destination-stop", Int.MAX_VALUE),
+            legs = emptyList(),
+            arrivalEpochMillis = at("08:00:00"),
+        )
+        val mapped = StaticRouteOptionMapper(data, zone).map(
+            huge, MapPoint(0.0, 0.0, "Start"), MapPoint(0.0, 0.0, "Ziel"), date, 4L,
+        )
+        assertEquals(71_582_789, mapped.walkingMinutes)
+        assertEquals("origin-stop", mapped.accessWalking?.stopName)
+        assertEquals("destination-stop", mapped.egressWalking?.stopName)
+        assertEquals(Int.MAX_VALUE, mapped.accessWalking?.walkSeconds)
+        assertEquals(Int.MAX_VALUE, mapped.egressWalking?.walkSeconds)
+
+        val none = huge.copy(
+            access = StaticRouterAccess("origin-stop"),
+            egress = StaticRouterAccess("destination-stop"),
+        )
+        val withoutWalk = StaticRouteOptionMapper(data, zone).map(
+            none, MapPoint(0.0, 0.0, "Start"), MapPoint(0.0, 0.0, "Ziel"), date, 4L,
+        )
+        assertEquals(0, withoutWalk.walkingMinutes)
+        assertNull(withoutWalk.accessWalking)
+        assertNull(withoutWalk.egressWalking)
+    }
+
     private val zone = TimeZone.getTimeZone("Europe/Berlin")
     private val date = GtfsServiceDate(2026, 10, 4)
 
@@ -75,6 +108,12 @@ class ProductionStaticJourneyPlannerTest {
         assertEquals(journey.legs.first().departureEpochMillis, option.departureEpochMillis)
         assertEquals(journey.arrivalEpochMillis, option.arrivalEpochMillis)
         assertEquals(3, option.walkingMinutes)
+        assertEquals("A", option.accessWalking?.stopId)
+        assertEquals("Lohne", option.accessWalking?.stopName)
+        assertEquals(60, option.accessWalking?.walkSeconds)
+        assertEquals("B", option.egressWalking?.stopId)
+        assertEquals("Berlin Hbf", option.egressWalking?.stopName)
+        assertEquals(120, option.egressWalking?.walkSeconds)
         assertEquals(1, option.transfers)
         assertEquals(listOf("T1", "T2"), option.tripIds)
         assertEquals(listOf("A", "X", "B"), option.stops.map { it.id })

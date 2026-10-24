@@ -380,6 +380,39 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            // Only local planning provides separate distance-based access/egress estimates.
+            // These are stop contexts, never inferred pedestrian map polylines.
+            option.accessWalking?.takeIf { it.walkSeconds > 0 }?.let { leg ->
+                val roundedMinutes = ((leg.walkSeconds.toLong() + 59L) / 60L).toInt()
+                Text(
+                    text = stringResource(
+                        R.string.route_walk_access_detail, leg.stopName, roundedMinutes,
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("route-walk-access"),
+                )
+            }
+            option.egressWalking?.takeIf { it.walkSeconds > 0 }?.let { leg ->
+                val roundedMinutes = ((leg.walkSeconds.toLong() + 59L) / 60L).toInt()
+                Text(
+                    text = stringResource(
+                        R.string.route_walk_egress_detail, leg.stopName, roundedMinutes,
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("route-walk-egress"),
+                )
+            }
+            if (option.accessWalking != null || option.egressWalking != null) {
+                Text(
+                    text = stringResource(R.string.route_walk_source_note),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("route-walk-source"),
+                )
+            }
+
             HorizontalDivider()
 
             if (option.stops.isEmpty()) {

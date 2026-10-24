@@ -27,6 +27,16 @@ data class RouteStop(
     val plannedPlatform: String? = null,
 )
 
+/**
+ * GTFS stop-backed walking access/egress estimates derived from straight-line
+ * stop distance and nominal walking speed, not pedestrian path geometry.
+ */
+data class RouteWalkingLegEvidence(
+    val stopId: String,
+    val stopName: String,
+    val walkSeconds: Int,
+)
+
 data class RouteOption(
     val id: String,
     val origin: MapPoint,
@@ -44,6 +54,9 @@ data class RouteOption(
     val realtime: RouteRealtimeInfo? = null,
     val departureEpochMillis: Long? = null,
     val arrivalEpochMillis: Long? = null,
+    // Null means this provider did not supply separately verified walking legs.
+    val accessWalking: RouteWalkingLegEvidence? = null,
+    val egressWalking: RouteWalkingLegEvidence? = null,
 )
 
 interface GeocodeProvider { fun search(query: String): List<MapPoint> }
