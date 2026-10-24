@@ -375,7 +375,7 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
                 style = MaterialTheme.typography.bodyLarge,
             )
             Text(
-                text = option.departure + " → " + option.arrival,
+                text = displayDeparture + " → " + displayArrival,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
