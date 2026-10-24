@@ -472,4 +472,42 @@ class TransitExperienceTest {
         assertEquals(listOf(supplied), supported.vehicles(listOf(supplied)))
     }
 
+
+    @Test fun offlineBoardAndAlternativesNeverPresentCachedRealtimeAsScheduled() {
+        val capabilities = TransitProviderCapabilities(realtimeDepartures = true)
+        val late = Departure("late", "RE 1", "Bremen", 1_200L, realtimeEpochSeconds = 1_800L)
+        val other = Departure("other", "RB 1", "Lohne", 1_300L)
+        val providerResults = listOf(late, other)
+        val offline = TransitExperienceEngine(capabilities, isOfflineCache = true)
+        val displayed = offline.departureBoard(providerResults, 1_000L)
+
+        assertEquals(listOf("late", "other"), displayed.map { it.tripId })
+        assertEquals(listOf(1_200L, 1_300L), displayed.map { it.effectiveEpochSeconds })
+        assertTrue(displayed.none { it.isRealtime })
+        val alternatives = offline.alternateDepartures(providerResults, displayed.first(), 1_000L)
+        assertEquals(listOf("other"), alternatives.map { it.tripId })
+        assertTrue(alternatives.none { it.isRealtime })
+
+        val online = TransitExperienceEngine(capabilities)
+        val onlineBoard = online.departureBoard(providerResults, 1_000L)
+        assertEquals(listOf("other", "late"), onlineBoard.map { it.tripId })
+        assertEquals(1_800L, onlineBoard.last().effectiveEpochSeconds)
+        assertTrue(onlineBoard.last().isRealtime)
+    }
+
+    @Test fun offlineBoardCannotResurrectExpiredScheduleWithCachedFutureRealtime() {
+        val delayedPast = Departure(
+            "past", "RE 1", "Bremen", 900L, realtimeEpochSeconds = 1_800L,
+        )
+        val capabilities = TransitProviderCapabilities(realtimeDepartures = true)
+        assertTrue(
+            TransitExperienceEngine(capabilities, isOfflineCache = true)
+                .departureBoard(listOf(delayedPast), 1_000L).isEmpty(),
+        )
+        assertEquals(
+            listOf("past"),
+            TransitExperienceEngine(capabilities)
+                .departureBoard(listOf(delayedPast), 1_000L).map { it.tripId },
+        )
+    }
 }
