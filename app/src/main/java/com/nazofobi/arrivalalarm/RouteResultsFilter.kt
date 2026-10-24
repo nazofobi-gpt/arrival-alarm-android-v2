@@ -18,6 +18,9 @@ internal data class RouteResultsFilter(
             // valid route with fewer changes. Never display it as "-1 transfers",
             // even when all routes are shown without an explicit limit.
             option.transfers >= 0 &&
+                // Missing/corrupt walking costs cannot be offered as a real
+                // negative-minute itinerary, even with every chip disabled.
+                option.walkingMinutes >= 0 &&
                 (!directOnly || option.transfers == 0) &&
                 (limit == null || option.transfers <= limit)
         }
