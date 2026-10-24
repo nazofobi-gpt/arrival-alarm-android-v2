@@ -65,6 +65,8 @@ def validate_manifest(source: str) -> list[str]:
         return errors + ["missing <application>"]
     if app.get(ANDROID + "allowBackup") != "false":
         errors.append("android:allowBackup must explicitly be false")
+    if app.get(ANDROID + "dataExtractionRules") != "@xml/varis_data_extraction_rules":
+        errors.append("Android 12+ backup exclusion rules must be explicitly referenced")
     if app.get(ANDROID + "usesCleartextTraffic") != "false":
         errors.append("android:usesCleartextTraffic must explicitly be false")
     # Source manifests used for a distributable app must not force a debug or
@@ -139,6 +141,31 @@ def validate_manifest(source: str) -> list[str]:
     return errors
 
 
+def validate_data_extraction_rules(source: str) -> list[str]:
+    """Reject Android 12+ cloud/device migration of local journey data by default."""
+    try:
+        root = ET.fromstring(source)
+    except ET.ParseError as exc:
+        return [f"data extraction XML cannot be parsed: {exc}"]
+    if root.tag != "data-extraction-rules":
+        return ["data extraction XML must have <data-extraction-rules> root"]
+    errors: list[str] = []
+    for mode in ("cloud-backup", "device-transfer"):
+        sections = root.findall(mode)
+        if len(sections) != 1:
+            errors.append(f"{mode} must appear exactly once")
+            continue
+        section = sections[0]
+        if section.findall("include"):
+            errors.append(f"{mode} must not include private app data")
+        exclusions = {(node.get("domain"), node.get("path"))
+                      for node in section.findall("exclude")}
+        for domain in ("root", "device_root", "external"):
+            if (domain, ".") not in exclusions:
+                errors.append(f"{mode} must exclude entire {domain} domain")
+    return errors
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("manifest", type=Path, help="AndroidManifest.xml to validate")
@@ -148,6 +175,12 @@ def main(argv: list[str] | None = None) -> int:
     except OSError as exc:
         print(f"Manifest could not be read: {exc}", file=sys.stderr)
         return 1
+    if not errors:
+        rules = args.manifest.parent / "res" / "xml" / "varis_data_extraction_rules.xml"
+        try:
+            errors.extend(validate_data_extraction_rules(rules.read_text(encoding="utf-8")))
+        except OSError as exc:
+            errors.append(f"data extraction rules could not be read: {exc}")
     if errors:
         for error in errors:
             print(f"G-191 manifest policy FAIL: {error}", file=sys.stderr)

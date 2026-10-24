@@ -1,7 +1,7 @@
 """Regression tests for the G-191 Android manifest policy gate."""
 import unittest
 
-from check_android_privacy_manifest import validate_manifest
+from check_android_privacy_manifest import validate_manifest, validate_data_extraction_rules
 
 
 VALID = """<?xml version="1.0" encoding="utf-8"?>
@@ -12,7 +12,7 @@ VALID = """<?xml version="1.0" encoding="utf-8"?>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <application android:allowBackup="false" android:usesCleartextTraffic="false">
+    <application android:allowBackup="false" android:dataExtractionRules="@xml/varis_data_extraction_rules" android:usesCleartextTraffic="false">
         <service android:name=".ActiveJourneyService"
                  android:exported="false"
                  android:foregroundServiceType="location" />
@@ -240,6 +240,40 @@ class AndroidManifestPrivacyPolicyTest(unittest.TestCase):
                       validate_manifest(VALID.replace("<application", "<notapplication")
                                                      .replace("</application>", "</notapplication>")))
 
+
+    def test_android12_extraction_rules_reference_is_required(self):
+        absent = VALID.replace(' android:dataExtractionRules="@xml/varis_data_extraction_rules"', '')
+        wrong = VALID.replace('@xml/varis_data_extraction_rules', '@xml/unknown_rules')
+        for xml in (absent, wrong):
+            self.assertIn(
+                "Android 12+ backup exclusion rules must be explicitly referenced",
+                validate_manifest(xml),
+            )
+
+    def test_data_extraction_rules_exclude_every_private_domain_for_both_transfers(self):
+        valid = """<data-extraction-rules>
+            <cloud-backup><exclude domain="root" path="."/>
+                <exclude domain="device_root" path="."/>
+                <exclude domain="external" path="."/></cloud-backup>
+            <device-transfer><exclude domain="root" path="."/>
+                <exclude domain="device_root" path="."/>
+                <exclude domain="external" path="."/></device-transfer>
+        </data-extraction-rules>"""
+        self.assertEqual([], validate_data_extraction_rules(valid))
+        for mode in ("cloud-backup", "device-transfer"):
+            for domain in ("root", "device_root", "external"):
+                with self.subTest(mode=mode, domain=domain):
+                    section = valid.split(f"<{mode}>")[1].split(f"</{mode}>")[0]
+                    removal = f'<exclude domain="{domain}" path="."/>'
+                    bad = valid.replace(section, section.replace(removal, ""))
+                    self.assertIn(
+                        f"{mode} must exclude entire {domain} domain",
+                        validate_data_extraction_rules(bad),
+                    )
+        included = valid.replace("<device-transfer>", '<device-transfer><include domain="root" path="."/>')
+        self.assertIn("device-transfer must not include private app data", validate_data_extraction_rules(included))
+        self.assertTrue(validate_data_extraction_rules("<data-extraction-rules"))
+        self.assertIn("device-transfer must appear exactly once", validate_data_extraction_rules("<data-extraction-rules><cloud-backup/></data-extraction-rules>"))
 
 if __name__ == "__main__":
     unittest.main()
