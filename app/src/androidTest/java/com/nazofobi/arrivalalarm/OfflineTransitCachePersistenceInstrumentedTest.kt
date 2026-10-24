@@ -901,4 +901,90 @@ class OfflineTransitCachePersistenceInstrumentedTest {
         }
     }
 
+
+    @Test
+    fun malformedScheduledTextCannotBePresentedAsOfflineTimetable() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val store = SharedPreferencesTransitCacheStore(context)
+        val route = RouteOption(
+            id = "route-scheduled",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen"),
+            line = "RE 9", direction = "Bremen",
+            departure = "10:00", arrival = "11:00",
+            walkingMinutes = 0, transfers = 0,
+            stops = listOf(
+                RouteStop(
+                    id = "lohne", name = "Lohne",
+                    plannedArrival = "09:59", plannedDeparture = "10:00",
+                    plannedPlatform = "2",
+                )
+            ),
+        )
+        val departure = Departure(
+            tripId = "trip-scheduled", line = "RE 9",
+            direction = "Bremen", scheduledEpochSeconds = 1_700_000_000L,
+        )
+        try {
+            assertTrue(prefs.edit().clear().commit())
+            store.save(listOf(
+                CachedTransitPlan("strict-display", listOf(route), listOf(departure), 100L),
+            ))
+            val baseline = requireNotNull(prefs.getString("plans_json", null))
+
+            fun restore(scope: String, field: String, value: Any): CachedTransitPlan {
+                val plans = org.json.JSONArray(baseline)
+                val entry = plans.getJSONObject(0)
+                val routeJson = entry.getJSONArray("routeOptions").getJSONObject(0)
+                val target = when (scope) {
+                    "route" -> routeJson
+                    "stop" -> routeJson.getJSONArray("stops").getJSONObject(0)
+                    else -> entry.getJSONArray("departures").getJSONObject(0)
+                }
+                target.put(field, value)
+                assertTrue(prefs.edit().putString("plans_json", plans.toString()).commit())
+                return store.load().single()
+            }
+
+            val invalidValues: List<Any> = listOf(
+                42, true, org.json.JSONObject().put("fake", "Lohne"),
+                org.json.JSONArray().put("fake"),
+            )
+            val fields = listOf(
+                "route" to listOf("line", "direction", "departure", "arrival"),
+                "stop" to listOf("plannedArrival", "plannedDeparture", "plannedPlatform"),
+                "departure" to listOf("line", "direction"),
+            )
+            for ((scope, names) in fields) {
+                for (field in names) {
+                    for (bad in invalidValues) {
+                        val result = restore(scope, field, bad)
+                        if (scope == "departure") {
+                            assertTrue("Wrong-typed departure $field=$bad must be rejected",
+                                result.departures.isEmpty())
+                            assertEquals(1, result.routeOptions.size)
+                        } else {
+                            assertTrue("Wrong-typed $scope $field=$bad must reject itinerary",
+                                result.routeOptions.isEmpty())
+                            assertEquals(1, result.departures.size)
+                        }
+                    }
+                    val good = restore(scope, field, "verified text")
+                    assertEquals(1, good.routeOptions.size)
+                    assertEquals(1, good.departures.size)
+                }
+            }
+
+            // Optional planned stop fields can still be absent in legacy records.
+            val old = org.json.JSONArray(baseline)
+            old.getJSONObject(0).getJSONArray("routeOptions").getJSONObject(0)
+                .getJSONArray("stops").getJSONObject(0).remove("plannedPlatform")
+            assertTrue(prefs.edit().putString("plans_json", old.toString()).commit())
+            assertEquals(null, store.load().single().routeOptions.single()
+                .stops.single().plannedPlatform)
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
 }
