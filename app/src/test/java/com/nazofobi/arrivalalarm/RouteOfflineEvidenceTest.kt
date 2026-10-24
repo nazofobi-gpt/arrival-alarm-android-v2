@@ -51,4 +51,17 @@ class RouteOfflineEvidenceTest {
         assertEquals("08:15", routeEvidenceTime(" ", "08:15", routeOffline = true))
         assertEquals("1", routeEvidencePlatform("", "1", routeOffline = true))
     }
+
+    @Test fun missingProviderClocksCannotProduceLiveDeviationBadges() {
+        for (missing in listOf<String?>(null, "", " ", "\t")) {
+            assertFalse(routeHasUsableRealtimeDelta(missing, "08:15"))
+            assertFalse(routeHasUsableRealtimeDelta("08:42", missing))
+            assertFalse(routeHasTrustedRealtime(routeOffline = false,
+                suppliedRealtime = routeHasUsableRealtimeDelta(missing, "08:15")))
+        }
+        assertFalse(routeHasUsableRealtimeDelta("08:15", "08:15"))
+        assertTrue(routeHasUsableRealtimeDelta("08:42", "08:15"))
+        assertFalse(routeHasTrustedRealtime(routeOffline = true,
+            suppliedRealtime = routeHasUsableRealtimeDelta("08:42", "08:15")))
+    }
 }
