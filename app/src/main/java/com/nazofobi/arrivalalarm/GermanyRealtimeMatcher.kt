@@ -178,7 +178,12 @@ class GermanyRealtimeMatcher(
 
         val sourceTimestamp = snapshot.feedTimestampEpochSeconds ?: snapshot.fetchedAtEpochSeconds
         val ageSeconds = (nowEpochSeconds - sourceTimestamp).coerceAtLeast(0L)
-        val freshness = if (ageSeconds <= freshWindowSeconds) {
+        // Do not present future-dated or invalid provider clocks as live truth.
+        // GTFS-RT may be up to 30 seconds ahead due to ordinary clock skew.
+        val plausibleProviderClock = nowEpochSeconds > 0L && sourceTimestamp > 0L &&
+            (sourceTimestamp <= nowEpochSeconds ||
+                sourceTimestamp - nowEpochSeconds <= MAX_FUTURE_CLOCK_SKEW_SECONDS)
+        val freshness = if (plausibleProviderClock && ageSeconds <= freshWindowSeconds) {
             GermanyRealtimeOverlayFreshnessState.FRESH
         } else {
             GermanyRealtimeOverlayFreshnessState.STALE
@@ -467,4 +472,8 @@ class GermanyRealtimeMatcher(
 
     private fun parseServiceSeconds(raw: String): Int? =
         runCatching { GtfsServiceTime.parse(raw).secondsFromServiceDayStart }.getOrNull()
+
+    private companion object {
+        const val MAX_FUTURE_CLOCK_SKEW_SECONDS = 30L
+    }
 }
