@@ -232,13 +232,13 @@ class AndroidSelectedGtfsTripSessionInstrumentedTest {
             )
         }
         AndroidSelectedGtfsTripSession(context).use { session ->
-            // The card's timestamp matching a stop's arrival cannot prove boarding.
+            // GTFS requires a terminal departure clock. Resolver rejects this trip\n            // before inspection reaches the card-vs-boarding-time mismatch gate.
             val arrivalOnlyCard = scheduledDeparture().copy(
                 scheduledEpochSeconds = serviceTimeEpoch("08:00:00"),
             )
             assertEquals(
                 GtfsDepartureInspection.Rejected(
-                    GtfsDepartureInspectionFailure.SOURCE_EVIDENCE_MISMATCH,
+                    GtfsDepartureInspectionFailure.TRIP_UNAVAILABLE,
                 ),
                 session.inspect(arrivalOnlyCard, "A"),
             )
@@ -258,7 +258,7 @@ class AndroidSelectedGtfsTripSessionInstrumentedTest {
             // a provider-backed arrival clock, even if departure clocks exist.
             assertEquals(
                 GtfsDepartureInspection.Rejected(
-                    GtfsDepartureInspectionFailure.NO_DOWNSTREAM_ALIGHTING_STOP,
+                    GtfsDepartureInspectionFailure.TRIP_UNAVAILABLE,
                 ),
                 session.inspect(scheduledDeparture(), "A"),
             )

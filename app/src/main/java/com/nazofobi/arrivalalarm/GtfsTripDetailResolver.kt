@@ -169,6 +169,14 @@ class GtfsTripDetailResolver(private val source: GtfsTripDetailSource) {
             stopTimes.zipWithNext().any { (a, b) -> a.stopSequence >= b.stopSequence }
         ) return unavailable(GtfsTripDetailFailure.INVALID_STOP_SEQUENCE)
 
+        // The first and last GTFS stops must have both scheduled clocks.
+        // Missing boundary evidence must not become a selectable concrete trip.
+        if (stopTimes.first().arrivalTime == null ||
+            stopTimes.first().departureTime == null ||
+            stopTimes.last().arrivalTime == null ||
+            stopTimes.last().departureTime == null
+        ) return unavailable(GtfsTripDetailFailure.INVALID_STOP_TIME)
+
         // GTFS allows times beyond midnight (24:10:00) and absent non-timepoint
         // clocks, but a malformed non-null provider clock must never be used
         // to offer a concrete, user-confirmable service.
