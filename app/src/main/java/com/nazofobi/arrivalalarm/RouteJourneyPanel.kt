@@ -178,6 +178,7 @@ fun RouteJourneyPanel(
                     RouteOptionCard(
                         option = option,
                         selected = selectedRouteId == option.id,
+                        routeOffline = routeOffline,
                         onSelect = { onSelectRoute(option) },
                         selectTestTag = "route-option-select-" + index,
                         modifier = Modifier.testTag("route-option-" + index),
@@ -216,7 +217,7 @@ fun RouteJourneyPanel(
                     modifier = Modifier.testTag("journey-detail-empty"),
                 )
             } else {
-                JourneyDetailCard(selected)
+                JourneyDetailCard(selected, routeOffline = routeOffline)
             }
 
             JourneyAlarmControls(
@@ -232,13 +233,20 @@ fun RouteJourneyPanel(
 private fun RouteOptionCard(
     option: RouteOption,
     selected: Boolean,
+    routeOffline: Boolean,
     onSelect: () -> Unit,
     selectTestTag: String,
     modifier: Modifier = Modifier,
 ) {
-    val duration = routeDurationMinutes(option)
-    val hasRealtime = option.stops.any(::hasRealtimeDelta)
+    val displayDeparture = routeOptionEvidenceClock(option, departure = true, routeOffline = routeOffline)
+        ?: stringResource(R.string.unknown_time)
+    val displayArrival = routeOptionEvidenceClock(option, departure = false, routeOffline = routeOffline)
+        ?: stringResource(R.string.unknown_time)
+    val duration = if (routeOffline) routeDurationMinutes(displayDeparture, displayArrival)
+        else routeDurationMinutes(option)
+    val hasRealtime = routeHasTrustedRealtime(routeOffline, option.stops.any(::hasRealtimeDelta))
     val realtimeLabel = when {
+        routeOffline -> R.string.route_offline_badge
         option.realtime?.cancelledTripIds?.isNotEmpty() == true ->
             R.string.route_realtime_cancelled_badge
         hasRealtime -> R.string.route_realtime_badge
@@ -269,12 +277,12 @@ private fun RouteOptionCard(
             Text(
                 text = duration?.let {
                     stringResource(R.string.route_duration_minutes, it)
-                } ?: (option.departure + " → " + option.arrival),
+                } ?: (displayDeparture + " → " + displayArrival),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = option.departure + " → " + option.arrival,
+                text = displayDeparture + " → " + displayArrival,
                 style = MaterialTheme.typography.bodyLarge,
             )
             Text(
@@ -300,6 +308,7 @@ private fun RouteOptionCard(
                 text = stringResource(realtimeLabel),
                 style = MaterialTheme.typography.labelMedium,
                 color = when {
+                    routeOffline -> MaterialTheme.colorScheme.tertiary
                     option.realtime?.cancelledTripIds?.isNotEmpty() == true ->
                         MaterialTheme.colorScheme.error
                     hasRealtime -> MaterialTheme.colorScheme.secondary
@@ -328,8 +337,13 @@ private fun RouteOptionCard(
 }
 
 @Composable
-private fun JourneyDetailCard(option: RouteOption) {
-    val duration = routeDurationMinutes(option)
+private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
+    val displayDeparture = routeOptionEvidenceClock(option, departure = true, routeOffline = routeOffline)
+        ?: stringResource(R.string.unknown_time)
+    val displayArrival = routeOptionEvidenceClock(option, departure = false, routeOffline = routeOffline)
+        ?: stringResource(R.string.unknown_time)
+    val duration = if (routeOffline) routeDurationMinutes(displayDeparture, displayArrival)
+        else routeDurationMinutes(option)
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface,
@@ -361,7 +375,7 @@ private fun JourneyDetailCard(option: RouteOption) {
                 style = MaterialTheme.typography.bodyLarge,
             )
             Text(
-                text = option.departure + " → " + option.arrival,
+                text = displayDeparture + " → " + displayArrival,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -370,12 +384,12 @@ private fun JourneyDetailCard(option: RouteOption) {
 
             if (option.stops.isEmpty()) {
                 JourneyEndpoint(
-                    time = option.departure,
+                    time = displayDeparture,
                     label = option.origin.label,
                     testTag = "journey-stop-origin",
                 )
                 JourneyEndpoint(
-                    time = option.arrival,
+                    time = displayArrival,
                     label = option.destination.label,
                     testTag = "journey-stop-destination",
                 )
@@ -399,9 +413,9 @@ private fun JourneyDetailCard(option: RouteOption) {
                     val stop = option.stops[stopIndex]
                     val actual = stop.departure ?: stop.arrival
                     val planned = stop.plannedDeparture ?: stop.plannedArrival
-                    val displayTime = routeClock(actual ?: planned)
+                    val displayTime = routeClock(routeEvidenceTime(actual, planned, routeOffline))
                         ?: stringResource(R.string.unknown_time)
-                    val realtime = hasRealtimeDelta(stop)
+                    val realtime = routeHasTrustedRealtime(routeOffline, hasRealtimeDelta(stop))
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -422,10 +436,14 @@ private fun JourneyDetailCard(option: RouteOption) {
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Medium,
                         )
-                        (stop.platform ?: stop.plannedPlatform)?.let { platform ->
+                        routeEvidencePlatform(stop.platform, stop.plannedPlatform, routeOffline)
+                            ?.let { platform ->
+                            val realtimePlatform = routeHasTrustedRealtime(
+                                routeOffline, stop.platform != null,
+                            )
                             Text(
                                 text = stringResource(
-                                    if (stop.platform != null) {
+                                    if (realtimePlatform) {
                                         R.string.route_realtime_platform_format
                                     } else {
                                         R.string.route_planned_platform_format
@@ -433,7 +451,7 @@ private fun JourneyDetailCard(option: RouteOption) {
                                     platform,
                                 ),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (stop.platform != null) {
+                                color = if (realtimePlatform) {
                                     MaterialTheme.colorScheme.secondary
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
@@ -472,6 +490,21 @@ private fun JourneyDetailCard(option: RouteOption) {
             }
         }
     }
+}
+
+/**
+ * Route-level clocks may already contain old realtime overlays. In offline mode,
+ * derive endpoints only from scheduled stop evidence; missing proof remains unknown.
+ */
+private fun routeOptionEvidenceClock(option: RouteOption, departure: Boolean, routeOffline: Boolean): String? {
+    if (!routeOffline) return if (departure) option.departure else option.arrival
+    val stop = if (departure) option.stops.firstOrNull() else option.stops.lastOrNull()
+    val scheduled = if (departure) {
+        stop?.plannedDeparture ?: stop?.plannedArrival
+    } else {
+        stop?.plannedArrival ?: stop?.plannedDeparture
+    }
+    return routeClock(scheduled)
 }
 
 @Composable

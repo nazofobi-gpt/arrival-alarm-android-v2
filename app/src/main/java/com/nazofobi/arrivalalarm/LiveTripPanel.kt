@@ -98,7 +98,9 @@ fun LiveTripPanel(
                 modifier = Modifier.testTag("live-trip-timing"),
             )
 
-            selectedRoute.realtime?.let { realtime ->
+            // A cached snapshot cannot provide a current provider status while offline.
+            // The timing label above already reports offline rather than realtime.
+            selectedRoute.realtime?.takeUnless { routeOffline }?.let { realtime ->
                 LiveTripFact(
                     label = stringResource(R.string.live_trip_realtime_source),
                     value = when (realtime.state) {
