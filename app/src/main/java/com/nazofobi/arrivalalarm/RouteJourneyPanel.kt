@@ -244,7 +244,11 @@ private fun RouteOptionCard(
         ?: stringResource(R.string.unknown_time)
     val duration = if (routeOffline) routeDurationMinutes(displayDeparture, displayArrival)
         else routeDurationMinutes(option)
-    val hasRealtime = routeHasTrustedRealtime(routeOffline, option.stops.any(::hasRealtimeDelta))
+    val hasRealtime = routeHasVerifiedRealtimeDelta(
+        routeOffline = routeOffline,
+        state = option.realtime?.state,
+        suppliedDelta = option.stops.any(::hasRealtimeDelta),
+    )
     val realtimeLabel = when {
         routeOffline -> R.string.route_offline_badge
         option.realtime?.cancelledTripIds?.isNotEmpty() == true ->
@@ -448,7 +452,11 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
                     val planned = stop.plannedDeparture ?: stop.plannedArrival
                     val displayTime = routeClock(routeEvidenceTime(actual, planned, routeOffline))
                         ?: stringResource(R.string.unknown_time)
-                    val realtime = routeHasTrustedRealtime(routeOffline, hasRealtimeDelta(stop))
+                    val realtime = routeHasVerifiedRealtimeDelta(
+                        routeOffline = routeOffline,
+                        state = option.realtime?.state,
+                        suppliedDelta = hasRealtimeDelta(stop),
+                    )
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -471,8 +479,9 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
                         )
                         routeEvidencePlatform(stop.platform, stop.plannedPlatform, routeOffline)
                             ?.let { platform ->
-                            val realtimePlatform = routeHasTrustedRealtimePlatform(
+                            val realtimePlatform = routeHasVerifiedRealtimePlatform(
                                 routeOffline = routeOffline,
+                                state = option.realtime?.state,
                                 actualPlatform = stop.platform,
                             )
                             Text(
