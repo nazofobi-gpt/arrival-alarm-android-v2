@@ -7,6 +7,32 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RouteStopProgressTest {
+
+    @Test fun compactUtcOffsetsCannotInventScheduledStopProgress() {
+        // RFC 3339 allows +02:00 and -12:00, not their compact +0200/-1200 forms.
+        val now = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
+        assertEquals(
+            "2026-09-26T06:10:00Z".toTransitEpochSecondsOrNull(),
+            now,
+        )
+        for (untrusted in listOf(
+            "2026-09-26T08:10:00+0200",
+            "2026-09-26T08:10:00-1200",
+            "2026-09-26T08:10:00+0000",
+        )) {
+            assertNull("Compact UTC offset must not be accepted: $untrusted",
+                untrusted.toTransitEpochSecondsOrNull())
+            val progress = RouteStopProgressTracker().resolve(
+                listOf(RouteStop(id = "a", name = "Lohne", plannedArrival = untrusted)),
+                now,
+                trustRealtime = false,
+            )
+            assertFalse(progress.resolvedByProviderTime)
+            assertNull(progress.current)
+            assertNull(progress.next)
+            assertNull(progress.remainingStops)
+        }
+    }
     @Test fun oversizedProviderTimestampFailsClosedBeforeStopProgress() {
         val legitimate = "2026-09-26T08:10:00Z"
         val untrusted = listOf(
