@@ -5,13 +5,19 @@ package com.nazofobi.arrivalalarm
  * When a route is offline, only explicitly scheduled values may be displayed.
  * Absence of a scheduled value must remain unknown, not fall back to stale realtime.
  */
-// Blank provider fields are missing evidence, not usable live or scheduled values.
-// Preserve the original nonblank text; presentation formatting is owned by the UI.
+// Blank provider platform fields are missing evidence, not usable values.
+// Preserve platform labels; presentation formatting is owned by the UI.
 private fun String?.usableRouteEvidence(): String? = this?.takeIf { it.isNotBlank() }
 
+// Malformed provider clocks must not mask a valid scheduled fallback.
+// Normalize incidental whitespace so RouteJourneyPanel.routeClock can display the
+// same value that is accepted here, including GTFS extended service-day hours.
+private fun String?.usableRouteTime(): String? =
+    this?.trim()?.takeIf { it.isNotEmpty() && routeClock(it) != null }
+
 internal fun routeEvidenceTime(actual: String?, planned: String?, routeOffline: Boolean): String? =
-    if (routeOffline) planned.usableRouteEvidence()
-    else actual.usableRouteEvidence() ?: planned.usableRouteEvidence()
+    if (routeOffline) planned.usableRouteTime()
+    else actual.usableRouteTime() ?: planned.usableRouteTime()
 
 internal fun routeEvidencePlatform(actual: String?, planned: String?, routeOffline: Boolean): String? =
     if (routeOffline) planned.usableRouteEvidence()
