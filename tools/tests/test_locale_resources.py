@@ -291,6 +291,24 @@ class LocaleResourceContractTest(unittest.TestCase):
         )
 
 
+    def test_java_formatter_percent_literal_rejects_invalid_flags_and_precision(self):
+        # Confirmed with Java 21 String.format; these throw before rendering.
+        for token in ("%#%", "%+%", "% %", "%0%", "%(%", "%,%", "%-%", "%5.2%", "%.2%"):
+            with self.subTest(token=token):
+                with self.assertRaisesRegex(ValueError, "invalid width, precision or flags for %"):
+                    placeholders(token)
+
+    def test_invalid_percent_literal_fails_even_when_all_locales_match(self):
+        for locale in ("values", "values-de", "values-en"):
+            self.write(locale, '<string name="arrival">Progress %#%</string>')
+        self.assertTrue(any("invalid format for arrival" in error for error in validate(self.root)))
+
+    def test_valid_percent_literal_width_alignment_and_index_remain_allowed(self):
+        for token in ("%%", "%5%", "%-5%", "%1$%", "%1$5%"):
+            with self.subTest(token=token):
+                self.assertEqual({}, dict(placeholders(token)))
+
+
     def test_java_formatter_line_separator_rejects_width_precision_and_flags(self):
         for token in ("%5n", "%.2n", "%-5n", "%1$5n"):
             with self.subTest(token=token):

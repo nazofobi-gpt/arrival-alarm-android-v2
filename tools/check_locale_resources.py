@@ -67,6 +67,12 @@ def placeholders(value: str) -> Counter[tuple[int, str]]:
                 raise ValueError(
                     f"relative flag invalid for no-argument conversion %{conversion} at offset {start}"
                 )
+            if conversion == "%" and not re.fullmatch(
+                r"%(?:[1-9][0-9]*[$])?(?:-?[1-9][0-9]*)?%", match.group(0)
+            ):
+                # Only optional left alignment and width are legal for literal percent.
+                # Java Formatter rejects %#%, %+%, %0%, %-% and %5.2%.
+                raise ValueError(f"invalid width, precision or flags for %% at offset {start}")
             if conversion == "n":
                 # Java Formatter permits an argument index but no width,
                 # precision or flags on the line-separator conversion.
