@@ -69,6 +69,11 @@ internal fun GtfsTripDetailStop.hasActionableArrivalClock(): Boolean =
 object TripStopRoleValidator {
     fun validate(detail: GtfsTripDetail, roles: TripStopRoles): TripStopRoleResult {
         fun reject(reason: TripStopRoleProblem) = TripStopRoleResult.Rejected(reason)
+        // A pre-resolved UI detail can bypass the persistence store's identity gate.
+        // Placeholder IDs must never authorize explicit boarding/alarm consent.
+        if (detail.identity.tripId.isBlank() || detail.identity.serviceId.isBlank() ||
+            detail.identity.routeId.isBlank()
+        ) return reject(TripStopRoleProblem.INVALID_STOP_SEQUENCE)
         val stops = detail.stops
         if (stops.size < 2 || stops.any {
                 it.stopSequence < 0 || it.stopId.isBlank() || it.name.isBlank() ||
