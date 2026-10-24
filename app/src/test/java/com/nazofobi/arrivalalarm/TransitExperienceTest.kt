@@ -384,4 +384,56 @@ class TransitExperienceTest {
         assertTrue(engine.departureBoard(listOf(validBoundary), now).single().isRealtime)
     }
 
+
+    @Test fun selectableBoardRejectsMissingOrContradictoryGtfsIdentity() {
+        val instance = GtfsTripInstanceIdentity(
+            tripId = "verified-trip",
+            serviceDate = GtfsServiceDate.parse("20261024"),
+            serviceId = "weekday",
+            routeId = "route-5",
+            directionId = 1,
+        )
+        val verified = Departure(
+            "verified-trip", "RE 5", "Bremen", 1_300L,
+            routeId = "route-5", gtfsInstance = instance,
+        )
+        val legacy = Departure("legacy-trip", "RB 1", "Lohne", 1_200L)
+        val malformed = listOf(
+            verified.copy(tripId = "", scheduledEpochSeconds = 1_010L),
+            verified.copy(tripId = "  ", scheduledEpochSeconds = 1_020L),
+            verified.copy(tripId = "different-trip", scheduledEpochSeconds = 1_030L),
+            verified.copy(routeId = "wrong-route", scheduledEpochSeconds = 1_040L),
+            verified.copy(routeId = "", scheduledEpochSeconds = 1_050L),
+        )
+        val engine = TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures = true))
+        assertEquals(
+            listOf(legacy, verified),
+            engine.departureBoard(malformed + verified + legacy, now, limit = 2),
+        )
+        assertEquals(
+            listOf(verified),
+            engine.alternateDepartures(malformed + verified + legacy, legacy, now),
+        )
+    }
+
+    @Test fun missingVisibleRouteWithMatchingGtfsTripRemainsSelectable() {
+        val instance = GtfsTripInstanceIdentity(
+            tripId = "source-trip",
+            serviceDate = GtfsServiceDate.parse("20261024"),
+            serviceId = "weekday",
+            routeId = "route-source",
+            directionId = null,
+        )
+        val noVisibleRoute = Departure(
+            "source-trip", "RE", "Bremen", 1_100L,
+            routeId = null, gtfsInstance = instance,
+        )
+        val next = noVisibleRoute.copy(routeId = "route-source", scheduledEpochSeconds = 1_200L)
+        val engine = TransitExperienceEngine(TransitProviderCapabilities())
+        assertEquals(
+            listOf(noVisibleRoute, next),
+            engine.departureBoard(listOf(noVisibleRoute, next), now),
+        )
+    }
+
 }

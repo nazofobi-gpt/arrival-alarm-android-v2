@@ -65,6 +65,16 @@ class TransitExperienceEngine(private val capabilities: TransitProviderCapabilit
         else departures.asSequence()
             .map { if (capabilities.realtimeDepartures) it else it.copy(realtimeEpochSeconds = null) }
             .filterNot { it.cancelled }
+            // A selectable service must have a nonblank trip ID, and attached
+            // GTFS proof must agree with its visible trip and route identity.
+            // Legacy departures without a GTFS instance remain visible.
+            .filter { departure ->
+                departure.tripId.isNotBlank() &&
+                    (departure.gtfsInstance?.let { instance ->
+                        instance.tripId == departure.tripId &&
+                            (departure.routeId == null || departure.routeId == instance.routeId)
+                    } != false)
+            }
             // A valid realtime update cannot make an invalid scheduled identity selectable.
             .filter { it.scheduledEpochSeconds.isDisplayableDepartureEpochSeconds() }
             .filter { it.effectiveEpochSeconds >= nowEpochSeconds }
