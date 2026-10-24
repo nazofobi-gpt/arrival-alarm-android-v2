@@ -180,7 +180,7 @@ class GermanyRealtimeMatcher(
         val ageSeconds = (nowEpochSeconds - sourceTimestamp).coerceAtLeast(0L)
         // Do not present future-dated or invalid provider clocks as live truth.
         // GTFS-RT may be up to 30 seconds ahead due to ordinary clock skew.
-        val plausibleProviderClock = nowEpochSeconds >= 0L && sourceTimestamp > 0L &&
+        val plausibleProviderClock = nowEpochSeconds > 0L && sourceTimestamp > 0L &&
             (sourceTimestamp <= nowEpochSeconds ||
                 sourceTimestamp - nowEpochSeconds <= MAX_FUTURE_CLOCK_SKEW_SECONDS)
         val freshness = if (plausibleProviderClock && ageSeconds <= freshWindowSeconds) {
