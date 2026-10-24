@@ -109,20 +109,41 @@ object ConnectorJsonCodec {
 
     private fun JSONObject.requiredPoint(name: String): MapPoint {
         val point = getJSONObject(name)
+        val latitude = point.getDouble("latitude")
+        val longitude = point.getDouble("longitude")
+        requireValidCoordinates(latitude, longitude)
         return MapPoint(
-            latitude = point.getDouble("latitude"),
-            longitude = point.getDouble("longitude"),
+            latitude = latitude,
+            longitude = longitude,
             label = point.requiredNonBlank("label"),
         )
     }
 
-    private fun JSONObject.decodeStop(): ConnectorStopState =
-        ConnectorStopState(
+    private fun JSONObject.decodeStop(): ConnectorStopState {
+        val latitude = if (has("latitude")) getDouble("latitude") else null
+        val longitude = if (has("longitude")) getDouble("longitude") else null
+        require((latitude == null) == (longitude == null)) {
+            "Stop coordinates must contain both latitude and longitude"
+        }
+        if (latitude != null && longitude != null) {
+            requireValidCoordinates(latitude, longitude)
+        }
+        return ConnectorStopState(
             id = optString("id").takeIf { it.isNotBlank() },
             name = requiredNonBlank("name"),
-            latitude = if (has("latitude")) getDouble("latitude") else null,
-            longitude = if (has("longitude")) getDouble("longitude") else null,
+            latitude = latitude,
+            longitude = longitude,
         )
+    }
+
+    private fun requireValidCoordinates(latitude: Double, longitude: Double) {
+        require(latitude.isFinite() && latitude in -90.0..90.0) {
+            "Latitude must be a finite value between -90 and 90"
+        }
+        require(longitude.isFinite() && longitude in -180.0..180.0) {
+            "Longitude must be a finite value between -180 and 180"
+        }
+    }
 
     private fun JSONObject.requiredNonBlank(name: String): String =
         getString(name).trim().also { require(it.isNotEmpty()) { "$name must not be blank" } }
