@@ -255,6 +255,37 @@ class GtfsTripDetailResolverTest {
         )
     }
 
+    @Test
+    fun missingFirstOrLastStopClockCannotConfirmScheduledTrip() {
+        val source = FakeSource()
+        val identity = GtfsTripInstanceIdentity.scheduled(trip, serviceDate)
+        val resolver = GtfsTripDetailResolver(source)
+        val original = source.times
+        val invalid = listOf(
+            original.mapIndexed { index, stop ->
+                if (index == 0) stop.copy(arrivalTime = null) else stop
+            },
+            original.mapIndexed { index, stop ->
+                if (index == 0) stop.copy(departureTime = null) else stop
+            },
+            original.mapIndexed { index, stop ->
+                if (index == original.lastIndex) stop.copy(arrivalTime = null) else stop
+            },
+            original.mapIndexed { index, stop ->
+                if (index == original.lastIndex) stop.copy(departureTime = null) else stop
+            },
+        )
+        invalid.forEach { candidate ->
+            source.times = candidate
+            assertEquals(
+                GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.INVALID_STOP_TIME),
+                resolver.resolve(identity),
+            )
+        }
+        source.times = original
+        assertTrue(resolver.resolve(identity) is GtfsTripDetailResult.Available)
+    }
+
     private fun st(sequence: Int, stopId: String) = GtfsScheduleStopTime(
         tripId = trip.id, stopSequence = sequence, stopId = stopId,
         arrivalTime = when (sequence) {
