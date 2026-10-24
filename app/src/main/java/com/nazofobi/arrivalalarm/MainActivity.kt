@@ -734,6 +734,10 @@ fun ArrivalAlarmApp(
     LaunchedEffect(query) {
         val q = query.trim()
         if (q.length < 2) {
+            // A late response for the previous query must never reinstate search
+            // results or positive readiness after the query has been cleared.
+            searchRequestId += 1
+            searchHealth = TransitFunctionHealth.UNVERIFIED
             searchResults = emptyList()
             searchSource = null
             searchMessage = null
