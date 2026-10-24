@@ -48,7 +48,9 @@ fun TransitExperiencePanel(
     loading: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val engine = remember(providerCapabilities) { TransitExperienceEngine(providerCapabilities) }
+    val engine = remember(providerCapabilities, isOfflineCache) {
+        TransitExperienceEngine(providerCapabilities, isOfflineCache = isOfflineCache)
+    }
     val context = LocalContext.current.applicationContext
     val prefs = remember(context) {
         context.getSharedPreferences("transit_experience", Context.MODE_PRIVATE)
