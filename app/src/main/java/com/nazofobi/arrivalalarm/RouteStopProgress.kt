@@ -219,8 +219,9 @@ internal fun String?.toTransitEpochSecondsOrNull(): Long? {
     }.getOrNull()
 }
 
+// RFC 3339 numeric offsets require the colon (+02:00, not +0200).
 private val ISO_TRANSIT_TIMESTAMP = Regex(
-    "^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(\\.\\d+)?(Z|([+-])(\\d{2}):?(\\d{2}))$"
+    "^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(\\.\\d+)?(Z|([+-])(\\d{2}):(\\d{2}))$"
 )
 
 /** Only fresh matched route evidence can advance progress using realtime stop times. */
