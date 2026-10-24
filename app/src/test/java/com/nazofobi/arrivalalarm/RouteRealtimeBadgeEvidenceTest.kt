@@ -29,4 +29,32 @@ class RouteRealtimeBadgeEvidenceTest {
         assertFalse(routeHasVerifiedRealtimePlatform(false, fresh, actualPlatform = null))
         assertFalse(routeHasVerifiedRealtimePlatform(true, fresh, actualPlatform = "3"))
     }
+
+    @Test fun cancelledRouteBadgeNeedsFreshMatchedOnlineEvidence() {
+        val untrusted = listOf<RouteRealtimeState?>(
+            null,
+            RouteRealtimeState.STALE,
+            RouteRealtimeState.UNAVAILABLE,
+            RouteRealtimeState.FRESH_NO_MATCH,
+        )
+        for (state in untrusted) {
+            assertFalse(routeHasVerifiedRealtimeCancellation(false, state, suppliedCancellation = true))
+        }
+
+        assertFalse(
+            routeHasVerifiedRealtimeCancellation(
+                true, RouteRealtimeState.FRESH_MATCHED, suppliedCancellation = true,
+            ),
+        )
+        assertFalse(
+            routeHasVerifiedRealtimeCancellation(
+                false, RouteRealtimeState.FRESH_MATCHED, suppliedCancellation = false,
+            ),
+        )
+        assertTrue(
+            routeHasVerifiedRealtimeCancellation(
+                false, RouteRealtimeState.FRESH_MATCHED, suppliedCancellation = true,
+            ),
+        )
+    }
 }
