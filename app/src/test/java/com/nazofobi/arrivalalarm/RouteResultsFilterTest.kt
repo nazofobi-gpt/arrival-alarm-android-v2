@@ -204,6 +204,29 @@ class RouteResultsFilterTest {
     }
 
     @Test
+    fun discardedNonphysicalCandidateCannotShadowAnotherRouteWithSameId() {
+        // Detail lookup still sees the raw source list and selects by ID.
+        // Discarding the first bad option alone would expose the second card
+        // while silently opening the first, nonphysical journey.
+        val bad = option("reused-id", 0).copy(
+            origin = origin.copy(latitude = Double.NaN),
+        )
+        val good = option("reused-id", 0)
+        val unaffected = option("safe-id", 1)
+        val candidates = listOf(bad, good, unaffected)
+
+        assertEquals(
+            listOf("safe-id"),
+            RouteResultsFilter().apply(candidates).map { it.id },
+        )
+        assertEquals(
+            listOf("safe-id"),
+            RouteResultsFilter(maxTransfers = 1).apply(candidates).map { it.id },
+        )
+        assertEquals(candidates, listOf(bad, good, unaffected))
+    }
+
+    @Test
     fun exactDuplicateProviderRowsAreDisplayedOnceWithoutChangingOrder() {
         val repeated = option("first", 0)
         val candidates = listOf(repeated, repeated.copy(), option("second", 0), repeated)
