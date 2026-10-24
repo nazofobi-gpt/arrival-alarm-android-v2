@@ -64,4 +64,13 @@ class RouteOfflineEvidenceTest {
         assertFalse(routeHasTrustedRealtime(routeOffline = true,
             suppliedRealtime = routeHasUsableRealtimeDelta("08:42", "08:15")))
     }
+    @Test fun blankRealtimePlatformNeverClaimsARealtimeBadge() {
+        for (missing in listOf<String?>(null, "", " ", "\t")) {
+            assertFalse(routeHasTrustedRealtimePlatform(routeOffline = false, actualPlatform = missing))
+            assertFalse(routeHasTrustedRealtimePlatform(routeOffline = true, actualPlatform = missing))
+        }
+        assertTrue(routeHasTrustedRealtimePlatform(routeOffline = false, actualPlatform = "2"))
+        assertFalse(routeHasTrustedRealtimePlatform(routeOffline = true, actualPlatform = "2"))
+    }
+
 }
