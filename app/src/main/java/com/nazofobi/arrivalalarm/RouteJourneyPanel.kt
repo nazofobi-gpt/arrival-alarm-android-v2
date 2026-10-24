@@ -251,8 +251,11 @@ private fun RouteOptionCard(
     )
     val realtimeLabel = when {
         routeOffline -> R.string.route_offline_badge
-        option.realtime?.cancelledTripIds?.isNotEmpty() == true ->
-            R.string.route_realtime_cancelled_badge
+        routeHasVerifiedRealtimeCancellation(
+            routeOffline = routeOffline,
+            state = option.realtime?.state,
+            suppliedCancellation = option.realtime?.cancelledTripIds?.isNotEmpty() == true,
+        ) -> R.string.route_realtime_cancelled_badge
         hasRealtime -> R.string.route_realtime_badge
         option.realtime?.state == RouteRealtimeState.STALE ->
             R.string.route_realtime_stale_badge
