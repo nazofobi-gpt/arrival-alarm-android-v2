@@ -45,9 +45,10 @@ internal fun GtfsTripDetailStop.hasActionableScheduleClock(): Boolean {
         val departure = scheduledDeparture?.let {
             GtfsServiceTime.parse(it).secondsFromServiceDayStart
         }
-        // A malformed or inverted dwell interval cannot authorize boarding or an alarm,
-        // even if only one of its clocks is required for the selected role.
-        arrival == null || departure == null || arrival <= departure
+        // GTFS may provide only the clock required by the selected role:
+        // boarding needs departure, while alighting/alarm needs arrival. When both
+        // clocks exist, the dwell interval must still be chronologically valid.
+        (arrival == null || departure == null || arrival <= departure)
     } catch (_: IllegalArgumentException) {
         false
     }
