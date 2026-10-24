@@ -471,8 +471,9 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
                         )
                         routeEvidencePlatform(stop.platform, stop.plannedPlatform, routeOffline)
                             ?.let { platform ->
-                            val realtimePlatform = routeHasTrustedRealtime(
-                                routeOffline, stop.platform != null,
+                            val realtimePlatform = routeHasTrustedRealtimePlatform(
+                                routeOffline = routeOffline,
+                                actualPlatform = stop.platform,
                             )
                             Text(
                                 text = stringResource(
