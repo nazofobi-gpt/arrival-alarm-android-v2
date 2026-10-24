@@ -26,13 +26,27 @@ class OfflineTransitCache(
     private val backingStore: TransitCacheBackingStore = NoOpTransitCacheBackingStore,
 ) {
     private val entries = LinkedHashMap<String, CachedTransitPlan>()
+    // A zero or negative capacity must disable retention, not silently keep one trip.
+    private val capacity = maxEntries.coerceAtLeast(0)
 
     init {
         // Persisted records may predate the realtime-stripping write contract.
         // Never reintroduce live cancellation, platform or ETA data after process restore.
-        backingStore.load().takeLast(maxEntries.coerceAtLeast(1)).forEach { plan ->
-            val safe = plan.forOfflineCache()
-            entries[safe.key] = safe
+        try {
+            // Prefer the most recent version of each key before applying
+            // capacity, so duplicate legacy records cannot evict valid trips.
+            backingStore.load().asReversed().asSequence()
+                .distinctBy { it.key }
+                .take(capacity)
+                .toList().asReversed()
+                .forEach { plan ->
+                val safe = plan.forOfflineCache()
+                entries[safe.key] = safe
+            }
+        } catch (_: RuntimeException) {
+            // Corrupt or unavailable disk state must not crash offline routing.
+            // Reject the entire partial restore rather than expose unverified entries.
+            entries.clear()
         }
     }
 
@@ -40,8 +54,13 @@ class OfflineTransitCache(
         val cacheSafe = plan.forOfflineCache()
         entries.remove(cacheSafe.key)
         entries[cacheSafe.key] = cacheSafe
-        while (entries.size > maxEntries.coerceAtLeast(1)) entries.remove(entries.keys.first())
-        backingStore.save(entries.values.toList())
+        while (entries.size > capacity) entries.remove(entries.keys.first())
+        try {
+            backingStore.save(entries.values.toList())
+        } catch (_: RuntimeException) {
+            // Retain a scheduled-only fallback for this session even if disk is full.
+            // Persistence is not guaranteed after a failed save.
+        }
     }
 
     fun get(key: String): CachedTransitPlan? = entries[key]
@@ -79,7 +98,7 @@ private fun RouteOption.forOfflineCache(): RouteOption =
     // Legacy JSON stores actual stop times/platforms but omits RouteRealtimeInfo.
     // The planned fields remain as the authoritative scheduled-only fallback.
     if (realtime == null && stops.none {
-            it.plannedArrival != null || it.plannedDeparture != null || it.plannedPlatform != null
+            it.arrival != null || it.departure != null || it.platform != null
         }
     ) {
         this

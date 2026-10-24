@@ -29,6 +29,50 @@ class GuidanceReliabilityTest {
         assertEquals("Hedef Flughafen Bremen", speaker.spoken.last().text)
     }
 
+    @Test fun blankGuidanceIdentityOrTextCannotReachTtsOrPendingStore() {
+        val speaker = RecordingSpeaker()
+        val store = InMemoryGuidanceStateStore()
+        val controller = GuidanceReliabilityController(speaker, store)
+        controller.onPermissions(GuidancePermissionSnapshot(true, true, true))
+
+        assertFalse(controller.requestGuidance(GuidanceUtterance("  ", "Next stop", "en-US")))
+        assertFalse(controller.requestGuidance(GuidanceUtterance("stop:missing", "  ", "en-US")))
+        assertTrue(speaker.spoken.isEmpty())
+        assertNull(controller.state.pending)
+        assertNull(controller.state.lastSpokenKey)
+
+        controller.onPermissions(GuidancePermissionSnapshot(false, false, false))
+        assertFalse(controller.requestGuidance(GuidanceUtterance("", "Destination", "en-US")))
+        assertFalse(controller.requestGuidance(GuidanceUtterance("stop:blank", "", "en-US")))
+        assertNull(controller.state.pending)
+        assertNull(controller.state.pendingSinceEpochMillis)
+    }
+
+    @Test fun malformedRestoredPendingGuidanceIsDiscardedWithoutSpeech() {
+        val speaker = RecordingSpeaker()
+        val malformed = GuidanceUtterance("stop:unknown", "  ", "tr-TR")
+        val store = object : GuidanceStateStore {
+            var saved = GuidanceReliabilityState(
+                pending = malformed,
+                pendingSinceEpochMillis = 10_000L,
+                permissionState = GuidancePermissionState.GRANTED,
+            )
+            override fun load(): GuidanceReliabilityState = saved
+            override fun save(state: GuidanceReliabilityState) { saved = state }
+        }
+        val controller = GuidanceReliabilityController(
+            speaker,
+            store,
+            nowEpochMillis = { 10_001L },
+        )
+
+        assertFalse(controller.retryPending())
+        assertTrue(speaker.spoken.isEmpty())
+        assertNull(controller.state.pending)
+        assertNull(controller.state.pendingSinceEpochMillis)
+        assertNull(store.saved.pending)
+    }
+
     @Test fun deterministicVoiceFallbackPolicy() {
         assertEquals(VoiceChoice.DESIRED_LOCALE, TtsVoicePolicy.choose(true, true))
         assertEquals(VoiceChoice.DEVICE_FALLBACK, TtsVoicePolicy.choose(false, true))
@@ -257,4 +301,69 @@ class GuidanceReliabilityTest {
         assertNull(recreated.state.pending)
     }
 
+    @Test fun brokenGuidanceStateLoadDoesNotPreventInSessionTts() {
+        val brokenStore = object : GuidanceStateStore {
+            override fun load(): GuidanceReliabilityState? =
+                throw IllegalStateException("corrupt stored guidance state")
+            override fun save(state: GuidanceReliabilityState) {}
+        }
+        val speaker = RecordingSpeaker()
+        val controller = GuidanceReliabilityController(speaker, brokenStore)
+        controller.onPermissions(GuidancePermissionSnapshot(true, true, false))
+        val instruction = GuidanceUtterance(
+            "stop:lo", "Sıradaki durak Lohne", "tr-TR",
+        )
+
+        assertTrue(controller.requestGuidance(instruction))
+        assertEquals(listOf(instruction), speaker.spoken)
+        assertEquals(instruction.key, controller.state.lastSpokenKey)
+    }
+
+    @Test fun brokenGuidanceStateSaveDoesNotSuppressTtsOrDuplicateInstruction() {
+        val brokenStore = object : GuidanceStateStore {
+            override fun load(): GuidanceReliabilityState? = null
+            override fun save(state: GuidanceReliabilityState) {
+                throw IllegalStateException("guidance storage unavailable")
+            }
+        }
+        val speaker = RecordingSpeaker()
+        val controller = GuidanceReliabilityController(speaker, brokenStore)
+        controller.onPermissions(GuidancePermissionSnapshot(true, true, true))
+        controller.onAudioRoute(GuidanceAudioRoute.BLUETOOTH_CONNECTED)
+        val instruction = GuidanceUtterance(
+            "stop:bre", "Sıradaki durak Bremen Hbf", "tr-TR",
+        )
+
+        assertTrue(controller.requestGuidance(instruction))
+        controller.onAudioRoute(GuidanceAudioRoute.BLUETOOTH_DISCONNECTED)
+        assertFalse(controller.requestGuidance(instruction))
+        assertEquals(listOf(instruction), speaker.spoken)
+        assertEquals(instruction.key, controller.state.lastSpokenKey)
+    }
+
+
+    @Test fun restoredAlreadySpokenPendingIsClearedWithoutReplay() {
+        val instruction = GuidanceUtterance("stop:lo", "Sıradaki durak Lohne", "tr-TR")
+        var saved = GuidanceReliabilityState(
+            lastSpokenKey = instruction.key,
+            pending = instruction,
+            pendingSinceEpochMillis = 100_000L,
+        )
+        val store = object : GuidanceStateStore {
+            override fun load(): GuidanceReliabilityState = saved
+            override fun save(state: GuidanceReliabilityState) { saved = state }
+        }
+        val speaker = RecordingSpeaker()
+        val controller = GuidanceReliabilityController(speaker, store, nowEpochMillis = { 100_100L })
+
+        controller.onPermissions(GuidancePermissionSnapshot(true, true, true))
+        assertTrue(speaker.spoken.isEmpty())
+        assertEquals(instruction.key, controller.state.lastSpokenKey)
+        assertNull(controller.state.pending)
+        assertNull(controller.state.pendingSinceEpochMillis)
+
+        val recreated = GuidanceReliabilityController(speaker, store, nowEpochMillis = { 100_200L })
+        assertFalse(recreated.retryPending())
+        assertTrue(speaker.spoken.isEmpty())
+    }
 }

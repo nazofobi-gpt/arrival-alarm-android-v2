@@ -48,7 +48,9 @@ class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
     fun searchStops(query:String,limit:Int=20):List<CatalogStop> {
         val q = query.trim()
         if (q.isEmpty() || limit <= 0) return emptyList()
-        return snapshot.stops.asSequence().filter { it.name.contains(q, true) }.take(limit).toList()
+        return snapshot.stops.asSequence().filter { it.name.contains(q, true) }
+            .distinctBy { it.providerId to it.id }
+            .take(limit).toList()
     }
 
     fun searchRoutes(query:String,limit:Int=20):List<CatalogRoute> {
@@ -56,7 +58,7 @@ class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
         if (q.isEmpty() || limit <= 0) return emptyList()
         return snapshot.routes.asSequence().filter {
             it.shortName.contains(q, true) || it.direction.contains(q, true)
-        }.take(limit).toList()
+        }.distinctBy { it.providerId to it.id }.take(limit).toList()
     }
 
     fun searchTrips(query:String,limit:Int=20):List<Pair<CatalogTrip,CatalogRoute>> {
@@ -68,12 +70,47 @@ class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
                 trip.id.contains(q, true) || trip.departure.contains(q, true) ||
                     route.shortName.contains(q, true) || route.direction.contains(q, true)
             }
+            .distinctBy { (trip, _) -> trip.providerId to trip.id }
             .take(limit)
             .toList()
     }
 
-    fun tripsForRoute(routeId:String)=snapshot.trips.filter{it.routeId==routeId}
-    fun routesServing(originStopId:String,destinationStopId:String):List<CatalogRoute> = snapshot.routes.filter { route -> val a=route.stopIds.indexOf(originStopId); val b=route.stopIds.indexOf(destinationStopId); a>=0 && b>a }
+    // A GTFS route ID is only unique within one provider. Legacy callers lacking
+    // provider context must not accidentally return trips from two transit feeds.
+    fun tripsForRoute(routeId: String): List<CatalogTrip> {
+        val providers = snapshot.routes.asSequence()
+            .filter { it.id == routeId }
+            .map { it.providerId }
+            .distinct()
+            .take(2)
+            .toList()
+        return if (providers.size == 1) tripsForRoute(providers.single(), routeId) else emptyList()
+    }
+
+    fun tripsForRoute(providerId: String, routeId: String): List<CatalogTrip> {
+        if (providerId.isBlank() || routeId.isBlank() ||
+            (providerId to routeId) !in routesByProviderAndId
+        ) return emptyList()
+        return snapshot.trips.filter { it.providerId == providerId && it.routeId == routeId }
+    }
+    /**
+     * GTFS stop IDs are provider-local. A route must match the selected origin
+     * and destination in the same provider, not just two coincidentally equal IDs.
+     * Cross-provider travel requires an explicit transfer graph, which this
+     * direct-route catalog does not implement.
+     */
+    fun routesServing(originStop: CatalogStop, destinationStop: CatalogStop): List<CatalogRoute> {
+        if (originStop.providerId.isBlank() || originStop.providerId != destinationStop.providerId ||
+            originStop.id.isBlank() || destinationStop.id.isBlank()
+        ) return emptyList()
+        return snapshot.routes.filter { route ->
+            if (route.providerId != originStop.providerId) return@filter false
+            val boarding = route.stopIds.indexOf(originStop.id)
+            // A loop may revisit the alighting stop after boarding.
+            val alighting = route.stopIds.lastIndexOf(destinationStop.id)
+            boarding >= 0 && alighting > boarding
+        }
+    }
 
     fun nearestStops(latitude:Double,longitude:Double,limit:Int=5):List<NearbyStop> {
         // Bad GPS/provider coordinates must not crash distance rounding or reach map UI.
@@ -132,5 +169,5 @@ class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
 
     fun provider(id:String)=snapshot.providers.firstOrNull{it.id==id}
     fun isStale()=snapshot.stale
-    private fun haversineMeters(lat1:Double,lon1:Double,lat2:Double,lon2:Double):Double { val r=6_371_000.0; val p1=Math.toRadians(lat1); val p2=Math.toRadians(lat2); val dp=Math.toRadians(lat2-lat1); val dl=Math.toRadians(lon2-lon1); val a=sin(dp/2).pow(2)+cos(p1)*cos(p2)*sin(dl/2).pow(2); return 2*r*atan2(sqrt(a),sqrt(1-a)) }
+    private fun haversineMeters(lat1:Double,lon1:Double,lat2:Double,lon2:Double):Double { val r=6_371_000.0; val p1=Math.toRadians(lat1); val p2=Math.toRadians(lat2); val dp=Math.toRadians(lat2-lat1); val dl=Math.toRadians(lon2-lon1); val a=(sin(dp/2).pow(2)+cos(p1)*cos(p2)*sin(dl/2).pow(2)).coerceIn(0.0,1.0); return 2*r*atan2(sqrt(a),sqrt(1-a)) }
 }

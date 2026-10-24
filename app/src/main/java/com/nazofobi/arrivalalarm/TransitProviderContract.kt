@@ -106,6 +106,11 @@ data class TransitProviderFreshness(
                 return TransitProviderFreshness(TransitProviderFreshnessState.UNKNOWN)
             }
             require(updatedAtEpochSeconds >= 0L)
+            // Zero is a missing/unsynchronized clock sentinel, not proof of freshness.
+            // Do not turn an absent update timestamp or an unset device clock into FRESH.
+            if (updatedAtEpochSeconds == 0L || nowEpochSeconds == 0L) {
+                return TransitProviderFreshness(TransitProviderFreshnessState.UNKNOWN)
+            }
             // Never label a substantially future-dated provider snapshot as FRESH.
             // A small positive skew accounts for unsynchronized device/provider clocks.
             if (updatedAtEpochSeconds > nowEpochSeconds &&

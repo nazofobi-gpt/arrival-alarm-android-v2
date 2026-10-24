@@ -34,6 +34,96 @@ class CancelledDepartureVisibilityTest {
         assertEquals(listOf("first", "second", "third"), actual.map { it.tripId })
     }
 
+    @Test fun repeatedProviderCancellationDoesNotHideOtherDepartures() {
+        val actual = upcomingCancelledDepartures(
+            listOf(
+                cancelled("a", 1_100L),
+                cancelled("a", 1_100L, realtime = 1_800L),
+                cancelled("b", 1_200L),
+                cancelled("a", 1_300L),
+            ),
+            nowEpochSeconds = 1_000L,
+            limit = 3,
+        )
+        // Same trip at a different scheduled time represents a distinct departure.
+        assertEquals(
+            listOf("a" to 1_100L, "b" to 1_200L, "a" to 1_300L),
+            actual.map { it.tripId to it.scheduledEpochSeconds },
+        )
+    }
+
+    @Test fun sharedTripIdAndScheduleAcrossDifferentRoutesDoesNotHideCancellation() {
+        val routeA = Departure(
+            "shared", "RE 1", "Bremen", 1_100L, cancelled = true, routeId = "route-a",
+        )
+        val routeB = Departure(
+            "shared", "S 1", "Oldenburg", 1_100L, cancelled = true, routeId = "route-b",
+        )
+        val duplicateUpdate = routeA.copy(realtimeEpochSeconds = 1_400L)
+
+        val actual = upcomingCancelledDepartures(
+            listOf(routeA, duplicateUpdate, routeB),
+            nowEpochSeconds = 1_000L,
+        )
+        assertEquals(listOf(routeA, routeB), actual)
+    }
+
+    @Test fun routeIdUnavailableStillKeepsDistinctDisplayedServices() {
+        val bremen = cancelled("shared", 1_100L)
+        val oldenburg = bremen.copy(line = "S 1", direction = "Oldenburg")
+
+        assertEquals(
+            listOf(bremen, oldenburg),
+            upcomingCancelledDepartures(listOf(bremen, oldenburg), nowEpochSeconds = 1_000L),
+        )
+    }
+
+    @Test fun frequencyInstancesWithSameTripAndScheduleRemainDistinct() {
+        val first = Departure(
+            "frequency", "RE 1", "Bremen", 1_100L,
+            cancelled = true, routeId = "route-1",
+            realtimeTripStartDate = "20261019", realtimeTripStartTime = "08:00:00",
+        )
+        val second = first.copy(realtimeTripStartTime = "08:10:00")
+        val duplicateUpdate = first.copy(realtimeEpochSeconds = 1_400L)
+
+        assertEquals(
+            listOf(first, second),
+            upcomingCancelledDepartures(
+                listOf(first, duplicateUpdate, second),
+                nowEpochSeconds = 1_000L,
+            ),
+        )
+    }
+
+    @Test fun cancellationDedupKeepsDistinctGtfsInstancesAndBoardingStops() {
+        val identity = GtfsTripInstanceIdentity(
+            tripId = "shared-trip",
+            serviceDate = GtfsServiceDate.parse("20261020"),
+            serviceId = "service-1",
+            routeId = "route-1",
+            directionId = 0,
+        )
+        val first = Departure(
+            "shared-trip", "RE 1", "Bremen", 1_100L,
+            cancelled = true, routeId = "route-1",
+            gtfsInstance = identity, boardingStopSequence = 1,
+        )
+        val duplicateUpdate = first.copy(realtimeEpochSeconds = 1_400L)
+        val nextServiceDay = first.copy(
+            gtfsInstance = identity.copy(serviceDate = GtfsServiceDate.parse("20261021")),
+        )
+        val otherBoardingStop = first.copy(boardingStopSequence = 2)
+
+        assertEquals(
+            listOf(first, nextServiceDay, otherBoardingStop),
+            upcomingCancelledDepartures(
+                listOf(first, duplicateUpdate, nextServiceDay, otherBoardingStop),
+                nowEpochSeconds = 1_000L,
+            ),
+        )
+    }
+
     @Test fun realtimeTimestampDoesNotResurrectAlreadyPassedCancellation() {
         val actual = upcomingCancelledDepartures(
             listOf(cancelled("past", 900L, realtime = 1_500L)),
@@ -47,4 +137,42 @@ class CancelledDepartureVisibilityTest {
         assertTrue(upcomingCancelledDepartures(source, 1_000L, limit = 0).isEmpty())
         assertTrue(upcomingCancelledDepartures(source, 1_000L, limit = -10).isEmpty())
     }
+    @Test fun invalidCancelledScheduleNeverAppearsWithValidClock() {
+        val invalid = listOf(0L, -1L, Long.MIN_VALUE, Long.MAX_VALUE,
+            MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS + 1)
+        val samples = invalid.mapIndexed { index, epoch ->
+            cancelled("bad-$index", epoch, realtime = 1_500L)
+        } + cancelled("valid", 1_200L)
+        assertEquals(
+            listOf("valid"),
+            upcomingCancelledDepartures(samples, nowEpochSeconds = 1_000L)
+                .map { it.tripId },
+        )
+    }
+
+    @Test fun invalidDeviceClockNeverReportsCancelledTripsAsUpcoming() {
+        val upcoming = listOf(cancelled("today", 1_200L), cancelled("later", 1_800L))
+        val invalidClocks = listOf(
+            0L, -1L, Long.MIN_VALUE,
+            MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS + 1L, Long.MAX_VALUE,
+        )
+        for (invalidClock in invalidClocks) {
+            assertTrue(upcomingCancelledDepartures(upcoming, nowEpochSeconds = invalidClock).isEmpty())
+        }
+        assertEquals(
+            listOf("today", "later"),
+            upcomingCancelledDepartures(upcoming, nowEpochSeconds = 1_000L).map { it.tripId },
+        )
+    }
+
+    @Test fun cancelledScheduleAtDisplayBoundaryRemainsVisible() {
+        val boundary = cancelled("boundary", MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS)
+        assertEquals(
+            listOf(boundary),
+            upcomingCancelledDepartures(
+                listOf(boundary), nowEpochSeconds = 1_000L,
+            ),
+        )
+    }
+
 }

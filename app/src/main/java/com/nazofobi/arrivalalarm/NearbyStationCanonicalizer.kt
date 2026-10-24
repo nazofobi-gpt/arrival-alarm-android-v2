@@ -17,6 +17,7 @@ internal object NearbyStationCanonicalizer {
         candidates: List<NearbyStop>,
         limit: Int,
     ): List<NearbyStop> {
+        if (limit <= 0) return emptyList()
         // GTFS stop IDs are scoped to the feed/provider, not globally unique.
         val parentIds = candidates.mapNotNull { candidate ->
             val stop = candidate.stop
@@ -30,7 +31,7 @@ internal object NearbyStationCanonicalizer {
                 when {
                     parentId != null -> GroupKey("parent", stop.providerId, parentId)
                     (stop.providerId to stop.id) in parentIds -> GroupKey("parent", stop.providerId, stop.id)
-                    else -> GroupKey("fallback", null, fallbackKey(stop))
+                    else -> GroupKey("fallback", stop.providerId, fallbackKey(stop))
                 }
             }
             .values
@@ -112,7 +113,10 @@ internal object NearbyStationCanonicalizer {
         val p2 = Math.toRadians(lat2)
         val dp = Math.toRadians(lat2 - lat1)
         val dl = Math.toRadians(lon2 - lon1)
-        val a = sin(dp / 2).pow(2) + cos(p1) * cos(p2) * sin(dl / 2).pow(2)
+        // Clamp spherical floating-point roundoff before square-rooting 1-a.
+        // This is the second distance calculation, after catalog candidate mapping.
+        val a = (sin(dp / 2).pow(2) + cos(p1) * cos(p2) * sin(dl / 2).pow(2))
+            .coerceIn(0.0, 1.0)
         return 2 * radius * atan2(sqrt(a), sqrt(1 - a))
     }
 }

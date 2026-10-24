@@ -20,6 +20,12 @@ data class ArmedRoute(
         require(routeId.isNotBlank())
         require(stops.isNotEmpty())
         require(targetIndex in stops.indices)
+        // Malformed static GTFS stop coordinates must never enter the armed
+        // alarm engine; NaN distances could otherwise suppress arrival/missed events.
+        require(stops.all { stop ->
+            stop.latitude.isFinite() && stop.latitude in -90.0..90.0 &&
+                stop.longitude.isFinite() && stop.longitude in -180.0..180.0
+        }) { "Route contains invalid stop coordinates" }
     }
 
     // Route IDs may remain stable while the selected alarm target or stop
@@ -63,20 +69,46 @@ interface ArrivalProgressStateStore {
 
 class ArrivalProgressController(
     private val stateStore: ArrivalProgressStateStore? = null,
+    private val nowEpochMillis: () -> Long = { System.currentTimeMillis() },
 ) {
-    var state: ArrivalProgressState = stateStore?.load() ?: ArrivalProgressState()
+    var state: ArrivalProgressState = try {
+        stateStore?.load() ?: ArrivalProgressState()
+    } catch (_: RuntimeException) {
+        // Legacy/wrong-typed persisted values must not crash journey restoration.
+        ArrivalProgressState()
+    }
         private set
 
     private var route: ArmedRoute? = null
+    private var latestAcceptedFixEpochMillis: Long = 0L
 
     fun arm(route: ArmedRoute) {
         this.route = route
+        latestAcceptedFixEpochMillis = 0L
         val restored = state.takeIf {
             it.routeId == route.routeId && it.armed &&
-                it.routeFingerprint == route.persistenceFingerprint
+                it.routeFingerprint == route.persistenceFingerprint &&
+                it.lastMatchedStopIndex in route.stops.indices &&
+                it.progressFraction.isFinite() && it.progressFraction in 0.0..1.0 &&
+                it.arrivalEventCount >= 0 &&
+                (it.phase != ArrivalAlertPhase.ARRIVED || it.arrivalEventCount > 0)
         }
         setState(
-            restored ?: ArrivalProgressState(
+            // A restored debounce counter has no persisted GPS timestamp
+            // watermark, so it cannot prove a second independent fix.
+            restored?.copy(
+                // Persisted UI metrics may be corrupt even when the route identity
+                // and terminal one-shot event are valid. Drop only invalid metrics:
+                // resetting an ARRIVED state would risk a duplicate arrival alarm.
+                distanceToTargetMeters = restored.distanceToTargetMeters?.takeIf {
+                    it.isFinite() && it >= 0.0
+                },
+                adaptiveThresholdMeters = restored.adaptiveThresholdMeters?.takeIf {
+                    it.isFinite() && it in 120.0..320.0
+                },
+                consecutiveInsideThreshold = 0,
+                consecutivePastTarget = 0,
+            ) ?: ArrivalProgressState(
                 routeId = route.routeId,
                 armed = true,
                 phase = ArrivalAlertPhase.TRACKING,
@@ -87,6 +119,7 @@ class ArrivalProgressController(
 
     fun disarm() {
         route = null
+        latestAcceptedFixEpochMillis = 0L
         setState(ArrivalProgressState())
     }
 
@@ -102,12 +135,20 @@ class ArrivalProgressController(
             !point.longitude.isFinite() || point.longitude !in -180.0..180.0 ||
             !fix.accuracyMeters.isFinite() || fix.accuracyMeters < 0.0 ||
             fix.accuracyMeters > ArrivalLocationQuality.MAX_TRACKING_ACCURACY_METERS ||
-            !fix.speedMps.isFinite() || fix.speedMps < 0.0
+            !fix.speedMps.isFinite() || fix.speedMps < 0.0 ||
+            fix.epochMillis < 0L || !hasPlausibleFixTime(fix.epochMillis)
         ) {
             if (state.consecutiveInsideThreshold != 0 || state.consecutivePastTarget != 0) {
                 setState(state.copy(consecutiveInsideThreshold = 0, consecutivePastTarget = 0))
             }
             return state
+        }
+
+        // A callback replay or older timestamp is not a second independent GPS fix.
+        // Zero means timestamp unavailable; retain the legacy path for those providers.
+        if (fix.epochMillis > 0L) {
+            if (fix.epochMillis <= latestAcceptedFixEpochMillis) return state
+            latestAcceptedFixEpochMillis = fix.epochMillis
         }
 
         val nearestIndex = activeRoute.stops.indices.minBy { index ->
@@ -179,12 +220,33 @@ class ArrivalProgressController(
             .coerceIn(120.0, 320.0)
     }
 
+    /** Timestamped GPS evidence must be recent enough to count toward arrival or missed-stop debounce. */
+    private fun hasPlausibleFixTime(epochMillis: Long): Boolean {
+        if (epochMillis == 0L) return true // Preserve the legacy timestamp-unavailable path.
+        val now = nowEpochMillis()
+        if (now <= 0L) return false // An invalid device clock cannot attest a timestamped fix.
+        return if (epochMillis >= now) {
+            epochMillis - now <= MAX_FUTURE_FIX_SKEW_MILLIS
+        } else {
+            now - epochMillis <= ArrivalLocationQuality.MAX_FIX_AGE_MILLIS
+        }
+    }
+
     private fun setState(newState: ArrivalProgressState) {
         state = newState
-        stateStore?.save(newState)
+        try {
+            stateStore?.save(newState)
+        } catch (_: RuntimeException) {
+            // A broken preference store must not interrupt live GPS progress,
+            // suppress an arrival alert, or prevent the user from disarming.
+            // The in-memory state remains authoritative for this session.
+        }
     }
 
     companion object {
+        // Reject provider clock corruption before it can poison the GPS replay watermark.
+        const val MAX_FUTURE_FIX_SKEW_MILLIS = 30_000L
+
         fun distanceMeters(a: GeoPoint, b: GeoPoint): Double {
             val earthRadius = 6_371_000.0
             val lat1 = Math.toRadians(a.latitude)

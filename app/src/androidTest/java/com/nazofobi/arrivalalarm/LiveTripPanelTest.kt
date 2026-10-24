@@ -85,6 +85,7 @@ class LiveTripPanelTest {
         rule.onNodeWithTag("live-trip-panel").assertIsDisplayed()
         rule.onNodeWithTag("live-trip-current").assertTextContains("Diepholz", substring = true)
         rule.onNodeWithTag("live-trip-next").assertTextContains("Bremen Hbf", substring = true)
+        rule.onNodeWithTag("live-trip-remaining-stops").assertTextContains("1")
         rule.onNodeWithTag("live-trip-distance").assertTextContains("430", substring = true)
         rule.onNodeWithTag("live-trip-audio").performScrollTo().assertIsDisplayed()
     }
@@ -138,6 +139,8 @@ class LiveTripPanelTest {
 
         rule.onNodeWithTag("live-trip-previous").assertTextContains("Diepholz", substring = true)
         rule.onNodeWithTag("live-trip-next").assertTextContains("Bremen Hbf", substring = true)
+        // Stale realtime must retain the coherent scheduled stop count, not stale timing.
+        rule.onNodeWithTag("live-trip-remaining-stops").assertTextContains("1")
     }
 
 
@@ -185,6 +188,7 @@ class LiveTripPanelTest {
         // The first departure has not occurred: no previous stop, hence no "between" claim.
         rule.onNodeWithTag("live-trip-current")
             .assertTextContains(unknownProgressText, substring = true)
+        rule.onNodeWithTag("live-trip-remaining-stops").assertTextContains("2")
 
         // Once the last scheduled arrival is in the past there is no next stop either.
         // Timetable evidence must not be misrepresented as the vehicle's GPS position.
@@ -194,6 +198,7 @@ class LiveTripPanelTest {
         rule.waitForIdle()
         rule.onNodeWithTag("live-trip-current")
             .assertTextContains(unknownProgressText, substring = true)
+        rule.onNodeWithTag("live-trip-remaining-stops").assertTextContains("0")
 
     }
 
@@ -233,6 +238,7 @@ class LiveTripPanelTest {
 
         // A malformed provider minute must not be shown as an arrival ETA.
         rule.onNodeWithTag("live-trip-target-time").assertDoesNotExist()
+        rule.onNodeWithTag("live-trip-remaining-stops").assertDoesNotExist()
 
         // Nor should an implausibly large service hour be treated as a clock.
         rule.runOnUiThread {

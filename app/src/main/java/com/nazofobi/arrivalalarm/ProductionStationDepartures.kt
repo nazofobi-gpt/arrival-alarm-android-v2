@@ -36,6 +36,24 @@ internal fun firstFrequencyBoardAtOrAfter(
     return startSeconds + intervals * headway
 }
 
+/**
+ * Nationwide feeds can reuse a trip ID at the same departure time on different
+ * routes. Distinguish visible service identity before limiting board results.
+ * Repeated updates to the same service still collapse to its first occurrence.
+ */
+internal fun distinctStationDepartures(departures: List<Departure>): List<Departure> =
+    departures.distinctBy { departure ->
+        listOf(
+            departure.tripId,
+            departure.scheduledEpochSeconds,
+            departure.routeId,
+            departure.line,
+            departure.direction,
+            departure.gtfsInstance,
+            departure.boardingStopSequence,
+        )
+    }
+
 internal class ProductionStationDeparturesPlanner(
     private val index: NationwideTransitIndex,
     private val nowMillis: () -> Long = { System.currentTimeMillis() },
@@ -72,7 +90,7 @@ internal class ProductionStationDeparturesPlanner(
                     )
                 }
             }
-            .distinctBy { it.tripId to it.scheduledEpochSeconds }
+            .let(::distinctStationDepartures)
             .sortedWith(
                 compareBy<Departure> { it.scheduledEpochSeconds }
                     .thenBy { it.tripId }
@@ -120,6 +138,7 @@ internal class ProductionStationDeparturesPlanner(
                     direction = direction,
                     scheduledEpochSeconds = scheduled,
                     plannedPlatform = plannedPlatform,
+                    serviceDate = serviceDate,
                 ),
             )
         }
@@ -188,9 +207,12 @@ internal class ProductionStationDeparturesPlanner(
         direction: String,
         scheduledEpochSeconds: Long,
         plannedPlatform: String?,
+        serviceDate: GtfsServiceDate? = null,
         realtimeTripStartDate: String? = null,
         realtimeTripStartTime: String? = null,
-    ) = Departure(
+    ): Departure {
+        val evidence = stationDepartureEvidence(candidate.trip, candidate.stopSequence, serviceDate)
+        return Departure(
         tripId = candidate.trip.id,
         line = line,
         direction = direction,
@@ -199,7 +221,10 @@ internal class ProductionStationDeparturesPlanner(
         routeId = candidate.trip.routeId,
         realtimeTripStartDate = realtimeTripStartDate,
         realtimeTripStartTime = realtimeTripStartTime,
-    )
+        gtfsInstance = evidence?.identity,
+        boardingStopSequence = evidence?.boardingStopSequence,
+        )
+    }
 
     private fun parseServiceSeconds(raw: String): Int? =
         runCatching { GtfsServiceTime.parse(raw).secondsFromServiceDayStart }.getOrNull()
@@ -286,9 +311,25 @@ internal class ProductionRealtimeStationOverlay(
         stopId: String,
         planned: List<Departure>,
     ): ProductionStationDeparturesResult {
-        if (planned.isEmpty()) return ProductionStationDeparturesResult(emptyList())
+        // Even with no scheduled departures, an exact stop-only fresh service alert
+        // can still be relevant. Route/trip-scoped alerts remain gated by the board.
+        if (stopId.isBlank()) return ProductionStationDeparturesResult(planned)
         val overlay = try {
-            match(fetch(), nowEpochSeconds())
+            // A cancelled lookup must never begin provider I/O or run matching.
+            if (Thread.currentThread().isInterrupted) {
+                throw InterruptedException("Station realtime lookup cancelled before fetch")
+            }
+            val response = fetch()
+            // Cancellation may occur while the provider call is completing.
+            if (Thread.currentThread().isInterrupted) {
+                throw InterruptedException("Station realtime lookup cancelled after fetch")
+            }
+            val matched = match(response, nowEpochSeconds())
+            // The matcher itself may be cancelled; do not return a stale result.
+            if (Thread.currentThread().isInterrupted) {
+                throw InterruptedException("Station realtime lookup cancelled during match")
+            }
+            matched
         } catch (interrupted: InterruptedException) {
             // Cancellation is not an upstream outage; preserve the interrupt signal.
             Thread.currentThread().interrupt()
@@ -346,14 +387,26 @@ internal class ProductionRealtimeStationOverlay(
                     overlayMatchesDeparture(candidate, departure)
                 }
                 ?: return@map departure
-            val update = trip.stopUpdates.firstOrNull { it.scheduledStopId == stopId }
-            matchedAny = true
+            // A loop trip can visit the same stop_id more than once with different
+            // stop_sequence values. The board lacks that sequence, so choosing the
+            // first matching update can display a false skipped stop or platform.
+            // Keep only unambiguous stop-specific evidence; trip cancellation is global.
+            val update = trip.stopUpdates.singleOrNull { it.scheduledStopId == stopId }
+            matchedAny = matchedAny || trip.cancelled || update != null
+            // SKIPPED is stop-specific; do not offer boarding here or project
+            // a predicted departure. Other stops of this trip remain available.
+            val skippedAtStop = update?.scheduleRelationship == "SKIPPED"
             departure.copy(
-                realtimeEpochSeconds = update?.departureTimeEpochSeconds
-                    ?: update?.departureDelaySeconds?.let {
-                        departure.scheduledEpochSeconds + it
-                    },
-                cancelled = trip.cancelled,
+                realtimeEpochSeconds = if (skippedAtStop) null else {
+                    // An invalid provider timestamp must not turn a 2026 board into
+                    // a 1970/overflowed departure. Valid early-running delays remain usable.
+                    val predicted = update?.departureTimeEpochSeconds
+                        ?: update?.departureDelaySeconds?.let {
+                            departure.scheduledEpochSeconds + it.toLong()
+                        }
+                    predicted?.takeIf { it > 0L && it <= Long.MAX_VALUE / 1_000L }
+                },
+                cancelled = trip.cancelled || skippedAtStop,
                 platform = update?.platformCode ?: departure.platform,
             )
         }
@@ -402,9 +455,20 @@ internal class ProductionRealtimeStationOverlay(
         val tripSelector = selector.trip
         if (tripSelector != null) {
             val tripId = tripSelector.tripId ?: return false
+            // The board has no numeric direction ID; never broaden directed alerts.
+            if (selector.directionId != null || tripSelector.directionId != null ||
+                tripSelector.validity == GermanyRealtimeTripSelectorValidity.UNMATCHABLE_INCOMPLETE
+            ) return false
+            val startSeconds = tripSelector.startTime?.let(::serviceTimeSeconds)
+            if (tripSelector.startTime != null && startSeconds == null) return false
             return planned.any { departure ->
                 departure.tripId == tripId &&
-                    (selector.routeId == null || departure.routeId == selector.routeId)
+                    (selector.routeId == null || departure.routeId == selector.routeId) &&
+                    (tripSelector.routeId == null || departure.routeId == tripSelector.routeId) &&
+                    (tripSelector.startDate == null ||
+                        departure.realtimeTripStartDate == tripSelector.startDate) &&
+                    (startSeconds == null ||
+                        departure.realtimeTripStartTime?.let(::serviceTimeSeconds) == startSeconds)
             }
         }
 
@@ -428,6 +492,11 @@ internal class ProductionRealtimeStationOverlay(
         overlay: GermanyRealtimeTripOverlay,
         departure: Departure,
     ): Boolean {
+        // Static feeds may reuse trip IDs across different routes. Do not let
+        // a matched overlay cancel or delay an unrelated station-board service.
+        if (departure.routeId.isNullOrBlank() || overlay.staticTrip.routeId != departure.routeId) {
+            return false
+        }
         if (!frequencyTrip(departure.tripId)) return true
 
         val expectedDate = departure.realtimeTripStartDate ?: return false

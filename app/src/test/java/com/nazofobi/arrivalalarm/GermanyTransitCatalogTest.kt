@@ -43,6 +43,22 @@ class GermanyTransitCatalogTest {
         assertEquals(listOf("valid"), result.map { it.stop.id })
     }
 
+    @Test fun nearlyAntipodalValidCoordinatesCannotCrashDistanceRounding() {
+        // Spherical roundoff makes the raw haversine term 1.0000000000000004.
+        // Without clamping, sqrt(1 - a) becomes NaN and roundToInt() throws.
+        val antipodal = CatalogStop(
+            "antipodal", "gtfs", "Far stop",
+            59.0670108474441, -35.58357680931971,
+        )
+        val localCatalog = GermanyTransitCatalog(
+            TestGermanyTransitFixtures.snapshot.copy(stops = listOf(antipodal)),
+        )
+
+        val nearby = localCatalog.nearestStops(-59.06701098810696, 144.41642361996526)
+        assertEquals(listOf("antipodal"), nearby.map { it.stop.id })
+        assertTrue(nearby.single().distanceMeters in 20_000_000..20_020_000)
+    }
+
     @Test fun boundedTripSearchPreservesFirstRouteForDuplicateIds() {
         val primary = CatalogRoute("duplicate", "gtfs", "First", "Center", emptyList())
         val laterDuplicate = primary.copy(shortName = "Second")
@@ -77,6 +93,40 @@ class GermanyTransitCatalogTest {
         assertEquals(listOf(berlinRoute, munichRoute), matched.map { it.second })
     }
 
+    @Test fun unscopedRouteTripLookupFailsClosedWhenProvidersShareRouteId() {
+        val snapshot = TestGermanyTransitFixtures.snapshot.copy(
+            routes = listOf(
+                CatalogRoute("common-route", "vbb", "RE", "Berlin", emptyList()),
+                CatalogRoute("common-route", "mvv", "RE", "München", emptyList()),
+            ),
+            trips = listOf(
+                CatalogTrip("berlin-trip", "vbb", "common-route", "07:00"),
+                CatalogTrip("munich-trip", "mvv", "common-route", "08:00"),
+                CatalogTrip("orphan-trip", "other", "common-route", "09:00"),
+            ),
+        )
+        val localCatalog = GermanyTransitCatalog(snapshot)
+
+        // The old unqualified lookup must never mix Berlin and München services.
+        assertTrue(localCatalog.tripsForRoute("common-route").isEmpty())
+        assertEquals(
+            listOf("berlin-trip"),
+            localCatalog.tripsForRoute("vbb", "common-route").map { it.id },
+        )
+        assertEquals(
+            listOf("munich-trip"),
+            localCatalog.tripsForRoute("mvv", "common-route").map { it.id },
+        )
+        assertTrue(localCatalog.tripsForRoute("other", "common-route").isEmpty())
+        assertTrue(localCatalog.tripsForRoute("", "common-route").isEmpty())
+    }
+
+    @Test fun unambiguousRouteTripLookupRetainsExistingSingleProviderBehavior() {
+        val one = catalog.tripsForRoute("r-hb-6")
+        assertEquals(1, one.size)
+        assertEquals(one, catalog.tripsForRoute(one.single().providerId, "r-hb-6"))
+    }
+
     @Test fun registryExposesCoverageFreshnessAndRealtimeCapability() {
         val delfi = requireNotNull(catalog.provider("delfi"))
         val vbb = requireNotNull(catalog.provider("vbb"))
@@ -95,4 +145,35 @@ class GermanyTransitCatalogTest {
         assertTrue(stale.searchStops("Marien").any { it.name == "Marienplatz" })
         assertEquals(1, stale.tripsForRoute("r-by-s8").size)
     }
+    @Test fun providerScopedDuplicateRowsDoNotConsumeSearchResultLimit() {
+        val firstStop = CatalogStop("same", "vbb", "Central A", 52.52, 13.40)
+        val nextStop = CatalogStop("other", "vbb", "Central B", 52.53, 13.41)
+        val otherProviderStop = CatalogStop("same", "mvv", "Central C", 48.14, 11.58)
+        val firstRoute = CatalogRoute("same-route", "vbb", "S1", "Outer", emptyList())
+        val otherProviderRoute = CatalogRoute("same-route", "mvv", "S1", "Outer", emptyList())
+        val firstTrip = CatalogTrip("trip-1", "vbb", "same-route", "08:00")
+        val otherProviderTrip = CatalogTrip("trip-1", "mvv", "same-route", "08:00")
+        val snapshot = TestGermanyTransitFixtures.snapshot.copy(
+            stops = listOf(firstStop, firstStop, nextStop, otherProviderStop),
+            routes = listOf(firstRoute, firstRoute, otherProviderRoute),
+            trips = listOf(firstTrip, firstTrip, otherProviderTrip),
+        )
+        val deduplicated = GermanyTransitCatalog(snapshot)
+
+        assertEquals(
+            listOf(firstStop, nextStop, otherProviderStop),
+            deduplicated.searchStops("Central", limit = 3),
+        )
+        assertEquals(
+            listOf(firstRoute, otherProviderRoute),
+            deduplicated.searchRoutes("S1", limit = 2),
+        )
+        assertEquals(
+            listOf(firstTrip, otherProviderTrip),
+            deduplicated.searchTrips("trip-", limit = 2).map { it.first },
+        )
+        assertEquals(3, SearchMapPlanner(deduplicated).search("Central", limit = 3).size)
+        assertEquals(listOf(firstStop), deduplicated.searchStops("Central", limit = 1))
+    }
+
 }

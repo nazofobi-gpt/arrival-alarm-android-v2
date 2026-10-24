@@ -39,6 +39,54 @@ class LocaleResourceContractTest(unittest.TestCase):
         self.write("values-de", '<string name="arrival">In %2$s Min. zu %1$s</string>')
         self.assertTrue(any("format arguments differ" in e for e in validate(self.root)))
 
+    def test_string_plus_flag_is_invalid_even_when_types_match(self):
+        # Java Formatter throws FormatFlagsConversionMismatchException for %+s.
+        # The translation gate must reject it instead of ignoring the flag.
+        self.write("values-de", '<string name="arrival">Stop %+s in %2$d min</string>')
+        self.assertTrue(any("invalid format" in e for e in validate(self.root)))
+
+
+    def test_invalid_java_string_format_flags_are_rejected(self):
+        # Confirmed against Java 21 String.format: these raise
+        # FormatFlagsConversionMismatchException for a String argument.
+        for token in ("%0s", "%05s", "% s", "%,s", "%(s", "%+s", "%#s", "%#S", "%1$#10s"):
+            with self.subTest(token=token):
+                with self.assertRaisesRegex(ValueError, "invalid string format flags"):
+                    placeholders(token)
+
+    def test_duplicate_java_formatter_flags_are_rejected(self):
+        # Verified on Java 21: these raise DuplicateFormatFlagsException.
+        for token in ("%--5s", "%++d", "%1$--10s"):
+            with self.subTest(token=token):
+                with self.assertRaisesRegex(ValueError, "duplicate format flags"):
+                    placeholders(token)
+
+    def test_matching_invalid_sharp_string_flags_fail_locale_gate(self):
+        # A string with the # flag throws FormatFlagsConversionMismatchException
+        # even when each translation contains the same placeholder.
+        for locale in ("values", "values-de", "values-en"):
+            self.write(locale, '<string name="arrival">Stop %1$#10s</string>')
+        self.assertTrue(
+            any("invalid format for arrival" in error for error in validate(self.root))
+        )
+
+    def test_matching_duplicate_flags_across_locales_still_fail(self):
+        for locale in ("values", "values-de", "values-en"):
+            self.write(locale, '<string name="arrival">Stop %1$--10s</string>')
+        self.assertTrue(
+            any("duplicate format flags" in error for error in validate(self.root))
+        )
+
+    def test_valid_java_string_padding_remains_allowed(self):
+        self.assertEqual({(1, "s"): 1}, dict(placeholders("%1$-10s")))
+        self.assertEqual({(1, "s"): 1}, dict(placeholders("%10s")))
+
+    def test_invalid_string_flags_in_matching_locales_are_still_rejected(self):
+        for locale in ("values", "values-de", "values-en"):
+            self.write(locale, '<string name="arrival">Stop %0s</string>')
+        self.assertTrue(
+            any("invalid format for arrival" in error for error in validate(self.root))
+        )
 
     def test_datetime_conversion_suffix_mismatch_is_rejected(self):
         # Both strings have a date/time argument, but H (hour) and M (minute)
@@ -64,11 +112,48 @@ class LocaleResourceContractTest(unittest.TestCase):
             any("format arguments differ" in e for e in validate(self.root))
         )
 
+    def test_localized_key_cannot_disable_required_translation(self):
+        # A localized override cannot downgrade a required translation.
+        self.write(
+            "values-de",
+            '<string name="arrival" translatable="false">In %2$d Min. zu %1$s</string>',
+        )
+        self.assertTrue(
+            any("translatable flag differs for arrival" in error for error in validate(self.root))
+        )
+
     def test_nontranslatable_source_may_be_omitted(self):
         self.write(
             "values",
             '<string name="arrival">Stop %1$s in %2$d min</string>'
             '<string name="machine_code" translatable="false">X-123</string>',
+        )
+        self.assertEqual([], validate(self.root))
+
+    def test_nontranslatable_source_cannot_be_overridden_in_locale(self):
+        self.write(
+            "values",
+            '<string name="arrival">Stop %1$s in %2$d min</string>'
+            '<string name="provider_endpoint" translatable="false">https://example.org</string>',
+        )
+        self.write(
+            "values-de",
+            '<string name="arrival">In %2$d Min. zu %1$s</string>'
+            '<string name="provider_endpoint">https://untrusted.example</string>',
+        )
+        errors = validate(self.root)
+        self.assertTrue(
+            any(
+                "nontranslatable key must not be localized: provider_endpoint" in e
+                for e in errors
+            )
+        )
+
+    def test_nontranslatable_source_still_may_be_omitted(self):
+        self.write(
+            "values",
+            '<string name="arrival">Stop %1$s in %2$d min</string>'
+            '<string name="provider_endpoint" translatable="false">https://example.org</string>',
         )
         self.assertEqual([], validate(self.root))
 
@@ -187,6 +272,38 @@ class LocaleResourceContractTest(unittest.TestCase):
                 '<string name="arrival">Stop %1$s in %2$d min (100%%)%n</string>',
             )
         self.assertEqual([], validate(self.root))
+
+
+    def test_relative_flag_on_newline_is_rejected_even_when_locales_match(self):
+        for locale in ("values", "values-de", "values-en"):
+            self.write(locale, '<string name="arrival">Stop %1$s%&lt;n</string>')
+        self.assertTrue(
+            any("relative flag invalid for no-argument conversion %n" in e
+                for e in validate(self.root))
+        )
+
+    def test_relative_flag_on_escaped_percent_is_rejected_even_when_locales_match(self):
+        for locale in ("values", "values-de", "values-en"):
+            self.write(locale, '<string name="arrival">Stop %1$s 100%&lt;%</string>')
+        self.assertTrue(
+            any("relative flag invalid for no-argument conversion %%" in e
+                for e in validate(self.root))
+        )
+
+
+    def test_java_formatter_line_separator_rejects_width_precision_and_flags(self):
+        for token in ("%5n", "%.2n", "%-5n", "%1$5n"):
+            with self.subTest(token=token):
+                with self.assertRaisesRegex(ValueError, "invalid width, precision or flags for %n"):
+                    placeholders(token)
+
+    def test_invalid_newline_width_is_rejected_even_when_locales_match(self):
+        for locale in ("values", "values-de", "values-en"):
+            self.write(locale, '<string name="arrival">Next stop%5n</string>')
+        self.assertTrue(any("invalid format for arrival" in error for error in validate(self.root)))
+
+    def test_indexed_newline_without_width_remains_valid(self):
+        self.assertEqual({}, placeholders("%1$n%n"))
 
 
 if __name__ == "__main__":

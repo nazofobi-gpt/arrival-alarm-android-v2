@@ -33,9 +33,14 @@ object ActiveJourneyPermissions {
     }
 
     fun hasRequired(context: Context): Boolean {
-        val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val hasProvider = runCatching { manager.getProviders(true).isNotEmpty() }.getOrDefault(false)
-        return hasRuntimeGrants(context) && hasProvider
+        if (!hasRuntimeGrants(context)) return false
+        val manager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+            ?: return false
+        if (!isDeviceLocationEnabledForTracking(manager)) return false
+        // Do not report a trackable journey if the only enabled provider is passive.
+        return runCatching {
+            ActiveJourneyLocationProviderSelection.choose(manager.getProviders(true)) != null
+        }.getOrDefault(false)
     }
 
     fun runtimePermissions(): Array<String> = buildList {
@@ -62,9 +67,13 @@ class ActiveJourneyService : Service(), LocationListener {
             // Keep an armed journey alive when a provider disappears; stop only
             // when the journey ends or the user no longer grants runtime access.
             if (!arrivalHandled) {
+                val registeredProviderEnabled = registeredProvider?.let { provider ->
+                    runCatching { locationManager.isProviderEnabled(provider) }.getOrDefault(false)
+                } == true
                 when (LocationProviderRecovery.decide(
                     graph.controller.state.phase,
                     locationRegistered,
+                    registeredProviderEnabled,
                     ActiveJourneyPermissions.hasRuntimeGrants(this@ActiveJourneyService),
                 )) {
                     LocationProviderRecovery.Decision.STOP -> {
@@ -72,9 +81,9 @@ class ActiveJourneyService : Service(), LocationListener {
                         return
                     }
                     LocationProviderRecovery.Decision.RETRY -> {
-                        if (!registerLocationUpdates()) {
-                            updateTrackingNotification(null, accuracyDegraded = true)
-                        }
+                        removeLocationUpdates()
+                        registerLocationUpdates()
+                        updateTrackingNotification(null, accuracyDegraded = true)
                     }
                     LocationProviderRecovery.Decision.KEEP -> Unit
                 }
@@ -84,6 +93,7 @@ class ActiveJourneyService : Service(), LocationListener {
     }
     @Volatile private var arrivalHandled = false
     private var locationRegistered = false
+    private var registeredProvider: String? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -117,7 +127,7 @@ class ActiveJourneyService : Service(), LocationListener {
     }
 
     override fun onLocationChanged(location: Location) {
-        if (!location.latitude.isFinite() || !location.longitude.isFinite()) return
+        if (!ArrivalLocationQuality.hasValidCoordinates(location.latitude, location.longitude)) return
         val destination = graph.controller.state.destination ?: return
         val distanceMeters = ArrivalProgressController.distanceMeters(
             GeoPoint(location.latitude, location.longitude),
@@ -153,6 +163,7 @@ class ActiveJourneyService : Service(), LocationListener {
     override fun onProviderEnabled(provider: String) = Unit
 
     override fun onProviderDisabled(provider: String) {
+        if (provider != registeredProvider) return
         removeLocationUpdates()
         if (graph.controller.state.phase != JourneyPhase.ARMED) return
         // Switch to another enabled provider if possible, otherwise retry later.
@@ -181,6 +192,7 @@ class ActiveJourneyService : Service(), LocationListener {
                 Looper.getMainLooper(),
             )
             locationRegistered = true
+            registeredProvider = provider
             true
         } catch (_: SecurityException) {
             false
@@ -190,18 +202,14 @@ class ActiveJourneyService : Service(), LocationListener {
     }
 
     private fun removeLocationUpdates() {
-        if (!locationRegistered) return
-        runCatching { locationManager.removeUpdates(this) }
+        if (locationRegistered) runCatching { locationManager.removeUpdates(this) }
         locationRegistered = false
+        registeredProvider = null
     }
 
     private fun enabledLocationProvider(): String? {
         val providers = runCatching { locationManager.getProviders(true) }.getOrDefault(emptyList())
-        return when {
-            LocationManager.GPS_PROVIDER in providers -> LocationManager.GPS_PROVIDER
-            LocationManager.NETWORK_PROVIDER in providers -> LocationManager.NETWORK_PROVIDER
-            else -> providers.firstOrNull()
-        }
+        return ActiveJourneyLocationProviderSelection.choose(providers)
     }
 
     private fun startLocationForeground(): Boolean {

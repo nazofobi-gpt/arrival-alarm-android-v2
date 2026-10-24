@@ -30,7 +30,23 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material3.RadioButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
+
 enum class ReadinessLevel { READY, ACTION_NEEDED, BLOCKED, INFO }
+
+// A downloaded feed is not a usable offline index when it contains zero stops.
+internal fun hasUsableNationwideIndex(state: NationwideDataState): Boolean =
+    state is NationwideDataState.Ready && state.stopCount > 0
 
 data class SettingsReadinessState(
     val themeMode: ArrivalThemeMode,
@@ -49,7 +65,7 @@ data class SettingsReadinessState(
         get() = when {
             !locationPermission || !notificationPermission || !locationServicesAvailable ->
                 ReadinessLevel.BLOCKED
-            dataState !is NationwideDataState.Ready ||
+            !hasUsableNationwideIndex(dataState) ||
                 guidancePermissionState != GuidancePermissionState.GRANTED ||
                 !bluetoothPermission -> ReadinessLevel.ACTION_NEEDED
             else -> ReadinessLevel.READY
@@ -77,8 +93,7 @@ data class SettingsReadinessState(
                 Build.VERSION.SDK_INT < 31 || granted(Manifest.permission.BLUETOOTH_CONNECT)
             val locationManager =
                 context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-            val locationServicesAvailable =
-                runCatching { locationManager.getProviders(true).isNotEmpty() }.getOrDefault(false)
+            val locationServicesAvailable = isDeviceLocationEnabledForTracking(locationManager)
 
             return SettingsReadinessState(
                 themeMode = themeMode,
@@ -106,11 +121,14 @@ fun SettingsReadinessPanel(
     onRequestJourneyPermissions: () -> Unit,
     onRequestGuidancePermissions: () -> Unit,
     onRefreshReadiness: () -> Unit,
+    onShareDiagnostics: () -> Unit,
     onOpenAppSettings: () -> Unit,
     onRetryData: () -> Unit,
     onConnectorAction: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var themeOptionsExpanded by rememberSaveable { mutableStateOf(false) }
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -137,41 +155,59 @@ fun SettingsReadinessPanel(
 
             HorizontalDivider()
 
-            Text(
-                text = stringResource(R.string.theme_mode_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = stringResource(
-                    R.string.theme_mode_status,
-                    themeModeLabel(state.themeMode),
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.testTag("theme-mode-status"),
-            )
-            ThemeModeChoice(
-                mode = ArrivalThemeMode.SYSTEM,
-                selected = state.themeMode == ArrivalThemeMode.SYSTEM,
-                label = stringResource(R.string.theme_system),
-                testTag = "theme-system",
-                onSelect = onThemeModeChange,
-            )
-            ThemeModeChoice(
-                mode = ArrivalThemeMode.LIGHT,
-                selected = state.themeMode == ArrivalThemeMode.LIGHT,
-                label = stringResource(R.string.theme_light),
-                testTag = "theme-light",
-                onSelect = onThemeModeChange,
-            )
-            ThemeModeChoice(
-                mode = ArrivalThemeMode.DARK,
-                selected = state.themeMode == ArrivalThemeMode.DARK,
-                label = stringResource(R.string.theme_dark),
-                testTag = "theme-dark",
-                onSelect = onThemeModeChange,
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .clickable { themeOptionsExpanded = !themeOptionsExpanded }
+                    .testTag("theme-mode-picker"),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.theme_mode_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.theme_mode_status,
+                            themeModeLabel(state.themeMode),
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("theme-mode-status"),
+                    )
+                }
+            }
+            if (themeOptionsExpanded) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().selectableGroup(),
+                ) {
+                    ThemeModeChoice(
+                        mode = ArrivalThemeMode.SYSTEM,
+                        selected = state.themeMode == ArrivalThemeMode.SYSTEM,
+                        label = stringResource(R.string.theme_system),
+                        testTag = "theme-system",
+                        onSelect = { onThemeModeChange(it); themeOptionsExpanded = false },
+                    )
+                    ThemeModeChoice(
+                        mode = ArrivalThemeMode.LIGHT,
+                        selected = state.themeMode == ArrivalThemeMode.LIGHT,
+                        label = stringResource(R.string.theme_light),
+                        testTag = "theme-light",
+                        onSelect = { onThemeModeChange(it); themeOptionsExpanded = false },
+                    )
+                    ThemeModeChoice(
+                        mode = ArrivalThemeMode.DARK,
+                        selected = state.themeMode == ArrivalThemeMode.DARK,
+                        label = stringResource(R.string.theme_dark),
+                        testTag = "theme-dark",
+                        onSelect = { onThemeModeChange(it); themeOptionsExpanded = false },
+                    )
+                }
+            }
 
             HorizontalDivider()
 
@@ -206,12 +242,15 @@ fun SettingsReadinessPanel(
                 value = when (val data = state.dataState) {
                     NationwideDataState.Idle -> stringResource(R.string.readiness_data_not_ready)
                     is NationwideDataState.Loading -> stringResource(R.string.readiness_data_loading)
-                    is NationwideDataState.Ready ->
+                    is NationwideDataState.Ready -> if (hasUsableNationwideIndex(data)) {
                         stringResource(R.string.readiness_data_ready, data.stopCount)
+                    } else {
+                        stringResource(R.string.readiness_data_unavailable)
+                    }
                     is NationwideDataState.Error -> stringResource(R.string.readiness_data_unavailable)
                 },
                 level = when (state.dataState) {
-                    is NationwideDataState.Ready -> ReadinessLevel.READY
+                    is NationwideDataState.Ready -> if (hasUsableNationwideIndex(state.dataState)) ReadinessLevel.READY else ReadinessLevel.ACTION_NEEDED
                     is NationwideDataState.Loading -> ReadinessLevel.INFO
                     else -> ReadinessLevel.ACTION_NEEDED
                 },
@@ -280,6 +319,20 @@ fun SettingsReadinessPanel(
             ) {
                 Text(stringResource(R.string.readiness_refresh))
             }
+            OutlinedButton(
+                onClick = onShareDiagnostics,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("readiness-share-diagnostics"),
+            ) {
+                Text(stringResource(R.string.readiness_share_diagnostics))
+            }
+            Text(
+                text = stringResource(R.string.readiness_share_diagnostics_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             OutlinedButton(
                 onClick = onOpenAppSettings,
                 modifier = Modifier
@@ -359,28 +412,20 @@ private fun ThemeModeChoice(
     testTag: String,
     onSelect: (ArrivalThemeMode) -> Unit,
 ) {
-    if (selected) {
-        Button(
-            onClick = { onSelect(mode) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .semantics { this.selected = selected }
-                .testTag(testTag),
-        ) {
-            Text(stringResource(R.string.theme_selected_format, label))
-        }
-    } else {
-        OutlinedButton(
-            onClick = { onSelect(mode) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .semantics { this.selected = selected }
-                .testTag(testTag),
-        ) {
-            Text(label)
-        }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .selectable(
+                selected = selected,
+                role = Role.RadioButton,
+                onClick = { onSelect(mode) },
+            )
+            .testTag(testTag),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Text(text = label, style = MaterialTheme.typography.bodyLarge)
     }
 }
 

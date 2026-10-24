@@ -14,6 +14,9 @@ data class RouteStopProgress(
     val next: RouteStop? = null,
     val resolvedByProviderTime: Boolean = false,
     val timingBasis: TransitTimingBasis = TransitTimingBasis.SCHEDULED,
+    // Null means provider stop-time evidence cannot establish progress.
+    // Count is based on ordered stop occurrences, never on possibly repeated stop IDs.
+    val remainingStops: Int? = null,
 )
 
 /**
@@ -22,13 +25,21 @@ data class RouteStopProgress(
  * Between stops, current remains null rather than pretending that the vehicle is physically
  * at a stop. The last passed stop is previous and the first future stop is next.
  */
+private const val MIN_TRUSTED_PROGRESS_EPOCH_SECONDS = 946_684_800L // 2000-01-01 UTC
+private const val MAX_TRUSTED_PROGRESS_EPOCH_SECONDS = 253_402_300_799L // 9999-12-31 UTC
+
 class RouteStopProgressTracker {
     fun resolve(
         stops: List<RouteStop>,
         nowEpochSeconds: Long,
         trustRealtime: Boolean = true,
     ): RouteStopProgress {
-        if (stops.isEmpty()) return RouteStopProgress()
+        // An unset/reset device clock must not turn an otherwise valid timetable
+        // into a fabricated current/next stop or remaining-stop count.
+        if (stops.isEmpty() ||
+            nowEpochSeconds < MIN_TRUSTED_PROGRESS_EPOCH_SECONDS ||
+            nowEpochSeconds > MAX_TRUSTED_PROGRESS_EPOCH_SECONDS
+        ) return RouteStopProgress()
 
         val windows = stops.map { stop ->
             val actualArrival = if (trustRealtime) stop.arrival.toTransitEpochSecondsOrNull() else null
@@ -66,7 +77,12 @@ class RouteStopProgressTracker {
 
         // Preserve route-order semantics when schedule/realtime timestamps disagree.
         // Two distinct stops must not occupy overlapping provider time windows.
-        if (!hasCoherentTimeline(windows)) return RouteStopProgress()
+        if (!hasCoherentTimeline(windows)) {
+            // Conflicting realtime observations must not erase a coherent planned journey.
+            // Recalculate solely from scheduled stops, clearly labeling the timing basis.
+            return if (trustRealtime) resolve(stops, nowEpochSeconds, trustRealtime = false)
+                else RouteStopProgress()
+        }
 
         val basis = if (windows.any { it.hasRealtimeEvidence }) {
             TransitTimingBasis.REALTIME
@@ -74,14 +90,25 @@ class RouteStopProgressTracker {
             TransitTimingBasis.SCHEDULED
         }
 
-        val currentIndex = windows.indexOfFirst { window ->
+        // Inclusive windows may touch at the same provider second. Both stops then
+        // match "current"; choosing the first one would fabricate a stop identity.
+        // Fall back to scheduled evidence when it can disambiguate the boundary.
+        var currentIndex = -1
+        for ((index, window) in windows.withIndex()) {
             val arrival = window.arrival
             val departure = window.departure
-            when {
+            val matches = when {
                 arrival != null && departure != null -> nowEpochSeconds in arrival..departure
                 arrival != null -> nowEpochSeconds == arrival
                 departure != null -> nowEpochSeconds == departure
                 else -> false
+            }
+            if (matches) {
+                if (currentIndex >= 0) {
+                    return if (trustRealtime) resolve(stops, nowEpochSeconds, trustRealtime = false)
+                        else RouteStopProgress()
+                }
+                currentIndex = index
             }
         }
         if (currentIndex >= 0) {
@@ -91,6 +118,7 @@ class RouteStopProgressTracker {
                 next = stops.getOrNull(currentIndex + 1),
                 resolvedByProviderTime = true,
                 timingBasis = basis,
+                remainingStops = stops.lastIndex - currentIndex,
             )
         }
 
@@ -103,12 +131,23 @@ class RouteStopProgressTracker {
             upcomingAt != null && upcomingAt > nowEpochSeconds
         }
 
+        // A timed stop across an untimed segment is not necessarily the immediate
+        // previous/next stop. Missing intermediate evidence must remain unknown.
+        val unknownNeighbor = when {
+            previousIndex >= 0 && nextIndex >= 0 -> nextIndex != previousIndex + 1
+            previousIndex < 0 && nextIndex >= 0 -> nextIndex != 0
+            previousIndex >= 0 && nextIndex < 0 -> previousIndex != stops.lastIndex
+            else -> false
+        }
+        if (unknownNeighbor) return RouteStopProgress()
+
         return RouteStopProgress(
             previous = stops.getOrNull(previousIndex),
             current = null,
             next = stops.getOrNull(nextIndex),
             resolvedByProviderTime = true,
             timingBasis = basis,
+            remainingStops = if (nextIndex >= 0) stops.size - nextIndex else 0,
         )
     }
 
@@ -133,8 +172,13 @@ class RouteStopProgressTracker {
     )
 }
 
+// A provider feed must not force scanning/allocating an unbounded timestamp value.
+// Normal RFC3339 stop instants (including nanosecond fractions) fit within this limit.
+private const val MAX_TRANSIT_TIMESTAMP_CHARACTERS = 64
+
 internal fun String?.toTransitEpochSecondsOrNull(): Long? {
-    val value = this?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val value = this?.takeIf { it.length <= MAX_TRANSIT_TIMESTAMP_CHARACTERS }
+        ?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     val match = ISO_TRANSIT_TIMESTAMP.matchEntire(value) ?: return null
     return runCatching {
         val year = match.groupValues[1].toInt()
@@ -150,7 +194,14 @@ internal fun String?.toTransitEpochSecondsOrNull(): Long? {
                 val sign = if (match.groupValues[9] == "-") -1 else 1
                 val offsetHours = match.groupValues[10].toInt()
                 val offsetMinutes = match.groupValues[11].toInt()
-                require(offsetHours <= 14 && offsetMinutes <= 59 && (offsetHours != 14 || offsetMinutes == 0))
+                // RFC 3339 -00:00 means the local UTC offset is unknown, not UTC.
+                // An unknown instant is not safe evidence for stop progression.
+                require(!(sign < 0 && offsetHours == 0 && offsetMinutes == 0))
+                // The current civil UTC offset range is -12:00 through +14:00.
+                // A forged -13/-14 hour feed must not move the rider's stop progress.
+                val maxHours = if (sign < 0) 12 else 14
+                require(offsetHours <= maxHours && offsetMinutes <= 59 &&
+                    (offsetHours != maxHours || offsetMinutes == 0))
                 sign * (offsetHours * 3_600 + offsetMinutes * 60)
             }
         }
@@ -160,7 +211,11 @@ internal fun String?.toTransitEpochSecondsOrNull(): Long? {
             clear()
             set(year, month - 1, day, hour, minute, second)
         }
-        calendar.timeInMillis / 1_000L - offsetSeconds
+        val epochSeconds = calendar.timeInMillis / 1_000L - offsetSeconds
+        // Reject reset/corrupt provider stop clocks even if the device clock is valid.
+        epochSeconds.takeIf {
+            it in MIN_TRUSTED_PROGRESS_EPOCH_SECONDS..MAX_TRUSTED_PROGRESS_EPOCH_SECONDS
+        }
     }.getOrNull()
 }
 

@@ -27,8 +27,13 @@ jobs:
 
       - name: Validate Android locale resources
         run: |
-          python3 -m unittest discover -s tools/tests -p 'test_locale_resources.py'
+          python3 -m unittest discover -s tools/tests -p 'test_*.py'
           python3 tools/check_locale_resources.py
+
+      - name: Enforce G-191 Android location and manifest privacy policy
+        run: |
+          python3 -m unittest discover -s tools -p 'test_android_privacy_manifest.py' -v
+          python3 tools/check_android_privacy_manifest.py app/src/main/AndroidManifest.xml
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4

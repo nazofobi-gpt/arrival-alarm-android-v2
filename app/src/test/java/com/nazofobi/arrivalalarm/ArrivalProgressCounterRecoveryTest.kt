@@ -71,7 +71,7 @@ class ArrivalProgressCounterRecoveryTest {
         assertEquals(ArrivalAlertPhase.MISSED, controller.state.phase)
     }
 
-    @Test fun validSinglePersistedFixStillCompletesDebounce() {
+    @Test fun persistedSingleFixRequiresTwoFreshConfirmationsAfterRestart() {
         val controller = restore(
             ArrivalProgressState(
                 routeId = route.routeId,
@@ -80,6 +80,14 @@ class ArrivalProgressCounterRecoveryTest {
                 consecutiveInsideThreshold = 1,
             )
         )
+
+        // The original single GPS fix cannot establish independent evidence
+        // after the in-memory timestamp watermark was lost on restart.
+        assertEquals(0, controller.state.consecutiveInsideThreshold)
+        controller.onLocation(fix(1))
+        assertEquals(ArrivalAlertPhase.IMMINENT, controller.state.phase)
+        assertEquals(1, controller.state.consecutiveInsideThreshold)
+        assertEquals(0, controller.state.arrivalEventCount)
 
         controller.onLocation(fix(1))
         assertEquals(ArrivalAlertPhase.ARRIVED, controller.state.phase)

@@ -5,6 +5,21 @@ import org.junit.Test
 
 class NearbyStationCanonicalizerTest {
     @Test
+    fun nonPositiveLimitReturnsNoStopsWithoutThrowing() {
+        val stop = CatalogStop("station", "gtfs", "Lohne Bahnhof", 52.665, 8.237)
+        for (requestedLimit in listOf(0, -1, Int.MIN_VALUE)) {
+            assertEquals(
+                emptyList<NearbyStop>(),
+                NearbyStationCanonicalizer.canonicalize(
+                    52.665, 8.237,
+                    listOf(NearbyStop(stop, 0)),
+                    requestedLimit,
+                ),
+            )
+        }
+    }
+
+    @Test
     fun duplicatePlatformsCollapseToParentStation() {
         val station = CatalogStop("station", "gtfs", "Lohne Bahnhof", 52.665, 8.237)
         val first = CatalogStop("p1", "gtfs", "Lohne Bahnhof", 52.665, 8.237, "station")
@@ -76,5 +91,33 @@ class NearbyStationCanonicalizerTest {
             forward.single().childStops.map { it.id },
             reversed.single().childStops.map { it.id },
         )
+    }
+
+    @Test
+    fun fallbackStationsWithSameNameAndCoordinatesRemainSeparateAcrossProviders() {
+        val vbb = CatalogStop("vbb-central", "vbb", "Hauptbahnhof", 52.52, 13.405)
+        val mvv = CatalogStop("mvv-central", "mvv", "Hauptbahnhof", 52.52, 13.405)
+        val result = NearbyStationCanonicalizer.canonicalize(
+            52.52, 13.405,
+            listOf(NearbyStop(vbb, 0), NearbyStop(mvv, 0)),
+            limit = 5,
+        )
+        assertEquals(2, result.size)
+        assertEquals(setOf("vbb", "mvv"), result.map { it.stop.providerId }.toSet())
+        assertEquals(setOf("vbb-central", "mvv-central"), result.map { it.stop.id }.toSet())
+    }
+
+    @Test
+    fun sameProviderFallbackPlatformsStillCollapseToOneStation() {
+        val first = CatalogStop("a", "vbb", "Hauptbahnhof", 52.52, 13.405)
+        val second = CatalogStop("b", "vbb", "Hauptbahnhof", 52.52, 13.405)
+        val result = NearbyStationCanonicalizer.canonicalize(
+            52.52, 13.405,
+            listOf(NearbyStop(first, 0), NearbyStop(second, 0)),
+            limit = 5,
+        )
+        assertEquals(1, result.size)
+        assertEquals("a", result.single().stop.id)
+        assertEquals(listOf("b"), result.single().childStops.map { it.id })
     }
 }

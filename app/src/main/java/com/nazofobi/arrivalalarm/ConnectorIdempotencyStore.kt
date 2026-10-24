@@ -18,6 +18,49 @@ interface ConnectorIdempotencyStore {
     fun complete(receipt: ConnectorCommandReceipt)
 }
 
+private const val MAX_IDEMPOTENCY_KEY_CHARS = 200
+private const val MAX_COMMAND_TYPE_CHARS = 128
+private const val MAX_RECEIPT_MESSAGE_CHARS = 4_096
+private const val MAX_ACTION_ID_CHARS = 200
+private val COMMAND_FINGERPRINT = Regex("[0-9a-f]{64}")
+
+private fun ConnectorIdempotencyEntry.validateStoredIdentity() {
+    check(idempotencyKey.isNotBlank() && idempotencyKey.length <= MAX_IDEMPOTENCY_KEY_CHARS) {
+        "Invalid idempotency key"
+    }
+    check(commandType.isNotBlank() && commandType.length <= MAX_COMMAND_TYPE_CHARS) {
+        "Invalid command type"
+    }
+    check(stateVersionBefore >= 0L) { "State version must not be negative" }
+    check(commandFingerprint == null || COMMAND_FINGERPRINT.matches(commandFingerprint)) {
+        "Malformed command fingerprint"
+    }
+}
+
+private fun ConnectorIdempotencyEntry.validatePendingClaim() {
+    validateStoredIdentity()
+    check(receipt == null) { "A new idempotency claim cannot contain a receipt" }
+}
+
+private fun ConnectorCommandReceipt.validateDurableReceipt() {
+    check(idempotencyKey.isNotBlank() && idempotencyKey.length <= MAX_IDEMPOTENCY_KEY_CHARS) {
+        "Invalid receipt idempotency key"
+    }
+    check(commandType.isNotBlank() && commandType.length <= MAX_COMMAND_TYPE_CHARS) {
+        "Invalid receipt command type"
+    }
+    check(stateVersionBefore >= 0L && stateVersionAfter >= stateVersionBefore) {
+        "Invalid receipt state versions"
+    }
+    check(message.length <= MAX_RECEIPT_MESSAGE_CHARS) { "Receipt message is too large" }
+    check(actionId == null || (actionId.isNotBlank() && actionId.length <= MAX_ACTION_ID_CHARS)) {
+        "Invalid receipt action ID"
+    }
+    // `duplicate` is a response-only projection produced when replaying a stored receipt.
+    // Persisting it would make the journal claim that the original command was a replay.
+    check(!duplicate) { "A durable receipt cannot be marked duplicate" }
+}
+
 class InMemoryConnectorIdempotencyStore(
     private val maxCompletedEntries: Int = 128,
 ) : ConnectorIdempotencyStore {
@@ -29,21 +72,17 @@ class InMemoryConnectorIdempotencyStore(
 
     @Synchronized
     override fun begin(entry: ConnectorIdempotencyEntry) {
-        check(entry.idempotencyKey.isNotBlank()) { "Idempotency key must not be blank" }
-        check(entry.commandType.isNotBlank()) { "Command type must not be blank" }
-        check(entry.stateVersionBefore >= 0L) { "State version must not be negative" }
-        check(entry.commandFingerprint == null || entry.commandFingerprint.matches(Regex("[0-9a-f]{64}"))) {
-            "Malformed command fingerprint"
-        }
+        entry.validatePendingClaim()
         check(!entries.containsKey(entry.idempotencyKey)) {
             "Idempotency key already claimed"
         }
-        entries[entry.idempotencyKey] = entry.copy(receipt = null)
+        entries[entry.idempotencyKey] = entry
         trimCompleted()
     }
 
     @Synchronized
     override fun complete(receipt: ConnectorCommandReceipt) {
+        receipt.validateDurableReceipt()
         val existing = entries[receipt.idempotencyKey]
             ?: error("Idempotency key must be claimed before completion")
         check(existing.receipt == null) { "Idempotency claim already completed" }
@@ -81,22 +120,18 @@ class SharedPreferencesConnectorIdempotencyStore(
 
     @Synchronized
     override fun begin(entry: ConnectorIdempotencyEntry) {
-        check(entry.idempotencyKey.isNotBlank()) { "Idempotency key must not be blank" }
-        check(entry.commandType.isNotBlank()) { "Command type must not be blank" }
-        check(entry.stateVersionBefore >= 0L) { "State version must not be negative" }
-        check(entry.commandFingerprint == null || entry.commandFingerprint.matches(Regex("[0-9a-f]{64}"))) {
-            "Malformed command fingerprint"
-        }
+        entry.validatePendingClaim()
         val entries = loadEntries().toMutableList()
         check(entries.none { it.idempotencyKey == entry.idempotencyKey }) {
             "Idempotency key already claimed"
         }
-        entries += entry.copy(receipt = null)
+        entries += entry
         persist(trimCompleted(entries))
     }
 
     @Synchronized
     override fun complete(receipt: ConnectorCommandReceipt) {
+        receipt.validateDurableReceipt()
         val entries = loadEntries().toMutableList()
         val index = entries.indexOfFirst { it.idempotencyKey == receipt.idempotencyKey }
         check(index >= 0) { "Idempotency key must be claimed before completion" }
@@ -131,8 +166,8 @@ class SharedPreferencesConnectorIdempotencyStore(
             buildList(array.length()) {
                 for (index in 0 until array.length()) {
                     val entry = array.getJSONObject(index).decodeEntry()
-                    check(entry.idempotencyKey.isNotBlank() && entry.commandType.isNotBlank())
-                    check(entry.stateVersionBefore >= 0L)
+                    entry.validateStoredIdentity()
+                    entry.receipt?.validateDurableReceipt()
                     check(seenKeys.add(entry.idempotencyKey))
                     add(entry)
                 }
@@ -201,8 +236,6 @@ class SharedPreferencesConnectorIdempotencyStore(
             receipt = storedReceipt,
             commandFingerprint = if (has("command_fingerprint")) requireText("command_fingerprint") else null,
         )
-        check(entry.commandFingerprint == null ||
-            entry.commandFingerprint.matches(Regex("[0-9a-f]{64}")))
         check(storedReceipt == null || (
             storedReceipt.idempotencyKey == entry.idempotencyKey &&
                 storedReceipt.commandType == entry.commandType &&

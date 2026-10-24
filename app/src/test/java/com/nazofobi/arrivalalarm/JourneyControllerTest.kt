@@ -101,6 +101,101 @@ class JourneyControllerTest {
         assertNull(c.state.distanceMeters)
     }
 
+    @Test fun restoredArrivalRequiresMeasuredProximityWithinConfiguredRadius() {
+        val start = GeoPoint(53.083, 8.813)
+        val destination = GeoPoint(53.1, 8.9)
+        var distance: Double? = null
+        val store = object : JourneyStateStore {
+            override fun load(): JourneyUiState = JourneyUiState(
+                phase = JourneyPhase.ARRIVED,
+                start = start,
+                destination = destination,
+                distanceMeters = distance,
+            )
+            override fun save(state: JourneyUiState) = Unit
+        }
+
+        for (invalid in listOf<Double?>(null, 250.01, 1_000.0)) {
+            distance = invalid
+            assertEquals(
+                JourneyPhase.EMPTY,
+                JourneyController(arrivalRadiusMeters = 250.0, stateStore = store).state.phase,
+            )
+        }
+
+        distance = 250.0
+        val restored = JourneyController(arrivalRadiusMeters = 250.0, stateStore = store).state
+        assertEquals(JourneyPhase.ARRIVED, restored.phase)
+        assertEquals(250.0, restored.distanceMeters ?: -1.0, 0.0)
+    }
+
+    @Test fun restoredJourneyWithoutDestinationRejectsOrphanedGpsDistance() {
+        val start = GeoPoint(53.083, 8.813)
+        var persisted = JourneyUiState(
+            phase = JourneyPhase.EMPTY,
+            distanceMeters = 125.0,
+        )
+        val store = object : JourneyStateStore {
+            override fun load(): JourneyUiState = persisted
+            override fun save(state: JourneyUiState) = Unit
+        }
+
+        val restoredEmpty = JourneyController(stateStore = store).state
+        assertEquals(JourneyPhase.EMPTY, restoredEmpty.phase)
+        assertNull(restoredEmpty.distanceMeters)
+
+        persisted = JourneyUiState(
+            phase = JourneyPhase.START_SELECTED,
+            start = start,
+            distanceMeters = 125.0,
+        )
+        val restoredStartWithStaleDistance = JourneyController(stateStore = store).state
+        assertEquals(JourneyPhase.EMPTY, restoredStartWithStaleDistance.phase)
+        assertNull(restoredStartWithStaleDistance.distanceMeters)
+
+        // A legitimate saved origin with no distance still survives recreation.
+        persisted = JourneyUiState(phase = JourneyPhase.START_SELECTED, start = start)
+        val validRestoredStart = JourneyController(stateStore = store).state
+        assertEquals(JourneyPhase.START_SELECTED, validRestoredStart.phase)
+        assertEquals(start, validRestoredStart.start)
+        assertNull(validRestoredStart.distanceMeters)
+    }
+
+    @Test fun restoredUnarmedDestinationRejectsOrphanedGpsDistance() {
+        val start = GeoPoint(53.083, 8.813)
+        val destination = GeoPoint(53.1, 8.9)
+        var saved = JourneyUiState(
+            phase = JourneyPhase.DESTINATION_SELECTED,
+            start = start,
+            destination = destination,
+            distanceMeters = 20.0,
+        )
+        val store = object : JourneyStateStore {
+            override fun load(): JourneyUiState = saved
+            override fun save(state: JourneyUiState) = Unit
+        }
+
+        // A distance recorded in the unarmed phase must not become a valid current
+        // proximity reading or silently carry into a newly armed journey.
+        assertEquals(JourneyPhase.EMPTY, JourneyController(stateStore = store).state.phase)
+
+        saved = saved.copy(distanceMeters = null)
+        val valid = JourneyController(stateStore = store)
+        assertEquals(JourneyPhase.DESTINATION_SELECTED, valid.state.phase)
+        assertEquals(destination, valid.state.destination)
+        assertNull(valid.state.distanceMeters)
+
+        valid.arm()
+        assertEquals(JourneyPhase.ARMED, valid.state.phase)
+        assertNull(valid.state.distanceMeters)
+
+        // An actually armed and measured trip still survives restoration.
+        saved = saved.copy(phase = JourneyPhase.ARMED, distanceMeters = 400.0)
+        val armed = JourneyController(stateStore = store)
+        assertEquals(JourneyPhase.ARMED, armed.state.phase)
+        assertEquals(400.0, armed.state.distanceMeters ?: -1.0, 0.0)
+    }
+
     @Test fun corruptedPersistedArmedJourneyFailsClosedOnRestart() {
         val store = object : JourneyStateStore {
             override fun load() = JourneyUiState(
@@ -155,9 +250,102 @@ class JourneyControllerTest {
         assertEquals(destination, restored.destination)
     }
 
+    @Test fun journeyStorageFailureDoesNotInterruptArrivalAndLaterSaves() {
+        var failWrites = true
+        var persisted: JourneyUiState? = null
+        val store = object : JourneyStateStore {
+            override fun load(): JourneyUiState? = persisted
+            override fun save(state: JourneyUiState) {
+                if (failWrites) throw IllegalStateException("preferences unavailable")
+                persisted = state
+            }
+        }
+        val controller = JourneyController(stateStore = store)
+        controller.selectStart(GeoPoint(53.083, 8.813))
+        controller.selectDestination(GeoPoint(53.1, 8.9))
+        controller.arm()
+        controller.onDistanceChanged(100.0)
+        assertEquals(JourneyPhase.ARRIVED, controller.state.phase)
+        assertNull(persisted)
+
+        failWrites = false
+        controller.selectDestination(GeoPoint(53.2, 8.9))
+        assertEquals(JourneyPhase.DESTINATION_SELECTED, persisted?.phase)
+        assertNull(persisted?.distanceMeters)
+        controller.arm()
+        assertEquals(JourneyPhase.ARMED, persisted?.phase)
+    }
+
+    @Test fun journeyStorageFailureDoesNotPreventErrorOrAlarmCancellation() {
+        val store = object : JourneyStateStore {
+            override fun load(): JourneyUiState? = null
+            override fun save(state: JourneyUiState) {
+                throw IllegalStateException("storage full")
+            }
+        }
+        val controller = JourneyController(stateStore = store)
+        controller.selectDestination(GeoPoint(53.2, 8.8))
+        assertEquals(JourneyPhase.EMPTY, controller.state.phase)
+        assertNotNull(controller.state.error)
+
+        controller.selectStart(GeoPoint(53.0, 8.0))
+        controller.selectDestination(GeoPoint(53.1, 8.1))
+        controller.arm()
+        controller.onDistanceChanged(350.0)
+        controller.cancelAlarm()
+        assertEquals(JourneyPhase.DESTINATION_SELECTED, controller.state.phase)
+        assertNull(controller.state.distanceMeters)
+        assertNull(controller.state.error)
+    }
+
+    @Test fun rearmingAfterArrivalClearsStaleDistanceAndPersistsReset() {
+        var persisted: JourneyUiState? = null
+        val store = object : JourneyStateStore {
+            override fun load(): JourneyUiState? = persisted
+            override fun save(state: JourneyUiState) { persisted = state }
+        }
+        val controller = JourneyController(stateStore = store)
+        controller.selectStart(GeoPoint(53.083, 8.813))
+        controller.selectDestination(GeoPoint(53.1, 8.9))
+        controller.arm()
+        controller.onDistanceChanged(100.0)
+        assertEquals(JourneyPhase.ARRIVED, controller.state.phase)
+        assertEquals(100.0, persisted?.distanceMeters)
+
+        controller.arm()
+        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+        assertNull(controller.state.distanceMeters)
+        assertNull(persisted?.distanceMeters)
+
+        controller.onDistanceChanged(500.0)
+        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+        assertEquals(500.0, persisted?.distanceMeters)
+    }
+
+    @Test fun armingAlreadyArmedJourneyRetainsFreshDistance() {
+        val controller = JourneyController()
+        controller.selectStart(GeoPoint(53.083, 8.813))
+        controller.selectDestination(GeoPoint(53.1, 8.9))
+        controller.arm()
+        controller.onDistanceChanged(500.0)
+        controller.arm()
+        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+        assertEquals(500.0, controller.state.distanceMeters)
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun invalidRadiusCannotCreateAlwaysArrivingController() {
         JourneyController(arrivalRadiusMeters = Double.POSITIVE_INFINITY)
+    }
+
+
+    @Test(expected = AssertionError::class)
+    fun fatalJourneyStateLoadErrorIsNotSilentlyConvertedIntoEmptyJourney() {
+        val store = object : JourneyStateStore {
+            override fun load(): JourneyUiState? = throw AssertionError("fatal storage failure")
+            override fun save(state: JourneyUiState) = Unit
+        }
+        JourneyController(stateStore = store)
     }
 
 }
