@@ -60,12 +60,38 @@ class SupportDiagnosticsTest {
     }
 
     @Test fun feedFreshnessUsesCoarseBucketsOnly() {
-        val saved = state(NationwideDataState.Ready(10, 1_000L, "test"))
-        assertTrue(SupportDiagnostics.render(saved, 605_800L).contains("feed_age_bucket=over_7d"))
-        assertTrue(SupportDiagnostics.render(saved, 999L).contains("feed_age_bucket=clock_mismatch"))
+        val fetchedAt = 1_700_000_000L
+        val saved = state(NationwideDataState.Ready(10, fetchedAt, "test"))
+        assertTrue(SupportDiagnostics.render(saved, fetchedAt + 604_800L).contains("feed_age_bucket=over_7d"))
+        assertTrue(SupportDiagnostics.render(saved, fetchedAt - 1L).contains("feed_age_bucket=clock_mismatch"))
         assertTrue(SupportDiagnostics.render(
-            state(NationwideDataState.Loading("unknown provider details")), 1_000L,
+            state(NationwideDataState.Loading("unknown provider details")), fetchedAt,
         ).contains("feed_age_bucket=unknown"))
+    }
+
+
+    @Test fun unsetAndPre2000ClocksCannotClaimFreshFeedAge() {
+        val validNow = 1_700_000_100L
+        val privateSource = "private-feed-source"
+        for (resetEpoch in listOf(0L, 90L, 946_684_799L)) {
+            val badFeed = state(NationwideDataState.Ready(10, resetEpoch, privateSource))
+            val sameResetClock = SupportDiagnostics.render(badFeed, resetEpoch)
+            assertTrue(sameResetClock.contains("transit_index=index_present_unverified\n"))
+            assertTrue(sameResetClock.contains("feed_age_bucket=unknown\n"))
+            assertFalse(sameResetClock.contains("feed_age_bucket=under_24h\n"))
+            assertFalse(sameResetClock.contains(privateSource))
+
+            val validClock = SupportDiagnostics.render(badFeed, validNow)
+            assertTrue(validClock.contains("feed_age_bucket=unknown\n"))
+            val validFeed = state(NationwideDataState.Ready(10, validNow, privateSource))
+            val resetDeviceClock = SupportDiagnostics.render(validFeed, resetEpoch)
+            assertTrue(resetDeviceClock.contains("feed_age_bucket=unknown\n"))
+        }
+
+        val trustworthyBoundary = 946_684_800L
+        val boundaryFeed = state(NationwideDataState.Ready(10, trustworthyBoundary, privateSource))
+        val report = SupportDiagnostics.render(boundaryFeed, trustworthyBoundary)
+        assertTrue(report.contains("feed_age_bucket=under_24h\n"))
     }
 
     @Test fun impossibleUtcClocksNeverClaimFeedAge() {
