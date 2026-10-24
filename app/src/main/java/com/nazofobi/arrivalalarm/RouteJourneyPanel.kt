@@ -681,5 +681,5 @@ internal fun routeClock(value: String?): String? {
 }
 
 private fun hasRealtimeDelta(stop: RouteStop): Boolean =
-    (stop.arrival != null && stop.plannedArrival != null && stop.arrival != stop.plannedArrival) ||
-        (stop.departure != null && stop.plannedDeparture != null && stop.departure != stop.plannedDeparture)
+    routeHasUsableRealtimeDelta(stop.arrival, stop.plannedArrival) ||
+        routeHasUsableRealtimeDelta(stop.departure, stop.plannedDeparture)
