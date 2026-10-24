@@ -30,7 +30,8 @@ internal object DeviceLastKnownFixPolicy {
         val maxAgeNanos = MAX_FIX_AGE_MILLIS * NANOS_PER_MILLI
         return candidates.filter { candidate ->
             val accuracy = candidate.accuracyMeters
-            candidate.latitude.isFinite() && candidate.latitude in -90.0..90.0 &&
+            candidate.provider.isNotBlank() &&
+                candidate.latitude.isFinite() && candidate.latitude in -90.0..90.0 &&
                 candidate.longitude.isFinite() && candidate.longitude in -180.0..180.0 &&
                 accuracy != null && accuracy.isFinite() && accuracy >= 0f &&
                 candidate.observedAtMillis > 0L &&
