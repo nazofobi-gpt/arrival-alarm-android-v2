@@ -17,9 +17,16 @@ internal fun routeEvidencePlatform(actual: String?, planned: String?, routeOffli
     if (routeOffline) planned.usableRouteEvidence()
     else actual.usableRouteEvidence() ?: planned.usableRouteEvidence()
 
-/** A blank provider clock cannot prove a real-time deviation from the schedule. */
-internal fun routeHasUsableRealtimeDelta(actual: String?, planned: String?): Boolean =
-    !actual.isNullOrBlank() && !planned.isNullOrBlank() && actual.trim() != planned.trim()
+/**
+ * Only displayable provider clocks can prove a real-time deviation.
+ * Missing or malformed clocks must never color an unknown time as live.
+ */
+internal fun routeHasUsableRealtimeDelta(actual: String?, planned: String?): Boolean {
+    val observed = actual?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+    val scheduled = planned?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+    if (routeClock(observed) == null || routeClock(scheduled) == null) return false
+    return observed != scheduled
+}
 
 internal fun routeHasTrustedRealtime(routeOffline: Boolean, suppliedRealtime: Boolean): Boolean =
     !routeOffline && suppliedRealtime
