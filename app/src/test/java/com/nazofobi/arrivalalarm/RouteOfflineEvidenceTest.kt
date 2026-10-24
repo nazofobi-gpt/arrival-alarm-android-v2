@@ -32,4 +32,23 @@ class RouteOfflineEvidenceTest {
         assertFalse(routeHasTrustedRealtime(routeOffline = false, suppliedRealtime = false))
         assertTrue(routeHasTrustedRealtime(routeOffline = false, suppliedRealtime = true))
     }
+
+    @Test fun offlineBlankScheduledFieldsStayUnknownInsteadOfDisplayingEmptyEvidence() {
+        for (missing in listOf("", " ", "\t")) {
+            assertNull(routeEvidenceTime("08:42", missing, routeOffline = true))
+            assertNull(routeEvidencePlatform("3", missing, routeOffline = true))
+        }
+    }
+
+    @Test fun blankRealtimeFieldsFallBackOnlyToUsableSchedule() {
+        for (missing in listOf("", " ", "\t")) {
+            assertEquals("08:15", routeEvidenceTime(missing, "08:15", routeOffline = false))
+            assertEquals("1", routeEvidencePlatform(missing, "1", routeOffline = false))
+            assertNull(routeEvidenceTime(missing, " ", routeOffline = false))
+            assertNull(routeEvidencePlatform(missing, "", routeOffline = false))
+        }
+        // A scheduled value can be shown offline, not a cached realtime-only value.
+        assertEquals("08:15", routeEvidenceTime(" ", "08:15", routeOffline = true))
+        assertEquals("1", routeEvidencePlatform("", "1", routeOffline = true))
+    }
 }
