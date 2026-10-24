@@ -108,7 +108,10 @@ class GtfsTripDetailResolver(private val source: GtfsTripDetailSource) {
 
         val trip = source.trip(identity.tripId)
             ?: return unavailable(GtfsTripDetailFailure.TRIP_NOT_FOUND)
-        if (trip.serviceId != identity.serviceId ||
+        // A stale/incorrect provider lookup must not substitute another trip ID,
+        // even when the route, service and direction still happen to match.
+        if (trip.id != identity.tripId ||
+            trip.serviceId != identity.serviceId ||
             trip.routeId != identity.routeId ||
             trip.directionId != identity.directionId
         ) return unavailable(GtfsTripDetailFailure.TRIP_CHANGED)
