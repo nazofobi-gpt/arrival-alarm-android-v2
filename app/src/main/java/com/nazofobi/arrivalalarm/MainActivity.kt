@@ -1052,6 +1052,15 @@ fun ArrivalAlarmApp(
                             setDestination(candidate.stop)
                         }
                     },
+                    onToggleFavoriteStop = { stopId ->
+                        val updated = toggleFavoriteStopIds(favoriteStopIds, stopId)
+                        if (updated != favoriteStopIds) {
+                            transitExperiencePreferences.edit()
+                                .putStringSet("favorite_stop_ids", updated.toSet())
+                                .apply()
+                            favoriteStopIds = updated
+                        }
+                    },
                     mode = HomeSearchMode.SEARCH,
                 )
                 }

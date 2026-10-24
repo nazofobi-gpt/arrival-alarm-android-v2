@@ -81,7 +81,12 @@ class G170NearbyVisualInstrumentedTest {
             nearby.single().childStops.map { it.id },
         )
 
-        setNearbyContent(nearby, favoriteStopIds = setOf(station.id))
+        var toggledFavoriteId: String? = null
+        setNearbyContent(
+            nearby,
+            favoriteStopIds = setOf(station.id),
+            onToggleFavoriteStop = { toggledFavoriteId = it },
+        )
 
         rule.onNodeWithTag("nearby-stop-0")
             .performScrollTo()
@@ -91,6 +96,11 @@ class G170NearbyVisualInstrumentedTest {
         assertEquals(1, rule.onAllNodesWithTag("nearby-stop-0").fetchSemanticsNodes().size)
         assertTrue(rule.onAllNodesWithTag("nearby-stop-1").fetchSemanticsNodes().isEmpty())
         assertTrue(rule.onAllNodesWithTag("nearby-stop-0-child-0").fetchSemanticsNodes().isEmpty())
+        rule.onNodeWithTag("nearby-stop-0-favorite")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        rule.runOnIdle { assertEquals(station.id, toggledFavoriteId) }
 
         rule.onNodeWithTag("nearby-stop-0-expand")
             .performScrollTo()
@@ -184,6 +194,7 @@ class G170NearbyVisualInstrumentedTest {
     private fun setNearbyContent(
         nearby: List<NearbyStop>,
         favoriteStopIds: Set<String>,
+        onToggleFavoriteStop: (String) -> Unit = {},
     ) {
         rule.setContent {
             MaterialTheme {
@@ -216,6 +227,7 @@ class G170NearbyVisualInstrumentedTest {
                         onMapPointSelected = {},
                         onMapError = {},
                         onNearbyStopSelected = {},
+                        onToggleFavoriteStop = onToggleFavoriteStop,
                         mode = HomeSearchMode.HOME,
                     )
                 }

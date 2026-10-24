@@ -62,6 +62,7 @@ fun HomeSearchPanel(
     onMapPointSelected: (MapPoint) -> Unit,
     onMapError: (String) -> Unit,
     onNearbyStopSelected: (NearbyStop) -> Unit,
+    onToggleFavoriteStop: (String) -> Unit,
     mode: HomeSearchMode = HomeSearchMode.HOME,
     modifier: Modifier = Modifier,
 ) {
@@ -309,6 +310,23 @@ fun HomeSearchPanel(
                                     )
                                 )
                             }
+                            TextButton(
+                                onClick = { onToggleFavoriteStop(candidate.stop.id) },
+                                enabled = candidate.stop.id.isNotBlank(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("nearby-stop-$index-favorite"),
+                            ) {
+                                Text(
+                                    stringResource(
+                                        if (candidate.stop.id in favoriteStopIds) {
+                                            R.string.favorite_remove
+                                        } else {
+                                            R.string.favorite_add
+                                        }
+                                    )
+                                )
+                            }
                             if (candidate.childStops.isNotEmpty()) {
                                 val expanded = candidate.stop.id in expandedNearbyStopIds
                                 TextButton(
@@ -445,6 +463,25 @@ fun HomeSearchPanel(
                                     result.label,
                                 )
                             )
+                        }
+                        result.stop?.let { stop ->
+                            TextButton(
+                                onClick = { onToggleFavoriteStop(stop.id) },
+                                enabled = stop.id.isNotBlank(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("search-result-$index-favorite"),
+                            ) {
+                                Text(
+                                    stringResource(
+                                        if (stop.id in favoriteStopIds) {
+                                            R.string.favorite_remove
+                                        } else {
+                                            R.string.favorite_add
+                                        }
+                                    )
+                                )
+                            }
                         }
                     }
 
