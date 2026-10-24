@@ -263,4 +263,12 @@
     <string name="gtfs_consent_saved">Auswahl gespeichert. Alarm separat aktivieren.</string>
     <string name="gtfs_consent_restored">Gespeicherte Fahrt und Haltestellen mit aktuellen Daten bestätigt.</string>
     <string name="gtfs_consent_restore_invalid">Gespeicherte Fahrt geändert oder nicht verfügbar. Bitte erneut auswählen.</string>
+    <string name="active_tracking_channel_name">Aktive Ankunftsverfolgung</string>
+    <string name="arrival_alerts_channel_name">Ankunftswarnungen</string>
+    <string name="active_tracking_title">Ankunftsalarm aktiv</string>
+    <string name="active_tracking_degraded">Standort ungenau; Alarm aktiv, neues GPS-Signal abwarten</string>
+    <string name="active_tracking_in_progress">Standort wird verfolgt</string>
+    <string name="active_tracking_distance">Noch etwa %1$d m bis zum Ziel</string>
+    <string name="arrival_notification_title">Ziel erreicht</string>
+    <string name="arrival_notification_body">Ankunftsalarm abgeschlossen.</string>
 </resources>

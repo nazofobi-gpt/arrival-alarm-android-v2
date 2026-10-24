@@ -258,6 +258,15 @@ class JourneyConnectorActionPortTest {
         assertTrue(port.armArrivalAlarm().applied)
 
         assertTrue(port.cancelArrivalAlarm().applied)
+        assertEquals(JourneyPhase.DESTINATION_SELECTED, controller.state.phase)
+        assertFalse(port.readSnapshot().alarmArmed)
+        assertEquals(1, cancelled)
+
+        // A delayed location callback and repeated notification tap cannot re-arm
+        // or complete a journey after the authoritative alarm was cancelled.
+        assertFalse(port.updateDistanceToDestination(5.0).applied)
+        assertFalse(port.cancelArrivalAlarm().applied)
+        assertEquals(JourneyPhase.DESTINATION_SELECTED, controller.state.phase)
         assertEquals(1, cancelled)
     }
 

@@ -263,4 +263,12 @@
     <string name="gtfs_consent_saved">Selection saved. Activate the arrival alarm separately.</string>
     <string name="gtfs_consent_restored">Saved trip and stop roles verified against current data.</string>
     <string name="gtfs_consent_restore_invalid">Saved trip changed or is unavailable. Please select again.</string>
+    <string name="active_tracking_channel_name">Active arrival tracking</string>
+    <string name="arrival_alerts_channel_name">Arrival alerts</string>
+    <string name="active_tracking_title">Arrival alarm active</string>
+    <string name="active_tracking_degraded">Location accuracy low; alarm active, waiting for GPS</string>
+    <string name="active_tracking_in_progress">Tracking location</string>
+    <string name="active_tracking_distance">About %1$d m to your destination</string>
+    <string name="arrival_notification_title">Destination reached</string>
+    <string name="arrival_notification_body">Arrival alarm completed.</string>
 </resources>

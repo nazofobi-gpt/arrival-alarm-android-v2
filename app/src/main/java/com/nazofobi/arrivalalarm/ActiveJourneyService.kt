@@ -108,6 +108,15 @@ class ActiveJourneyService : Service(), LocationListener {
             stopSelf()
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_CANCEL) {
+            // The notification action must disarm the authoritative journey state;
+            // stopping only the service would leave a silently armed alarm behind.
+            if (graph.controller.state.phase == JourneyPhase.ARMED) {
+                graph.connectorPort.cancelArrivalAlarm()
+            }
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (graph.controller.state.phase != JourneyPhase.ARMED) {
             stopSelf()
             return START_NOT_STICKY
@@ -239,17 +248,24 @@ class ActiveJourneyService : Service(), LocationListener {
 
     private fun trackingNotification(distanceMeters: Double?, accuracyDegraded: Boolean = false): Notification {
         val text = when {
-            accuracyDegraded -> "Konum doğruluğu yetersiz; alarm etkin, yeni GPS bekleniyor"
-            distanceMeters == null -> "Konum takip ediliyor"
-            else -> "Hedefe yaklaşık " + distanceMeters.roundToInt() + " m kaldı"
+            accuracyDegraded -> getString(R.string.active_tracking_degraded)
+            distanceMeters == null -> getString(R.string.active_tracking_in_progress)
+            else -> getString(R.string.active_tracking_distance, distanceMeters.roundToInt())
         }
         return notificationBuilder(TRACKING_CHANNEL_ID)
-            .setContentTitle("Varış alarmı etkin")
+            .setContentTitle(getString(R.string.active_tracking_title))
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_dialog_map)
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setContentIntent(openAppPendingIntent())
+            .addAction(
+                Notification.Action.Builder(
+                    android.R.drawable.ic_menu_close_clear_cancel,
+                    getString(R.string.cancel_alarm),
+                    cancelAlarmPendingIntent(),
+                ).build()
+            )
             .build()
     }
 
@@ -258,8 +274,8 @@ class ActiveJourneyService : Service(), LocationListener {
         manager.notify(
             ARRIVAL_NOTIFICATION_ID,
             notificationBuilder(ARRIVAL_CHANNEL_ID)
-                .setContentTitle("Varış noktasına ulaşıldı")
-                .setContentText("Varış alarmı tamamlandı.")
+                .setContentTitle(getString(R.string.arrival_notification_title))
+                .setContentText(getString(R.string.arrival_notification_body))
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setAutoCancel(true)
                 .setCategory(Notification.CATEGORY_ALARM)
@@ -282,20 +298,28 @@ class ActiveJourneyService : Service(), LocationListener {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
+    private fun cancelAlarmPendingIntent(): PendingIntent =
+        PendingIntent.getService(
+            this,
+            CANCEL_REQUEST_CODE,
+            cancellationIntent(this),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT < 26) return
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(
             NotificationChannel(
                 TRACKING_CHANNEL_ID,
-                "Aktif varış takibi",
+                getString(R.string.active_tracking_channel_name),
                 NotificationManager.IMPORTANCE_LOW,
             )
         )
         manager.createNotificationChannel(
             NotificationChannel(
                 ARRIVAL_CHANNEL_ID,
-                "Varış uyarıları",
+                getString(R.string.arrival_alerts_channel_name),
                 NotificationManager.IMPORTANCE_HIGH,
             )
         )
@@ -304,14 +328,19 @@ class ActiveJourneyService : Service(), LocationListener {
     companion object {
         const val ACTION_START = "com.nazofobi.arrivalalarm.action.START_ACTIVE_JOURNEY"
         const val ACTION_STOP = "com.nazofobi.arrivalalarm.action.STOP_ACTIVE_JOURNEY"
+        const val ACTION_CANCEL = "com.nazofobi.arrivalalarm.action.CANCEL_ACTIVE_JOURNEY"
         const val SERVICE_RUNTIME_OWNER = "active-journey-service"
         private const val TRACKING_CHANNEL_ID = "arrival_tracking"
         private const val ARRIVAL_CHANNEL_ID = "arrival_alerts"
         private const val TRACKING_NOTIFICATION_ID = 4101
         private const val ARRIVAL_NOTIFICATION_ID = 4102
+        private const val CANCEL_REQUEST_CODE = 4103
         private const val MIN_UPDATE_MILLIS = 10_000L
         private const val MIN_UPDATE_METERS = 25f
         private const val STATE_MONITOR_MILLIS = 5_000L
+
+        internal fun cancellationIntent(context: Context): Intent =
+            Intent(context, ActiveJourneyService::class.java).setAction(ACTION_CANCEL)
 
         fun tryStart(context: Context): Boolean {
             if (!ActiveJourneyPermissions.hasRequired(context)) return false
