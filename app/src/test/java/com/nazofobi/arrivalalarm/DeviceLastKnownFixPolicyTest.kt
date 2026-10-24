@@ -51,6 +51,17 @@ class DeviceLastKnownFixPolicyTest {
         assertNull(DeviceLastKnownFixPolicy.select(invalid, now))
     }
 
+    @Test fun missingProviderProvenanceCannotSeedCurrentLocation() {
+        val valid = sample(provider = "network", ageSeconds = 20L)
+        val missingSource = listOf(
+            sample(provider = "", ageSeconds = 1L),
+            sample(provider = "   ", ageSeconds = 2L),
+        )
+        assertNull(DeviceLastKnownFixPolicy.select(missingSource, now))
+        // A recent but source-less candidate cannot shadow an older verified provider.
+        assertEquals(valid, DeviceLastKnownFixPolicy.select(missingSource + valid, now))
+    }
+
     @Test fun approximatePermissionRemainsUsableForOriginWithoutConfirmingArrival() {
         val approximate = sample(accuracy = 2_000f, provider = "network")
         assertEquals(approximate, DeviceLastKnownFixPolicy.select(listOf(approximate), now))
