@@ -86,7 +86,18 @@ class TransitExperienceEngine(private val capabilities: TransitProviderCapabilit
             .toList()
 
     fun alerts(values: List<ServiceAlert>): List<ServiceAlert> = if (capabilities.serviceAlerts) values else emptyList()
-    fun vehicles(values: List<LiveVehicle>): List<LiveVehicle> = if (capabilities.liveVehiclePositions) values else emptyList()
+    fun vehicles(values: List<LiveVehicle>): List<LiveVehicle> {
+        if (!capabilities.liveVehiclePositions) return emptyList()
+        // A provider capability flag is not proof that every coordinate is
+        // usable. Reject corrupt vehicle IDs/positions before map presentation.
+        return values.filter { vehicle ->
+            vehicle.tripId.isNotBlank() &&
+                vehicle.point.latitude.isFinite() &&
+                vehicle.point.latitude in -90.0..90.0 &&
+                vehicle.point.longitude.isFinite() &&
+                vehicle.point.longitude in -180.0..180.0
+        }
+    }
 
     /** Exclude only the selected departure, not every service of its GTFS template. */
     fun alternateDepartures(values: List<Departure>, selected: Departure, nowEpochSeconds: Long): List<Departure> =
