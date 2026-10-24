@@ -95,7 +95,7 @@
     <string name="route_walk_transfer_format">%1$d min walking • %2$d transfers</string>
     <string name="route_walk_access_detail">Start → %1$s stop: about %2$d min walking</string>
     <string name="route_walk_egress_detail">%1$s stop → destination: about %2$d min walking</string>
-    <string name="route_walk_source_note">GTFS walking-time estimate; no pedestrian path geometry is provided.</string>
+    <string name="route_walk_source_note">Estimated from straight-line stop distance and walking speed; not a pedestrian route.</string>
     <string name="route_realtime_badge">Realtime update</string>
     <string name="route_planned_badge">Scheduled time</string>
     <string name="route_select_action">Select this route</string>

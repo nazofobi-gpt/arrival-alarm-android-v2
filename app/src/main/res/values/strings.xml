@@ -99,7 +99,7 @@
     <string name="route_walk_transfer_format">%1$d dk yürüme • %2$d aktarma</string>
     <string name="route_walk_access_detail">Başlangıç → %1$s durağı: yaklaşık %2$d dk yürüme</string>
     <string name="route_walk_egress_detail">%1$s durağı → varış: yaklaşık %2$d dk yürüme</string>
-    <string name="route_walk_source_note">GTFS yürüme süresi tahminidir; yaya güzergâhı haritası sağlanmadı.</string>
+    <string name="route_walk_source_note">Durağa kuş uçuşu mesafe ve tahmini yürüyüş hızı kullanılır; yaya rotası değildir.</string>
     <string name="route_realtime_badge">Canlı güncelleme</string>
     <string name="route_realtime_cancelled_badge">Canlı veri: sefer iptal bilgisi</string>
     <string name="route_realtime_cancelled_action_blocked">Sefer iptal edildi • farklı bir rota seç</string>

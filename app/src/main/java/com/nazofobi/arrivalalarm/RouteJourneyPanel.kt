@@ -380,7 +380,7 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            // Only the local GTFS router supplies separate access/egress estimates.
+            // Only local planning provides separate distance-based access/egress estimates.
             // These are stop contexts, never inferred pedestrian map polylines.
             option.accessWalking?.takeIf { it.walkSeconds > 0 }?.let { leg ->
                 val roundedMinutes = ((leg.walkSeconds.toLong() + 59L) / 60L).toInt()

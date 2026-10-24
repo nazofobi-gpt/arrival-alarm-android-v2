@@ -28,8 +28,8 @@ data class RouteStop(
 )
 
 /**
- * Provider-backed walking access/egress evidence. These fields describe only a
- * stop and walking duration, not a mapped pedestrian path or transfer walk.
+ * GTFS stop-backed walking access/egress estimates derived from straight-line
+ * stop distance and nominal walking speed, not pedestrian path geometry.
  */
 data class RouteWalkingLegEvidence(
     val stopId: String,
