@@ -99,4 +99,28 @@ class RouteOfflineEvidenceTest {
         assertFalse(routeHasTrustedRealtimePlatform(routeOffline = true, actualPlatform = "2"))
     }
 
+
+    @Test fun invalidObservedClockFallsBackToValidScheduledClock() {
+        assertEquals("08:15", routeEvidenceTime("invalid", "08:15", routeOffline = false))
+        assertEquals("24:15", routeEvidenceTime("25:61", "24:15", routeOffline = false))
+        assertEquals("08:15", routeEvidenceTime("08:99", "08:15", routeOffline = false))
+        assertEquals("08:42", routeEvidenceTime("08:42", "not-a-clock", routeOffline = false))
+        assertNull(routeEvidenceTime("unknown", "bad", routeOffline = false))
+    }
+
+    @Test fun offlineAndBlankScheduledClocksFailClosedWhenNotParseable() {
+        assertNull(routeEvidenceTime("08:42", "not-a-clock", routeOffline = true))
+        assertNull(routeEvidenceTime("08:42", "25:61", routeOffline = true))
+        assertEquals("24:15", routeEvidenceTime("25:61", "24:15", routeOffline = true))
+    }
+
+    @Test fun incidentalClockWhitespaceIsNormalizedForDisplay() {
+        assertEquals("08:42", routeEvidenceTime(" 08:42 ", "08:15", routeOffline = false))
+        assertEquals("08:15", routeEvidenceTime("invalid", " 08:15 ", routeOffline = false))
+        assertEquals("24:00:59", routeEvidenceTime("24:00:59", "24:00", routeOffline = false))
+        assertEquals(
+            "2026-10-25T08:42:00",
+            routeEvidenceTime("2026-10-25T08:42:00", "08:15", routeOffline = false),
+        )
+    }
 }
