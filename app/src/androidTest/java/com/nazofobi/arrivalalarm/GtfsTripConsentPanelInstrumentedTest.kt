@@ -26,19 +26,33 @@ class GtfsTripConsentPanelInstrumentedTest {
         directionId = 0,
     )
 
-    private fun stop(sequence: Int, dropOff: Int? = null) = GtfsTripDetailStop(
-        stopSequence = sequence,
-        stopId = "stop-$sequence",
-        name = "Stop $sequence",
-        parentStationId = null,
-        platformCode = null,
-        wheelchairBoarding = null,
-        scheduledArrival = "08:00:00",
-        scheduledDeparture = "08:01:00",
-        latitude = 52.66,
-        longitude = 8.24,
-        dropOffType = dropOff,
-    )
+    private fun stop(sequence: Int, dropOff: Int? = null): GtfsTripDetailStop {
+        // A consent fixture must be chronologically valid unless the test
+        // deliberately supplies an invalid scheduled arrival or departure.
+        val minute = when (sequence) {
+            10 -> 0
+            20 -> 10
+            30 -> 20
+            50 -> 30
+            90 -> 40
+            else -> error("Unexpected fixture stop sequence: $sequence")
+        }
+        val arrival = minute.toString().padStart(2, '0')
+        val departure = (minute + 1).toString().padStart(2, '0')
+        return GtfsTripDetailStop(
+            stopSequence = sequence,
+            stopId = "stop-$sequence",
+            name = "Stop $sequence",
+            parentStationId = null,
+            platformCode = null,
+            wheelchairBoarding = null,
+            scheduledArrival = "08:$arrival:00",
+            scheduledDeparture = "08:$departure:00",
+            latitude = 52.66,
+            longitude = 8.24,
+            dropOffType = dropOff,
+        )
+    }
 
     private val detail = GtfsTripDetail(
         identity,
@@ -98,6 +112,37 @@ class GtfsTripConsentPanelInstrumentedTest {
         compose.runOnUiThread { busy.value = true }
         compose.waitForIdle()
         compose.runOnUiThread { busy.value = false }
+        compose.waitForIdle()
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsEnabled().performClick()
+        assertEquals(2, confirmations)
+    }
+
+    @Test fun fastFailedSaveCanBeRetriedEvenWhenBusyFrameWasNeverObserved() {
+        val busy = mutableStateOf(false)
+        val completionRevision = mutableStateOf(0L)
+        var confirmations = 0
+        compose.setContent {
+            GtfsTripConsentPanel(
+                preview = GtfsDepartureInspection.Ready(detail, detail.stops.first()),
+                busy = busy.value,
+                completionRevision = completionRevision.value,
+                onConfirm = { confirmations++ },
+                onDismiss = {},
+            )
+        }
+        compose.onNodeWithTag("gtfs-destination-picker").performClick()
+        compose.onNodeWithTag("gtfs-destination-30").performClick()
+        compose.onNodeWithTag("gtfs-consent-confirm").performClick()
+        assertEquals(1, confirmations)
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsNotEnabled()
+
+        // Parent starts and finishes IO before Compose renders busy=true.
+        // The completion token still reflects that the first attempt has ended.
+        compose.runOnUiThread {
+            busy.value = true
+            busy.value = false
+            completionRevision.value += 1L
+        }
         compose.waitForIdle()
         compose.onNodeWithTag("gtfs-consent-confirm").assertIsEnabled().performClick()
         assertEquals(2, confirmations)
@@ -401,6 +446,89 @@ class GtfsTripConsentPanelInstrumentedTest {
         compose.onNodeWithTag("gtfs-confirmed-planned-stop-count")
             .assertTextContains("2", substring = true)
         compose.onNodeWithTag("gtfs-consent-confirm").assertDoesNotExist()
+    }
+
+
+    @Test fun chronologyPreflightRejectsDestinationBeforeBoardingClock() {
+        var chosen: GtfsSelectedTrip? = null
+        val impossible = detail.copy(stops = detail.stops.map { current ->
+            if (current.stopSequence == 30) current.copy(
+                scheduledArrival = "07:59:00",
+                scheduledDeparture = "08:00:00",
+            ) else current
+        })
+        compose.setContent {
+            GtfsTripConsentPanel(
+                preview = GtfsDepartureInspection.Ready(impossible, impossible.stops.first()),
+                busy = false,
+                onConfirm = { chosen = it },
+                onDismiss = {},
+            )
+        }
+        compose.onNodeWithTag("gtfs-destination-picker").performClick()
+        // Keep the invalid choice visible but prevent a consent that cannot be saved.
+        compose.onNodeWithTag("gtfs-destination-30").performClick()
+        compose.onNodeWithTag("gtfs-consent-invalid").assertExists()
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsNotEnabled()
+        assertNull(chosen)
+    }
+
+    @Test fun chronologyPreflightRejectsBackwardsIntermediateStopRegardlessOfAlarmChoice() {
+        var chosen: GtfsSelectedTrip? = null
+        val impossibleIntermediate = detail.copy(stops = detail.stops.map { current ->
+            if (current.stopSequence == 20) current.copy(
+                scheduledArrival = "08:00:00",
+                scheduledDeparture = "08:11:00",
+            ) else current
+        })
+        compose.setContent {
+            GtfsTripConsentPanel(
+                preview = GtfsDepartureInspection.Ready(
+                    impossibleIntermediate, impossibleIntermediate.stops.first()
+                ),
+                busy = false,
+                onConfirm = { chosen = it },
+                onDismiss = {},
+            )
+        }
+        compose.onNodeWithTag("gtfs-destination-picker").performClick()
+        compose.onNodeWithTag("gtfs-destination-30").performClick()
+        // Stop 20 arrives at 08:00, before boarding departs at 08:01.
+        // This invalidates the entire segment, even with destination as alarm.
+        compose.onNodeWithTag("gtfs-consent-invalid").assertExists()
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsNotEnabled()
+
+        compose.onNodeWithTag("gtfs-alarm-target-picker").performClick()
+        compose.onNodeWithTag("gtfs-alarm-20").performClick()
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsNotEnabled()
+
+        compose.onNodeWithTag("gtfs-alarm-target-picker").performClick()
+        compose.onNodeWithTag("gtfs-alarm-30").performClick()
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsNotEnabled()
+        assertNull(chosen)
+    }
+
+    @Test fun chronologyPreflightAcceptsLegitimateOvernightServiceDayClock() {
+        var chosen: GtfsSelectedTrip? = null
+        val overnight = detail.copy(stops = listOf(
+            stop(10).copy(scheduledArrival = "23:58:00", scheduledDeparture = "23:59:00"),
+            stop(20, dropOff = 1).copy(
+                scheduledArrival = "24:05:00", scheduledDeparture = "24:06:00",
+            ),
+            stop(30).copy(scheduledArrival = "24:20:00", scheduledDeparture = "24:21:00"),
+        ))
+        compose.setContent {
+            GtfsTripConsentPanel(
+                preview = GtfsDepartureInspection.Ready(overnight, overnight.stops.first()),
+                busy = false,
+                onConfirm = { chosen = it },
+                onDismiss = {},
+            )
+        }
+        compose.onNodeWithTag("gtfs-destination-picker").performClick()
+        compose.onNodeWithTag("gtfs-destination-30").performClick()
+        compose.onNodeWithTag("gtfs-consent-confirm").assertIsEnabled().performClick()
+        assertEquals(GtfsSelectedStopRef(30, "stop-30"), chosen?.destination)
     }
 
 }

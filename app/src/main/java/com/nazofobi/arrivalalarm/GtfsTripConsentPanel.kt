@@ -36,6 +36,7 @@ internal fun GtfsTripConsentPanel(
     onConfirm: (GtfsSelectedTrip) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    completionRevision: Long = 0L,
 ) {
     val boarding = preview.boarding
     val detail = preview.detail
@@ -50,12 +51,19 @@ internal fun GtfsTripConsentPanel(
         // Once the parent's busy cycle ends, failed saves can be retried.
         var confirmationPending by remember { mutableStateOf(false) }
         var busySeenAfterConfirmation by remember { mutableStateOf(false) }
-        LaunchedEffect(busy, confirmationPending) {
-            if (busy && confirmationPending) {
-                busySeenAfterConfirmation = true
-            } else if (!busy && busySeenAfterConfirmation) {
-                confirmationPending = false
-                busySeenAfterConfirmation = false
+        var startedAtCompletionRevision by remember { mutableStateOf(completionRevision) }
+        // Fast IO can finish before Compose observes busy=true. A parent completion
+        // revision releases the latch without permitting a second in-flight save.
+        LaunchedEffect(busy, confirmationPending, completionRevision) {
+            if (confirmationPending) {
+                if (busy) {
+                    busySeenAfterConfirmation = true
+                } else if (busySeenAfterConfirmation ||
+                    completionRevision != startedAtCompletionRevision
+                ) {
+                    confirmationPending = false
+                    busySeenAfterConfirmation = false
+                }
             }
         }
 
@@ -75,6 +83,18 @@ internal fun GtfsTripConsentPanel(
         } else emptyList()
         val alarm = alarmStops.singleOrNull { it.stopSequence == alarmOverride }
             ?: destination
+
+        // Preview the same source-backed stop-role contract enforced at persistence.
+        // An impossible service-day clock must disable consent before the rider taps Save,
+        // rather than offer a button that can only reject after the tap.
+        // Keep invalid destination choices visible so the feed defect is explicit.
+        val consentReady = destination != null && boardingActionable &&
+            buildGtfsTripConsentDraft(
+                detail = detail,
+                boardingSequence = boarding.stopSequence,
+                destinationSequence = destination.stopSequence,
+                alarmTargetSequence = alarm?.stopSequence,
+            ) is GtfsTripConsentDraft.Ready
 
         Card(modifier = modifier.fillMaxWidth().testTag("gtfs-consent-panel")) {
             Column(
@@ -148,7 +168,9 @@ internal fun GtfsTripConsentPanel(
                     }
                 }
 
-                if (invalidRoles || destinations.isEmpty() || !boardingActionable) {
+                if (invalidRoles || destinations.isEmpty() || !boardingActionable ||
+                    (destination != null && !consentReady)
+                ) {
                     Text(
                         stringResource(R.string.gtfs_consent_invalid),
                         color = MaterialTheme.colorScheme.error,
@@ -170,6 +192,7 @@ internal fun GtfsTripConsentPanel(
                         )) {
                             is GtfsTripConsentDraft.Ready -> {
                                 if (!confirmationPending) {
+                                    startedAtCompletionRevision = completionRevision
                                     confirmationPending = true
                                     onConfirm(draft.selection)
                                 }
@@ -177,7 +200,7 @@ internal fun GtfsTripConsentPanel(
                             is GtfsTripConsentDraft.Rejected -> invalidRoles = true
                         }
                     },
-                    enabled = destination != null && boardingActionable && !busy && !confirmationPending,
+                    enabled = consentReady && !busy && !confirmationPending,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                         .testTag("gtfs-consent-confirm"),
                 ) {

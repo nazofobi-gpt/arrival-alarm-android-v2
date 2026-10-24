@@ -44,6 +44,10 @@ import androidx.compose.ui.semantics.Role
 
 enum class ReadinessLevel { READY, ACTION_NEEDED, BLOCKED, INFO }
 
+// A downloaded feed is not a usable offline index when it contains zero stops.
+internal fun hasUsableNationwideIndex(state: NationwideDataState): Boolean =
+    state is NationwideDataState.Ready && state.stopCount > 0
+
 data class SettingsReadinessState(
     val themeMode: ArrivalThemeMode,
     val locationPermission: Boolean,
@@ -61,7 +65,7 @@ data class SettingsReadinessState(
         get() = when {
             !locationPermission || !notificationPermission || !locationServicesAvailable ->
                 ReadinessLevel.BLOCKED
-            dataState !is NationwideDataState.Ready ||
+            !hasUsableNationwideIndex(dataState) ||
                 guidancePermissionState != GuidancePermissionState.GRANTED ||
                 !bluetoothPermission -> ReadinessLevel.ACTION_NEEDED
             else -> ReadinessLevel.READY
@@ -238,12 +242,15 @@ fun SettingsReadinessPanel(
                 value = when (val data = state.dataState) {
                     NationwideDataState.Idle -> stringResource(R.string.readiness_data_not_ready)
                     is NationwideDataState.Loading -> stringResource(R.string.readiness_data_loading)
-                    is NationwideDataState.Ready ->
+                    is NationwideDataState.Ready -> if (hasUsableNationwideIndex(data)) {
                         stringResource(R.string.readiness_data_ready, data.stopCount)
+                    } else {
+                        stringResource(R.string.readiness_data_unavailable)
+                    }
                     is NationwideDataState.Error -> stringResource(R.string.readiness_data_unavailable)
                 },
                 level = when (state.dataState) {
-                    is NationwideDataState.Ready -> ReadinessLevel.READY
+                    is NationwideDataState.Ready -> if (hasUsableNationwideIndex(state.dataState)) ReadinessLevel.READY else ReadinessLevel.ACTION_NEEDED
                     is NationwideDataState.Loading -> ReadinessLevel.INFO
                     else -> ReadinessLevel.ACTION_NEEDED
                 },

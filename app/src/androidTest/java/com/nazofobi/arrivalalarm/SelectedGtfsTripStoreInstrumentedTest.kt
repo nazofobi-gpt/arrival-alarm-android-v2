@@ -36,18 +36,31 @@ class SelectedGtfsTripStoreInstrumentedTest {
         assertTrue(preferences.edit().clear().commit())
     }
 
-    private fun stop(sequence: Int, id: String) = GtfsTripDetailStop(
-        stopSequence = sequence,
-        stopId = id,
-        name = id,
-        parentStationId = null,
-        platformCode = null,
-        wheelchairBoarding = null,
-        scheduledArrival = "08:00:00",
-        scheduledDeparture = "08:01:00",
-        latitude = 52.665,
-        longitude = 8.237,
-    )
+    private fun stop(sequence: Int, id: String): GtfsTripDetailStop {
+        // Every ordinary fixture represents a feasible GTFS service-day journey.
+        // Invalid stop chronology must be introduced explicitly by each negative test.
+        val minute = when (sequence) {
+            2 -> 0
+            5 -> 5
+            7 -> 10
+            13 -> 20
+            else -> error("Unexpected fixture stop sequence: $sequence")
+        }
+        val arrival = minute.toString().padStart(2, '0')
+        val departure = (minute + 1).toString().padStart(2, '0')
+        return GtfsTripDetailStop(
+            stopSequence = sequence,
+            stopId = id,
+            name = id,
+            parentStationId = null,
+            platformCode = null,
+            wheelchairBoarding = null,
+            scheduledArrival = "08:$arrival:00",
+            scheduledDeparture = "08:$departure:00",
+            latitude = 52.665,
+            longitude = 8.237,
+        )
+    }
 
     private fun detail(
         trip: GtfsTripInstanceIdentity = identity,
@@ -159,11 +172,14 @@ class SelectedGtfsTripStoreInstrumentedTest {
         assertTrue(normal.save(selected))
         val before = preferences.getString(SelectedGtfsTripStore.KEY, null)
         val oversized = selected.copy(identity = identity.copy(tripId = "x".repeat(70_000)))
+        var resolverCalled = false
         val withOversizedIdentity = store { trip ->
+            resolverCalled = true
             GtfsTripDetailResult.Available(detail(trip = trip))
         }
 
         assertFalse(withOversizedIdentity.save(oversized))
+        assertFalse(resolverCalled)
         assertEquals(before, preferences.getString(SelectedGtfsTripStore.KEY, null))
         assertTrue(normal.restore() is GtfsSelectionRestore.Verified)
     }
@@ -207,7 +223,9 @@ class SelectedGtfsTripStoreInstrumentedTest {
         val revised = detail().copy(
             stops = listOf(
                 stop(2, "Lohne"),
-                stop(7, "Transfer").copy(scheduledArrival = "09:15:00"),
+                stop(7, "Transfer").copy(
+                    scheduledArrival = "08:15:00", scheduledDeparture = "08:16:00",
+                ),
                 stop(13, "Achim"),
             ),
         )
@@ -227,7 +245,7 @@ class SelectedGtfsTripStoreInstrumentedTest {
         assertTrue(initial.save(selected))
         val revised = original.copy(
             stops = original.stops.map { stop ->
-                if (stop.stopSequence == 5) stop.copy(scheduledDeparture = "08:22:00") else stop
+                if (stop.stopSequence == 5) stop.copy(scheduledDeparture = "08:06:30") else stop
             },
         )
         assertRejected(

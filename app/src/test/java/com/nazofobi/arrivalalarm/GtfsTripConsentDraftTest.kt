@@ -12,18 +12,30 @@ class GtfsTripConsentDraftTest {
         routeId = "route-2",
         directionId = 1,
     )
-    private fun stop(sequence: Int, id: String) = GtfsTripDetailStop(
-        stopSequence = sequence,
-        stopId = id,
-        name = id,
-        parentStationId = null,
-        platformCode = null,
-        wheelchairBoarding = null,
-        scheduledArrival = "08:00:00",
-        scheduledDeparture = "08:01:00",
-        latitude = 52.0,
-        longitude = 8.0,
-    )
+    private fun stop(sequence: Int, id: String): GtfsTripDetailStop {
+        // Stops must have monotonically increasing times for a viable GTFS trip.
+        // A single 08:00 fixture for every sequence hides backwards journeys.
+        val minute = when (sequence) {
+            2 -> 0
+            7 -> 10
+            13 -> 20
+            else -> error("Unexpected fixture stop sequence: $sequence")
+        }
+        val arrival = minute.toString().padStart(2, '0')
+        val departure = (minute + 1).toString().padStart(2, '0')
+        return GtfsTripDetailStop(
+            stopSequence = sequence,
+            stopId = id,
+            name = id,
+            parentStationId = null,
+            platformCode = null,
+            wheelchairBoarding = null,
+            scheduledArrival = "08:$arrival:00",
+            scheduledDeparture = "08:$departure:00",
+            latitude = 52.0,
+            longitude = 8.0,
+        )
+    }
     private val detail = GtfsTripDetail(
         identity,
         "Achim",

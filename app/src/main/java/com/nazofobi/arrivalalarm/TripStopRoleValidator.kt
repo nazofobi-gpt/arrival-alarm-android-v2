@@ -37,14 +37,19 @@ sealed interface TripStopRoleResult {
  * must also fail closed even if the other clock is populated.
  */
 internal fun GtfsTripDetailStop.hasActionableScheduleClock(): Boolean {
-    val clocks = listOfNotNull(scheduledArrival, scheduledDeparture)
-    return clocks.isNotEmpty() && clocks.all { clock ->
-        try {
-            GtfsServiceTime.parse(clock)
-            true
-        } catch (_: IllegalArgumentException) {
-            false
+    if (scheduledArrival == null && scheduledDeparture == null) return false
+    return try {
+        val arrival = scheduledArrival?.let {
+            GtfsServiceTime.parse(it).secondsFromServiceDayStart
         }
+        val departure = scheduledDeparture?.let {
+            GtfsServiceTime.parse(it).secondsFromServiceDayStart
+        }
+        // A malformed or inverted dwell interval cannot authorize boarding or an alarm,
+        // even if only one of its clocks is required for the selected role.
+        arrival == null || departure == null || arrival <= departure
+    } catch (_: IllegalArgumentException) {
+        false
     }
 }
 
@@ -96,6 +101,55 @@ object TripStopRoleValidator {
             !alarm.hasActionableArrivalClock()
         ) {
             return reject(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME)
+        }
+
+        // A callback may supply a pre-resolved detail without the normal resolver's
+        // cross-stop chronology validation. Do not confirm a trip where boarding
+        // happens after the selected alarm or destination arrival.
+        val boardingDeparture = GtfsServiceTime.parse(boarding.scheduledDeparture!!)
+            .secondsFromServiceDayStart
+        val alarmArrival = GtfsServiceTime.parse(alarm.scheduledArrival!!)
+            .secondsFromServiceDayStart
+        val destinationArrival = GtfsServiceTime.parse(destination.scheduledArrival!!)
+            .secondsFromServiceDayStart
+        if (boardingDeparture > alarmArrival || alarmArrival > destinationArrival) {
+            return reject(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME)
+        }
+
+        // A plausible boarding/alarm/destination clock is not sufficient if an
+        // unselected intermediate stop runs backwards in GTFS service-day time.
+        // Untimed non-timepoint stops remain legal: compare only known events.
+        var lastKnownSeconds = boardingDeparture
+        for (stop in stops) {
+            if (stop.stopSequence <= boarding.stopSequence) continue
+            if (stop.stopSequence > destination.stopSequence) break
+
+            val arrival = try {
+                stop.scheduledArrival?.let {
+                    GtfsServiceTime.parse(it).secondsFromServiceDayStart
+                }
+            } catch (_: IllegalArgumentException) {
+                return reject(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME)
+            }
+            val departure = try {
+                stop.scheduledDeparture?.let {
+                    GtfsServiceTime.parse(it).secondsFromServiceDayStart
+                }
+            } catch (_: IllegalArgumentException) {
+                return reject(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME)
+            }
+            if (arrival != null) {
+                if (arrival < lastKnownSeconds) {
+                    return reject(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME)
+                }
+                lastKnownSeconds = arrival
+            }
+            if (departure != null) {
+                if (departure < lastKnownSeconds) {
+                    return reject(TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME)
+                }
+                lastKnownSeconds = departure
+            }
         }
 
         return TripStopRoleResult.Accepted(
