@@ -132,4 +132,39 @@ class RouteResultsFilterTest {
         RouteResultsFilter(directOnly = true).apply(candidates)
         assertEquals(listOf("via", "direct"), RouteResultsFilter(false).apply(candidates).map { it.id })
     }
+
+    @Test
+    fun negativeWalkingDurationsAreRejectedBeforeEveryRouteFilterAndLimit() {
+        val invalid = option("bad-walk", transfers = 0).copy(walkingMinutes = -3)
+        val validDirect = option("direct", transfers = 0).copy(walkingMinutes = 0)
+        val validTransfer = option("transfer", transfers = 1).copy(walkingMinutes = 7)
+        val source = listOf(invalid, validTransfer, validDirect)
+
+        assertEquals(
+            listOf("transfer", "direct"),
+            RouteResultsFilter().apply(source).map { it.id },
+        )
+        assertEquals(
+            listOf("direct"),
+            RouteResultsFilter(directOnly = true).apply(source).map { it.id },
+        )
+        assertEquals(
+            listOf("direct", "transfer"),
+            RouteResultsFilter(fewerTransfersFirst = true, maxTransfers = 1)
+                .apply(source).map { it.id },
+        )
+        assertEquals(-3, source.first().walkingMinutes)
+    }
+
+    @Test
+    fun extremeNegativeWalkingValuesCannotBecomeJourneyCandidates() {
+        val invalid = option("impossible", transfers = 0)
+            .copy(walkingMinutes = Int.MIN_VALUE)
+        val valid = option("valid", transfers = 0).copy(walkingMinutes = Int.MAX_VALUE)
+        assertEquals(
+            listOf("valid"),
+            RouteResultsFilter().apply(listOf(invalid, valid)).map { it.id },
+        )
+    }
+
 }
