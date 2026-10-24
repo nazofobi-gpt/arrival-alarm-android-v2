@@ -126,9 +126,26 @@ class ActiveJourneyService : Service(), LocationListener {
             return START_NOT_STICKY
         }
 
-        if (!startLocationForeground() || !registerLocationUpdates()) {
+        if (!startLocationForeground()) {
             stopSelf()
             return START_NOT_STICKY
+        }
+        // Provider registration can fail after the initial availability check.
+        // Keep the foreground journey alive and let the state monitor retry,
+        // but never retain tracking after runtime grants are revoked.
+        when (LocationProviderRecovery.decide(
+            graph.controller.state.phase,
+            registerLocationUpdates(),
+            ActiveJourneyPermissions.hasRuntimeGrants(this),
+        )) {
+            LocationProviderRecovery.Decision.STOP -> {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            LocationProviderRecovery.Decision.RETRY -> {
+                updateTrackingNotification(null, accuracyDegraded = true)
+            }
+            LocationProviderRecovery.Decision.KEEP -> Unit
         }
         mainHandler.removeCallbacks(stateMonitor)
         mainHandler.postDelayed(stateMonitor, STATE_MONITOR_MILLIS)
