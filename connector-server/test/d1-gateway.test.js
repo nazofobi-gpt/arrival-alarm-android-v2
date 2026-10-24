@@ -126,3 +126,60 @@ test("async gateway rejects stale state before D1 write", async () => {
   );
   assert.equal((await store.pendingCommands("user-1", "phone-a")).length, 0);
 });
+
+
+test("D1 connector fails closed on future or malformed trip progress timestamps", async () => {
+  const store = new D1GatewayStore(new FakeD1(), { nowEpochSeconds: () => 1000 });
+  const service = new AsyncGatewayService(store, { nowEpochSeconds: () => 1000 });
+  for (const timestamp of [1001, "invalid-epoch", 0]) {
+    await store.putSnapshot(
+      "user-1",
+      snapshot({ active_trip: { progress_updated_at_epoch_seconds: timestamp } })
+    );
+    const progress = await service.getTripProgress("user-1");
+    assert.equal(progress.stale, false);
+    assert.equal(progress.progress_stale, true, String(timestamp));
+  }
+  await store.putSnapshot(
+    "user-1",
+    snapshot({ active_trip: { progress_updated_at_epoch_seconds: 990 } })
+  );
+  assert.equal((await service.getTripProgress("user-1")).progress_stale, false);
+});
+
+test("D1 connector rejects invalid freshness TTL and future gateway heartbeats", async () => {
+  const store = new D1GatewayStore(new FakeD1(), { nowEpochSeconds: () => 1000 });
+  const service = new AsyncGatewayService(store, { nowEpochSeconds: () => 1000 });
+  await store.putSnapshot("user-1", snapshot({ stale_after_seconds: "invalid-ttl" }));
+  assert.equal((await service.getCurrentJourney("user-1")).stale, true);
+  await assert.rejects(
+    () => service.queueWrite("user-1", { type: "cancel_arrival_alarm", idempotency_key: "bad-ttl" }, 7),
+    /stale_device_state/
+  );
+  const clockBehind = new AsyncGatewayService(store, { nowEpochSeconds: () => 999 });
+  await store.putSnapshot("user-1", snapshot());
+  assert.equal((await clockBehind.getCurrentJourney("user-1")).stale, true);
+  await assert.rejects(
+    () => clockBehind.queueWrite("user-1", { type: "cancel_arrival_alarm", idempotency_key: "future-heartbeat" }, 7),
+    /stale_device_state/
+  );
+});
+
+test("D1 connector rejects numeric-looking strings and boolean freshness fields", async () => {
+  const store = new D1GatewayStore(new FakeD1(), { nowEpochSeconds: () => 1000 });
+  const service = new AsyncGatewayService(store, { nowEpochSeconds: () => 1000 });
+  await store.putSnapshot("user-1", snapshot({ active_trip: { progress_updated_at_epoch_seconds: "990" } }));
+  assert.equal((await service.getTripProgress("user-1")).progress_stale, true);
+
+  for (const ttl of ["120", true]) {
+    await store.putSnapshot("user-1", snapshot({ stale_after_seconds: ttl }));
+    assert.equal((await service.getCurrentJourney("user-1")).stale, true);
+    await assert.rejects(
+      () => service.queueWrite("user-1", { type: "cancel_arrival_alarm", idempotency_key: "bad-type" }, 7),
+      /stale_device_state/
+    );
+  }
+  assert.equal((await store.pendingCommands("user-1")).length, 0);
+  await store.putSnapshot("user-1", snapshot({ stale_after_seconds: 120 }));
+  assert.equal((await service.getCurrentJourney("user-1")).stale, false);
+});
