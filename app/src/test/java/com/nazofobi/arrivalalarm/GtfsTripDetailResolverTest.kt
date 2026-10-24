@@ -41,6 +41,25 @@ class GtfsTripDetailResolverTest {
     }
 
     @Test
+    fun providerCannotSubstituteAnotherTripIdWithMatchingRouteAndService() {
+        val source = FakeSource().apply {
+            // Simulate a buggy/stale provider that ignores the requested lookup key.
+            // Its returned stop_times are internally consistent with the wrong trip.
+            allowMismatchedLookup = true
+            currentTrip = trip.copy(id = "OTHER-TRIP")
+            times = times.map { it.copy(tripId = "OTHER-TRIP") }
+        }
+        val selected = GtfsTripInstanceIdentity.scheduled(trip, serviceDate)
+        assertEquals(
+            GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.TRIP_CHANGED),
+            GtfsTripDetailResolver(source).resolve(selected),
+        )
+        source.currentTrip = trip
+        source.times = source.times.map { it.copy(tripId = trip.id) }
+        assertTrue(GtfsTripDetailResolver(source).resolve(selected) is GtfsTripDetailResult.Available)
+    }
+
+    @Test
     fun calendarDateRemovalWinsOverWeekdayAndAddedExceptionEnablesExtraDay() {
         val source = FakeSource()
         val identity = GtfsTripInstanceIdentity.scheduled(trip, serviceDate)
@@ -253,6 +272,7 @@ class GtfsTripDetailResolverTest {
 
     private inner class FakeSource : GtfsTripDetailSource {
         var currentTrip = trip
+        var allowMismatchedLookup = false
         var exception: GtfsScheduleCalendarDate? = null
         var frequencies = false
         var times = listOf(st(2, "A"), st(7, "B"), st(13, "A"))
@@ -262,7 +282,7 @@ class GtfsTripDetailResolverTest {
         )
 
         override fun trip(id: String): GtfsScheduleTrip? =
-            currentTrip.takeIf { it.id == id }
+            currentTrip.takeIf { allowMismatchedLookup || it.id == id }
         override fun stopTimes(tripId: String, limit: Int): List<GtfsScheduleStopTime> =
             times.take(limit)
         override fun stop(id: String): GtfsScheduleStop? = stops[id]
