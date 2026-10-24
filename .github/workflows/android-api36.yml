@@ -171,6 +171,27 @@ jobs:
 
             bash .github/scripts/build-field-rc.sh
 
+      - name: Print instrumentation failure summary
+        if: always()
+        run: |
+          set +e
+          report_root="app/build/outputs/androidTest-results"
+          if [ -d "$report_root" ]; then
+            find "$report_root" -type f \\( -name '*.xml' -o -name '*.txt' \\) -print0 |
+              while IFS= read -r -d '' report; do
+                echo "===== INSTRUMENTATION REPORT: $report ====="
+                grep -E 'failure|error|shortMsg|class=|testcase' "$report" | head -n 80 || true
+              done
+          fi
+          html_root="app/build/reports/androidTests"
+          if [ -d "$html_root" ]; then
+            find "$html_root" -type f \\( -name '*.html' -o -name '*.txt' \\) -print0 |
+              while IFS= read -r -d '' report; do
+                echo "===== ANDROID TEST REPORT: $report ====="
+                grep -E -i 'failure|error|failed|exception' "$report" | head -n 80 || true
+              done
+          fi
+
       - name: Upload API 36 diagnostics
         if: always()
         uses: actions/upload-artifact@v4
