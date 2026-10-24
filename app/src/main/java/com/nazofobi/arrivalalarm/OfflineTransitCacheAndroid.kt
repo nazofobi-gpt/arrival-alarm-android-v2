@@ -85,7 +85,7 @@ private fun JSONObject.toRouteOption(): RouteOption? {
     // A corrupt refresh token cannot become a provider request identity.
     if (hasNonStringOptional("refreshToken")) return null
     // Do not stringify booleans or JSON containers into displayed route facts.
-    if (listOf("line", "direction", "departure", "arrival").any(::hasNonStringOptional)) return null
+    if (listOf("line", "direction", "departure", "arrival").any { hasNonStringOptional(it) }) return null
     val stopsJson = optJSONArray("stops")
     if (has("stops") && !isNull("stops") && stopsJson == null) return null
     val stops = stopsJson.toRouteStops()
@@ -173,7 +173,7 @@ private fun JSONObject.toRouteStop(): RouteStop? {
     // Only scheduled baselines may survive offline; corrupt planned facts must
     // reject the stop instead of being rendered as text from another JSON type.
     if (listOf("plannedArrival", "plannedDeparture", "plannedPlatform")
-            .any(::hasNonStringOptional)
+            .any { hasNonStringOptional(it) }
     ) return null
     // Optional coordinates may be absent, but supplied invalid values cannot be trusted.
     if (hasInvalidCoordinate("latitude", -90.0, 90.0) ||
@@ -208,7 +208,7 @@ private fun JSONObject.toDeparture(): Departure? {
     val tripId = (opt("tripId") as? String)?.takeIf { it.isNotBlank() } ?: return null
     // Reject a forged route identity, rather than stringifying a stored JSON number.
     if (hasNonStringOptional("routeId")) return null
-    if (listOf("line", "direction").any(::hasNonStringOptional)) return null
+    if (listOf("line", "direction").any { hasNonStringOptional(it) }) return null
     // JSON getters silently coerce missing, malformed or fractional times to epoch zero.
     // Keep offline departures only when a positive whole-second timestamp is proven.
     val scheduled = strictPositiveEpochSecondsOrNull("scheduledEpochSeconds") ?: return null
