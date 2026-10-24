@@ -436,4 +436,40 @@ class TransitExperienceTest {
         )
     }
 
+
+    @Test fun liveVehiclePositionsRejectBlankIdsAndInvalidProviderCoordinates() {
+        val engine = TransitExperienceEngine(
+            TransitProviderCapabilities(liveVehiclePositions = true),
+        )
+        val valid = LiveVehicle("verified-trip", GeoPoint(52.662, 8.236))
+        val upperBoundary = LiveVehicle("boundary", GeoPoint(90.0, 180.0))
+        val lowerBoundary = LiveVehicle("boundary-south", GeoPoint(-90.0, -180.0))
+        val malformed = listOf(
+            LiveVehicle("", GeoPoint(52.662, 8.236)),
+            LiveVehicle("   ", GeoPoint(52.662, 8.236)),
+            LiveVehicle("nan-lat", GeoPoint(Double.NaN, 8.236)),
+            LiveVehicle("inf-lat", GeoPoint(Double.POSITIVE_INFINITY, 8.236)),
+            LiveVehicle("nan-lon", GeoPoint(52.662, Double.NaN)),
+            LiveVehicle("inf-lon", GeoPoint(52.662, Double.NEGATIVE_INFINITY)),
+            LiveVehicle("lat-over", GeoPoint(90.001, 8.236)),
+            LiveVehicle("lat-under", GeoPoint(-90.001, 8.236)),
+            LiveVehicle("lon-over", GeoPoint(52.662, 180.001)),
+            LiveVehicle("lon-under", GeoPoint(52.662, -180.001)),
+        )
+        assertEquals(
+            listOf(valid, upperBoundary, lowerBoundary),
+            engine.vehicles(malformed + valid + upperBoundary + lowerBoundary),
+        )
+    }
+
+    @Test fun unsupportedVehicleCapabilityNeverExposesCoordinates() {
+        val unsupported = TransitExperienceEngine(TransitProviderCapabilities())
+        val supplied = LiveVehicle("valid-trip", GeoPoint(52.662, 8.236))
+        assertTrue(unsupported.vehicles(listOf(supplied)).isEmpty())
+        val supported = TransitExperienceEngine(
+            TransitProviderCapabilities(liveVehiclePositions = true),
+        )
+        assertEquals(listOf(supplied), supported.vehicles(listOf(supplied)))
+    }
+
 }
