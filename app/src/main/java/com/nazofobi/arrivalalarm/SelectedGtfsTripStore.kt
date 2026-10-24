@@ -103,6 +103,11 @@ class SelectedGtfsTripStore(
         val boarding = selection.boarding
         val destination = selection.destination
         val alarm = selection.alarmTarget
+        // GTFS trip, service and route IDs are required identity components.
+        // A permissive/mocked resolver must not authorize an identity-less trip.
+        if (listOf(selection.identity.tripId, selection.identity.serviceId,
+                selection.identity.routeId).any { it.isBlank() }
+        ) return GtfsSelectionRestore.Rejected(GtfsSelectionRestoreProblem.INVALID_STOP_ROLES)
         if (selection.identity.frequencyStartSeconds != null ||
             listOf(boarding, destination, alarm).any { it.sequence < 0 || it.stopId.isBlank() } ||
             boarding.sequence >= destination.sequence ||

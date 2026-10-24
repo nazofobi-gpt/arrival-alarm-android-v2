@@ -184,6 +184,83 @@ class SelectedGtfsTripStoreInstrumentedTest {
         assertTrue(normal.restore() is GtfsSelectionRestore.Verified)
     }
 
+    @Test fun blankTripServiceOrRouteIdCannotBeConstructedOrMutateSelection() {
+        val verifiedStore = store()
+        assertTrue(verifiedStore.save(selected))
+        val original = preferences.getString(SelectedGtfsTripStore.KEY, null)
+        // GtfsTripInstanceIdentity validates these fields at construction.
+        // An invalid identity cannot be passed to SelectedGtfsTripStore.save().
+        val invalidFactories = listOf<() -> GtfsTripInstanceIdentity>(
+            { identity.copy(tripId = " ") },
+            { identity.copy(serviceId = "") },
+            { identity.copy(routeId = "\t") },
+        )
+        for (factory in invalidFactories) {
+            val failure = runCatching { factory() }.exceptionOrNull()
+            assertTrue(failure is IllegalArgumentException)
+            assertEquals(original, preferences.getString(SelectedGtfsTripStore.KEY, null))
+        }
+        assertTrue(verifiedStore.restore() is GtfsSelectionRestore.Verified)
+    }
+
+    @Test fun blankStopReferencesFailBeforeResolverAndPreserveSelection() {
+        val verifiedStore = store()
+        assertTrue(verifiedStore.save(selected))
+        val original = preferences.getString(SelectedGtfsTripStore.KEY, null)
+        val invalidSelections = listOf(
+            selected.copy(boarding = selected.boarding.copy(stopId = " ")),
+            selected.copy(destination = selected.destination.copy(stopId = "")),
+            selected.copy(alarmTarget = selected.alarmTarget.copy(stopId = "\t")),
+        )
+        for (invalid in invalidSelections) {
+            var resolverCalled = false
+            val guardedStore = store { requested ->
+                resolverCalled = true
+                GtfsTripDetailResult.Available(detail(trip = requested))
+            }
+            assertFalse(guardedStore.save(invalid))
+            assertFalse(resolverCalled)
+            assertEquals(original, preferences.getString(SelectedGtfsTripStore.KEY, null))
+        }
+        assertTrue(verifiedStore.restore() is GtfsSelectionRestore.Verified)
+    }
+
+    @Test fun blankPersistedTripIdentityFailsClosedBeforeResolver() {
+        val verifiedStore = store()
+        assertTrue(verifiedStore.save(selected))
+        val original = requireNotNull(preferences.getString(SelectedGtfsTripStore.KEY, null))
+        val malformedPreferences = context.getSharedPreferences(
+            "g180_blank_identity_snapshot_test", Context.MODE_PRIVATE,
+        )
+
+        // A corrupted stored snapshot must never resolve a different vehicle or
+        // overwrite the user's last verified selection, even with a permissive resolver.
+        for ((field, blank) in listOf(
+            "trip_id" to " ",
+            "service_id" to "",
+            "route_id" to "\t",
+        )) {
+            assertTrue(malformedPreferences.edit().clear().commit())
+            val invalidSnapshot = JSONObject(original).apply { put(field, blank) }.toString()
+            assertTrue(malformedPreferences.edit()
+                .putString(SelectedGtfsTripStore.KEY, invalidSnapshot).commit())
+
+            var resolverCalled = false
+            val guarded = SelectedGtfsTripStore(malformedPreferences) { requested ->
+                resolverCalled = true
+                GtfsTripDetailResult.Available(detail(trip = requested))
+            }
+            assertRejected(GtfsSelectionRestoreProblem.CORRUPT_SNAPSHOT, guarded.restore())
+            assertFalse(resolverCalled)
+            assertEquals(
+                invalidSnapshot,
+                malformedPreferences.getString(SelectedGtfsTripStore.KEY, null),
+            )
+            assertEquals(original, preferences.getString(SelectedGtfsTripStore.KEY, null))
+        }
+        assertTrue(verifiedStore.restore() is GtfsSelectionRestore.Verified)
+    }
+
     @Test fun invalidRoleOrderingNeverOverwritesKnownGoodChoice() {
         assertTrue(store().save(selected))
         val original = preferences.getString(SelectedGtfsTripStore.KEY, null)
