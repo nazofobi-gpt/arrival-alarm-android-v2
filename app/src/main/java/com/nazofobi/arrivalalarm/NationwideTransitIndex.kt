@@ -335,6 +335,10 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         canonicalizeStations: Boolean,
     ): List<NearbyStop> {
         if (limit <= 0) return emptyList()
+        // The direct nearby-index APIs are also called outside the route planner.
+        // Never send NaN, infinities or impossible coordinates into SQLite, where
+        // implicit coercion may return unrelated stations or invalid distances.
+        if (!validTransitJourneyCoordinates(latitude, longitude)) return emptyList()
         val radii = listOf(5_000.0, 20_000.0, 80_000.0)
         for (radius in radii) {
             val latDelta = radius / 111_320.0
