@@ -733,11 +733,11 @@ fun ArrivalAlarmApp(
 
     LaunchedEffect(query) {
         val q = query.trim()
+        // Reject all in-flight responses as soon as the query changes, rather
+        // than waiting for the next debounced request to begin.
+        searchRequestId += 1
+        searchHealth = TransitFunctionHealth.UNVERIFIED
         if (q.length < 2) {
-            // A late response for the previous query must never reinstate search
-            // results or positive readiness after the query has been cleared.
-            searchRequestId += 1
-            searchHealth = TransitFunctionHealth.UNVERIFIED
             searchResults = emptyList()
             searchSource = null
             searchMessage = null
