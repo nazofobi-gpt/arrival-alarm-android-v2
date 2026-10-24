@@ -24,8 +24,11 @@ internal fun routeEvidencePlatform(actual: String?, planned: String?, routeOffli
 internal fun routeHasUsableRealtimeDelta(actual: String?, planned: String?): Boolean {
     val observed = actual?.trim()?.takeIf { it.isNotEmpty() } ?: return false
     val scheduled = planned?.trim()?.takeIf { it.isNotEmpty() } ?: return false
-    if (routeClock(observed) == null || routeClock(scheduled) == null) return false
-    return observed != scheduled
+    // Compare the visible minute, not provider text precision (08:15 vs 08:15:00).
+    // A seconds-only difference must not create a misleading realtime-change badge.
+    val observedClock = routeClock(observed) ?: return false
+    val scheduledClock = routeClock(scheduled) ?: return false
+    return observedClock != scheduledClock
 }
 
 internal fun routeHasTrustedRealtime(routeOffline: Boolean, suppliedRealtime: Boolean): Boolean =

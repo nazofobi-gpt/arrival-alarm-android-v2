@@ -77,6 +77,19 @@ class RouteOfflineEvidenceTest {
         assertTrue(routeHasUsableRealtimeDelta("24:15", "23:55"))
     }
 
+    @Test fun providerClockPrecisionAloneCannotClaimRealtimeDelay() {
+        // Both fields render as 08:15. Formatting or seconds-only variance
+        // is not a visible departure-time change.
+        assertFalse(routeHasUsableRealtimeDelta("08:15:00", "08:15"))
+        assertFalse(routeHasUsableRealtimeDelta("08:15", "08:15:59"))
+        assertFalse(routeHasUsableRealtimeDelta("08:15:59", "08:15:00"))
+        assertFalse(routeHasUsableRealtimeDelta("24:00:59", "24:00"))
+
+        // A genuine change of displayed minute remains labelled realtime.
+        assertTrue(routeHasUsableRealtimeDelta("08:16:00", "08:15:59"))
+        assertTrue(routeHasUsableRealtimeDelta("24:01:00", "24:00:59"))
+    }
+
     @Test fun blankRealtimePlatformNeverClaimsARealtimeBadge() {
         for (missing in listOf<String?>(null, "", " ", "\t")) {
             assertFalse(routeHasTrustedRealtimePlatform(routeOffline = false, actualPlatform = missing))
