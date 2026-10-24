@@ -22,3 +22,15 @@ internal fun routeHasVerifiedRealtimePlatform(
         state = state,
         suppliedDelta = !actualPlatform.isNullOrBlank(),
     )
+
+/** Cancelled-trip badges also require a fresh provider match, not a cached ID list. */
+internal fun routeHasVerifiedRealtimeCancellation(
+    routeOffline: Boolean,
+    state: RouteRealtimeState?,
+    suppliedCancellation: Boolean,
+): Boolean =
+    routeHasVerifiedRealtimeDelta(
+        routeOffline = routeOffline,
+        state = state,
+        suppliedDelta = suppliedCancellation,
+    )
