@@ -167,4 +167,60 @@ class RouteResultsFilterTest {
         )
     }
 
+    @Test
+    fun blankRouteIdsAndNonphysicalEndpointsAreNotSelectable() {
+        val candidates = listOf(
+            option("  ", 0),
+            option("bad-lat", 0).copy(origin = origin.copy(latitude = Double.NaN)),
+            option("bad-lon", 0).copy(destination = destination.copy(longitude = 181.0)),
+            option("infinite", 0).copy(origin = origin.copy(longitude = Double.POSITIVE_INFINITY)),
+            option("valid", 0),
+        )
+        assertEquals(listOf("valid"), RouteResultsFilter().apply(candidates).map { it.id })
+        assertEquals(
+            listOf("valid"),
+            RouteResultsFilter(directOnly = true, fewerTransfersFirst = true)
+                .apply(candidates).map { it.id },
+        )
+        assertEquals(5, candidates.size)
+    }
+
+    @Test
+    fun contradictoryRoutesSharingAnIdCannotSelectTheWrongJourney() {
+        val candidates = listOf(
+            option("same-id", 0).copy(line = "RE"),
+            option("safe-transfer", 1),
+            option("same-id", 0).copy(line = "IC"),
+            option("safe-direct", 0),
+        )
+        assertEquals(
+            listOf("safe-transfer", "safe-direct"),
+            RouteResultsFilter().apply(candidates).map { it.id },
+        )
+        assertEquals(
+            listOf("safe-direct", "safe-transfer"),
+            RouteResultsFilter(fewerTransfersFirst = true).apply(candidates).map { it.id },
+        )
+    }
+
+    @Test
+    fun exactDuplicateProviderRowsAreDisplayedOnceWithoutChangingOrder() {
+        val repeated = option("first", 0)
+        val candidates = listOf(repeated, repeated.copy(), option("second", 0), repeated)
+        assertEquals(
+            listOf("first", "second"),
+            RouteResultsFilter().apply(candidates).map { it.id },
+        )
+        assertEquals(4, candidates.size)
+    }
+
+    @Test
+    fun validGeographicBoundaryCoordinatesRemainSelectable() {
+        val boundary = option("boundary", 0).copy(
+            origin = origin.copy(latitude = -90.0, longitude = 180.0),
+            destination = destination.copy(latitude = 90.0, longitude = -180.0),
+        )
+        assertEquals(listOf(boundary), RouteResultsFilter().apply(listOf(boundary)))
+    }
+
 }
