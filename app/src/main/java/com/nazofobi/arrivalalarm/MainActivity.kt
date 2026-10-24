@@ -189,6 +189,7 @@ fun ArrivalAlarmApp(
     var searchSource by remember { mutableStateOf<String?>(null) }
     var searchMessage by remember { mutableStateOf<String?>(null) }
     var searchRequestId by remember { mutableStateOf(0L) }
+    var searchHealth by remember(dataState) { mutableStateOf(TransitFunctionHealth.UNVERIFIED) }
     var selectingOrigin by remember { mutableStateOf(controller.state.start == null) }
     var origin by remember(controller) {
         mutableStateOf(
@@ -217,6 +218,7 @@ fun ArrivalAlarmApp(
     var routeStatus by remember { mutableStateOf<String?>(null) }
     var routeOffline by remember { mutableStateOf(false) }
     var routeBusy by remember { mutableStateOf(false) }
+    var routingHealth by remember(dataState) { mutableStateOf(TransitFunctionHealth.UNVERIFIED) }
     // In-flight responses must not overwrite a newer journey or station selection.
     val routeRequestGate = remember { LatestRequestGate() }
     val nearbyRequestGate = remember { LatestRequestGate() }
@@ -352,6 +354,7 @@ fun ArrivalAlarmApp(
     fun setOrigin(point: MapPoint) {
         // Changing origin cancels any pending route and station responses.
         routeRequestGate.invalidate()
+        routingHealth = TransitFunctionHealth.UNVERIFIED
         stationRequestGate.invalidate()
         nearbyRequestGate.invalidate()
         routeBusy = false
@@ -384,6 +387,7 @@ fun ArrivalAlarmApp(
 
     fun loadRoutes(a: MapPoint, b: MapPoint) {
         val token = routeRequestGate.begin()
+        routingHealth = TransitFunctionHealth.UNVERIFIED
         routeBusy = true
         routeStatus = context.getString(R.string.route_calculating)
         val key = routeKey(a, b)
@@ -391,6 +395,7 @@ fun ArrivalAlarmApp(
             routeRequestGate.commitIfCurrent(token) {
                 routeBusy = false
                 if (options.isNotEmpty()) {
+                    routingHealth = TransitFunctionHealth.WORKING
                     routeOffline = false
                     val hadSelection = selectedRouteId != null
                     val retainedSelection = retainSelectedRouteAfterRefresh(
@@ -405,6 +410,8 @@ fun ArrivalAlarmApp(
                     routeCache.put(CachedTransitPlan(key, options, emptyList(), System.currentTimeMillis() / 1000))
                 } else {
                     val cached = routeCache.routeOptions(key)
+                    routingHealth = if (cached.isNotEmpty()) TransitFunctionHealth.DEGRADED
+                        else TransitFunctionHealth.FAILED
                     routeOffline = cached.isNotEmpty()
                     val hadSelection = selectedRouteId != null
                     val retainedSelection = retainSelectedRouteAfterRefresh(
@@ -465,6 +472,7 @@ fun ArrivalAlarmApp(
         }
         // Invalidate responses before the new selection changes visible state.
         routeRequestGate.invalidate()
+        routingHealth = TransitFunctionHealth.UNVERIFIED
         stationRequestGate.invalidate()
         routeBusy = false
         destination = point
@@ -522,27 +530,33 @@ fun ArrivalAlarmApp(
         val requestId = searchRequestId + 1
         searchRequestId = requestId
         searchBusy = true
+        searchHealth = TransitFunctionHealth.UNVERIFIED
         searchMessage = null
         transit.searchLocationsResolved(q) callback@{ resolution ->
             if (requestId != searchRequestId) return@callback
             searchBusy = false
             when (resolution) {
                 is NationwideLookupResolution.Results -> {
+                    searchHealth = if (resolution.values.isNotEmpty()) TransitFunctionHealth.WORKING
+                        else TransitFunctionHealth.UNVERIFIED
                     searchResults = resolution.values
                     searchSource = resolution.sourceLabel
                     searchMessage = null
                 }
                 is NationwideLookupResolution.Stale -> {
+                    searchHealth = TransitFunctionHealth.DEGRADED
                     searchResults = resolution.values
                     searchSource = resolution.sourceLabel
                     searchMessage = context.getString(R.string.lookup_stale_results)
                 }
                 is NationwideLookupResolution.NoResult -> {
+                    searchHealth = TransitFunctionHealth.UNVERIFIED
                     searchResults = emptyList()
                     searchSource = resolution.sourceLabel
                     searchMessage = context.getString(R.string.no_stop_found)
                 }
                 is NationwideLookupResolution.ProviderUnavailable -> {
+                    searchHealth = TransitFunctionHealth.FAILED
                     searchResults = emptyList()
                     searchSource = resolution.sourceLabel
                     searchMessage = context.getString(R.string.lookup_provider_unavailable)
@@ -816,6 +830,8 @@ fun ArrivalAlarmApp(
                     journey.phase,
                     connectorConnected,
                     connectorBaseUrl,
+                    searchHealth,
+                    routingHealth,
                 ) {
                     SettingsReadinessState.from(
                         context = context,
@@ -825,6 +841,8 @@ fun ArrivalAlarmApp(
                         backgroundJourneyActive = journey.phase == JourneyPhase.ARMED,
                         connectorConfigured = connectorBaseUrl.isNotBlank(),
                         connectorConnected = connectorConnected,
+                        searchHealth = searchHealth,
+                        routingHealth = routingHealth,
                     )
                 }
                 if (activeScreen == ArrivalAppScreen.SETTINGS) {
