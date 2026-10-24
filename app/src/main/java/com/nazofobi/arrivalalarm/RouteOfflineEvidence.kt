@@ -19,7 +19,7 @@ internal fun routeEvidencePlatform(actual: String?, planned: String?, routeOffli
 
 /** A blank provider clock cannot prove a real-time deviation from the schedule. */
 internal fun routeHasUsableRealtimeDelta(actual: String?, planned: String?): Boolean =
-    !actual.isNullOrBlank() && !planned.isNullOrBlank() && actual != planned
+    !actual.isNullOrBlank() && !planned.isNullOrBlank() && actual.trim() != planned.trim()
 
 internal fun routeHasTrustedRealtime(routeOffline: Boolean, suppliedRealtime: Boolean): Boolean =
     !routeOffline && suppliedRealtime
