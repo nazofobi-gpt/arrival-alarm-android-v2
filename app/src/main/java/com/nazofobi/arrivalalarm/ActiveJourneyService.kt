@@ -239,12 +239,12 @@ class ActiveJourneyService : Service(), LocationListener {
 
     private fun trackingNotification(distanceMeters: Double?, accuracyDegraded: Boolean = false): Notification {
         val text = when {
-            accuracyDegraded -> "Konum doğruluğu yetersiz; alarm etkin, yeni GPS bekleniyor"
-            distanceMeters == null -> "Konum takip ediliyor"
-            else -> "Hedefe yaklaşık " + distanceMeters.roundToInt() + " m kaldı"
+            accuracyDegraded -> getString(R.string.tracking_notification_degraded)
+            distanceMeters == null -> getString(R.string.tracking_notification_acquiring)
+            else -> getString(R.string.tracking_notification_distance, distanceMeters.roundToInt())
         }
         return notificationBuilder(TRACKING_CHANNEL_ID)
-            .setContentTitle("Varış alarmı etkin")
+            .setContentTitle(getString(R.string.tracking_notification_title))
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_dialog_map)
             .setOngoing(true)
@@ -258,8 +258,8 @@ class ActiveJourneyService : Service(), LocationListener {
         manager.notify(
             ARRIVAL_NOTIFICATION_ID,
             notificationBuilder(ARRIVAL_CHANNEL_ID)
-                .setContentTitle("Varış noktasına ulaşıldı")
-                .setContentText("Varış alarmı tamamlandı.")
+                .setContentTitle(getString(R.string.tracking_notification_arrived_title))
+                .setContentText(getString(R.string.tracking_notification_arrived_text))
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setAutoCancel(true)
                 .setCategory(Notification.CATEGORY_ALARM)

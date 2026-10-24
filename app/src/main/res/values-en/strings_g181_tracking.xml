@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tracking_notification_degraded">Location unavailable or unreliable; alarm armed, waiting for a new fix</string>
+    <string name="tracking_notification_acquiring">Updating location</string>
+    <string name="tracking_notification_distance">About %1$d m to destination</string>
+    <string name="tracking_notification_title">Arrival alarm armed</string>
+    <string name="tracking_notification_arrived_title">Destination reached</string>
+    <string name="tracking_notification_arrived_text">Arrival alarm completed.</string>
+</resources>
