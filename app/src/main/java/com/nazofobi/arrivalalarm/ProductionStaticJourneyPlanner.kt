@@ -47,6 +47,15 @@ internal class StaticRouteOptionMapper(
         require(maxStopTimesPerTrip in 2..2_048)
     }
 
+    /**
+     * Add two non-negative GTFS walking durations without Int overflow.
+     * Times are approximate provider walk estimates, never measured geometry.
+     */
+    private fun totalWalkingMinutes(accessSeconds: Int, egressSeconds: Int): Int {
+        val sum = accessSeconds.toLong() + egressSeconds.toLong()
+        return ((sum + 59L) / 60L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
+    }
+
     fun map(
         journey: StaticTransitJourney,
         origin: MapPoint,
@@ -91,9 +100,7 @@ internal class StaticRouteOptionMapper(
             direction = direction,
             departure = journey.legs.firstOrNull()?.departureEpochMillis?.let(::clock).orEmpty(),
             arrival = clock(journey.arrivalEpochMillis),
-            walkingMinutes = ceil(
-                (journey.access.walkSeconds + journey.egress.walkSeconds) / 60.0,
-            ).toInt(),
+            walkingMinutes = totalWalkingMinutes(journey.access.walkSeconds, journey.egress.walkSeconds),
             transfers = journey.transferCount,
             tripIds = journey.legs.map { it.tripId },
             stops = routeStops,
@@ -101,6 +108,18 @@ internal class StaticRouteOptionMapper(
             sourceUpdatedAtEpochSeconds = sourceUpdatedAtEpochSeconds,
             departureEpochMillis = journey.legs.firstOrNull()?.departureEpochMillis,
             arrivalEpochMillis = journey.arrivalEpochMillis,
+            accessWalking = walkingLegEvidence(journey.access),
+            egressWalking = walkingLegEvidence(journey.egress),
+        )
+    }
+
+    private fun walkingLegEvidence(access: StaticRouterAccess): RouteWalkingLegEvidence? {
+        if (access.walkSeconds <= 0) return null
+        val name = data.stop(access.stopId)?.name?.takeIf { it.isNotBlank() } ?: access.stopId
+        return RouteWalkingLegEvidence(
+            stopId = access.stopId,
+            stopName = name,
+            walkSeconds = access.walkSeconds,
         )
     }
 
