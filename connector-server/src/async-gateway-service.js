@@ -18,11 +18,13 @@ export class AsyncGatewayService {
 
   async getTripProgress(userId) {
     const snapshot = await this.#requiredSnapshot(userId);
+    const snapshotStale = this.#isStale(snapshot);
     const trip = snapshot.active_trip ?? {};
     const progressUpdatedAt = (trip.progress_updated_at_epoch_seconds ?? 0);
     const progressStaleAfter = (snapshot.stale_after_seconds ?? 120);
     const now = this.nowEpochSeconds();
     const progressStale =
+      snapshotStale ||
       !Number.isFinite(progressUpdatedAt) ||
       progressUpdatedAt <= 0 ||
       progressUpdatedAt > now ||
@@ -31,7 +33,7 @@ export class AsyncGatewayService {
       now - progressUpdatedAt > progressStaleAfter;
     return {
       state_version: snapshot.state_version,
-      stale: this.#isStale(snapshot),
+      stale: snapshotStale,
       trip_id: trip.trip_id ?? null,
       route_id: trip.route_id ?? null,
       line: trip.line ?? null,
