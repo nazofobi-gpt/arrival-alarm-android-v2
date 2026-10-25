@@ -22,6 +22,11 @@ function normalizedHttps(value, name, { preserveTrailingSlash = false } = {}) {
   if (parsed.protocol !== "https:" || !parsed.hostname) {
     throw new Error("worker_https_required_" + name);
   }
+  // OAuth metadata and JWKS locations must not embed credentials or fragments.
+  // Include an empty trailing #, which URL.hash normalizes to an empty string.\n  // Match the production configuration validator while preserving valid query strings.
+  if (parsed.username || parsed.password || parsed.href.includes("#")) {
+    throw new Error("worker_invalid_" + name);
+  }
   const canonical = parsed.toString();
   return preserveTrailingSlash ? canonical : canonical.replace(/\/$/, "");
 }
