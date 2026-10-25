@@ -63,9 +63,12 @@ data class GtfsServiceDate(
 
     companion object {
         private val UTC = TimeZone.getTimeZone("UTC")
+        private const val MAX_GTFS_DATE_CHARACTERS = 32
         private val pattern = Regex("""^(\d{4})(\d{2})(\d{2})$""")
 
         fun parse(raw: String): GtfsServiceDate {
+            // Limit untrusted feed scalars before trim/regex allocation.
+            require(raw.length <= MAX_GTFS_DATE_CHARACTERS) { "GTFS date exceeds size limit" }
             val match = pattern.matchEntire(raw.trim())
                 ?: throw IllegalArgumentException("Invalid GTFS service date: $raw")
             return GtfsServiceDate(
