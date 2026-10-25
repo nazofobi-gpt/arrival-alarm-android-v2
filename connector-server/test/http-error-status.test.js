@@ -28,10 +28,16 @@ test("Node auth errors retain their distinct OAuth challenge and status", () => 
   });
 });
 
-test("unexpected provider failures still report server unavailability", () => {
-  assert.deepEqual(classifyHttpError(new Error("production_oauth_not_configured")), {
-    status: 503,
-    code: "production_oauth_not_configured",
-    challenge: null,
-  });
+test("unexpected provider failures report 503 without leaking infrastructure details", () => {
+  for (const error of [
+    new Error("production_oauth_not_configured"),
+    new Error("database connection failed at secret-internal-host"),
+    new TypeError("private credential value"),
+  ]) {
+    assert.deepEqual(classifyHttpError(error), {
+      status: 503,
+      code: "service_unavailable",
+      challenge: null,
+    });
+  }
 });
