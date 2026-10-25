@@ -16,6 +16,11 @@ function httpsUrl(value, name) {
   if (parsed.protocol !== "https:" || !parsed.hostname) {
     throw new Error("production_config_https_required_" + name.toLowerCase());
   }
+  // Credentials and fragments must never enter public OAuth metadata or
+  // deployment URLs; retain valid HTTPS query parameters.
+  if (parsed.username || parsed.password || parsed.hash) {
+    throw new Error("production_config_invalid_" + name.toLowerCase());
+  }
   return parsed.toString().replace(/\/$/, "");
 }
 
