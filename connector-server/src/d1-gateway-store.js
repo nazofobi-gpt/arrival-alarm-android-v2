@@ -14,6 +14,9 @@ function validateSnapshot(snapshot) {
   if (typeof snapshot.journey_phase !== "string" || !snapshot.journey_phase) {
     throw new Error("invalid_journey_phase");
   }
+  if (snapshot.alarm_armed != null && typeof snapshot.alarm_armed !== "boolean") {
+    throw new Error("invalid_alarm_armed");
+  }
   return snapshot;
 }
 
