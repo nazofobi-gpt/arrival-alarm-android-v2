@@ -14,5 +14,6 @@ export function classifyHttpError(error) {
   if (error instanceof SyntaxError) {
     return { status: 400, code: "invalid_json", challenge: null };
   }
-  return { status: 503, code: message, challenge: null };
+  // Do not expose infrastructure details or exception messages in HTTP responses.
+  return { status: 503, code: "service_unavailable", challenge: null };
 }
