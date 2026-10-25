@@ -12,8 +12,18 @@ private fun String?.usableRouteEvidence(): String? = this?.takeIf { it.isNotBlan
 // Malformed provider clocks must not mask a valid scheduled fallback.
 // Normalize incidental whitespace so RouteJourneyPanel.routeClock can display the
 // same value that is accepted here, including GTFS extended service-day hours.
+// A free-form provider prefix ending in T (e.g. "garbageT08:42") is not
+// an ISO local datetime, even when routeClock could extract the trailing clock.
+private val ROUTE_ISO_LOCAL_CLOCK = Regex(
+    """\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T\d{2}:\d{2}(:\d{2})?"""
+)
+
 private fun String?.usableRouteTime(): String? =
-    this?.trim()?.takeIf { it.isNotEmpty() && routeClock(it) != null }
+    this?.trim()?.takeIf { value ->
+        value.isNotEmpty() &&
+            (!value.contains('T') || ROUTE_ISO_LOCAL_CLOCK.matches(value)) &&
+            routeClock(value) != null
+    }
 
 internal fun routeEvidenceTime(actual: String?, planned: String?, routeOffline: Boolean): String? =
     if (routeOffline) planned.usableRouteTime()
@@ -32,8 +42,8 @@ internal fun routeHasUsableRealtimeDelta(actual: String?, planned: String?): Boo
     val scheduled = planned?.trim()?.takeIf { it.isNotEmpty() } ?: return false
     // Compare the visible minute, not provider text precision (08:15 vs 08:15:00).
     // A seconds-only difference must not create a misleading realtime-change badge.
-    val observedClock = routeClock(observed) ?: return false
-    val scheduledClock = routeClock(scheduled) ?: return false
+    val observedClock = observed.usableRouteTime()?.let(::routeClock) ?: return false
+    val scheduledClock = scheduled.usableRouteTime()?.let(::routeClock) ?: return false
     return observedClock != scheduledClock
 }
 
