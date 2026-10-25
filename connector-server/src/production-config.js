@@ -21,7 +21,9 @@ function httpsUrl(value, name) {
   if (parsed.username || parsed.password || parsed.href.includes("#")) {
     throw new Error("production_config_invalid_" + name.toLowerCase());
   }
-  return parsed.toString().replace(/\/$/, "");
+  const normalized = parsed.toString();
+  // Preserve path-ending slashes: /token/ and /token may be distinct endpoints.
+  return normalized === `${parsed.origin}/` ? parsed.origin : normalized;
 }
 
 export function deviceOAuthMetadataFromEnv(env = process.env) {
