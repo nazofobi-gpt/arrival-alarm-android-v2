@@ -23,6 +23,10 @@ private fun isValidRouteIsoClock(value: String): Boolean {
     if (!ROUTE_ISO_LOCAL_CLOCK.matches(value)) return false
     val year = value.substring(0, 4).toInt()
     if (year == 0) return false
+    // An ISO local date-time uses civil hours (00..23). Standalone GTFS
+    // service-day clocks may use 24+ and are validated separately.
+    val hour = value.substring(11, 13).toInt()
+    if (hour !in 0..23) return false
     val month = value.substring(5, 7).toInt()
     val day = value.substring(8, 10).toInt()
     val maxDay = when (month) {
