@@ -81,6 +81,7 @@ test("Worker rejects OAuth URLs containing credentials or fragments in public me
     for (const invalidUrl of [
       "https://user:secret@tenant.example/oauth",
       "https://tenant.example/oauth#access-token",
+      "https://tenant.example/oauth#",
     ]) {
       const response = await worker.fetch(
         new Request("https://free.example/.well-known/oauth-protected-resource"),
@@ -103,6 +104,7 @@ test("Worker rejects unsafe OAuth issuer and JWKS URLs before verifying bearer t
     for (const invalidUrl of [
       "https://user:secret@tenant.example/keys",
       "https://tenant.example/keys#fragment",
+      "https://tenant.example/keys#",
     ]) {
       const endpoint = device ? "/device/state" : "/mcp";
       const response = await worker.fetch(
