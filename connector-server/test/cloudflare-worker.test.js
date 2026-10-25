@@ -72,6 +72,25 @@ test("free Worker publishes Android Auth0-compatible public client metadata", as
 });
 
 
+test("device OAuth public metadata hides internal configuration failure reasons", async () => {
+  const worker = createCloudflareWorker();
+  for (const override of [
+    { DEVICE_OAUTH_TOKEN_ENDPOINT: undefined },
+    { DEVICE_OAUTH_TOKEN_ENDPOINT: "http://tenant.example/oauth/token" },
+    { DEVICE_OAUTH_TOKEN_ENDPOINT: "https://user:private@tenant.example/token" },
+    { DEVICE_OAUTH_SCOPES: "offline_access" },
+  ]) {
+    const response = await worker.fetch(
+      new Request("https://free.example/.well-known/arrival-alarm-device-oauth"),
+      { ...env(), ...override }
+    );
+    assert.equal(response.status, 503);
+    const body = await response.json();
+    assert.deepEqual(body, { error: "device_oauth_not_configured" });
+    assert.doesNotMatch(JSON.stringify(body), /production_config|private|token_endpoint/i);
+  }
+});
+
 test("Worker rejects OAuth URLs containing credentials or fragments in public metadata", async () => {
   const worker = createCloudflareWorker();
   for (const key of [
