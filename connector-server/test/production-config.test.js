@@ -153,3 +153,21 @@ test("production rejects URL fragments but preserves safe HTTPS query parameters
   assert.equal(result.deviceOAuth.authorization_endpoint, "https://auth.example/authorize?prompt=login");
   assert.equal(result.deviceOAuth.resource, "https://connector.example/device?mode=read");
 });
+
+test("production preserves provider-configured trailing slashes on non-root OAuth endpoints", () => {
+  const config = validateProductionEnvironment(valid({
+    OAUTH_JWKS_URL: "https://auth.example/keys/",
+    DEVICE_OAUTH_AUTHORIZATION_ENDPOINT: "https://auth.example/authorize/",
+    DEVICE_OAUTH_TOKEN_ENDPOINT: "https://auth.example/token/",
+    DEVICE_OAUTH_REVOCATION_ENDPOINT: "https://auth.example/revoke/",
+    DEVICE_OAUTH_RESOURCE: "https://connector.example/device/",
+  }));
+
+  assert.equal(config.jwksUrl, "https://auth.example/keys/");
+  assert.equal(config.deviceOAuth.authorization_endpoint, "https://auth.example/authorize/");
+  assert.equal(config.deviceOAuth.token_endpoint, "https://auth.example/token/");
+  assert.equal(config.deviceOAuth.revocation_endpoint, "https://auth.example/revoke/");
+  assert.equal(config.deviceOAuth.resource, "https://connector.example/device/");
+  // Root-only origins still retain their existing canonical representation.
+  assert.equal(config.publicBaseUrl, "https://connector.example");
+});
