@@ -53,8 +53,20 @@ function ok(data, message) {
   };
 }
 
+// Do not serialize provider exceptions, secret values, SQL diagnostics, or token contents.
+// Only documented, actionable gateway errors are safe to return through MCP tools.
+const PUBLIC_MCP_ERROR_CODES = new Set([
+  "unauthorized",
+  "insufficient_scope",
+  "device_state_unavailable",
+  "stale_device_state",
+  "state_version_mismatch",
+  "invalid_command",
+]);
+
 export function mcpErrorResult(error, resourceMetadataUrl = null) {
-  const message = error instanceof Error ? error.message : "connector_error";
+  const candidate = error instanceof Error ? error.message : null;
+  const message = PUBLIC_MCP_ERROR_CODES.has(candidate) ? candidate : "connector_error";
   const result = {
     isError: true,
     content: [{ type: "text", text: message }],
