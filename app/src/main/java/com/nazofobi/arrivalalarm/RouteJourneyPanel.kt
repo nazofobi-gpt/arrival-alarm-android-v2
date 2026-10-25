@@ -249,10 +249,14 @@ private fun RouteOptionCard(
         state = option.realtime?.state,
         suppliedDelta = option.stops.any(::hasRealtimeDelta),
     )
+    val hasVerifiedCancellation = routeHasVerifiedRealtimeCancellation(
+        routeOffline = routeOffline,
+        state = option.realtime?.state,
+        suppliedCancellation = option.realtime?.cancelledTripIds?.isNotEmpty() == true,
+    )
     val realtimeLabel = when {
         routeOffline -> R.string.route_offline_badge
-        option.realtime?.cancelledTripIds?.isNotEmpty() == true ->
-            R.string.route_realtime_cancelled_badge
+        hasVerifiedCancellation -> R.string.route_realtime_cancelled_badge
         hasRealtime -> R.string.route_realtime_badge
         option.realtime?.state == RouteRealtimeState.STALE ->
             R.string.route_realtime_stale_badge
@@ -313,16 +317,14 @@ private fun RouteOptionCard(
                 style = MaterialTheme.typography.labelMedium,
                 color = when {
                     routeOffline -> MaterialTheme.colorScheme.tertiary
-                    option.realtime?.cancelledTripIds?.isNotEmpty() == true ->
-                        MaterialTheme.colorScheme.error
+                    hasVerifiedCancellation -> MaterialTheme.colorScheme.error
                     hasRealtime -> MaterialTheme.colorScheme.secondary
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 },
             )
             OutlinedButton(
                 onClick = onSelect,
-                enabled = !selected &&
-                    option.realtime?.cancelledTripIds?.isNotEmpty() != true,
+                enabled = !selected && !hasVerifiedCancellation,
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
