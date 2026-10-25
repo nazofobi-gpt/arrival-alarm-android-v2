@@ -242,6 +242,25 @@ class GtfsServiceDayTest {
     }
 
     @Test
+    fun untrustedOversizedGtfsClockFailsClosedBeforeTrimming() {
+        // Valid padded GTFS clock at the documented scalar bound remains legal.
+        val padded = " ".repeat(12) + "25:05:09" + " ".repeat(12)
+        assertEquals(32, padded.length)
+        assertEquals("25:05:09", GtfsServiceTime.parse(padded).toString())
+
+        // Provider data can contain very long malformed time fields. Neither
+        // whitespace nor digits may be accepted after an unbounded trim.
+        for (invalid in listOf(
+            " ".repeat(100_000) + "25:05:09",
+            "9".repeat(100_000),
+        )) {
+            val failure = runCatching { GtfsServiceTime.parse(invalid) }.exceptionOrNull()
+            assertTrue("Oversized GTFS time should fail closed", failure is IllegalArgumentException)
+            assertTrue(failure?.message?.contains("size limit") == true)
+        }
+    }
+
+    @Test
     fun malformedTimesFailClosed() {
         listOf("24:60:00", "-1:00:00", "12:00", "not-a-time").forEach { raw ->
             try {
