@@ -74,9 +74,9 @@ test("free Worker publishes Android Auth0-compatible public client metadata", as
 
 test("Worker rejects OAuth URLs containing credentials or fragments in public metadata", async () => {
   const worker = createCloudflareWorker();
-  for (const [key, errorCode] of [
-    ["MCP_PUBLIC_BASE_URL", "worker_invalid_public_base_url"],
-    ["OAUTH_AUTHORIZATION_SERVER", "worker_invalid_authorization_server"],
+  for (const key of [
+    "MCP_PUBLIC_BASE_URL",
+    "OAUTH_AUTHORIZATION_SERVER",
   ]) {
     for (const invalidUrl of [
       "https://user:secret@tenant.example/oauth",
@@ -88,18 +88,18 @@ test("Worker rejects OAuth URLs containing credentials or fragments in public me
         { ...env(), [key]: invalidUrl }
       );
       assert.equal(response.status, 503, key);
-      assert.deepEqual(await response.json(), { error: errorCode });
+      assert.deepEqual(await response.json(), { error: "service_unavailable" });
     }
   }
 });
 
 test("Worker rejects unsafe OAuth issuer and JWKS URLs before verifying bearer tokens", async () => {
   const worker = createCloudflareWorker();
-  for (const [key, expectedError, device] of [
-    ["OAUTH_ISSUER", "worker_invalid_oauth_issuer", false],
-    ["OAUTH_JWKS_URL", "worker_invalid_oauth_jwks_url", false],
-    ["DEVICE_OAUTH_ISSUER", "worker_invalid_device_oauth_issuer", true],
-    ["DEVICE_OAUTH_JWKS_URL", "worker_invalid_device_oauth_jwks_url", true],
+  for (const [key, device] of [
+    ["OAUTH_ISSUER", false],
+    ["OAUTH_JWKS_URL", false],
+    ["DEVICE_OAUTH_ISSUER", true],
+    ["DEVICE_OAUTH_JWKS_URL", true],
   ]) {
     for (const invalidUrl of [
       "https://user:secret@tenant.example/keys",
@@ -119,7 +119,7 @@ test("Worker rejects unsafe OAuth issuer and JWKS URLs before verifying bearer t
         { ...env(), [key]: invalidUrl }
       );
       assert.equal(response.status, 503, key);
-      assert.deepEqual(await response.json(), { error: expectedError });
+      assert.deepEqual(await response.json(), { error: "service_unavailable" });
     }
   }
 });
@@ -138,4 +138,19 @@ test("Worker preserves legitimate HTTPS query parameters in authorization server
   assert.deepEqual(body.authorization_servers, [
     "https://tenant.example/authorize?prompt=consent",
   ]);
+});
+
+test("Worker preserves OAuth challenge for unauthenticated MCP requests", async () => {
+  const worker = createCloudflareWorker();
+  const response = await worker.fetch(
+    new Request("https://free.example/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    }),
+    env()
+  );
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), { error: "unauthorized" });
+  assert.match(response.headers.get("WWW-Authenticate"), /error="invalid_token"/);
 });
