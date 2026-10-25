@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createCloudflareWorker } from "../src/cloudflare-worker.js";
+import { createCloudflareWorker, readJson } from "../src/cloudflare-worker.js";
 import { FakeD1 } from "./support/fake-d1.js";
 
 function env() {
@@ -138,4 +138,65 @@ test("Worker preserves legitimate HTTPS query parameters in authorization server
   assert.deepEqual(body.authorization_servers, [
     "https://tenant.example/authorize?prompt=consent",
   ]);
+});
+
+
+test("Worker JSON reader decodes split UTF-8 and accepts the exact 256 KiB limit", async () => {
+  const encoder = new TextEncoder();
+  const payload = encoder.encode('{"stop":"Löhne"}');
+  let index = 0;
+  const chunks = new ReadableStream({
+    pull(controller) {
+      if (index >= payload.length) return controller.close();
+      controller.enqueue(payload.slice(index, ++index));
+    },
+  });
+  const splitRequest = new Request("https://free.example/device/state", {
+    method: "POST",
+    body: chunks,
+    duplex: "half",
+  });
+  assert.deepEqual(await readJson(splitRequest), { stop: "Löhne" });
+
+  const base = '{"ok":true}';
+  const exactBody = base + " ".repeat(256 * 1024 - encoder.encode(base).byteLength);
+  const exactRequest = new Request("https://free.example/device/state", {
+    method: "POST",
+    body: exactBody,
+  });
+  assert.deepEqual(await readJson(exactRequest), { ok: true });
+  assert.deepEqual(
+    await readJson(new Request("https://free.example/device/state", { method: "POST" })),
+    {}
+  );
+});
+
+test("Worker JSON reader rejects oversized advertised and streamed payloads", async () => {
+  const size = 256 * 1024;
+  const declared = new Request("https://free.example/device/state", {
+    method: "POST",
+    headers: { "content-length": String(size + 1) },
+    body: "{}",
+  });
+  await assert.rejects(readJson(declared), /request_too_large/);
+
+  let canceled = false;
+  let chunksIssued = 0;
+  const hugeStream = new ReadableStream({
+    pull(controller) {
+      chunksIssued++;
+      controller.enqueue(new Uint8Array(64 * 1024));
+    },
+    cancel() {
+      canceled = true;
+    },
+  });
+  const streamRequest = new Request("https://free.example/device/state", {
+    method: "POST",
+    body: hugeStream,
+    duplex: "half",
+  });
+  await assert.rejects(readJson(streamRequest), /request_too_large/);
+  assert.equal(canceled, true, "oversized stream must be canceled");
+  assert.ok(chunksIssued <= 7, "reader must stop near the byte limit");
 });
