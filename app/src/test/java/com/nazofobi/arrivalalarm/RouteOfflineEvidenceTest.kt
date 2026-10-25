@@ -123,4 +123,22 @@ class RouteOfflineEvidenceTest {
             routeEvidenceTime("2026-10-25T08:42:00", "08:15", routeOffline = false),
         )
     }
+
+    @Test fun arbitraryTextBeforeDateTimeSeparatorCannotMasqueradeAsLiveClock() {
+        // routeClock extracts text after T; only a structurally valid ISO date
+        // may use that form as provider evidence.
+        assertEquals("08:15", routeEvidenceTime("garbageT08:42", "08:15", routeOffline = false))
+        assertNull(routeEvidenceTime("garbageT08:42", null, routeOffline = false))
+        assertFalse(routeHasUsableRealtimeDelta("garbageT08:42", "08:15"))
+        assertFalse(routeHasUsableRealtimeDelta("08:42", "garbageT08:15"))
+
+        assertNull(routeEvidenceTime("2026-00-25T08:42", null, routeOffline = false))
+        assertNull(routeEvidenceTime("2026-13-25T08:42", null, routeOffline = true))
+        assertEquals(
+            "2026-10-25T08:42:00",
+            routeEvidenceTime("2026-10-25T08:42:00", "08:15", routeOffline = false),
+        )
+        assertTrue(routeHasUsableRealtimeDelta("2026-10-25T08:42:00", "08:15"))
+    }
+
 }
