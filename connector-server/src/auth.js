@@ -50,11 +50,12 @@ export function authContextFromPayload(
     throw new Error("insufficient_scope");
   }
 
-  const configuredDeviceId =
+  // A configured provider claim is authoritative; do not silently fall back to
+  // generic device IDs when that signed binding is absent or malformed.
+  const rawDeviceId =
     typeof deviceIdClaim === "string" && deviceIdClaim
       ? payload[deviceIdClaim]
-      : undefined;
-  const rawDeviceId = configuredDeviceId ?? payload.device_id ?? payload.deviceId;
+      : payload.device_id ?? payload.deviceId;
   const deviceId = typeof rawDeviceId === "string" ? rawDeviceId.trim() : null;
   if (requireDeviceId && !deviceId) throw new Error("unauthorized");
 
