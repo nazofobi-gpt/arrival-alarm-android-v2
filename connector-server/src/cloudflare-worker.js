@@ -245,10 +245,10 @@ export function createCloudflareWorker() {
       ) {
         try {
           return json(deviceOAuthMetadataFromEnv(env));
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "device_oauth_not_configured";
-          return json({ error: message }, 503);
+        } catch {
+          // Public discovery must not expose internal configuration details.
+          // Keep the exact HTTP shape stable for Android clients.
+          return json({ error: "device_oauth_not_configured" }, 503);
         }
       }
 
