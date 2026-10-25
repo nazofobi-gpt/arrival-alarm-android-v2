@@ -232,9 +232,14 @@ value class GtfsServiceTime private constructor(val secondsFromServiceDayStart: 
 
     companion object {
         private const val TWELVE_HOURS_MILLIS = 12L * 60L * 60L * 1_000L
+        private const val MAX_GTFS_TIME_CHARACTERS = 32
         private val pattern = Regex("""^(\d{1,3}):([0-5]\d):([0-5]\d)$""")
 
         fun parse(raw: String): GtfsServiceTime {
+            // A GTFS clock has at most 3 hour digits plus MM:SS. Bound hostile
+            // feed values before trimming/regex allocation; ordinary padding
+            // and GTFS hours beyond 24 remain supported.
+            require(raw.length <= MAX_GTFS_TIME_CHARACTERS) { "GTFS time exceeds size limit" }
             val match = pattern.matchEntire(raw.trim())
                 ?: throw IllegalArgumentException("Invalid GTFS time: $raw")
             val hour = match.groupValues[1].toInt()
