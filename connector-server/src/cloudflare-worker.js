@@ -94,10 +94,49 @@ async function resolveDeviceAuth(request, env) {
   });
 }
 
-async function readJson(request) {
-  const bytes = new Uint8Array(await request.arrayBuffer());
-  if (bytes.byteLength > MAX_BODY_BYTES) throw new Error("request_too_large");
-  if (bytes.byteLength === 0) return {};
+export async function readJson(request) {
+  // Content-Length can reject an oversized body early, but is not trustworthy:
+  // absent or understated lengths must still be bounded while streaming.
+  const advertisedLength = request.headers.get("content-length");
+  if (
+    advertisedLength !== null &&
+    /^\d+$/.test(advertisedLength) &&
+    Number(advertisedLength) > MAX_BODY_BYTES
+  ) {
+    throw new Error("request_too_large");
+  }
+  if (!request.body) return {};
+
+  const reader = request.body.getReader();
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_BODY_BYTES) throw new Error("request_too_large");
+      chunks.push(value);
+    }
+  } catch (error) {
+    // Stop consuming a potentially unbounded request as soon as it exceeds
+    // the limit; a failed cancellation must not obscure the original error.
+    try {
+      await reader.cancel();
+    } catch {
+      // Stream may already be closed or errored.
+    }
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+  if (totalBytes === 0) return {};
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
   return JSON.parse(new TextDecoder().decode(bytes));
 }
 
@@ -115,7 +154,7 @@ function authError(request, env, error) {
   const message = error instanceof Error ? error.message : "unauthorized";
   const authFailure = message === "unauthorized";
   const scopeFailure = message === "insufficient_scope";
-  const status = authFailure ? 401 : scopeFailure ? 403 : 503;
+  const status = authFailure ? 401 : scopeFailure ? 403 : message === "request_too_large" ? 413 : 503;
   const headers = {};
 
   if (authFailure || scopeFailure) {
