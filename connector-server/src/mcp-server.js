@@ -64,6 +64,36 @@ const PUBLIC_MCP_ERROR_CODES = new Set([
   "invalid_command",
 ]);
 
+// The metadata URL is placed inside a quoted WWW-Authenticate parameter.
+// Reject untrusted syntax before URL parsing (which may silently strip controls).
+function safeResourceMetadataUrl(value) {
+  if (
+    typeof value !== "string" ||
+    value !== value.trim() ||
+    /[\u0000-\u001f\u007f"\\]/.test(value) ||
+    value.includes("#")
+  ) {
+    return null;
+  }
+  try {
+    const url = new URL(value);
+    const loopback =
+      url.protocol === "http:" &&
+      ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+    if (
+      (url.protocol !== "https:" && !loopback) ||
+      !url.hostname ||
+      url.username ||
+      url.password
+    ) {
+      return null;
+    }
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
 export function mcpErrorResult(error, resourceMetadataUrl = null) {
   const candidate = error instanceof Error ? error.message : null;
   const message = PUBLIC_MCP_ERROR_CODES.has(candidate) ? candidate : "connector_error";
@@ -72,8 +102,9 @@ export function mcpErrorResult(error, resourceMetadataUrl = null) {
     content: [{ type: "text", text: message }],
   };
 
+  const metadataUrl = safeResourceMetadataUrl(resourceMetadataUrl);
   if (
-    resourceMetadataUrl &&
+    metadataUrl &&
     (message === "insufficient_scope" || message === "unauthorized")
   ) {
     const errorCode =
@@ -84,7 +115,7 @@ export function mcpErrorResult(error, resourceMetadataUrl = null) {
         : "Authentication is required for this tool.";
     result._meta = {
       "mcp/www_authenticate": [
-        `Bearer resource_metadata="${resourceMetadataUrl}", error="${errorCode}", error_description="${description}"`,
+        `Bearer resource_metadata="${metadataUrl}", error="${errorCode}", error_description="${description}"`,
       ],
     };
   }
