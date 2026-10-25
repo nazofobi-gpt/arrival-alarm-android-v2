@@ -258,3 +258,16 @@ test("sync connector rejects numeric-looking strings and boolean freshness field
   store.putSnapshot("user-1", snapshot({ stale_after_seconds: 120 }));
   assert.equal(service.getCurrentJourney("user-1").stale, false);
 });
+
+
+test("sync progress is stale when gateway heartbeat expires despite a recent device clock", () => {
+  const store = new InMemoryGatewayStore({ nowEpochSeconds: () => 1000 });
+  const service = new GatewayService(store, { nowEpochSeconds: () => 1121 });
+  store.putSnapshot("user-1", snapshot({
+    active_trip: { progress_updated_at_epoch_seconds: 1110 },
+  }));
+
+  const progress = service.getTripProgress("user-1");
+  assert.equal(progress.stale, true);
+  assert.equal(progress.progress_stale, true);
+});
