@@ -2,6 +2,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { bearerToken, createJwtAccessVerifier } from "./auth.js";
 import { AsyncGatewayService } from "./async-gateway-service.js";
 import { D1GatewayStore } from "./d1-gateway-store.js";
+import { classifyHttpError } from "./http-error-status.js";
 import { createArrivalAlarmMcpServer } from "./mcp-server.js";
 import { deviceOAuthMetadataFromEnv } from "./production-config.js";
 
@@ -151,26 +152,24 @@ function json(value, status = 200, extraHeaders = {}) {
 }
 
 function authError(request, env, error) {
-  const message = error instanceof Error ? error.message : "unauthorized";
-  const authFailure = message === "unauthorized";
-  const scopeFailure = message === "insufficient_scope";
-  const status = authFailure ? 401 : scopeFailure ? 403 : message === "request_too_large" ? 413 : 503;
+  // Reuse the Node HTTP error contract: only allowlisted public error codes
+  // leave this endpoint. Internal OAuth/D1 failures must not expose details.
+  const { status, code, challenge } = classifyHttpError(error);
   const headers = {};
 
-  if (authFailure || scopeFailure) {
-    const oauthError = scopeFailure ? "insufficient_scope" : "invalid_token";
+  if (challenge) {
     try {
       headers["WWW-Authenticate"] =
         'Bearer resource_metadata="' +
         resourceMetadataUrl(request, env) +
         '", error="' +
-        oauthError +
+        challenge +
         '"';
     } catch {
       // Keep original auth error when public metadata is misconfigured.
     }
   }
-  return json({ error: message }, status, headers);
+  return json({ error: code }, status, headers);
 }
 
 function withMcpCors(response) {
