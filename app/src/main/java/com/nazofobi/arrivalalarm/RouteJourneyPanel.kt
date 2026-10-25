@@ -539,17 +539,18 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
 
 /**
  * Route-level clocks may already contain old realtime overlays. In offline mode,
- * derive endpoints only from scheduled stop evidence; missing proof remains unknown.
+ * derive endpoints only from scheduled stops. Online provider clocks must be validated
+ * and fall back to the scheduled endpoint if malformed; missing proof stays unknown.
  */
 private fun routeOptionEvidenceClock(option: RouteOption, departure: Boolean, routeOffline: Boolean): String? {
-    if (!routeOffline) return if (departure) option.departure else option.arrival
     val stop = if (departure) option.stops.firstOrNull() else option.stops.lastOrNull()
     val scheduled = if (departure) {
         stop?.plannedDeparture ?: stop?.plannedArrival
     } else {
         stop?.plannedArrival ?: stop?.plannedDeparture
     }
-    return routeClock(scheduled)
+    val actual = if (departure) option.departure else option.arrival
+    return routeSummaryEvidenceClock(actual, scheduled, routeOffline)
 }
 
 @Composable

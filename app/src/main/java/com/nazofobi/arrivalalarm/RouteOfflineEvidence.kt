@@ -44,6 +44,10 @@ private fun String?.usableRouteTime(): String? =
             routeClock(value) != null
     }
 
+/** The route card and detail header must use the same validated clock as stop rows. */
+internal fun routeSummaryEvidenceClock(actual: String?, planned: String?, routeOffline: Boolean): String? =
+    routeClock(routeEvidenceTime(actual, planned, routeOffline))
+
 internal fun routeEvidenceTime(actual: String?, planned: String?, routeOffline: Boolean): String? =
     if (routeOffline) planned.usableRouteTime()
     else actual.usableRouteTime() ?: planned.usableRouteTime()

@@ -185,4 +185,23 @@ class RouteOfflineEvidenceTest {
     }
 
 
+
+    @Test fun routeSummaryHeaderRequiresValidatedRealtimeOrScheduledClock() {
+        // Route-card endpoints use the same clock policy as the stop sequence.
+        assertEquals("08:42", routeSummaryEvidenceClock("08:42:59", "08:15", routeOffline = false))
+        assertEquals("08:15", routeSummaryEvidenceClock("garbageT08:42", "08:15", routeOffline = false))
+        assertEquals("08:15", routeSummaryEvidenceClock("2026-02-30T08:42", "08:15", routeOffline = false))
+        assertEquals("08:15", routeSummaryEvidenceClock("25:61", "08:15", routeOffline = false))
+        assertEquals("08:15", routeSummaryEvidenceClock("  ", " 08:15 ", routeOffline = false))
+        assertNull(routeSummaryEvidenceClock("invalid", "unknown", routeOffline = false))
+
+        // Cached live clocks must not mask the scheduled endpoint offline.
+        assertEquals("08:15", routeSummaryEvidenceClock("08:42", "08:15", routeOffline = true))
+        assertNull(routeSummaryEvidenceClock("08:42", null, routeOffline = true))
+        assertNull(routeSummaryEvidenceClock("08:42", "25:61", routeOffline = true))
+
+        // Legitimate calendar and GTFS service-day clocks remain visible.
+        assertEquals("08:42", routeSummaryEvidenceClock("2028-02-29T08:42", "08:15", routeOffline = false))
+        assertEquals("25:40", routeSummaryEvidenceClock(" 25:40:03 ", "08:15", routeOffline = false))
+    }
 }
