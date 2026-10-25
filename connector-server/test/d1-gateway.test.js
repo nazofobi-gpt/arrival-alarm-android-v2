@@ -183,3 +183,16 @@ test("D1 connector rejects numeric-looking strings and boolean freshness fields"
   await store.putSnapshot("user-1", snapshot({ stale_after_seconds: 120 }));
   assert.equal((await service.getCurrentJourney("user-1")).stale, false);
 });
+
+
+test("D1 progress is stale when gateway heartbeat expires despite a recent device clock", async () => {
+  const store = new D1GatewayStore(new FakeD1(), { nowEpochSeconds: () => 1000 });
+  const service = new AsyncGatewayService(store, { nowEpochSeconds: () => 1121 });
+  await store.putSnapshot("user-1", snapshot({
+    active_trip: { progress_updated_at_epoch_seconds: 1110 },
+  }));
+
+  const progress = await service.getTripProgress("user-1");
+  assert.equal(progress.stale, true);
+  assert.equal(progress.progress_stale, true);
+});
