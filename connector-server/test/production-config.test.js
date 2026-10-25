@@ -138,6 +138,8 @@ test("production rejects URL fragments but preserves safe HTTPS query parameters
     ["OAUTH_JWKS_URL", "https://auth.example/jwks.json#private"],
     ["DEVICE_OAUTH_REVOCATION_ENDPOINT", "https://auth.example/revoke#token"],
     ["DEVICE_OAUTH_RESOURCE", "https://connector.example/device#private"],
+    ["OAUTH_ISSUER", "https://auth.example/#"],
+    ["DEVICE_OAUTH_TOKEN_ENDPOINT", "https://auth.example/token#"],
   ]) {
     assert.throws(
       () => validateProductionEnvironment(valid({ [key]: value })),
