@@ -17,8 +17,8 @@ function httpsUrl(value, name) {
     throw new Error("production_config_https_required_" + name.toLowerCase());
   }
   // Credentials and fragments must never enter public OAuth metadata or
-  // deployment URLs; retain valid HTTPS query parameters.
-  if (parsed.username || parsed.password || parsed.hash) {
+  // deployment URLs, including an empty trailing #; retain HTTPS queries.
+  if (parsed.username || parsed.password || parsed.href.includes("#")) {
     throw new Error("production_config_invalid_" + name.toLowerCase());
   }
   return parsed.toString().replace(/\/$/, "");
