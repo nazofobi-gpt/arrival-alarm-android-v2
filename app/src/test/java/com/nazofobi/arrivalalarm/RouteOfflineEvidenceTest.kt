@@ -99,4 +99,90 @@ class RouteOfflineEvidenceTest {
         assertFalse(routeHasTrustedRealtimePlatform(routeOffline = true, actualPlatform = "2"))
     }
 
+
+    @Test fun invalidObservedClockFallsBackToValidScheduledClock() {
+        assertEquals("08:15", routeEvidenceTime("invalid", "08:15", routeOffline = false))
+        assertEquals("24:15", routeEvidenceTime("25:61", "24:15", routeOffline = false))
+        assertEquals("08:15", routeEvidenceTime("08:99", "08:15", routeOffline = false))
+        assertEquals("08:42", routeEvidenceTime("08:42", "not-a-clock", routeOffline = false))
+        assertNull(routeEvidenceTime("unknown", "bad", routeOffline = false))
+    }
+
+    @Test fun offlineAndBlankScheduledClocksFailClosedWhenNotParseable() {
+        assertNull(routeEvidenceTime("08:42", "not-a-clock", routeOffline = true))
+        assertNull(routeEvidenceTime("08:42", "25:61", routeOffline = true))
+        assertEquals("24:15", routeEvidenceTime("25:61", "24:15", routeOffline = true))
+    }
+
+    @Test fun incidentalClockWhitespaceIsNormalizedForDisplay() {
+        assertEquals("08:42", routeEvidenceTime(" 08:42 ", "08:15", routeOffline = false))
+        assertEquals("08:15", routeEvidenceTime("invalid", " 08:15 ", routeOffline = false))
+        assertEquals("24:00:59", routeEvidenceTime("24:00:59", "24:00", routeOffline = false))
+        assertEquals(
+            "2026-10-25T08:42:00",
+            routeEvidenceTime("2026-10-25T08:42:00", "08:15", routeOffline = false),
+        )
+    }
+
+    @Test fun arbitraryTextBeforeDateTimeSeparatorCannotMasqueradeAsLiveClock() {
+        // routeClock extracts text after T; only a structurally valid ISO date
+        // may use that form as provider evidence.
+        assertEquals("08:15", routeEvidenceTime("garbageT08:42", "08:15", routeOffline = false))
+        assertNull(routeEvidenceTime("garbageT08:42", null, routeOffline = false))
+        assertFalse(routeHasUsableRealtimeDelta("garbageT08:42", "08:15"))
+        assertFalse(routeHasUsableRealtimeDelta("08:42", "garbageT08:15"))
+
+        assertNull(routeEvidenceTime("2026-00-25T08:42", null, routeOffline = false))
+        assertNull(routeEvidenceTime("2026-13-25T08:42", null, routeOffline = true))
+        assertEquals(
+            "2026-10-25T08:42:00",
+            routeEvidenceTime("2026-10-25T08:42:00", "08:15", routeOffline = false),
+        )
+        assertTrue(routeHasUsableRealtimeDelta("2026-10-25T08:42:00", "08:15"))
+    }
+
+    @Test fun impossibleGregorianProviderDateFallsBackToSchedule() {
+        for (badDate in listOf(
+            "2026-02-29T08:42",
+            "2026-02-30T08:42",
+            "2026-02-31T08:42",
+            "2026-04-31T08:42",
+            "1900-02-29T08:42",
+            "0000-01-01T08:42",
+        )) {
+            assertEquals("08:15", routeEvidenceTime(badDate, "08:15", routeOffline = false))
+            assertNull(routeEvidenceTime(badDate, null, routeOffline = false))
+            assertFalse(routeHasUsableRealtimeDelta(badDate, "08:15"))
+        }
+        assertEquals("2028-02-29T08:42", routeEvidenceTime(
+            "2028-02-29T08:42", "08:15", routeOffline = false,
+        ))
+        assertEquals("2000-02-29T08:42", routeEvidenceTime(
+            "2000-02-29T08:42", null, routeOffline = false,
+        ))
+        assertEquals("2026-04-30T08:42", routeEvidenceTime(
+            "2026-04-30T08:42", null, routeOffline = false,
+        ))
+        assertEquals("24:15", routeEvidenceTime("24:15", null, routeOffline = false))
+    }
+
+    @Test fun isoLocalClockRejectsNonCivilHoursButKeepsGtfsExtendedServiceDay() {
+        for (malformedIso in listOf(
+            "2026-10-25T24:15",
+            "2026-10-25T25:15:00",
+            "2026-10-25T99:42",
+        )) {
+            assertEquals("08:15", routeEvidenceTime(malformedIso, "08:15", routeOffline = false))
+            assertNull(routeEvidenceTime(malformedIso, null, routeOffline = false))
+            assertFalse(routeHasUsableRealtimeDelta(malformedIso, "08:15"))
+        }
+        assertEquals(
+            "2026-10-25T23:59:00",
+            routeEvidenceTime("2026-10-25T23:59:00", "08:15", routeOffline = false),
+        )
+        assertEquals("24:15", routeEvidenceTime("24:15", null, routeOffline = false))
+        assertEquals("25:15:00", routeEvidenceTime(null, "25:15:00", routeOffline = true))
+    }
+
+
 }
