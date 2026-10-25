@@ -94,11 +94,39 @@ async function resolveDeviceAuth(request, env) {
   });
 }
 
-async function readJson(request) {
-  const bytes = new Uint8Array(await request.arrayBuffer());
-  if (bytes.byteLength > MAX_BODY_BYTES) throw new Error("request_too_large");
-  if (bytes.byteLength === 0) return {};
-  return JSON.parse(new TextDecoder().decode(bytes));
+// Bound memory while reading, not after Request.arrayBuffer() has already
+// consumed a potentially oversized device request.
+export async function readJson(request) {
+  const declaredLength = request.headers.get("content-length");
+  if (
+    declaredLength !== null &&
+    /^\\d+$/.test(declaredLength) &&
+    Number(declaredLength) > MAX_BODY_BYTES
+  ) {
+    throw new Error("request_too_large");
+  }
+  if (!request.body) return {};
+
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let bytesRead = 0;
+  let text = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytesRead += value.byteLength;
+      if (bytesRead > MAX_BODY_BYTES) {
+        await reader.cancel().catch(() => {});
+        throw new Error("request_too_large");
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  text += decoder.decode();
+  return bytesRead === 0 ? {} : JSON.parse(text);
 }
 
 function json(value, status = 200, extraHeaders = {}) {
