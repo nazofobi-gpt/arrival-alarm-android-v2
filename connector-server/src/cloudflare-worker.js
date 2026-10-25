@@ -100,7 +100,7 @@ export async function readJson(request) {
   const declaredLength = request.headers.get("content-length");
   if (
     declaredLength !== null &&
-    /^\\d+$/.test(declaredLength) &&
+    /^\d+$/.test(declaredLength) &&
     Number(declaredLength) > MAX_BODY_BYTES
   ) {
     throw new Error("request_too_large");
