@@ -181,7 +181,7 @@ class RouteOfflineEvidenceTest {
             routeEvidenceTime("2026-10-25T23:59:00", "08:15", routeOffline = false),
         )
         assertEquals("24:15", routeEvidenceTime("24:15", null, routeOffline = false))
-        assertEquals("25:15:00", routeEvidenceTime("25:15:00", null, routeOffline = true))
+        assertEquals("25:15:00", routeEvidenceTime(null, "25:15:00", routeOffline = true))
     }
 
 
