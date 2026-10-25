@@ -49,3 +49,35 @@ test("MCP auth challenges are preserved only for recognized auth failures", () =
   assert.equal(unknown.content[0].text, "connector_error");
   assert.equal("_meta" in unknown, false);
 });
+
+test("MCP authentication challenges reject unsafe metadata URLs without changing public error codes", () => {
+  const unsafe = [
+    'https://gateway.example/metadata" , error="injected',
+    "https://user:pass@gateway.example/metadata",
+    "https://gateway.example/metadata#",
+    "https://gateway.example/metadata#private",
+    "https://gateway.example/metadata\r\nX-Injected: true",
+    "https://gateway.example/metadata\\spoof",
+    "http://remote.example/metadata",
+    "javascript:alert(1)",
+    " https://gateway.example/metadata",
+    null,
+  ];
+  for (const value of unsafe) {
+    const result = mcpErrorResult(new Error("unauthorized"), value);
+    assert.equal(result.content[0].text, "unauthorized");
+    assert.equal("_meta" in result, false, String(value));
+  }
+});
+
+test("MCP authentication challenges preserve canonical safe HTTPS and local-loopback metadata", () => {
+  for (const value of [
+    "https://gateway.example/.well-known/oauth-protected-resource?test=%22",
+    "http://localhost:8787/.well-known/oauth-protected-resource",
+    "http://127.0.0.1:8787/.well-known/oauth-protected-resource",
+  ]) {
+    const result = mcpErrorResult(new Error("insufficient_scope"), value);
+    assert.equal(result._meta["mcp/www_authenticate"][0],
+      `Bearer resource_metadata="${value}", error="insufficient_scope", error_description="The connected account needs additional permission for this tool."`);
+  }
+});
