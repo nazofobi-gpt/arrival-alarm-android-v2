@@ -18,10 +18,25 @@ private val ROUTE_ISO_LOCAL_CLOCK = Regex(
     """\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T\d{2}:\d{2}(:\d{2})?"""
 )
 
+/** Reject impossible provider calendar dates before extracting the clock. */
+private fun isValidRouteIsoClock(value: String): Boolean {
+    if (!ROUTE_ISO_LOCAL_CLOCK.matches(value)) return false
+    val year = value.substring(0, 4).toInt()
+    if (year == 0) return false
+    val month = value.substring(5, 7).toInt()
+    val day = value.substring(8, 10).toInt()
+    val maxDay = when (month) {
+        2 -> if (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) 29 else 28
+        4, 6, 9, 11 -> 30
+        else -> 31
+    }
+    return day <= maxDay
+}
+
 private fun String?.usableRouteTime(): String? =
     this?.trim()?.takeIf { value ->
         value.isNotEmpty() &&
-            (!value.contains('T') || ROUTE_ISO_LOCAL_CLOCK.matches(value)) &&
+            (!value.contains('T') || isValidRouteIsoClock(value)) &&
             routeClock(value) != null
     }
 

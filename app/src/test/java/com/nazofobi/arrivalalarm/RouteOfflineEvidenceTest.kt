@@ -141,4 +141,30 @@ class RouteOfflineEvidenceTest {
         assertTrue(routeHasUsableRealtimeDelta("2026-10-25T08:42:00", "08:15"))
     }
 
+    @Test fun impossibleGregorianProviderDateFallsBackToSchedule() {
+        for (badDate in listOf(
+            "2026-02-29T08:42",
+            "2026-02-30T08:42",
+            "2026-02-31T08:42",
+            "2026-04-31T08:42",
+            "1900-02-29T08:42",
+            "0000-01-01T08:42",
+        )) {
+            assertEquals("08:15", routeEvidenceTime(badDate, "08:15", routeOffline = false))
+            assertNull(routeEvidenceTime(badDate, null, routeOffline = false))
+            assertFalse(routeHasUsableRealtimeDelta(badDate, "08:15"))
+        }
+        assertEquals("2028-02-29T08:42", routeEvidenceTime(
+            "2028-02-29T08:42", "08:15", routeOffline = false,
+        ))
+        assertEquals("2000-02-29T08:42", routeEvidenceTime(
+            "2000-02-29T08:42", null, routeOffline = false,
+        ))
+        assertEquals("2026-04-30T08:42", routeEvidenceTime(
+            "2026-04-30T08:42", null, routeOffline = false,
+        ))
+        assertEquals("24:15", routeEvidenceTime("24:15", null, routeOffline = false))
+    }
+
+
 }
