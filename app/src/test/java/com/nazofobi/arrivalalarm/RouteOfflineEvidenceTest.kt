@@ -166,5 +166,23 @@ class RouteOfflineEvidenceTest {
         assertEquals("24:15", routeEvidenceTime("24:15", null, routeOffline = false))
     }
 
+    @Test fun isoLocalClockRejectsNonCivilHoursButKeepsGtfsExtendedServiceDay() {
+        for (malformedIso in listOf(
+            "2026-10-25T24:15",
+            "2026-10-25T25:15:00",
+            "2026-10-25T99:42",
+        )) {
+            assertEquals("08:15", routeEvidenceTime(malformedIso, "08:15", routeOffline = false))
+            assertNull(routeEvidenceTime(malformedIso, null, routeOffline = false))
+            assertFalse(routeHasUsableRealtimeDelta(malformedIso, "08:15"))
+        }
+        assertEquals(
+            "2026-10-25T23:59:00",
+            routeEvidenceTime("2026-10-25T23:59:00", "08:15", routeOffline = false),
+        )
+        assertEquals("24:15", routeEvidenceTime("24:15", null, routeOffline = false))
+        assertEquals("25:15:00", routeEvidenceTime("25:15:00", null, routeOffline = true))
+    }
+
 
 }
