@@ -54,7 +54,7 @@ export class FakeD1Statement {
       const [receiptJson, completedAt, userId, idempotencyKey] = this.args;
       const key = userId + "|" + idempotencyKey;
       const row = this.db.commands.get(key);
-      if (row) {
+      if (row && (!this.sql.includes("AND status = 'queued'") || row.status === "queued")) {
         row.status = "completed";
         row.receipt_json = receiptJson;
         row.completed_at_epoch_seconds = completedAt;

@@ -100,6 +100,7 @@ export class InMemoryGatewayStore {
     if (item.device_id != null && deviceId != null && item.device_id !== deviceId) {
       throw new Error("device_mismatch");
     }
+    if (item.status === "completed") return clone(item);
     item.status = "completed";
     item.receipt = clone(receipt);
     item.completed_at_epoch_seconds = this.nowEpochSeconds();
@@ -192,7 +193,7 @@ export class SqliteGatewayStore {
     this.completeCommand = this.db.prepare(`
       UPDATE commands
       SET status = 'completed', receipt_json = ?, completed_at_epoch_seconds = ?
-      WHERE user_id = ? AND idempotency_key = ?
+      WHERE user_id = ? AND idempotency_key = ? AND status = 'queued'
     `);
   }
 
@@ -258,6 +259,9 @@ export class SqliteGatewayStore {
     if (existing.device_id != null && deviceId != null && existing.device_id !== deviceId) {
       throw new Error("device_mismatch");
     }
+    // Preserve the first terminal receipt even when the device retries or
+    // a second receipt races with the first update.
+    if (existing.status === "completed") return existing;
     this.completeCommand.run(
       JSON.stringify(receipt),
       this.nowEpochSeconds(),
