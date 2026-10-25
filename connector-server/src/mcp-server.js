@@ -3,15 +3,15 @@ import { z } from "zod";
 
 const stopSchema = z.object({
   id: z.string().nullable().optional(),
-  name: z.string(),
-  latitude: z.number().nullable().optional(),
-  longitude: z.number().nullable().optional(),
+  name: z.string().trim().min(1).max(200),
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
 });
 
 const pointInput = {
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
-  label: z.string().min(1).max(200),
+  label: z.string().trim().min(1).max(200),
 };
 
 const writeBaseInput = {
