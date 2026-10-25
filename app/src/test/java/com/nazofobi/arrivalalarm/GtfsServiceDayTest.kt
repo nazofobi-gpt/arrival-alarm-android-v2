@@ -242,6 +242,24 @@ class GtfsServiceDayTest {
     }
 
     @Test
+    fun untrustedOversizedGtfsDateFailsClosedBeforeTrimming() {
+        // Accept padded but bounded civil dates just like padded GTFS clocks.
+        val padded = " ".repeat(12) + "20261025" + " ".repeat(12)
+        assertEquals(32, padded.length)
+        assertEquals(GtfsServiceDate(2026, 10, 25), GtfsServiceDate.parse(padded))
+
+        // Reject unbounded provider date scalars before trim/regex processing.
+        for (invalid in listOf(
+            " ".repeat(100_000) + "20261025",
+            "2".repeat(100_000),
+        )) {
+            val failure = runCatching { GtfsServiceDate.parse(invalid) }.exceptionOrNull()
+            assertTrue("Oversized GTFS date should fail closed", failure is IllegalArgumentException)
+            assertTrue(failure?.message?.contains("size limit") == true)
+        }
+    }
+
+    @Test
     fun untrustedOversizedGtfsClockFailsClosedBeforeTrimming() {
         // Valid padded GTFS clock at the documented scalar bound remains legal.
         val padded = " ".repeat(12) + "25:05:09" + " ".repeat(12)
