@@ -23,8 +23,8 @@ function normalizedHttps(value, name, { preserveTrailingSlash = false } = {}) {
     throw new Error("worker_https_required_" + name);
   }
   // OAuth metadata and JWKS locations must not embed credentials or fragments.
-  // Match the production configuration validator while preserving valid query strings.
-  if (parsed.username || parsed.password || parsed.hash) {
+  // Include an empty trailing #, which URL.hash normalizes to an empty string.\n  // Match the production configuration validator while preserving valid query strings.
+  if (parsed.username || parsed.password || parsed.href.includes("#")) {
     throw new Error("worker_invalid_" + name);
   }
   const canonical = parsed.toString();
