@@ -50,6 +50,20 @@ class RouteJourneyDurationTest {
         }
     }
 
+    @Test fun datedSameDayBackwardClockCannotInventAlmostFullDayJourney() {
+        assertNull(routeDurationMinutes(option(
+            departure = "2026-10-11T10:45:00",
+            arrival = "2026-10-11T10:05:00",
+        )))
+    }
+
+    @Test fun arrivalDatedBeforeDepartureCannotMasqueradeAsOvernightJourney() {
+        assertNull(routeDurationMinutes(option(
+            departure = "2026-10-12T23:50:00",
+            arrival = "2026-10-11T00:25:00",
+        )))
+    }
+
     @Test fun isoClockWithSecondsPreservesLegacyOvernightFallback() {
         assertEquals(
             35,
