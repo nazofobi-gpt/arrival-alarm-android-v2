@@ -1,6 +1,7 @@
 """Regression tests for duplicate work-unit admission and legacy safety."""
 import importlib.util
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 SOURCE = Path(__file__).resolve().parents[1] / "check_pr_duplication.py"
@@ -20,6 +21,29 @@ def pr(number, body="", title="fix(G-168): search", created="2026-10-19T12:00:00
 
 
 class DuplicateGuardTest(unittest.TestCase):
+    def test_rerun_uses_live_pr_body_after_metadata_edit(self):
+        stale = pr(571, "", "fix(G-173): search replay")
+        live = pr(571, "Work-Unit: G-173/search-replay-catalog-refresh\nOverlap-Review: #111",
+                  "fix(G-173): search replay")
+        peer = pr(111, "", "G-173: readiness gate", created="2026-10-11T12:00:00Z")
+        with patch.object(guard, "request_json") as fetch:
+            current = guard.resolve_live_pr("owner/repo", "token", stale, [live, peer])
+            fetch.assert_not_called()
+        self.assertEqual(current["body"], live["body"])
+        self.assertEqual(guard.analyze(current, [live, peer], [])[0], [])
+
+    def test_closed_pr_rerun_fetches_exact_live_pr(self):
+        stale = pr(571, "")
+        live = pr(571, "Work-Unit: G-173/search-replay-catalog-refresh\nOverlap-Review: none")
+        with patch.object(guard, "request_json", return_value=live) as fetch:
+            self.assertEqual(guard.resolve_live_pr("owner/repo", "token", stale, []), live)
+            fetch.assert_called_once_with("owner/repo", "pulls/571", "token")
+
+    def test_mismatched_live_pr_identity_fails_closed(self):
+        with patch.object(guard, "request_json", return_value=pr(572)):
+            with self.assertRaises(ValueError):
+                guard.resolve_live_pr("owner/repo", "token", pr(571), [])
+
     def test_same_exact_work_unit_is_blocked(self):
         current = pr(402, "Work-Unit: G-168/provider-identities\nOverlap-Review: #101")
         existing = pr(101, "Work-Unit: G-168/provider-identities", "fix(G-168): other")
