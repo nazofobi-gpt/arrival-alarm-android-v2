@@ -168,7 +168,8 @@ fun ArrivalAlarmApp(
     var activeScreen by rememberSaveable { mutableStateOf(ArrivalAppScreen.HOME) }
     var dataState by remember { mutableStateOf(transit.currentState()) }
     var query by remember { mutableStateOf("") }
-    var lastSearchedQuery by remember { mutableStateOf("") }
+    // Changing the active catalog must also invalidate remembered query deduplication.
+    val searchQueryRequestGate = remember(dataState) { SearchQueryRequestGate() }
     var recentSearches by remember {
         mutableStateOf(
             searchRecentsPreferences.getString("queries", "").orEmpty()
@@ -526,7 +527,7 @@ fun ArrivalAlarmApp(
         val q = rawQuery.trim()
         if (q.length < 2) return
         if (recordRecent) saveRecentSearch(q)
-        lastSearchedQuery = q
+        searchQueryRequestGate.markRequested(q)
         val requestId = searchRequestId + 1
         searchRequestId = requestId
         searchBusy = true
@@ -731,21 +732,22 @@ fun ArrivalAlarmApp(
         }
     }
 
-    LaunchedEffect(query) {
+    LaunchedEffect(query, dataState) {
         val q = query.trim()
-        // Reject all in-flight responses as soon as the query changes, rather
-        // than waiting for the next debounced request to begin.
+        // The query or the active catalog changed: discard previous results
+        // immediately and reject pre-debounce callbacks from the old source.
         searchRequestId += 1
         searchHealth = TransitFunctionHealth.UNVERIFIED
+        searchResults = emptyList()
+        searchSource = null
+        searchMessage = null
+        searchBusy = false
         if (q.length < 2) {
-            searchResults = emptyList()
-            searchSource = null
-            searchMessage = null
-            searchBusy = false
+            searchQueryRequestGate.reset()
             return@LaunchedEffect
         }
         delay(1_000)
-        if (q != lastSearchedQuery) {
+        if (searchQueryRequestGate.shouldAutoRequest(q)) {
             runSearch(q)
         }
     }
