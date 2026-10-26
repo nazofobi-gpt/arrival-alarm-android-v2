@@ -295,6 +295,32 @@ class SearchMapPlannerTest {
         assertEquals(listOf("Berlin"), queries)
     }
 
+    @Test fun plannerProviderBoundariesRejectOversizedQueriesWithoutGeocoding() {
+        val requested = mutableListOf<String>()
+        val validPoint = MapPoint(52.5200, 13.4050, "Berlin")
+        val bounded = SearchMapPlanner(
+            GermanyTransitCatalog(TestGermanyTransitFixtures.snapshot),
+            object : GeocodeProvider {
+                override fun search(query: String): List<MapPoint> {
+                    requested += query
+                    return listOf(validPoint)
+                }
+            },
+        )
+        val oversized = "x".repeat(MAX_SEARCH_QUERY_LENGTH + 1)
+
+        // The planner can be invoked outside the UI query gate.
+        assertTrue(bounded.search(oversized).isEmpty())
+        assertTrue(bounded.addressOrPoi(oversized).isEmpty())
+        assertTrue(bounded.addressOrPoi("  $oversized  ").isEmpty())
+        assertTrue(requested.isEmpty())
+
+        // Keep the existing short-query contract and inclusive upper bound.
+        assertEquals(listOf(validPoint), bounded.addressOrPoi(" S "))
+        assertEquals(listOf(validPoint), bounded.addressOrPoi("x".repeat(MAX_SEARCH_QUERY_LENGTH)))
+        assertEquals(listOf("S", "x".repeat(MAX_SEARCH_QUERY_LENGTH)), requested)
+    }
+
     @Test fun geocoderIsProviderSwappable() {
         val custom = SearchMapPlanner(GermanyTransitCatalog(TestGermanyTransitFixtures.snapshot), object : GeocodeProvider {
             override fun search(query: String) = listOf(MapPoint(50.0, 8.0, "POI:$query"))
