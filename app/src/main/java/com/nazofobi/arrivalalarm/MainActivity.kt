@@ -518,7 +518,7 @@ fun ArrivalAlarmApp(
 
     fun saveRecentSearch(rawQuery: String) {
         val q = rawQuery.trim()
-        if (q.length < 2) return
+        if (!isSupportedSearchQuery(q)) return
         val next = (listOf(q) + recentSearches.filterNot { it.equals(q, ignoreCase = true) })
             .take(5)
         recentSearches = next
@@ -529,7 +529,20 @@ fun ArrivalAlarmApp(
 
     fun runSearch(rawQuery: String = query, recordRecent: Boolean = false) {
         val q = rawQuery.trim()
-        if (q.length < 2) return
+        if (!isSupportedSearchQuery(q)) {
+            if (q.length > MAX_SEARCH_QUERY_LENGTH) {
+                // Reject direct submissions as well as debounce-driven lookups.
+                // Invalidate any earlier provider callback before showing the error.
+                searchRequestId += 1
+                searchQueryRequestGate.reset()
+                searchBusy = false
+                searchHealth = TransitFunctionHealth.UNVERIFIED
+                searchResults = emptyList()
+                searchSource = null
+                searchMessage = context.getString(R.string.search_query_too_long)
+            }
+            return
+        }
         if (recordRecent) saveRecentSearch(q)
         searchQueryRequestGate.markRequested(q)
         val requestId = searchRequestId + 1
@@ -751,7 +764,7 @@ fun ArrivalAlarmApp(
         // They update query and mark the request in the same UI callback. The
         // subsequent effect must not invalidate that in-flight callback and
         // then suppress the duplicate search, leaving an empty result list.
-        if (q.length >= 2 && !searchQueryRequestGate.shouldAutoRequest(q)) {
+        if (isSupportedSearchQuery(q) && !searchQueryRequestGate.shouldAutoRequest(q)) {
             return@LaunchedEffect
         }
         // The query or the active catalog changed: discard previous results
@@ -762,8 +775,11 @@ fun ArrivalAlarmApp(
         searchSource = null
         searchMessage = null
         searchBusy = false
-        if (q.length < 2) {
+        if (!isSupportedSearchQuery(q)) {
             searchQueryRequestGate.reset()
+            if (q.length > MAX_SEARCH_QUERY_LENGTH) {
+                searchMessage = context.getString(R.string.search_query_too_long)
+            }
             return@LaunchedEffect
         }
         delay(1_000)

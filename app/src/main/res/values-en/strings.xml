@@ -53,6 +53,7 @@
     <string name="select_destination">Select destination</string>
     <string name="search_stops_label">Search stop, address, line, or trip</string>
     <string name="search_supporting_text">Enter a stop, address, POI, line, or trip.</string>
+    <string name="search_query_too_long">Search query is too long. Please shorten it.</string>
     <string name="search_autocomplete_action">Complete</string>
     <string name="journey_points_title">Journey points</string>
     <string name="journey_points_empty">Choose an origin first.</string>

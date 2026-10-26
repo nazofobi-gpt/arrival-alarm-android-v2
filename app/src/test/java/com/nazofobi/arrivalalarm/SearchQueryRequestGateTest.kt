@@ -101,4 +101,33 @@ class SearchQueryRequestGateTest {
         assertFalse(gate.shouldAutoRequest("   "))
         assertTrue(gate.shouldAutoRequest(" Lo "))
     }
+
+    @Test fun maximumLengthSearchRemainsAllowedAfterTrimming() {
+        val maxLength = "L".repeat(MAX_SEARCH_QUERY_LENGTH)
+        assertTrue(isSupportedSearchQuery("  $maxLength  "))
+        assertFalse(isSupportedSearchQuery("L"))
+        assertFalse(isSupportedSearchQuery("  "))
+        assertTrue(isSupportedSearchQuery("Lohne"))
+
+        val gate = SearchQueryRequestGate()
+        assertTrue(gate.shouldAutoRequest(maxLength))
+        gate.markRequested(maxLength)
+        assertFalse(gate.shouldAutoRequest(" $maxLength "))
+    }
+
+    @Test fun oversizedQueryIsNeverAutoRequestedOrSavedAsDedupKey() {
+        val valid = "L".repeat(MAX_SEARCH_QUERY_LENGTH)
+        val oversized = valid + "x"
+        assertFalse(isSupportedSearchQuery(oversized))
+
+        val gate = SearchQueryRequestGate()
+        assertFalse(gate.shouldAutoRequest(oversized))
+        gate.markRequested(oversized)
+        assertTrue(gate.shouldAutoRequest(valid))
+        gate.markRequested(valid)
+        assertFalse(gate.shouldAutoRequest(valid))
+        // Rejecting an oversized edit must release the previous request key.
+        assertFalse(gate.shouldAutoRequest(oversized))
+        assertTrue(gate.shouldAutoRequest(valid))
+    }
 }

@@ -10,12 +10,17 @@ package com.nazofobi.arrivalalarm
  */
 internal fun normalizedSearchQuery(rawQuery: String): String = rawQuery.trim()
 
+// Bound queries before sending them to search providers or saving recents.
+internal const val MAX_SEARCH_QUERY_LENGTH = 256
+internal fun isSupportedSearchQuery(rawQuery: String): Boolean =
+    normalizedSearchQuery(rawQuery).length in 2..MAX_SEARCH_QUERY_LENGTH
+
 internal class SearchQueryRequestGate {
     private var lastRequestedQuery: String? = null
 
     fun markRequested(rawQuery: String) {
         val query = normalizedSearchQuery(rawQuery)
-        if (query.length >= 2) lastRequestedQuery = query
+        if (isSupportedSearchQuery(query)) lastRequestedQuery = query
     }
 
     // An intervening edit must invalidate the old deduplication key even if
@@ -27,7 +32,7 @@ internal class SearchQueryRequestGate {
 
     fun shouldAutoRequest(rawQuery: String): Boolean {
         val query = normalizedSearchQuery(rawQuery)
-        if (query.length < 2) {
+        if (!isSupportedSearchQuery(query)) {
             reset()
             return false
         }
