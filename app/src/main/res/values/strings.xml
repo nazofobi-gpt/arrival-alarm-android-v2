@@ -56,6 +56,7 @@
     <string name="select_destination">Varış seç</string>
     <string name="search_stops_label">Durak, adres, hat veya sefer ara</string>
     <string name="search_supporting_text">Durak adı, adres, POI, hat veya sefer yazın.</string>
+    <string name="search_query_too_long">Arama metni çok uzun. Lütfen daha kısa yazın.</string>
     <string name="search_autocomplete_action">Tamamla</string>
     <string name="journey_points_title">Yolculuk noktaları</string>
     <string name="journey_points_empty">Önce başlangıç noktasını seçin.</string>
