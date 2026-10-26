@@ -536,6 +536,10 @@ fun ArrivalAlarmApp(
         searchRequestId = requestId
         searchBusy = true
         searchHealth = TransitFunctionHealth.UNVERIFIED
+        // An explicit recent/completion selection may replace the query before
+        // its Compose effect runs. Never show the previous query's results.
+        searchResults = emptyList()
+        searchSource = null
         searchMessage = null
         transit.searchLocationsResolved(q) callback@{ resolution ->
             if (requestId != searchRequestId) return@callback
@@ -743,6 +747,13 @@ fun ArrivalAlarmApp(
     LaunchedEffect(normalizedSearchQuery(query), dataState) {
         val q = query.trim()
         searchQueryRequestGate.observeQuery(q)
+        // Recent searches and line/trip completions start a lookup immediately.
+        // They update query and mark the request in the same UI callback. The
+        // subsequent effect must not invalidate that in-flight callback and
+        // then suppress the duplicate search, leaving an empty result list.
+        if (q.length >= 2 && !searchQueryRequestGate.shouldAutoRequest(q)) {
+            return@LaunchedEffect
+        }
         // The query or the active catalog changed: discard previous results
         // immediately and reject pre-debounce callbacks from the old source.
         searchRequestId += 1
