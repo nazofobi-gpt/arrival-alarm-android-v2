@@ -734,6 +734,7 @@ fun ArrivalAlarmApp(
 
     LaunchedEffect(query, dataState) {
         val q = query.trim()
+        searchQueryRequestGate.observeQuery(q)
         // The query or the active catalog changed: discard previous results
         // immediately and reject pre-debounce callbacks from the old source.
         searchRequestId += 1
