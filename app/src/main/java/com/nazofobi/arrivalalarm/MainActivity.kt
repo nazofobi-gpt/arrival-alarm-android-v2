@@ -221,6 +221,7 @@ fun ArrivalAlarmApp(
     var routeBusy by remember { mutableStateOf(false) }
     var routingHealth by remember(dataState) { mutableStateOf(TransitFunctionHealth.UNVERIFIED) }
     // In-flight responses must not overwrite a newer journey or station selection.
+    val currentLocationRequestGate = remember { LatestRequestGate() }
     val routeRequestGate = remember { LatestRequestGate() }
     val nearbyRequestGate = remember { LatestRequestGate() }
     val stationRequestGate = remember { LatestRequestGate() }
@@ -353,6 +354,9 @@ fun ArrivalAlarmApp(
     }
 
     fun setOrigin(point: MapPoint) {
+        // A late device fix must never override a newer manual origin selection.
+        currentLocationRequestGate.invalidate()
+        locationMessage = null
         // Changing origin cancels any pending route and station responses.
         routeRequestGate.invalidate()
         routingHealth = TransitFunctionHealth.UNVERIFIED
@@ -567,13 +571,16 @@ fun ArrivalAlarmApp(
     }
 
     fun useCurrentLocation() {
+        val token = currentLocationRequestGate.begin()
         locationMessage = context.getString(R.string.getting_location)
         currentLocation.request { result ->
-            result.onSuccess { point ->
-                locationMessage = null
-                setOrigin(MapPoint(point.latitude, point.longitude, context.getString(R.string.current_location_label)))
-            }.onFailure {
-                locationMessage = localizedDomainMessage(context, it.message)
+            currentLocationRequestGate.commitIfCurrent(token) {
+                result.onSuccess { point ->
+                    locationMessage = null
+                    setOrigin(MapPoint(point.latitude, point.longitude, context.getString(R.string.current_location_label)))
+                }.onFailure {
+                    locationMessage = localizedDomainMessage(context, it.message)
+                }
             }
         }
     }
@@ -761,6 +768,7 @@ fun ArrivalAlarmApp(
 
     DisposableEffect(Unit) {
         onDispose {
+            currentLocationRequestGate.invalidate()
             guidanceSpeaker.shutdown()
             transit.close()
         }

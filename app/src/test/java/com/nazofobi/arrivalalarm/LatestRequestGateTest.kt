@@ -111,4 +111,42 @@ class LatestRequestGateTest {
         assertEquals(listOf("new-departure"), departures)
     }
 
+
+    @Test fun manualOriginSelectionRejectsLateDeviceLocationFix() {
+        val gate = LatestRequestGate()
+        var origin = "initial"
+        var locationMessage: String? = "getting location"
+        val pendingFix = gate.begin()
+
+        // The user selects a station before the platform delivers its GPS fix.
+        gate.invalidate()
+        origin = "manual station"
+        locationMessage = null
+
+        assertFalse(gate.commitIfCurrent(pendingFix) {
+            origin = "late device fix"
+            locationMessage = null
+        })
+        assertEquals("manual station", origin)
+        assertEquals(null, locationMessage)
+    }
+
+    @Test fun newerDeviceLocationRequestRejectsOlderSuccessAndFailure() {
+        val gate = LatestRequestGate()
+        val firstRequest = gate.begin()
+        val currentRequest = gate.begin()
+        var origin = "initial"
+        var message = "getting location"
+
+        assertFalse(gate.commitIfCurrent(firstRequest) { origin = "old fix" })
+        assertFalse(gate.commitIfCurrent(firstRequest) { message = "old error" })
+        assertEquals("initial", origin)
+        assertEquals("getting location", message)
+        assertTrue(gate.commitIfCurrent(currentRequest) {
+            origin = "new fix"
+            message = ""
+        })
+        assertEquals("new fix", origin)
+        assertEquals("", message)
+    }
 }
