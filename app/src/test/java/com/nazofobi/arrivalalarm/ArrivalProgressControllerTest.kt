@@ -538,7 +538,8 @@ class ArrivalProgressControllerTest {
         assertEquals(0, missed.state.consecutivePastTarget)
         missed.onLocation(fix(beyondTarget, speed = 0.0))
         assertEquals(1, missed.state.consecutivePastTarget)
-        assertEquals(ArrivalAlertPhase.IMMINENT, missed.state.phase.takeIf { it == ArrivalAlertPhase.IMMINENT } ?: missed.state.phase)
+        assertEquals(0, missed.state.arrivalEventCount)
+        assertEquals(1, missed.state.consecutivePastTarget)
         missed.onLocation(fix(beyondTarget, speed = 0.0))
         assertEquals(ArrivalAlertPhase.MISSED, missed.state.phase)
     }
