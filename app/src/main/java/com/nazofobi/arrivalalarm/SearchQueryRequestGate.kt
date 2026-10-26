@@ -16,6 +16,13 @@ internal class SearchQueryRequestGate {
         if (query.length >= 2) lastRequestedQuery = query
     }
 
+    // An intervening edit must invalidate the old deduplication key even if
+    // that intermediate query is abandoned before the debounce timer fires.
+    fun observeQuery(rawQuery: String) {
+        val query = rawQuery.trim()
+        if (lastRequestedQuery != null && query != lastRequestedQuery) reset()
+    }
+
     fun shouldAutoRequest(rawQuery: String): Boolean {
         val query = rawQuery.trim()
         if (query.length < 2) {
