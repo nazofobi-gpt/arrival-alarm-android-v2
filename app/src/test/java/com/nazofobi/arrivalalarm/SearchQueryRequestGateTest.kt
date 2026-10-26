@@ -33,6 +33,25 @@ class SearchQueryRequestGateTest {
         assertTrue(gate.shouldAutoRequest("Bremen"))
     }
 
+    @Test fun returningAfterAbandonedIntermediateQueryRequestsFreshResults() {
+        val gate = SearchQueryRequestGate()
+        gate.markRequested("Lohne")
+        assertFalse(gate.shouldAutoRequest("Lohne"))
+
+        // No actual request for Achim: the UI cancelled its debounce.
+        gate.observeQuery("Achim")
+        assertTrue(gate.shouldAutoRequest("Lohne"))
+        gate.markRequested("Lohne")
+        assertFalse(gate.shouldAutoRequest("Lohne"))
+    }
+
+    @Test fun cosmeticWhitespaceDoesNotInvalidateAnIdenticalQuery() {
+        val gate = SearchQueryRequestGate()
+        gate.markRequested("Lohne")
+        gate.observeQuery(" Lohne ")
+        assertFalse(gate.shouldAutoRequest("Lohne"))
+    }
+
     @Test fun shortQueryDoesNotTriggerAutoRequest() {
         val gate = SearchQueryRequestGate()
         assertFalse(gate.shouldAutoRequest("L"))
