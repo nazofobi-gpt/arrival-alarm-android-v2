@@ -73,7 +73,7 @@ class SearchMapPlanner(
 
     fun search(query: String, limit: Int = 20): List<SearchResult> {
         val q = query.trim()
-        if (q.isEmpty() || limit <= 0) return emptyList()
+        if (q.isEmpty() || q.length > MAX_SEARCH_QUERY_LENGTH || limit <= 0) return emptyList()
         val stops = catalog.searchStops(q, limit).map(SearchResult::Stop)
         val routes = catalog.searchRoutes(q, limit).map(SearchResult::Route)
         val trips = catalog.searchTrips(q, limit).map { (trip, route) -> SearchResult.Trip(trip, route) }
@@ -108,7 +108,7 @@ class SearchMapPlanner(
 
     fun addressOrPoi(query: String): List<MapPoint> {
         val q = query.trim()
-        if (q.isEmpty()) return emptyList()
+        if (q.isEmpty() || q.length > MAX_SEARCH_QUERY_LENGTH) return emptyList()
         // External geocoders must not inject invalid map coordinates into selection.
         return geocoder.search(q).filter(::hasValidCoordinates)
     }
