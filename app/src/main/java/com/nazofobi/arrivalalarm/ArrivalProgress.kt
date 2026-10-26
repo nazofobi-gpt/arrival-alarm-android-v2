@@ -136,6 +136,7 @@ class ArrivalProgressController(
             !fix.accuracyMeters.isFinite() || fix.accuracyMeters < 0.0 ||
             fix.accuracyMeters > ArrivalLocationQuality.MAX_TRACKING_ACCURACY_METERS ||
             !fix.speedMps.isFinite() || fix.speedMps < 0.0 ||
+            fix.speedMps > MAX_PLAUSIBLE_ARRIVAL_SPEED_MPS ||
             fix.epochMillis < 0L || !hasPlausibleFixTime(fix.epochMillis)
         ) {
             if (state.consecutiveInsideThreshold != 0 || state.consecutivePastTarget != 0) {
@@ -246,6 +247,9 @@ class ArrivalProgressController(
     companion object {
         // Reject provider clock corruption before it can poison the GPS replay watermark.
         const val MAX_FUTURE_FIX_SKEW_MILLIS = 30_000L
+        // Keep alarm evidence aligned with trip inference: >120 m/s (432 km/h)
+        // is an implausible surface-transit fix, not proof of stop progression.
+        const val MAX_PLAUSIBLE_ARRIVAL_SPEED_MPS = 120.0
 
         fun distanceMeters(a: GeoPoint, b: GeoPoint): Double {
             val earthRadius = 6_371_000.0

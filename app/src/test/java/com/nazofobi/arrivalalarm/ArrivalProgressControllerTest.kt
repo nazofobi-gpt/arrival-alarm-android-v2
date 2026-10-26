@@ -502,6 +502,48 @@ class ArrivalProgressControllerTest {
         )
     }
 
+
+    @Test fun impossibleFiniteSpeedCannotAdvanceGpsArrivalOrMissedStopDebounce() {
+        val c = ArrivalProgressController()
+        c.arm(route)
+        val target = route.stops[route.targetIndex]
+
+        // A finite but impossible provider speed must not invent the first arrival fix.
+        val before = c.state
+        c.onLocation(fix(target, speed = 120.01))
+        assertEquals(before, c.state)
+        c.onLocation(fix(target, speed = Double.MAX_VALUE))
+        assertEquals(before, c.state)
+
+        // Once a real confirmation exists, an impossible sample breaks the streak.
+        c.onLocation(fix(target, speed = 0.0))
+        assertEquals(1, c.state.consecutiveInsideThreshold)
+        c.onLocation(fix(target, speed = 121.0))
+        assertEquals(0, c.state.consecutiveInsideThreshold)
+        assertEquals(0, c.state.arrivalEventCount)
+
+        // The accepted upper boundary does not suppress credible surface-transit GPS.
+        c.onLocation(fix(target, speed = 120.0))
+        assertEquals(1, c.state.consecutiveInsideThreshold)
+        c.onLocation(fix(target, speed = 0.0))
+        assertEquals(ArrivalAlertPhase.ARRIVED, c.state.phase)
+        assertEquals(1, c.state.arrivalEventCount)
+
+        val missed = ArrivalProgressController()
+        missed.arm(route)
+        val beyondTarget = route.stops.last()
+        missed.onLocation(fix(beyondTarget, speed = 0.0))
+        assertEquals(1, missed.state.consecutivePastTarget)
+        missed.onLocation(fix(beyondTarget, speed = 121.0))
+        assertEquals(0, missed.state.consecutivePastTarget)
+        missed.onLocation(fix(beyondTarget, speed = 0.0))
+        assertEquals(1, missed.state.consecutivePastTarget)
+        assertEquals(0, missed.state.arrivalEventCount)
+        assertEquals(1, missed.state.consecutivePastTarget)
+        missed.onLocation(fix(beyondTarget, speed = 0.0))
+        assertEquals(ArrivalAlertPhase.MISSED, missed.state.phase)
+    }
+
     @Test fun failingStateWriteDoesNotStopArrivalAndLaterSuccessfulSave() {
         var failWrites = true
         var persisted: ArrivalProgressState? = null
