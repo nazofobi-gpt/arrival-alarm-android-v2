@@ -81,6 +81,11 @@ class GuidanceReliabilityController(
     companion object {
         // A next-stop instruction is time-sensitive; never replay it hours later.
         const val MAX_PENDING_AGE_MILLIS = 2 * 60_000L
+        // Android TextToSpeech input has a finite character bound; never enqueue
+        // unbounded provider labels/identifiers or replay oversized stored values.
+        const val MAX_UTTERANCE_TEXT_CHARACTERS = 3_900
+        const val MAX_UTTERANCE_KEY_CHARACTERS = 512
+        const val MAX_LOCALE_TAG_CHARACTERS = 64
     }
     var state: GuidanceReliabilityState = try {
         store.load() ?: GuidanceReliabilityState()
@@ -120,9 +125,14 @@ class GuidanceReliabilityController(
         retryPending()
     }
 
+    private fun isSafeUtterance(utterance: GuidanceUtterance): Boolean =
+        utterance.key.isNotBlank() && utterance.key.length <= MAX_UTTERANCE_KEY_CHARACTERS &&
+            utterance.text.isNotBlank() && utterance.text.length <= MAX_UTTERANCE_TEXT_CHARACTERS &&
+            utterance.localeTag.isNotBlank() && utterance.localeTag.length <= MAX_LOCALE_TAG_CHARACTERS
+
     fun requestGuidance(utterance: GuidanceUtterance): Boolean {
-        // Reject provider/UI gaps before TTS or durable pending-state mutation.
-        if (utterance.key.isBlank() || utterance.text.isBlank()) return false
+        // Bound untrusted input before either TTS or durable pending-state mutation.
+        if (!isSafeUtterance(utterance)) return false
         if (utterance.key == state.lastSpokenKey) return false
         if (state.permissionState == GuidancePermissionState.DENIED) {
             update(state.copy(
@@ -142,7 +152,7 @@ class GuidanceReliabilityController(
     fun retryPending(): Boolean {
         val pending = state.pending ?: return false
         // A restored malformed announcement must never be spoken on permission recovery.
-        if (pending.key.isBlank() || pending.text.isBlank()) {
+        if (!isSafeUtterance(pending)) {
             update(state.copy(pending = null, pendingSinceEpochMillis = null))
             return false
         }
