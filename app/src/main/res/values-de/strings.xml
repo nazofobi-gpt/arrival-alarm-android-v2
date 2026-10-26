@@ -53,6 +53,7 @@
     <string name="select_destination">Ziel wählen</string>
     <string name="search_stops_label">Haltestelle, Adresse, Linie oder Fahrt suchen</string>
     <string name="search_supporting_text">Haltestelle, Adresse, POI, Linie oder Fahrt eingeben.</string>
+    <string name="search_query_too_long">Suchanfrage zu lang. Bitte kürzen.</string>
     <string name="search_autocomplete_action">Vervollständigen</string>
     <string name="journey_points_title">Fahrtpunkte</string>
     <string name="journey_points_empty">Wählen Sie zuerst einen Startpunkt.</string>
