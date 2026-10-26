@@ -732,7 +732,8 @@ fun ArrivalAlarmApp(
         }
     }
 
-    LaunchedEffect(query, dataState) {
+    // Cosmetic whitespace must not clear already-resolved results without a new lookup.
+    LaunchedEffect(normalizedSearchQuery(query), dataState) {
         val q = query.trim()
         searchQueryRequestGate.observeQuery(q)
         // The query or the active catalog changed: discard previous results
