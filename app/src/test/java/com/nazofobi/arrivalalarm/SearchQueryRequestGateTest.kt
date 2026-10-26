@@ -1,10 +1,31 @@
 package com.nazofobi.arrivalalarm
 
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SearchQueryRequestGateTest {
+    @Test fun cosmeticWhitespaceUsesSameSearchEffectKey() {
+        // The Compose LaunchedEffect key uses the same normalization as this gate.
+        // A cosmetic edit must retain the visible results rather than clear them
+        // and then suppress the redundant request.
+        val initialKey = normalizedSearchQuery("Lohne")
+        val cosmeticKey = normalizedSearchQuery("  Lohne \t")
+        assertEquals(initialKey, cosmeticKey)
+
+        val gate = SearchQueryRequestGate()
+        gate.markRequested("Lohne")
+        gate.observeQuery(cosmeticKey)
+        assertFalse(gate.shouldAutoRequest(cosmeticKey))
+
+        val changedKey = normalizedSearchQuery("Lohne Hbf")
+        assertNotEquals(initialKey, changedKey)
+        gate.observeQuery(changedKey)
+        assertTrue(gate.shouldAutoRequest(changedKey))
+    }
+
     @Test fun clearingQueryAllowsSameQueryToRunAgain() {
         val gate = SearchQueryRequestGate()
         assertTrue(gate.shouldAutoRequest("Lohne"))
