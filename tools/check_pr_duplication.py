@@ -152,6 +152,20 @@ def list_prs(repo: str, token: str, state: str, max_pages: int = 6) -> list[dict
     return result
 
 
+
+def resolve_live_pr(
+    repo: str, token: str, event_pr: dict[str, Any], open_prs: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Use live PR metadata; a workflow rerun retains its original event body."""
+    number = event_pr["number"]
+    current = next((pr for pr in open_prs if pr.get("number") == number), None)
+    if current is None:
+        current = request_json(repo, f"pulls/{number}", token)
+    if current.get("number") != number:
+        raise ValueError("Live PR identity does not match the workflow event")
+    return current
+
+
 def publish(lines: list[str]) -> None:
     content = "\n".join(lines) + "\n"
     print(content)
@@ -169,6 +183,8 @@ def main() -> int:
     try:
         active = list_prs(repo, token, "open")
         current = event.get("pull_request")
+        if current is not None:
+            current = resolve_live_pr(repo, token, current, active)
         if current is None:
             grouped: dict[str, list[int]] = defaultdict(list)
             for pr in active:
