@@ -73,6 +73,28 @@ class SearchQueryRequestGateTest {
         assertFalse(gate.shouldAutoRequest("Lohne"))
     }
 
+    @Test fun immediateRecentSelectionIsNotCancelledByItsOwnComposeEffect() {
+        val gate = SearchQueryRequestGate()
+        gate.markRequested("Bremen") // Explicit recent/completion search started.
+        gate.observeQuery("Bremen") // Compose effect for the new text runs later.
+
+        // The effect must leave the already-started callback alive.
+        assertFalse(gate.shouldAutoRequest("Bremen"))
+
+        // Changing the query still requires cancellation and a fresh lookup.
+        gate.observeQuery("Lohne")
+        assertTrue(gate.shouldAutoRequest("Lohne"))
+    }
+
+    @Test fun immediateManualRetryPreservesTheNewAttempt() {
+        val gate = SearchQueryRequestGate()
+        gate.markRequested("Bremen")
+        gate.reset() // A retry or provider failure allows the next attempt.
+        gate.markRequested("Bremen")
+        gate.observeQuery(" Bremen ")
+        assertFalse(gate.shouldAutoRequest("Bremen"))
+    }
+
     @Test fun shortQueryDoesNotTriggerAutoRequest() {
         val gate = SearchQueryRequestGate()
         assertFalse(gate.shouldAutoRequest("L"))
