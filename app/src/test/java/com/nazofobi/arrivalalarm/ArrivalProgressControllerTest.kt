@@ -78,6 +78,43 @@ class ArrivalProgressControllerTest {
         assertTrue(controller.state.armed)
     }
 
+    @Test fun armedIdleSnapshotCannotRestoreAsActiveTrackingPhase() {
+        var saved: ArrivalProgressState? = ArrivalProgressState(
+            routeId = route.routeId,
+            armed = true,
+            phase = ArrivalAlertPhase.IDLE,
+            lastMatchedStopIndex = route.targetIndex,
+            progressFraction = 1.0,
+            distanceToTargetMeters = 0.0,
+            consecutiveInsideThreshold = 1,
+            routeFingerprint = route.persistenceFingerprint,
+        )
+        val store = object : ArrivalProgressStateStore {
+            override fun load(): ArrivalProgressState? = saved
+            override fun save(state: ArrivalProgressState) { saved = state }
+        }
+        val controller = ArrivalProgressController(store)
+        controller.arm(route)
+
+        // A corrupted ARMED/IDLE pair must be reset, not surfaced as a live
+        // journey with a stale terminal distance or a borrowed GPS confirmation.
+        assertTrue(controller.state.armed)
+        assertEquals(ArrivalAlertPhase.TRACKING, controller.state.phase)
+        assertEquals(0, controller.state.lastMatchedStopIndex)
+        assertEquals(0.0, controller.state.progressFraction, 0.0)
+        assertNull(controller.state.distanceToTargetMeters)
+        assertEquals(0, controller.state.consecutiveInsideThreshold)
+        assertEquals(0, controller.state.arrivalEventCount)
+        assertEquals(ArrivalAlertPhase.TRACKING, saved?.phase)
+
+        // The valid route is still usable; arrival needs two fresh fixes.
+        controller.onLocation(fix(route.stops[route.targetIndex]))
+        assertEquals(0, controller.state.arrivalEventCount)
+        controller.onLocation(fix(route.stops[route.targetIndex]))
+        assertEquals(ArrivalAlertPhase.ARRIVED, controller.state.phase)
+        assertEquals(1, controller.state.arrivalEventCount)
+    }
+
     @Test fun outOfBoundsRestoredStopIndexCannotCreatePhantomArrival() {
         val poisoned = ArrivalProgressState(
             routeId = route.routeId,
