@@ -172,10 +172,7 @@ fun ArrivalAlarmApp(
     val searchQueryRequestGate = remember(dataState) { SearchQueryRequestGate() }
     var recentSearches by remember {
         mutableStateOf(
-            searchRecentsPreferences.getString("queries", "").orEmpty()
-                .split('\u001F')
-                .filter { it.isNotBlank() }
-                .take(5)
+            restoredRecentSearchQueries(searchRecentsPreferences.getString("queries", ""))
         )
     }
     var favoriteStopIds by remember {

@@ -130,4 +130,25 @@ class SearchQueryRequestGateTest {
         assertFalse(gate.shouldAutoRequest(oversized))
         assertTrue(gate.shouldAutoRequest(valid))
     }
+
+    @Test fun restoredSearchHistoryExcludesLegacyInvalidQueriesBeforeLimitingResults() {
+        val max = "L".repeat(MAX_SEARCH_QUERY_LENGTH)
+        val oversized = "X".repeat(MAX_SEARCH_QUERY_LENGTH + 1)
+        val saved = listOf(
+            " ", "L", oversized, "  Lohne  ", " $max ", "Achim", "Berlin",
+            "Bremen", "Hamburg",
+        ).joinToString("\u001F")
+
+        assertEquals(
+            listOf("Lohne", max, "Achim", "Berlin", "Bremen"),
+            restoredRecentSearchQueries(saved),
+        )
+    }
+
+    @Test fun restoredSearchHistoryHandlesMissingAndInvalidLegacyValues() {
+        assertTrue(restoredRecentSearchQueries(null).isEmpty())
+        assertTrue(restoredRecentSearchQueries("").isEmpty())
+        assertTrue(restoredRecentSearchQueries("A\u001F \u001F" + "Z".repeat(257)).isEmpty())
+        assertEquals(listOf("Lohne"), restoredRecentSearchQueries("  Lohne  "))
+    }
 }
