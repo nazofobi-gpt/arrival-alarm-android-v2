@@ -21,6 +21,9 @@ internal fun restoredRecentSearchQueries(serialized: String?): List<String> =
     serialized.orEmpty().split('\u001F')
         .map(::normalizedSearchQuery)
         .filter(::isSupportedSearchQuery)
+        // Match saveRecentSearch: one visible chip per query, ignoring case.
+        // Deduplicate before the five-item cap so legacy repeats cannot hide valid recents.
+        .distinctBy { it.lowercase() }
         .take(5)
 
 internal class SearchQueryRequestGate {

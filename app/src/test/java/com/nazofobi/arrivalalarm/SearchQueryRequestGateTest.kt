@@ -145,6 +145,18 @@ class SearchQueryRequestGateTest {
         )
     }
 
+    @Test fun restoredLegacyHistoryDeduplicatesCaseAndWhitespaceBeforeFiveItemCap() {
+        val saved = listOf(
+            " Lohne ", "lohNE", " BREMEN ", "Bremen", "Achim", "Kiel",
+            "Berlin", "Hamburg",
+        ).joinToString("\u001F")
+
+        assertEquals(
+            listOf("Lohne", "BREMEN", "Achim", "Kiel", "Berlin"),
+            restoredRecentSearchQueries(saved),
+        )
+    }
+
     @Test fun restoredSearchHistoryHandlesMissingAndInvalidLegacyValues() {
         assertTrue(restoredRecentSearchQueries(null).isEmpty())
         assertTrue(restoredRecentSearchQueries("").isEmpty())
