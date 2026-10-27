@@ -15,6 +15,14 @@ internal const val MAX_SEARCH_QUERY_LENGTH = 256
 internal fun isSupportedSearchQuery(rawQuery: String): Boolean =
     normalizedSearchQuery(rawQuery).length in 2..MAX_SEARCH_QUERY_LENGTH
 
+// Reject legacy persisted search terms that predate the query length gate.
+// Normalize first so restored UI chips and subsequent searches use the same text.
+internal fun restoredRecentSearchQueries(serialized: String?): List<String> =
+    serialized.orEmpty().split('\u001F')
+        .map(::normalizedSearchQuery)
+        .filter(::isSupportedSearchQuery)
+        .take(5)
+
 internal class SearchQueryRequestGate {
     private var lastRequestedQuery: String? = null
 
