@@ -144,10 +144,13 @@ class TransitRecentsStore(
     fun favorites(): List<String> = favorites.toList()
 
     fun recordTrip(tripId: String) {
-        if (tripId.isBlank()) return
+        val capacity = maxItems.coerceAtLeast(0)
+        // Re-selecting the newest journey (or disabling history) is a no-op:
+        // avoid rewriting identical SharedPreferences snapshots on every tap.
+        if (tripId.isBlank() || capacity == 0 || recents.firstOrNull() == tripId) return
         recents.remove(tripId)
         recents.addFirst(tripId)
-        while (recents.size > maxItems.coerceAtLeast(0)) recents.removeLast()
+        while (recents.size > capacity) recents.removeLast()
         publish()
     }
 
