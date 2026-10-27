@@ -87,6 +87,9 @@ class ArrivalProgressController(
         latestAcceptedFixEpochMillis = 0L
         val restored = state.takeIf {
             it.routeId == route.routeId && it.armed &&
+                // IDLE is only valid for disarmed state; a persisted ARMED/IDLE
+                // pair is inconsistent and must not restore as an active trip.
+                it.phase != ArrivalAlertPhase.IDLE &&
                 it.routeFingerprint == route.persistenceFingerprint &&
                 it.lastMatchedStopIndex in route.stops.indices &&
                 it.progressFraction.isFinite() && it.progressFraction in 0.0..1.0 &&
