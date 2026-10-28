@@ -17,6 +17,8 @@ internal data class RouteResultsFilter(
             // Never offer an unnamed or nonphysical itinerary as a selectable
             // arrival target; reject it before route-card limiting.
             option.id.isNotBlank() &&
+                // Malformed provider identifiers cannot become selectable journey IDs.
+                option.id.none { java.lang.Character.isISOControl(it) } &&
                 option.transfers >= 0 &&
                 option.walkingMinutes >= 0 &&
                 option.origin.latitude.isFinite() &&
