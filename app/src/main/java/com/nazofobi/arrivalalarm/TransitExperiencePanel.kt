@@ -361,7 +361,11 @@ fun TransitExperiencePanel(
                 onClick = {
                     val enable = !historyEnabled
                     if (!enable) store.clearRecents()
-                    prefs.edit().putBoolean("recent_trip_history_enabled", enable).apply()
+                    // Always erase the durable key on opt-out, even if memory was
+                    // empty or the prior asynchronous persistence callback failed.
+                    val editor = prefs.edit().putBoolean("recent_trip_history_enabled", enable)
+                    if (!enable) editor.remove("recent_trip_ids")
+                    editor.apply()
                     historyEnabled = enable
                     recentTripCount = store.recents().size
                 },
