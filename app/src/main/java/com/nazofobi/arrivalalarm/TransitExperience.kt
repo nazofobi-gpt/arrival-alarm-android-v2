@@ -131,6 +131,7 @@ class TransitRecentsStore(
     private val recents = ArrayDeque<String>().apply {
         recentTripIds.filter(String::isNotBlank).distinct().take(maxItems.coerceAtLeast(0)).forEach { addLast(it) }
     }
+    private var needsPersistenceRetry = false
 
     fun isFavorite(stopId: String): Boolean = stopId.isNotBlank() && stopId in favorites
 
@@ -147,7 +148,12 @@ class TransitRecentsStore(
         val capacity = maxItems.coerceAtLeast(0)
         // Re-selecting the newest journey (or disabling history) is a no-op:
         // avoid rewriting identical SharedPreferences snapshots on every tap.
-        if (tripId.isBlank() || capacity == 0 || recents.firstOrNull() == tripId) return
+        if (tripId.isBlank() || capacity == 0) return
+        if (recents.firstOrNull() == tripId) {
+            // The previous write may have failed even though in-memory order is correct.
+            if (needsPersistenceRetry) publish()
+            return
+        }
         recents.remove(tripId)
         recents.addFirst(tripId)
         while (recents.size > capacity) recents.removeLast()
@@ -158,7 +164,10 @@ class TransitRecentsStore(
 
     /** Clear local trip history without changing the user's saved favorite stops. */
     fun clearRecents() {
-        if (recents.isEmpty()) return
+        if (recents.isEmpty()) {
+            if (needsPersistenceRetry) publish()
+            return
+        }
         recents.clear()
         publish()
     }
@@ -166,9 +175,11 @@ class TransitRecentsStore(
     private fun publish() {
         try {
             onChanged?.invoke(favorites(), recents())
+            needsPersistenceRetry = false
         } catch (_: RuntimeException) {
-            // Persistence failures must not undo the current-session favorite
-            // or recent-trip choice. A later change may retry the full snapshot.
+            // Keep the in-memory choice and retry the full snapshot on the next
+            // explicit action, even when that action leaves the order unchanged.
+            needsPersistenceRetry = true
         }
     }
 }
