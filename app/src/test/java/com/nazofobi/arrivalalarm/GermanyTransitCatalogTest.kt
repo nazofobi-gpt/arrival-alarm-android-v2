@@ -121,6 +121,49 @@ class GermanyTransitCatalogTest {
         assertTrue(localCatalog.tripsForRoute("", "common-route").isEmpty())
     }
 
+    @Test fun providerScopedTripLookupDeduplicatesBeforeRouteOptionLimit() {
+        val route = CatalogRoute("regional", "vbb", "RE", "Berlin", emptyList())
+        val otherProviderRoute = route.copy(providerId = "mvv")
+        val first = CatalogTrip("same-trip", "vbb", route.id, "07:00")
+        val second = CatalogTrip("other-trip", "vbb", route.id, "07:30")
+        val third = CatalogTrip("third-trip", "vbb", route.id, "08:00")
+        val otherProviderTrip = first.copy(providerId = "mvv", departure = "09:00")
+        val localCatalog = GermanyTransitCatalog(
+            TestGermanyTransitFixtures.snapshot.copy(
+                routes = listOf(route, otherProviderRoute),
+                trips = listOf(
+                    first,
+                    first.copy(departure = "07:05"),
+                    first,
+                    second,
+                    second.copy(departure = "07:35"),
+                    third,
+                    otherProviderTrip,
+                ),
+            ),
+        )
+
+        // The first imported row wins; duplicates cannot hide a third alternative.
+        assertEquals(
+            listOf(first, second, third),
+            localCatalog.tripsForRoute("vbb", route.id).take(3),
+        )
+        assertEquals(listOf(otherProviderTrip), localCatalog.tripsForRoute("mvv", route.id))
+        assertTrue(localCatalog.tripsForRoute(route.id).isEmpty())
+    }
+
+    @Test fun unscopedTripLookupAlsoDeduplicatesWithinItsSingleProvider() {
+        val route = CatalogRoute("single-provider", "vbb", "S1", "Berlin", emptyList())
+        val first = CatalogTrip("trip", "vbb", route.id, "06:00")
+        val catalog = GermanyTransitCatalog(
+            TestGermanyTransitFixtures.snapshot.copy(
+                routes = listOf(route),
+                trips = listOf(first, first.copy(departure = "06:05")),
+            ),
+        )
+        assertEquals(listOf(first), catalog.tripsForRoute(route.id))
+    }
+
     @Test fun unambiguousRouteTripLookupRetainsExistingSingleProviderBehavior() {
         val one = catalog.tripsForRoute("r-hb-6")
         assertEquals(1, one.size)
