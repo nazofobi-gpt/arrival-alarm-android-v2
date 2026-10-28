@@ -203,7 +203,10 @@ class ArrivalProgressController(
         val pastCount = if (clearlyPast) previousPast + 1 else 0
 
         val nextPhase = when {
+            // Once overshoot is confirmed, keep MISSED visible through later
+            // GPS callbacks until two independent credible fixes prove arrival.
             insideCount >= 2 -> ArrivalAlertPhase.ARRIVED
+            state.phase == ArrivalAlertPhase.MISSED -> ArrivalAlertPhase.MISSED
             pastCount >= 2 -> ArrivalAlertPhase.MISSED
             targetDistance <= threshold * 1.8 -> ArrivalAlertPhase.IMMINENT
             targetDistance <= max(650.0, threshold * 4.0) -> ArrivalAlertPhase.APPROACHING
