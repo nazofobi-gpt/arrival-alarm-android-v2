@@ -1,5 +1,7 @@
 package com.nazofobi.arrivalalarm
 
+import java.text.Normalizer
+import java.util.Locale
 import kotlin.math.*
 
 data class TransitProvider(val id:String,val name:String,val coverage:String,val staticSource:String,val license:String,val sourceVersion:String,val fetchedAt:String,val realtimeCapability:Boolean,val realtimeSource:String?=null)
@@ -45,10 +47,28 @@ class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
     // Lookup once rather than scanning every route for every trip search result.
     private val routesByProviderAndId = snapshot.routes.asReversed().associateBy { it.providerId to it.id }
 
+    private val searchCombiningMarks = Regex("\\p{M}+")
+
+    private fun foldStopSearchText(text: String): String =
+        Normalizer.normalize(text, Normalizer.Form.NFD)
+            .replace(searchCombiningMarks, "")
+            .lowercase(Locale.ROOT)
+            .replace("ß", "ss")
+
     fun searchStops(query:String,limit:Int=20):List<CatalogStop> {
         val q = query.trim()
         if (q.isEmpty() || limit <= 0) return emptyList()
-        return snapshot.stops.asSequence().filter { it.name.contains(q, true) }
+        // Preserve literal matches and their order; only search accent-insensitively
+        // when the existing search would otherwise incorrectly report no stops.
+        val direct = snapshot.stops.asSequence().filter { it.name.contains(q, true) }
+            .distinctBy { it.providerId to it.id }
+            .take(limit).toList()
+        if (direct.isNotEmpty()) return direct
+        val foldedQuery = foldStopSearchText(q)
+        // A combining-mark-only query must not match every stop via contains("").
+        if (foldedQuery.isBlank()) return emptyList()
+        return snapshot.stops.asSequence()
+            .filter { foldStopSearchText(it.name).contains(foldedQuery) }
             .distinctBy { it.providerId to it.id }
             .take(limit).toList()
     }
