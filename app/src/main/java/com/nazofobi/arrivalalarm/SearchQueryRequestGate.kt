@@ -25,8 +25,13 @@ internal fun normalizedSearchQuery(rawQuery: String): String = buildString(rawQu
 
 // Bound queries before sending them to search providers or saving recents.
 internal const val MAX_SEARCH_QUERY_LENGTH = 256
-internal fun isSupportedSearchQuery(rawQuery: String): Boolean =
-    normalizedSearchQuery(rawQuery).length in 2..MAX_SEARCH_QUERY_LENGTH
+internal fun isSupportedSearchQuery(rawQuery: String): Boolean {
+    val query = normalizedSearchQuery(rawQuery)
+    // Reject invisible control characters from pasted text and legacy history:
+    // they are not meaningful stop-name evidence for provider search.
+    return query.length in 2..MAX_SEARCH_QUERY_LENGTH &&
+        query.none { java.lang.Character.isISOControl(it) }
+}
 
 // Reject legacy persisted search terms that predate the query length gate.
 // Normalize first so restored UI chips and subsequent searches use the same text.
