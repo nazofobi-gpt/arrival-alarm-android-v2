@@ -180,6 +180,9 @@
     <string name="alternate_departures">Alternatif kalkışlar: %1$d</string>
     <string name="recent_trips">Son yolculuklar: %1$d</string>
     <string name="recent_trips_clear">Son yolculuk geçmişini sil</string>
+    <string name="recent_trips_enable">Son yolculuk geçmişini kaydetmeyi aç</string>
+    <string name="recent_trips_disable">Son yolculuk geçmişini kapat ve sil</string>
+    <string name="recent_trips_privacy_note">Yolculuk geçmişi yalnızca bu cihazda, siz izin verirseniz saklanır.</string>
 
     <string name="source_gtfs_local">GTFS Deutschland yerel indeks</string>
     <string name="source_live_germany">Canlı Almanya araması</string>
