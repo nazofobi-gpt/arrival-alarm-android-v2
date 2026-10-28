@@ -278,4 +278,7 @@
     <string name="active_tracking_distance">About %1$d m to your destination</string>
     <string name="arrival_notification_title">Destination reached</string>
     <string name="arrival_notification_body">Arrival alarm completed.</string>
+    <string name="pin_line_at_stop">Pin line at this stop</string>
+    <string name="unpin_line_at_stop">Unpin line at this stop</string>
+    <string name="pin_line_local_only">Saved locally for this stop; alerts are not enabled.</string>
 </resources>

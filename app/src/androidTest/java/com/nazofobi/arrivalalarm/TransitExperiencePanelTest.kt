@@ -3,6 +3,7 @@ package com.nazofobi.arrivalalarm
 import android.content.Context
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -16,6 +17,47 @@ import org.junit.runner.RunWith
 class TransitExperiencePanelTest {
     @get:Rule
     val rule = createComposeRule()
+
+    @Test
+    fun pinningLineStoresOnlyLocalStopScopedRouteBookmark() {
+        val prefs = InstrumentationRegistry.getInstrumentation().targetContext
+            .getSharedPreferences("transit_experience", Context.MODE_PRIVATE)
+        val stopId = "pin-regression-stop-20261028"
+        val routeId = "pin-regression-route-20261028"
+        val key = pinnedStopLineKey(stopId, routeId)!!
+        prefs.edit().remove("pinned_stop_line_keys_v1").commit()
+        try {
+            rule.setContent {
+                MaterialTheme {
+                    TransitExperiencePanel(
+                        stopId = stopId,
+                        stopName = "Test stop",
+                        lineName = "RE 9",
+                        direction = "Bremen",
+                        departures = listOf(
+                            Departure("pin-trip", "RE 9", "Bremen", 2_000L, routeId = routeId),
+                        ),
+                        alerts = emptyList(),
+                        isOfflineCache = false,
+                        nowEpochSeconds = 1_000L,
+                    )
+                }
+            }
+            rule.onNodeWithTag("pin-departure-0").performClick()
+            rule.onNodeWithTag("pinned-departure-0").assertExists()
+            rule.runOnIdle {
+                assertEquals(setOf(key), prefs.getStringSet("pinned_stop_line_keys_v1", emptySet()))
+                // No alert subscription or trip-history consent is created by pinning.
+                assertEquals(null, prefs.getString("pin_alert_subscription", null))
+            }
+            rule.onNodeWithTag("pin-departure-0").performClick()
+            rule.runOnIdle {
+                assertEquals(emptySet<String>(), prefs.getStringSet("pinned_stop_line_keys_v1", emptySet()))
+            }
+        } finally {
+            prefs.edit().remove("pinned_stop_line_keys_v1").commit()
+        }
+    }
 
     @Test
     fun departureSelectionPublishesCanonicalRouteId() {
