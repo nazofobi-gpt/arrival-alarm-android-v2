@@ -81,6 +81,8 @@ class ArrivalProgressController(
 
     private var route: ArmedRoute? = null
     private var latestAcceptedFixEpochMillis: Long = 0L
+    // A timestamped and a timestamp-less fix must never form one confirmation pair.
+    private var lastAcceptedFixWasTimestamped: Boolean? = null
 
     fun arm(route: ArmedRoute) {
         // Defensive snapshot: caller-owned mutable GTFS stop lists must not
@@ -88,6 +90,7 @@ class ArrivalProgressController(
         val armedRoute = route.copy(stops = route.stops.toList())
         this.route = armedRoute
         latestAcceptedFixEpochMillis = 0L
+        lastAcceptedFixWasTimestamped = null
         val restored = state.takeIf {
             it.routeId == armedRoute.routeId && it.armed &&
                 // IDLE is only valid for disarmed state; a persisted ARMED/IDLE
@@ -126,6 +129,7 @@ class ArrivalProgressController(
     fun disarm() {
         route = null
         latestAcceptedFixEpochMillis = 0L
+        lastAcceptedFixWasTimestamped = null
         setState(ArrivalProgressState())
     }
 
@@ -153,10 +157,16 @@ class ArrivalProgressController(
 
         // A callback replay or older timestamp is not a second independent GPS fix.
         // Zero means timestamp unavailable; retain the legacy path for those providers.
-        if (fix.epochMillis > 0L) {
+        val hasTimestamp = fix.epochMillis > 0L
+        if (hasTimestamp) {
             if (fix.epochMillis <= latestAcceptedFixEpochMillis) return state
             latestAcceptedFixEpochMillis = fix.epochMillis
         }
+        // Switching evidence classes breaks a pending two-fix confirmation.
+        // Two successive untimed fixes remain supported for legacy providers.
+        val sameTimestampMode = lastAcceptedFixWasTimestamped == null ||
+            lastAcceptedFixWasTimestamped == hasTimestamp
+        lastAcceptedFixWasTimestamped = hasTimestamp
 
         val nearestIndex = activeRoute.stops.indices.minBy { index ->
             distanceMeters(fix.point, activeRoute.stops[index])
@@ -173,7 +183,9 @@ class ArrivalProgressController(
         // The debounce needs at most one preceding credible fix. A legacy or
         // corrupted persisted counter must not overflow or trigger an arrival
         // from a single new GPS callback.
-        val previousInside = state.consecutiveInsideThreshold.takeIf { it in 0..1 } ?: 0
+        val previousInside = state.consecutiveInsideThreshold.takeIf {
+            sameTimestampMode && it in 0..1
+        } ?: 0
         // A valid but unconfirmed fix must break the two-confirmation streak,
         // including fixes in the uncertainty band near the arrival threshold.
         val insideCount = if (upperDistance <= threshold) {
@@ -185,7 +197,9 @@ class ArrivalProgressController(
         // Missed-stop evidence must likewise be outside the radius with confidence.
         val clearlyPast = monotonicIndex > activeRoute.targetIndex &&
             targetDistance - fix.accuracyMeters > threshold * 1.20
-        val previousPast = state.consecutivePastTarget.takeIf { it in 0..1 } ?: 0
+        val previousPast = state.consecutivePastTarget.takeIf {
+            sameTimestampMode && it in 0..1
+        } ?: 0
         val pastCount = if (clearlyPast) previousPast + 1 else 0
 
         val nextPhase = when {
