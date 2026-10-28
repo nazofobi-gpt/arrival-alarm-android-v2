@@ -8,7 +8,20 @@ package com.nazofobi.arrivalalarm
  * Owned by the current dataState in the UI; constructing a new gate when the
  * catalog changes prevents results from an earlier feed from being reused.
  */
-internal fun normalizedSearchQuery(rawQuery: String): String = rawQuery.trim()
+internal fun normalizedSearchQuery(rawQuery: String): String = buildString(rawQuery.length) {
+    // A pasted multi-line or non-breaking-space stop name must share the same
+    // provider query, search-effect key, and recent-history entry as typed text.
+    var pendingSpace = false
+    for (character in rawQuery) {
+        if (character.isWhitespace()) {
+            if (isNotEmpty()) pendingSpace = true
+        } else {
+            if (pendingSpace) append(' ')
+            append(character)
+            pendingSpace = false
+        }
+    }
+}
 
 // Bound queries before sending them to search providers or saving recents.
 internal const val MAX_SEARCH_QUERY_LENGTH = 256
