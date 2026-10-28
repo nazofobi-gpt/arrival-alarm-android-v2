@@ -115,6 +115,40 @@ class ArrivalProgressControllerTest {
         assertEquals(1, controller.state.arrivalEventCount)
     }
 
+    @Test fun callerMutationOfTargetStopCannotRetargetAnArmedAlarm() {
+        val suppliedStops = route.stops.toMutableList()
+        val suppliedRoute = ArmedRoute("mutable-stop-target", suppliedStops, targetIndex = 2)
+        val originalFingerprint = suppliedRoute.persistenceFingerprint
+        val controller = ArrivalProgressController()
+        controller.arm(suppliedRoute)
+
+        // Transit data refresh may reuse and mutate its original list.
+        // An active alarm must keep the target geometry it was armed with.
+        suppliedStops[2] = GeoPoint(0.0, 0.0)
+        val originalTarget = route.stops[2]
+        controller.onLocation(fix(originalTarget, speed = 0.0))
+        controller.onLocation(fix(originalTarget, speed = 0.0))
+
+        assertEquals(originalFingerprint, controller.state.routeFingerprint)
+        assertEquals(ArrivalAlertPhase.ARRIVED, controller.state.phase)
+        assertEquals(1, controller.state.arrivalEventCount)
+    }
+
+    @Test fun clearingCallerOwnedStopsAfterArmCannotCrashGpsProgress() {
+        val suppliedStops = route.stops.toMutableList()
+        val suppliedRoute = ArmedRoute("mutable-empty-stops", suppliedStops, targetIndex = 2)
+        val controller = ArrivalProgressController()
+        controller.arm(suppliedRoute)
+
+        suppliedStops.clear()
+        controller.onLocation(fix(route.stops[2], speed = 0.0))
+        assertEquals(1, controller.state.consecutiveInsideThreshold)
+        controller.onLocation(fix(route.stops[2], speed = 0.0))
+
+        assertEquals(ArrivalAlertPhase.ARRIVED, controller.state.phase)
+        assertEquals(1, controller.state.arrivalEventCount)
+    }
+
     @Test fun outOfBoundsRestoredStopIndexCannotCreatePhantomArrival() {
         val poisoned = ArrivalProgressState(
             routeId = route.routeId,
