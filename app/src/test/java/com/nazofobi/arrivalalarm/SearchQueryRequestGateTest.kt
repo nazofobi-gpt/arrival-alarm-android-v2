@@ -26,6 +26,28 @@ class SearchQueryRequestGateTest {
         assertTrue(gate.shouldAutoRequest(changedKey))
     }
 
+    @Test fun pastedInternalWhitespaceUsesTheTypedSearchAndDedupKey() {
+        val typed = "Lohne Hbf"
+        val pasted = "  Lohne\\n\\t Hbf\\r "
+        assertEquals(typed, normalizedSearchQuery(pasted))
+        assertEquals(typed, normalizedSearchQuery("Lohne\\u00A0Hbf"))
+        assertTrue(isSupportedSearchQuery(pasted))
+
+        val gate = SearchQueryRequestGate()
+        gate.markRequested(typed)
+        gate.observeQuery(pasted)
+        assertFalse(gate.shouldAutoRequest(pasted))
+        gate.observeQuery("Lohne Bahnhof")
+        assertTrue(gate.shouldAutoRequest(typed))
+    }
+
+    @Test fun restoredRecentsDeduplicatePastedWhitespaceVariants() {
+        val serialized = listOf(
+            "Lohne Hbf", "Lohne\\nHbf", "Lohne\\u00A0Hbf", "Achim",
+        ).joinToString("\\u001F")
+        assertEquals(listOf("Lohne Hbf", "Achim"), restoredRecentSearchQueries(serialized))
+    }
+
     @Test fun clearingQueryAllowsSameQueryToRunAgain() {
         val gate = SearchQueryRequestGate()
         assertTrue(gate.shouldAutoRequest("Lohne"))
