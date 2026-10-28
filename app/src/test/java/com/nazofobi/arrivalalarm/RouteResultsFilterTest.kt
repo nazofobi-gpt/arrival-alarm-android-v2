@@ -227,6 +227,26 @@ class RouteResultsFilterTest {
     }
 
     @Test
+    fun routeIdsWithInvisibleControlCharactersCannotBeSelected() {
+        val malformed = listOf(
+            option("\u0000", 0),
+            option("route\u0000id", 0),
+            option("route\u0085id", 0),
+        )
+        val safe = option("valid-route", 0)
+        val source = malformed + safe
+
+        assertEquals(listOf(safe), RouteResultsFilter().apply(source))
+        assertEquals(
+            listOf(safe),
+            RouteResultsFilter(directOnly = true, fewerTransfersFirst = true)
+                .apply(source),
+        )
+        // Filtering cannot silently rewrite the provider's source itinerary.
+        assertEquals(4, source.size)
+    }
+
+    @Test
     fun exactDuplicateProviderRowsAreDisplayedOnceWithoutChangingOrder() {
         val repeated = option("first", 0)
         val candidates = listOf(repeated, repeated.copy(), option("second", 0), repeated)
