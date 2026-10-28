@@ -134,7 +134,7 @@ class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
             // A loop may revisit the alighting stop after boarding.
             val alighting = route.stopIds.lastIndexOf(destinationStop.id)
             boarding >= 0 && alighting > boarding
-        }
+        }.distinctBy { it.providerId to it.id }
     }
 
     fun nearestStops(latitude:Double,longitude:Double,limit:Int=5):List<NearbyStop> {
