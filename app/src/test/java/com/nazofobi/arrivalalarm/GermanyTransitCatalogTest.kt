@@ -176,4 +176,33 @@ class GermanyTransitCatalogTest {
         assertEquals(listOf(firstStop), deduplicated.searchStops("Central", limit = 1))
     }
 
+
+    @Test fun stopSearchFallsBackToUnicodeAccentFolding() {
+        val munich = CatalogStop("munich", "mvv", "München Hauptbahnhof", 48.14, 11.58)
+        val street = CatalogStop("street", "vbb", "Straße der Einheit", 52.52, 13.40)
+        val cologne = CatalogStop("cologne", "vrr", "Köln Hauptbahnhof", 50.94, 6.96)
+        val search = GermanyTransitCatalog(
+            TestGermanyTransitFixtures.snapshot.copy(stops = listOf(munich, street, cologne)),
+        )
+
+        assertEquals(listOf(munich), search.searchStops("Munchen"))
+        assertEquals(listOf(munich), search.searchStops("MUNCHEN", 1))
+        assertEquals(listOf(street), search.searchStops("STRASSE"))
+        assertEquals(listOf(cologne), search.searchStops("Koln"))
+        assertEquals(listOf(munich), search.searchStops("München"))
+    }
+
+    @Test fun stopSearchPreservesLiteralRankingAndRejectsEmptyFoldedQueries() {
+        val ascii = CatalogStop("ascii", "vbb", "Munchen", 52.52, 13.40)
+        val accented = CatalogStop("accented", "mvv", "München", 48.14, 11.58)
+        val search = GermanyTransitCatalog(
+            TestGermanyTransitFixtures.snapshot.copy(stops = listOf(accented, ascii, accented)),
+        )
+
+        assertEquals(listOf(ascii), search.searchStops("Munchen"))
+        assertEquals(listOf(accented), search.searchStops("München"))
+        assertTrue(search.searchStops("\u0301").isEmpty())
+        assertTrue(search.searchStops("Munchen", 0).isEmpty())
+    }
+
 }
