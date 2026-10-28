@@ -286,4 +286,7 @@
     <string name="active_tracking_distance">Hedefe yaklaşık %1$d m kaldı</string>
     <string name="arrival_notification_title">Varış noktasına ulaşıldı</string>
     <string name="arrival_notification_body">Varış alarmı tamamlandı.</string>
+    <string name="pin_line_at_stop">Bu durakta hattı sabitle</string>
+    <string name="unpin_line_at_stop">Bu durakta sabitlemeyi kaldır</string>
+    <string name="pin_line_local_only">Hat bu durakta yalnızca cihaza kaydedildi; bildirimler etkin değil.</string>
 </resources>

@@ -33,6 +33,7 @@ import java.util.Locale
 @Composable
 fun TransitExperiencePanel(
     stopId: String,
+    stopProviderId: String? = null,
     stopName: String,
     lineName: String,
     direction: String,
@@ -95,6 +96,16 @@ fun TransitExperiencePanel(
     var favorite by remember(stopId) { mutableStateOf(store.isFavorite(stopId)) }
     var selectedDeparture by remember(stopId) { mutableStateOf<Departure?>(null) }
     var recentTripCount by remember(store) { mutableStateOf(store.recents().size) }
+    // Stop-scoped route bookmarks never imply realtime alert subscriptions.
+    // Fail closed on legacy/malformed preference types, preserving the departure board.
+    var pinnedLineKeys by remember(prefs) {
+        mutableStateOf(try {
+            prefs.getStringSet("pinned_stop_line_keys_v1", emptySet())
+                .orEmpty().filter(String::isNotBlank).toSet()
+        } catch (_: ClassCastException) {
+            emptySet()
+        })
+    }
     val board = engine.departureBoard(departures, nowEpochSeconds)
     val cancelled = upcomingCancelledDepartures(departures, nowEpochSeconds)
 
@@ -254,6 +265,39 @@ fun TransitExperiencePanel(
                             .testTag("departure-$index"),
                     ) {
                         Text(stringResource(R.string.departure_select))
+                    }
+                    pinnedStopLineKey(stopId, departure.routeId, stopProviderId)?.let { pinKey ->
+                        val pinned = pinKey in pinnedLineKeys
+                        if (pinned) {
+                            Text(
+                                text = stringResource(R.string.pin_line_local_only),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.testTag("pinned-departure-$index"),
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                val updated = if (pinKey in pinnedLineKeys) {
+                                    pinnedLineKeys - pinKey
+                                } else {
+                                    pinnedLineKeys + pinKey
+                                }
+                                prefs.edit()
+                                    .putStringSet("pinned_stop_line_keys_v1", updated)
+                                    .apply()
+                                pinnedLineKeys = updated
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("pin-departure-$index"),
+                        ) {
+                            Text(stringResource(
+                                if (pinned) R.string.unpin_line_at_stop
+                                else R.string.pin_line_at_stop,
+                            ))
+                        }
                     }
                 }
             }

@@ -278,4 +278,7 @@
     <string name="active_tracking_distance">Noch etwa %1$d m bis zum Ziel</string>
     <string name="arrival_notification_title">Ziel erreicht</string>
     <string name="arrival_notification_body">Ankunftsalarm abgeschlossen.</string>
+    <string name="pin_line_at_stop">Linie an dieser Haltestelle anheften</string>
+    <string name="unpin_line_at_stop">Linie hier lösen</string>
+    <string name="pin_line_local_only">Für diese Haltestelle lokal gespeichert; keine Benachrichtigungen aktiviert.</string>
 </resources>
