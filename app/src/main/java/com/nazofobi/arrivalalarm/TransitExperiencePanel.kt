@@ -33,6 +33,7 @@ import java.util.Locale
 @Composable
 fun TransitExperiencePanel(
     stopId: String,
+    stopProviderId: String? = null,
     stopName: String,
     lineName: String,
     direction: String,
@@ -265,7 +266,7 @@ fun TransitExperiencePanel(
                     ) {
                         Text(stringResource(R.string.departure_select))
                     }
-                    pinnedStopLineKey(stopId, departure.routeId)?.let { pinKey ->
+                    pinnedStopLineKey(stopId, departure.routeId, stopProviderId)?.let { pinKey ->
                         val pinned = pinKey in pinnedLineKeys
                         if (pinned) {
                             Text(
