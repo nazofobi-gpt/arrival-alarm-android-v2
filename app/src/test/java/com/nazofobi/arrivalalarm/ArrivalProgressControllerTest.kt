@@ -381,6 +381,58 @@ class ArrivalProgressControllerTest {
         assertEquals(ArrivalAlertPhase.MISSED, controller.state.phase)
     }
 
+    @Test fun switchingTimestampModeCannotReuseAnArrivalConfirmation() {
+        val target = route.stops[route.targetIndex]
+        val timed = LocationFix(target, 10.0, 0.0, epochMillis = 1_700_000_000_000L)
+        val later = timed.copy(epochMillis = 1_700_000_000_001L)
+        val untimed = timed.copy(epochMillis = 0L)
+
+        val timedFirst = ArrivalProgressController(nowEpochMillis = { 1_700_000_002_000L })
+        timedFirst.arm(route)
+        timedFirst.onLocation(timed)
+        timedFirst.onLocation(untimed)
+        assertEquals(1, timedFirst.state.consecutiveInsideThreshold)
+        assertEquals(0, timedFirst.state.arrivalEventCount)
+        timedFirst.onLocation(untimed)
+        assertEquals(ArrivalAlertPhase.ARRIVED, timedFirst.state.phase)
+        assertEquals(1, timedFirst.state.arrivalEventCount)
+
+        val untimedFirst = ArrivalProgressController(nowEpochMillis = { 1_700_000_002_000L })
+        untimedFirst.arm(route)
+        untimedFirst.onLocation(untimed)
+        untimedFirst.onLocation(timed)
+        assertEquals(1, untimedFirst.state.consecutiveInsideThreshold)
+        assertEquals(0, untimedFirst.state.arrivalEventCount)
+        untimedFirst.onLocation(later)
+        assertEquals(ArrivalAlertPhase.ARRIVED, untimedFirst.state.phase)
+        assertEquals(1, untimedFirst.state.arrivalEventCount)
+    }
+
+    @Test fun switchingTimestampModeCannotReuseAMissedStopConfirmation() {
+        val past = route.stops.last()
+        val timed = LocationFix(past, 10.0, 0.0, epochMillis = 1_700_000_000_000L)
+        val later = timed.copy(epochMillis = 1_700_000_000_001L)
+        val untimed = timed.copy(epochMillis = 0L)
+
+        val timedFirst = ArrivalProgressController(nowEpochMillis = { 1_700_000_002_000L })
+        timedFirst.arm(route)
+        timedFirst.onLocation(timed)
+        timedFirst.onLocation(untimed)
+        assertEquals(1, timedFirst.state.consecutivePastTarget)
+        assertNotEquals(ArrivalAlertPhase.MISSED, timedFirst.state.phase)
+        timedFirst.onLocation(untimed)
+        assertEquals(ArrivalAlertPhase.MISSED, timedFirst.state.phase)
+
+        val untimedFirst = ArrivalProgressController(nowEpochMillis = { 1_700_000_002_000L })
+        untimedFirst.arm(route)
+        untimedFirst.onLocation(untimed)
+        untimedFirst.onLocation(timed)
+        assertEquals(1, untimedFirst.state.consecutivePastTarget)
+        assertNotEquals(ArrivalAlertPhase.MISSED, untimedFirst.state.phase)
+        untimedFirst.onLocation(later)
+        assertEquals(ArrivalAlertPhase.MISSED, untimedFirst.state.phase)
+    }
+
     @Test fun restoredArrivalCounterNeedsFreshFixesAfterProcessRecreation() {
         var saved: ArrivalProgressState? = null
         val store = object : ArrivalProgressStateStore {
