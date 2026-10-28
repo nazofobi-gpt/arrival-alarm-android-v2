@@ -83,15 +83,18 @@ class ArrivalProgressController(
     private var latestAcceptedFixEpochMillis: Long = 0L
 
     fun arm(route: ArmedRoute) {
-        this.route = route
+        // Defensive snapshot: caller-owned mutable GTFS stop lists must not
+        // change alarm geometry or invalidate targetIndex after arming.
+        val armedRoute = route.copy(stops = route.stops.toList())
+        this.route = armedRoute
         latestAcceptedFixEpochMillis = 0L
         val restored = state.takeIf {
-            it.routeId == route.routeId && it.armed &&
+            it.routeId == armedRoute.routeId && it.armed &&
                 // IDLE is only valid for disarmed state; a persisted ARMED/IDLE
                 // pair is inconsistent and must not restore as an active trip.
                 it.phase != ArrivalAlertPhase.IDLE &&
-                it.routeFingerprint == route.persistenceFingerprint &&
-                it.lastMatchedStopIndex in route.stops.indices &&
+                it.routeFingerprint == armedRoute.persistenceFingerprint &&
+                it.lastMatchedStopIndex in armedRoute.stops.indices &&
                 it.progressFraction.isFinite() && it.progressFraction in 0.0..1.0 &&
                 it.arrivalEventCount >= 0 &&
                 (it.phase != ArrivalAlertPhase.ARRIVED || it.arrivalEventCount > 0)
@@ -112,10 +115,10 @@ class ArrivalProgressController(
                 consecutiveInsideThreshold = 0,
                 consecutivePastTarget = 0,
             ) ?: ArrivalProgressState(
-                routeId = route.routeId,
+                routeId = armedRoute.routeId,
                 armed = true,
                 phase = ArrivalAlertPhase.TRACKING,
-                routeFingerprint = route.persistenceFingerprint,
+                routeFingerprint = armedRoute.persistenceFingerprint,
             )
         )
     }
