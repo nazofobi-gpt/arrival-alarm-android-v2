@@ -1259,6 +1259,7 @@ fun ArrivalAlarmApp(
                     TransitExperiencePanel(
                         stopId = boardStopId
                             ?: "coord:${destinationPoint.latitude},${destinationPoint.longitude}",
+                        stopProviderId = selectedStop?.providerId,
                         stopName = destinationPoint.label,
                         lineName = selectedRoute?.line.orEmpty(),
                         direction = selectedRoute?.direction.orEmpty(),
