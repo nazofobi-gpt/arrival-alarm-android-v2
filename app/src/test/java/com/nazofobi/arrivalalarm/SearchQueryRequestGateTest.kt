@@ -185,4 +185,21 @@ class SearchQueryRequestGateTest {
         assertTrue(restoredRecentSearchQueries("A\u001F \u001F" + "Z".repeat(257)).isEmpty())
         assertEquals(listOf("Lohne"), restoredRecentSearchQueries("  Lohne  "))
     }
+    @Test fun invisibleControlCharactersAreRejectedFromSearchAndRestoredHistory() {
+        val invalidStop = "Loh\u0000ne"
+        val invalidC1Stop = "Bremen\u0085Hbf"
+        assertFalse(isSupportedSearchQuery(invalidStop))
+        assertFalse(isSupportedSearchQuery(invalidC1Stop))
+
+        val gate = SearchQueryRequestGate()
+        assertFalse(gate.shouldAutoRequest(invalidStop))
+        gate.markRequested(invalidStop) // An invalid query must not poison the dedup key.
+        assertTrue(gate.shouldAutoRequest("Lohne"))
+
+        val serialized = listOf(
+            invalidStop, "Achim", invalidC1Stop, "Bremen",
+        ).joinToString("\u001F")
+        assertEquals(listOf("Achim", "Bremen"), restoredRecentSearchQueries(serialized))
+    }
+
 }
