@@ -12,6 +12,8 @@ class PinnedStopLinesTest {
         assertNull(pinnedStopLineKey("stop", null))
         assertNull(pinnedStopLineKey("stop", ""))
         assertNull(pinnedStopLineKey("stop", "  "))
+        // The journey screen uses coord:... when no concrete GTFS stop is known.
+        assertNull(pinnedStopLineKey("coord:52.664,8.237", "route"))
     }
 
     @Test fun theSameRouteAtTwoStopsDoesNotShareAPin() {
