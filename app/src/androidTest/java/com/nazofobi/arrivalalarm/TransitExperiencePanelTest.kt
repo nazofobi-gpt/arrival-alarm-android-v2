@@ -87,7 +87,10 @@ class TransitExperiencePanelTest {
         val prefs = InstrumentationRegistry.getInstrumentation().targetContext
             .getSharedPreferences("transit_experience", Context.MODE_PRIVATE)
         val previousFavorites = prefs.getStringSet("favorite_stop_ids", emptySet()).orEmpty().toSet()
-        prefs.edit().remove("recent_trip_ids").commit()
+        val previouslyEnabled = prefs.getBoolean("recent_trip_history_enabled", false)
+        val hadConsentFlag = prefs.contains("recent_trip_history_enabled")
+        prefs.edit().putBoolean("recent_trip_history_enabled", false)
+            .remove("recent_trip_ids").commit()
 
         rule.setContent {
             MaterialTheme {
@@ -107,12 +110,17 @@ class TransitExperiencePanelTest {
         }
 
         rule.onNodeWithTag("recent-trips-clear").assertDoesNotExist()
+        rule.onNodeWithTag("recent-trips-consent-toggle").performClick()
         rule.onNodeWithTag("departure-0").performClick()
         rule.onNodeWithTag("recent-trips-clear").assertExists().performClick()
         rule.onNodeWithTag("recent-trips-clear").assertDoesNotExist()
         rule.runOnIdle {
             assertEquals("", prefs.getString("recent_trip_ids", ""))
             assertEquals(previousFavorites, prefs.getStringSet("favorite_stop_ids", emptySet()).orEmpty().toSet())
+            val editor = prefs.edit()
+            if (hadConsentFlag) editor.putBoolean("recent_trip_history_enabled", previouslyEnabled)
+            else editor.remove("recent_trip_history_enabled")
+            editor.commit()
         }
     }
 

@@ -55,6 +55,14 @@ fun TransitExperiencePanel(
     val prefs = remember(context) {
         context.getSharedPreferences("transit_experience", Context.MODE_PRIVATE)
     }
+    // History is private, device-only, and never collected without opt-in.
+    var historyEnabled by remember(prefs) {
+        mutableStateOf(try {
+            prefs.getBoolean("recent_trip_history_enabled", false)
+        } catch (_: ClassCastException) {
+            false
+        })
+    }
     val store = remember(prefs) {
         // Wrong-typed legacy preferences must not crash the departure board.
         // Keep valid data in the other field, and recover malformed fields on
@@ -69,7 +77,11 @@ fun TransitExperiencePanel(
         } catch (_: ClassCastException) {
             emptyList()
         }
-        val recentTripIds = savedRecents.split('\u001F').filter { it.isNotBlank() }
+        // Legacy implicit-history data is not retained or displayed without consent.
+        if (!historyEnabled) prefs.edit().remove("recent_trip_ids").apply()
+        val recentTripIds = if (historyEnabled) {
+            savedRecents.split('\u001F').filter { it.isNotBlank() }
+        } else emptyList()
         TransitRecentsStore(
             favoriteIds = savedFavorites,
             recentTripIds = recentTripIds,
@@ -231,7 +243,7 @@ fun TransitExperiencePanel(
                     Button(
                         onClick = {
                             selectedDeparture = departure
-                            store.recordTrip(departure.tripId)
+                            if (historyEnabled) store.recordTrip(departure.tripId)
                             recentTripCount = store.recents().size
                             if (onSelectDeparture != null) onSelectDeparture(departure)
                             else departure.routeId?.let(onSelectJourney)
@@ -292,7 +304,7 @@ fun TransitExperiencePanel(
                     OutlinedButton(
                         onClick = {
                             selectedDeparture = alternative
-                            store.recordTrip(alternative.tripId)
+                            if (historyEnabled) store.recordTrip(alternative.tripId)
                             recentTripCount = store.recents().size
                             if (onSelectDeparture != null) onSelectDeparture(alternative)
                             else alternative.routeId?.let(onSelectJourney)
@@ -340,7 +352,34 @@ fun TransitExperiencePanel(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (recentTripCount > 0) {
+            Text(
+                stringResource(R.string.recent_trips_privacy_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = {
+                    val enable = !historyEnabled
+                    if (!enable) store.clearRecents()
+                    // Always erase the durable key on opt-out, even if memory was
+                    // empty or the prior asynchronous persistence callback failed.
+                    val editor = prefs.edit().putBoolean("recent_trip_history_enabled", enable)
+                    if (!enable) editor.remove("recent_trip_ids")
+                    editor.apply()
+                    historyEnabled = enable
+                    recentTripCount = store.recents().size
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("recent-trips-consent-toggle"),
+            ) {
+                Text(stringResource(
+                    if (historyEnabled) R.string.recent_trips_disable
+                    else R.string.recent_trips_enable,
+                ))
+            }
+            if (historyEnabled && recentTripCount > 0) {
                 OutlinedButton(
                     onClick = {
                         store.clearRecents()

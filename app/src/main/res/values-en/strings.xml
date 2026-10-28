@@ -161,6 +161,9 @@
     <string name="alternate_departures">Alternative departures: %1$d</string>
     <string name="recent_trips">Recent trips: %1$d</string>
     <string name="recent_trips_clear">Clear recent trip history</string>
+    <string name="recent_trips_enable">Enable local trip history</string>
+    <string name="recent_trips_disable">Disable and erase trip history</string>
+    <string name="recent_trips_privacy_note">Trip history is stored only on this device with your consent.</string>
     <string name="source_gtfs_local">GTFS Deutschland local index</string>
     <string name="source_live_germany">Germany live search</string>
     <string name="min_two_chars">Enter at least 2 characters</string>
