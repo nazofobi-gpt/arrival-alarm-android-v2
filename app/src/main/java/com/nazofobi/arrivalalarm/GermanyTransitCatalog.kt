@@ -111,7 +111,12 @@ class GermanyTransitCatalog(private val snapshot: CatalogSnapshot) {
         if (providerId.isBlank() || routeId.isBlank() ||
             (providerId to routeId) !in routesByProviderAndId
         ) return emptyList()
-        return snapshot.trips.filter { it.providerId == providerId && it.routeId == routeId }
+        // GTFS trip IDs are unique within a provider. Duplicate imported rows
+        // must not consume the first few available route options.
+        return snapshot.trips.asSequence()
+            .filter { it.providerId == providerId && it.routeId == routeId }
+            .distinctBy { it.id }
+            .toList()
     }
     /**
      * GTFS stop IDs are provider-local. A route must match the selected origin
