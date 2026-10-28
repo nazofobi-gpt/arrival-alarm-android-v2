@@ -23,13 +23,14 @@ class TransitExperiencePanelTest {
             .getSharedPreferences("transit_experience", Context.MODE_PRIVATE)
         val stopId = "pin-regression-stop-20261028"
         val routeId = "pin-regression-route-20261028"
-        val key = pinnedStopLineKey(stopId, routeId)!!
+        val key = pinnedStopLineKey(stopId, routeId, "gtfs-full")!!
         prefs.edit().remove("pinned_stop_line_keys_v1").commit()
         try {
             rule.setContent {
                 MaterialTheme {
                     TransitExperiencePanel(
                         stopId = stopId,
+                        stopProviderId = "gtfs-full",
                         stopName = "Test stop",
                         lineName = "RE 9",
                         direction = "Bremen",
