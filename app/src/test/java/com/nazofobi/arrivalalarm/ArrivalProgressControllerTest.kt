@@ -521,6 +521,58 @@ class ArrivalProgressControllerTest {
         assertEquals(0, c.state.arrivalEventCount)
     }
 
+    @Test fun missedPhaseRemainsLatchedUntilTwoCredibleArrivalFixes() {
+        val controller = ArrivalProgressController()
+        controller.arm(route)
+        val pastTarget = route.stops.last()
+        val target = route.stops[route.targetIndex]
+
+        repeat(2) { controller.onLocation(fix(pastTarget)) }
+        assertEquals(ArrivalAlertPhase.MISSED, controller.state.phase)
+        controller.onLocation(fix(pastTarget))
+        assertEquals(ArrivalAlertPhase.MISSED, controller.state.phase)
+        controller.onLocation(fix(route.stops.first()))
+        assertEquals(ArrivalAlertPhase.MISSED, controller.state.phase)
+
+        controller.onLocation(fix(target))
+        assertEquals(ArrivalAlertPhase.MISSED, controller.state.phase)
+        assertEquals(0, controller.state.arrivalEventCount)
+        controller.onLocation(fix(target))
+        assertEquals(ArrivalAlertPhase.ARRIVED, controller.state.phase)
+        assertEquals(1, controller.state.arrivalEventCount)
+        controller.onLocation(fix(pastTarget))
+        assertEquals(1, controller.state.arrivalEventCount)
+    }
+
+    @Test fun restoredMissedPhaseNeedsFreshConsecutiveArrivalEvidence() {
+        val restoredState = ArrivalProgressState(
+            routeId = route.routeId,
+            armed = true,
+            phase = ArrivalAlertPhase.MISSED,
+            lastMatchedStopIndex = route.stops.lastIndex,
+            progressFraction = 1.0,
+            routeFingerprint = route.persistenceFingerprint,
+        )
+        val store = object : ArrivalProgressStateStore {
+            override fun load(): ArrivalProgressState? = restoredState
+            override fun save(state: ArrivalProgressState) = Unit
+        }
+        val controller = ArrivalProgressController(store)
+        controller.arm(route)
+        val target = route.stops[route.targetIndex]
+        assertEquals(ArrivalAlertPhase.MISSED, controller.state.phase)
+        controller.onLocation(fix(target))
+        assertEquals(ArrivalAlertPhase.MISSED, controller.state.phase)
+        controller.onLocation(fix(target, accuracy = 500.0))
+        assertEquals(ArrivalAlertPhase.MISSED, controller.state.phase)
+        assertEquals(0, controller.state.consecutiveInsideThreshold)
+        controller.onLocation(fix(target))
+        assertEquals(ArrivalAlertPhase.MISSED, controller.state.phase)
+        controller.onLocation(fix(target))
+        assertEquals(ArrivalAlertPhase.ARRIVED, controller.state.phase)
+        assertEquals(1, controller.state.arrivalEventCount)
+    }
+
     @Test fun poorAccuracyInterruptsArrivalDebounceWithoutFalseAlarm() {
         val c = ArrivalProgressController()
         c.arm(route)
