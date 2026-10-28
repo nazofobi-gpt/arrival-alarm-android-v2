@@ -51,6 +51,10 @@ enum class TransitFunctionHealth { UNVERIFIED, WORKING, DEGRADED, FAILED }
 internal fun hasUsableNationwideIndex(state: NationwideDataState): Boolean =
     state is NationwideDataState.Ready && state.stopCount > 0
 
+/** A zero-stop Ready snapshot is unusable and must offer recovery, not a dead end. */
+internal fun shouldOfferNationwideDataRetry(state: NationwideDataState): Boolean =
+    state !is NationwideDataState.Loading && !hasUsableNationwideIndex(state)
+
 data class SettingsReadinessState(
     val themeMode: ArrivalThemeMode,
     val locationPermission: Boolean,
@@ -366,9 +370,7 @@ fun SettingsReadinessPanel(
                 Text(stringResource(R.string.readiness_open_app_settings))
             }
 
-            if (state.dataState !is NationwideDataState.Ready &&
-                state.dataState !is NationwideDataState.Loading
-            ) {
+            if (shouldOfferNationwideDataRetry(state.dataState)) {
                 Button(
                     onClick = onRetryData,
                     modifier = Modifier
