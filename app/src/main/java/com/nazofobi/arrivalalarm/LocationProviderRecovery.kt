@@ -18,12 +18,12 @@ internal object LocationProviderRecovery {
         hasRuntimeGrants: Boolean,
         locationServicesEnabled: Boolean,
     ): Decision =
-        if (!locationServicesEnabled) Decision.STOP
-        else decide(
+        decide(
             journeyPhase = journeyPhase,
             locationRegistered = false,
             registeredProviderEnabled = false,
             hasRuntimeGrants = hasRuntimeGrants,
+            locationServicesEnabled = locationServicesEnabled,
         )
 
     fun decide(
@@ -31,8 +31,9 @@ internal object LocationProviderRecovery {
         locationRegistered: Boolean,
         registeredProviderEnabled: Boolean,
         hasRuntimeGrants: Boolean,
+        locationServicesEnabled: Boolean,
     ): Decision = when {
-        journeyPhase != JourneyPhase.ARMED || !hasRuntimeGrants -> Decision.STOP
+        !locationServicesEnabled || journeyPhase != JourneyPhase.ARMED || !hasRuntimeGrants -> Decision.STOP
         locationRegistered && registeredProviderEnabled -> Decision.KEEP
         else -> Decision.RETRY
     }
