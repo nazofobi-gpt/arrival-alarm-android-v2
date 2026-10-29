@@ -59,6 +59,11 @@ internal fun shouldOfferNationwideDataRetry(state: NationwideDataState): Boolean
 internal fun hasVerifiedConnectorConnection(configured: Boolean, connected: Boolean): Boolean =
     configured && connected
 
+/** Bluetooth permission is optional for device-speaker guidance, but required for a BT route. */
+internal fun hasUsableGuidanceAudioPath(state: SettingsReadinessState): Boolean =
+    state.guidancePermissionState != GuidancePermissionState.DENIED &&
+        (state.audioRoute != GuidanceAudioRoute.BLUETOOTH_CONNECTED || state.bluetoothPermission)
+
 data class SettingsReadinessState(
     val themeMode: ArrivalThemeMode,
     val locationPermission: Boolean,
@@ -79,8 +84,7 @@ data class SettingsReadinessState(
             !locationPermission || !notificationPermission || !locationServicesAvailable ->
                 ReadinessLevel.BLOCKED
             !hasUsableNationwideIndex(dataState) ||
-                guidancePermissionState != GuidancePermissionState.GRANTED ||
-                !bluetoothPermission ||
+                !hasUsableGuidanceAudioPath(this) ||
                 searchHealth != TransitFunctionHealth.WORKING ||
                 routingHealth != TransitFunctionHealth.WORKING -> ReadinessLevel.ACTION_NEEDED
             else -> ReadinessLevel.READY
@@ -291,12 +295,10 @@ fun SettingsReadinessPanel(
             ReadinessRow(
                 label = stringResource(R.string.readiness_audio),
                 value = guidanceReadinessText(state),
-                level = when {
-                    state.guidancePermissionState == GuidancePermissionState.DENIED ->
-                        ReadinessLevel.ACTION_NEEDED
-                    state.guidancePermissionState == GuidancePermissionState.PARTIAL ||
-                        !state.bluetoothPermission -> ReadinessLevel.ACTION_NEEDED
-                    else -> ReadinessLevel.READY
+                level = if (hasUsableGuidanceAudioPath(state)) {
+                    ReadinessLevel.READY
+                } else {
+                    ReadinessLevel.ACTION_NEEDED
                 },
                 testTag = "readiness-audio",
             )
