@@ -185,4 +185,61 @@ class SearchQueryRequestGateTest {
         assertTrue(restoredRecentSearchQueries("A\u001F \u001F" + "Z".repeat(257)).isEmpty())
         assertEquals(listOf("Lohne"), restoredRecentSearchQueries("  Lohne  "))
     }
+    @Test fun invisibleControlCharactersAreRejectedFromSearchAndRestoredHistory() {
+        val invalidStop = "Loh\u0000ne"
+        val invalidC1Stop = "Bremen\u0085Hbf"
+        assertFalse(isSupportedSearchQuery(invalidStop))
+        assertFalse(isSupportedSearchQuery(invalidC1Stop))
+
+        val gate = SearchQueryRequestGate()
+        assertFalse(gate.shouldAutoRequest(invalidStop))
+        gate.markRequested(invalidStop) // An invalid query must not poison the dedup key.
+        assertTrue(gate.shouldAutoRequest("Lohne"))
+
+        val serialized = listOf(
+            invalidStop, "Achim", invalidC1Stop, "Bremen",
+        ).joinToString("\u001F")
+        assertEquals(listOf("Achim", "Bremen"), restoredRecentSearchQueries(serialized))
+    }
+
+
+    @Test fun invisibleUnicodeSearchFormatControlsAreRejectedWithoutPoisoningRetryOrRecents() {
+        val invalidCharacters = listOf(
+            '\u061C', '\u200B', '\u200E', '\u200F',
+            '\u202A', '\u202C', '\u202E', '\u2060',
+            '\u2066', '\u2069', '\uFEFF',
+        )
+        val gate = SearchQueryRequestGate()
+        for (character in invalidCharacters) {
+            val invalid = "Loh${character}ne"
+            assertFalse("Unexpectedly allowed U+${character.code.toString(16)}", isSupportedSearchQuery(invalid))
+            assertFalse(gate.shouldAutoRequest(invalid))
+            gate.markRequested(invalid)
+            assertTrue(gate.shouldAutoRequest("Lohne"))
+        }
+
+        val history = listOf("Loh\u202Ene", "Achim", "Bremen\u200B", "Lohne")
+            .joinToString("\u001F")
+        assertEquals(listOf("Achim", "Lohne"), restoredRecentSearchQueries(history))
+        assertTrue(isSupportedSearchQuery("Lohne Hbf"))
+        assertTrue(isSupportedSearchQuery("Bremen"))
+    }
+
+    @Test fun otherInvisibleUnicodeFormatCharactersCannotReachSearchOrRecents() {
+        // These Unicode Cf characters were not covered by the previous fixed deny-list.
+        val invisibleFormatCharacters = listOf('\u180E', '\u200C', '\u200D', '\u2061', '\u2064')
+        val gate = SearchQueryRequestGate()
+        for (character in invisibleFormatCharacters) {
+            val query = "Loh${character}ne"
+            assertFalse("Allowed invisible U+${character.code.toString(16)}", isSupportedSearchQuery(query))
+            assertFalse(gate.shouldAutoRequest(query))
+            gate.markRequested(query)
+            assertTrue(gate.shouldAutoRequest("Lohne"))
+        }
+
+        val history = listOf("Loh\u200Cne", "Achim", "Bre\u2061men", "Lohne")
+            .joinToString("\u001F")
+        assertEquals(listOf("Achim", "Lohne"), restoredRecentSearchQueries(history))
+        assertTrue(isSupportedSearchQuery("Lohne Hbf"))
+    }
 }

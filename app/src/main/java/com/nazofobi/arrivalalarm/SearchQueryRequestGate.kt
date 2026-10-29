@@ -25,8 +25,24 @@ internal fun normalizedSearchQuery(rawQuery: String): String = buildString(rawQu
 
 // Bound queries before sending them to search providers or saving recents.
 internal const val MAX_SEARCH_QUERY_LENGTH = 256
-internal fun isSupportedSearchQuery(rawQuery: String): Boolean =
-    normalizedSearchQuery(rawQuery).length in 2..MAX_SEARCH_QUERY_LENGTH
+internal fun isSupportedSearchQuery(rawQuery: String): Boolean {
+    val query = normalizedSearchQuery(rawQuery)
+    // Reject invisible control characters from pasted text and legacy history:
+    // they are not meaningful stop-name evidence for provider search.
+    return query.length in 2..MAX_SEARCH_QUERY_LENGTH &&
+        query.none { character ->
+            java.lang.Character.isISOControl(character) ||
+                // Unicode Cf characters (including ZWNJ/ZWJ) are invisible query modifiers.
+                java.lang.Character.getType(character) == java.lang.Character.FORMAT.toInt() ||
+                character == '\u061C' || // Arabic letter mark (bidirectional formatting).
+                character == '\u200B' || // Zero-width space.
+                character == '\u200E' || character == '\u200F' || // Directional marks.
+                character in '\u202A'..'\u202E' || // Directional embeddings/overrides.
+                character == '\u2060' || // Word joiner.
+                character in '\u2066'..'\u2069' || // Bidirectional isolates.
+                character == '\uFEFF' // Invisible byte-order mark in pasted text.
+        }
+}
 
 // Reject legacy persisted search terms that predate the query length gate.
 // Normalize first so restored UI chips and subsequent searches use the same text.

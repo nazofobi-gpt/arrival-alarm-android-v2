@@ -120,4 +120,23 @@ class NearbyStationCanonicalizerTest {
         assertEquals("a", result.single().stop.id)
         assertEquals(listOf("b"), result.single().childStops.map { it.id })
     }
+    @Test
+    fun equalDistanceNameAndStopIdAcrossProvidersSortIndependentlyOfInputOrder() {
+        val vbb = CatalogStop("shared-stop", "vbb", "Hauptbahnhof", 52.52, 13.405)
+        val mvv = CatalogStop("shared-stop", "mvv", "Hauptbahnhof", 52.52, 13.405)
+        val vbbFirst = NearbyStationCanonicalizer.canonicalize(
+            52.52, 13.405,
+            listOf(NearbyStop(vbb, 0), NearbyStop(mvv, 0)),
+            limit = 5,
+        )
+        val mvvFirst = NearbyStationCanonicalizer.canonicalize(
+            52.52, 13.405,
+            listOf(NearbyStop(mvv, 0), NearbyStop(vbb, 0)),
+            limit = 5,
+        )
+
+        assertEquals(listOf("mvv", "vbb"), vbbFirst.map { it.stop.providerId })
+        assertEquals(vbbFirst, mvvFirst)
+    }
+
 }

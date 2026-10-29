@@ -70,7 +70,30 @@ class LocaleResourceContractTest(unittest.TestCase):
             any("invalid format for arrival" in error for error in validate(self.root))
         )
 
-    def test_matching_duplicate_flags_across_locales_still_fail(self):
+    def test_java_formatter_rejects_invalid_decimal_flags(self):
+        # Reproduced with Java 21 String.format(Locale.ROOT, token, 123).
+        for token in ("%#d", "%1$#8d", "%+ d", "%-05d"):
+            with self.subTest(token=token):
+                with self.assertRaisesRegex(ValueError, "invalid decimal format flags"):
+                    placeholders(token)
+
+    def test_java_formatter_decimal_padding_requires_width(self):
+        for token in ("%0d", "%1$0d", "%-d", "%0.2d"):
+            with self.subTest(token=token):
+                with self.assertRaisesRegex(ValueError, "missing decimal format width"):
+                    placeholders(token)
+
+    def test_java_formatter_valid_decimal_flags_remain_supported(self):
+        for token in ("%d", "%1$05d", "%-5d", "%+d", "% d", "%,d", "%(d"):
+            with self.subTest(token=token):
+                self.assertEqual({(1, "d"): 1}, dict(placeholders(token)))
+        self.assertEqual({(1, "x"): 1}, dict(placeholders("%#x")))
+
+    def test_invalid_decimal_flags_fail_even_when_all_locales_agree(self):
+        for locale in ("values", "values-de", "values-en"):
+            self.write(locale, '<string name="arrival">Arrives in %1$#8d minutes</string>')
+        self.assertTrue(any("invalid format for arrival" in error for error in validate(self.root)))
+
         for locale in ("values", "values-de", "values-en"):
             self.write(locale, '<string name="arrival">Stop %1$--10s</string>')
         self.assertTrue(

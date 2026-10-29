@@ -59,6 +59,19 @@ def placeholders(value: str) -> Counter[tuple[int, str]]:
             # Allow width, left alignment and reuse as normal for %s/%S.
             if set(flags).intersection("#+0 ,("):
                 raise ValueError(f"invalid string format flags for %{conversion} at offset {start}")
+        if conversion == "d":
+            # Java Formatter rejects '#' with decimal integers, conflicting
+            # sign flags, and alignment/zero-padding without a field width.
+            # A parity-only locale check would miss these if every locale agrees.
+            if "#" in flags or ("+" in flags and " " in flags) or ("-" in flags and "0" in flags):
+                raise ValueError(f"invalid decimal format flags at offset {start}")
+            if "-" in flags or "0" in flags:
+                token_suffix = match.group(0)[1:]
+                if match.group(1):
+                    token_suffix = token_suffix[len(match.group(1)) + 1:]
+                width_and_precision = token_suffix[len(flags):-len(conversion)]
+                if not width_and_precision or not width_and_precision[0].isdigit():
+                    raise ValueError(f"missing decimal format width at offset {start}")
         cursor = match.end()
         if conversion in ("%", "n"):
             # Java Formatter accepts no reused argument for %% or %n.

@@ -6,7 +6,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.IntentFilter
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
@@ -62,6 +64,14 @@ class ActiveJourneyService : Service(), LocationListener {
     private lateinit var locationManager: LocationManager
     private val completionExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var providerReceiverRegistered = false
+    private val providerChangeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == LocationManager.PROVIDERS_CHANGED_ACTION) {
+                retryProviderRegistration()
+            }
+        }
+    }
     private val stateMonitor = object : Runnable {
         override fun run() {
             // Keep an armed journey alive when a provider disappears; stop only
@@ -121,15 +131,49 @@ class ActiveJourneyService : Service(), LocationListener {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (!ActiveJourneyPermissions.hasRequired(this) || enabledLocationProvider() == null) {
+        // Android requires system-wide location services ON for a location FGS.
+        // With that prerequisite met, a transiently missing enabled provider
+        // must not kill the already-armed journey before recovery can run.
+        // New journey initiation still uses the stricter hasRequired() UI gate.
+        if (LocationProviderRecovery.startupDecision(
+                journeyPhase = graph.controller.state.phase,
+                hasRuntimeGrants = ActiveJourneyPermissions.hasRuntimeGrants(this),
+                locationServicesEnabled = runCatching {
+                    isDeviceLocationEnabledForTracking(locationManager)
+                }.getOrDefault(false),
+            ) == LocationProviderRecovery.Decision.STOP
+        ) {
             stopSelf()
             return START_NOT_STICKY
         }
 
-        if (!startLocationForeground() || !registerLocationUpdates()) {
+        if (!startLocationForeground()) {
             stopSelf()
             return START_NOT_STICKY
         }
+        // Provider registration can fail after the initial availability check.
+        // Keep the armed foreground journey alive and retry through the existing
+        // state monitor, but stop promptly if grants are revoked or the trip ends.
+        val registered = registerLocationUpdates()
+        val providerEnabled = registeredProvider?.let { provider ->
+            runCatching { locationManager.isProviderEnabled(provider) }.getOrDefault(false)
+        } == true
+        when (LocationProviderRecovery.decide(
+            graph.controller.state.phase,
+            registered,
+            providerEnabled,
+            ActiveJourneyPermissions.hasRuntimeGrants(this),
+        )) {
+            LocationProviderRecovery.Decision.STOP -> {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            LocationProviderRecovery.Decision.RETRY -> {
+                updateTrackingNotification(null, accuracyDegraded = true)
+            }
+            LocationProviderRecovery.Decision.KEEP -> Unit
+        }
+        observeProviderChanges()
         mainHandler.removeCallbacks(stateMonitor)
         mainHandler.postDelayed(stateMonitor, STATE_MONITOR_MILLIS)
         return START_NOT_STICKY
@@ -169,7 +213,9 @@ class ActiveJourneyService : Service(), LocationListener {
         }
     }
 
-    override fun onProviderEnabled(provider: String) = Unit
+    override fun onProviderEnabled(provider: String) {
+        retryProviderRegistration()
+    }
 
     override fun onProviderDisabled(provider: String) {
         if (provider != registeredProvider) return
@@ -184,10 +230,51 @@ class ActiveJourneyService : Service(), LocationListener {
 
     override fun onDestroy() {
         mainHandler.removeCallbacks(stateMonitor)
+        if (providerReceiverRegistered) {
+            runCatching { unregisterReceiver(providerChangeReceiver) }
+            providerReceiverRegistered = false
+        }
         removeLocationUpdates()
         graph.connectorRuntimeCoordinator.release(SERVICE_RUNTIME_OWNER)
         completionExecutor.shutdownNow()
         super.onDestroy()
+    }
+
+    private fun retryProviderRegistration() {
+        if (arrivalHandled) return
+        val registeredProviderEnabled = registeredProvider?.let { provider ->
+            runCatching { locationManager.isProviderEnabled(provider) }.getOrDefault(false)
+        } == true
+        when (LocationProviderRecovery.decide(
+            graph.controller.state.phase,
+            locationRegistered,
+            registeredProviderEnabled,
+            ActiveJourneyPermissions.hasRuntimeGrants(this),
+        )) {
+            LocationProviderRecovery.Decision.STOP -> stopSelf()
+            LocationProviderRecovery.Decision.KEEP -> Unit
+            LocationProviderRecovery.Decision.RETRY -> {
+                removeLocationUpdates()
+                registerLocationUpdates()
+                // Provider availability is not evidence of a fresh, accurate GPS fix.
+                updateTrackingNotification(null, accuracyDegraded = true)
+            }
+        }
+    }
+
+    private fun observeProviderChanges() {
+        if (providerReceiverRegistered) return
+        val filter = IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION)
+        providerReceiverRegistered = runCatching {
+            if (Build.VERSION.SDK_INT >= 33) {
+                registerReceiver(providerChangeReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("DEPRECATION")
+                registerReceiver(providerChangeReceiver, filter)
+            }
+            true
+        }.getOrDefault(false)
+        // The existing five-second monitor remains the fallback.
     }
 
     private fun registerLocationUpdates(): Boolean {
