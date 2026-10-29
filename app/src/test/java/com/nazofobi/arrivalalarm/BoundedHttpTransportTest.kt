@@ -283,6 +283,33 @@ class BoundedHttpTransportTest {
     }
 
     @Test
+    fun retryAfterHttpDateRejectsNonGmtZonesWithoutShiftingDeadline() {
+        // IMF-fixdate requires GMT. A permissive Java parser otherwise accepts
+        // PST as a date eight hours later, incorrectly hitting the max delay.
+        val responses = ArrayDeque(listOf(
+            HttpTransportResponse(503, mapOf("Retry-After" to listOf("Sun, 06 Nov 1994 08:49:39 PST"))),
+            HttpTransportResponse(503, mapOf("Retry-After" to listOf("Sun, 06 Nov 1994 08:49:39 UTC"))),
+            HttpTransportResponse(503, mapOf("Retry-After" to listOf("Sun, 06 Nov 1994 08:49:39 GMT"))),
+            HttpTransportResponse(200),
+        ))
+        val delays = mutableListOf<Long>()
+        val transport = BoundedHttpTransport(
+            exchange = HttpExchange { _, _, _ -> responses.removeFirst() },
+            clock = HttpTransportClock { 784111777000L },
+            sleeper = HttpTransportSleeper { delays += it },
+            maxRetries = 3,
+            baseBackoffMs = 125L,
+            maxRetryDelayMs = 4_000L,
+        )
+
+        val result = transport.execute(HttpTransportRequest("https://example.invalid")) as HttpTransportResult.Response
+
+        assertEquals(200, result.response.status)
+        assertEquals(4, result.attempts)
+        assertEquals(listOf(125L, 250L, 2_000L), delays)
+    }
+
+    @Test
     fun networkFailuresAreBoundedWithoutRealSleep() {
         var calls = 0
         val delays = mutableListOf<Long>()

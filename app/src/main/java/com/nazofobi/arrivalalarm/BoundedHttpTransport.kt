@@ -204,6 +204,9 @@ class BoundedHttpTransport(
             val seconds = value.toLongOrNull() ?: return Long.MAX_VALUE
             return saturatingMultiply(seconds, 1_000L)
         }
+        // IMF-fixdate uses the literal GMT zone. SimpleDateFormat also accepts
+        // PST/UTC/numeric offsets, which can incorrectly shift retry deadlines.
+        if (!value.endsWith(" GMT")) return null
         return try {
             val formatter = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US).apply {
                 isLenient = false
