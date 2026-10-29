@@ -283,6 +283,34 @@ class BoundedHttpTransportTest {
     }
 
     @Test
+    fun retryAfterHttpDateRequiresCanonicalImfFixdateFields() {
+        // Java's lenient=false parser still accepts one-digit fields and
+        // case-insensitive months, none of which are an IMF-fixdate.
+        val responses = ArrayDeque(listOf(
+            HttpTransportResponse(503, mapOf("Retry-After" to listOf("Sun, 6 Nov 1994 08:49:39 GMT"))),
+            HttpTransportResponse(503, mapOf("Retry-After" to listOf("Sun, 06 Nov 1994 8:49:39 GMT"))),
+            HttpTransportResponse(503, mapOf("Retry-After" to listOf("Sun, 06 nov 1994 08:49:39 GMT"))),
+            HttpTransportResponse(503, mapOf("Retry-After" to listOf("Sun, 06 Nov 1994 08:49:39 GMT"))),
+            HttpTransportResponse(200),
+        ))
+        val delays = mutableListOf<Long>()
+        val transport = BoundedHttpTransport(
+            exchange = HttpExchange { _, _, _ -> responses.removeFirst() },
+            clock = HttpTransportClock { 784111777000L },
+            sleeper = HttpTransportSleeper { delays += it },
+            maxRetries = 4,
+            baseBackoffMs = 100L,
+            maxRetryDelayMs = 4_000L,
+        )
+
+        val result = transport.execute(HttpTransportRequest("https://example.invalid")) as HttpTransportResult.Response
+
+        assertEquals(200, result.response.status)
+        assertEquals(5, result.attempts)
+        assertEquals(listOf(100L, 200L, 400L, 2_000L), delays)
+    }
+
+    @Test
     fun retryAfterHttpDateRejectsNonGmtZonesWithoutShiftingDeadline() {
         // IMF-fixdate requires GMT. A permissive Java parser otherwise accepts
         // PST as a date eight hours later, incorrectly hitting the max delay.
