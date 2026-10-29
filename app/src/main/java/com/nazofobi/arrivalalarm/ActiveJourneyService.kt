@@ -236,11 +236,9 @@ class ActiveJourneyService : Service(), LocationListener {
 
     override fun onProviderDisabled(provider: String) {
         if (provider != registeredProvider) return
-        removeLocationUpdates()
-        if (graph.controller.state.phase != JourneyPhase.ARMED) return
-        // Switch to another enabled provider if possible, otherwise retry later.
-        registerLocationUpdates()
-        updateTrackingNotification(null, accuracyDegraded = true)
+        // Enforce the same fail-closed permission/system-location policy as the
+        // broadcast receiver and the periodic monitor before re-registering.
+        retryProviderRegistration()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

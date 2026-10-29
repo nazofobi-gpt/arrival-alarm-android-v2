@@ -140,4 +140,39 @@ class LocationProviderRecoveryTest {
             ),
         )
     }
+
+    @Test fun providerDisabledCallbackMustEnforceSystemLocationAndRuntimeGrantSafety() {
+        // A provider-disabled callback may arrive before the five-second monitor.
+        // Re-registration is safe only when the system-wide switch and grants remain valid.
+        assertEquals(
+            LocationProviderRecovery.Decision.DISARM_AND_STOP,
+            LocationProviderRecovery.decide(
+                journeyPhase = JourneyPhase.ARMED,
+                locationRegistered = true,
+                registeredProviderEnabled = false,
+                hasRuntimeGrants = true,
+                locationServicesEnabled = false,
+            ),
+        )
+        assertEquals(
+            LocationProviderRecovery.Decision.DISARM_AND_STOP,
+            LocationProviderRecovery.decide(
+                journeyPhase = JourneyPhase.ARMED,
+                locationRegistered = true,
+                registeredProviderEnabled = false,
+                hasRuntimeGrants = false,
+                locationServicesEnabled = true,
+            ),
+        )
+        assertEquals(
+            LocationProviderRecovery.Decision.RETRY,
+            LocationProviderRecovery.decide(
+                journeyPhase = JourneyPhase.ARMED,
+                locationRegistered = true,
+                registeredProviderEnabled = false,
+                hasRuntimeGrants = true,
+                locationServicesEnabled = true,
+            ),
+        )
+    }
 }
