@@ -131,7 +131,18 @@ class ActiveJourneyService : Service(), LocationListener {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (!ActiveJourneyPermissions.hasRequired(this) || enabledLocationProvider() == null) {
+        // Android requires system-wide location services ON for a location FGS.
+        // With that prerequisite met, a transiently missing enabled provider
+        // must not kill the already-armed journey before recovery can run.
+        // New journey initiation still uses the stricter hasRequired() UI gate.
+        if (LocationProviderRecovery.startupDecision(
+                journeyPhase = graph.controller.state.phase,
+                hasRuntimeGrants = ActiveJourneyPermissions.hasRuntimeGrants(this),
+                locationServicesEnabled = runCatching {
+                    isDeviceLocationEnabledForTracking(locationManager)
+                }.getOrDefault(false),
+            ) == LocationProviderRecovery.Decision.STOP
+        ) {
             stopSelf()
             return START_NOT_STICKY
         }
