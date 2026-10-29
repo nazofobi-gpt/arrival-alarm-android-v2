@@ -126,9 +126,31 @@ class ActiveJourneyService : Service(), LocationListener {
             return START_NOT_STICKY
         }
 
-        if (!startLocationForeground() || !registerLocationUpdates()) {
+        if (!startLocationForeground()) {
             stopSelf()
             return START_NOT_STICKY
+        }
+        // Provider registration can fail after the initial availability check.
+        // Keep the armed foreground journey alive and retry through the existing
+        // state monitor, but stop promptly if grants are revoked or the trip ends.
+        val registered = registerLocationUpdates()
+        val providerEnabled = registeredProvider?.let { provider ->
+            runCatching { locationManager.isProviderEnabled(provider) }.getOrDefault(false)
+        } == true
+        when (LocationProviderRecovery.decide(
+            graph.controller.state.phase,
+            registered,
+            providerEnabled,
+            ActiveJourneyPermissions.hasRuntimeGrants(this),
+        )) {
+            LocationProviderRecovery.Decision.STOP -> {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            LocationProviderRecovery.Decision.RETRY -> {
+                updateTrackingNotification(null, accuracyDegraded = true)
+            }
+            LocationProviderRecovery.Decision.KEEP -> Unit
         }
         mainHandler.removeCallbacks(stateMonitor)
         mainHandler.postDelayed(stateMonitor, STATE_MONITOR_MILLIS)
