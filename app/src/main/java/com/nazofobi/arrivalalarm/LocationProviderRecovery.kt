@@ -3,10 +3,11 @@ package com.nazofobi.arrivalalarm
 /**
  * Decides whether armed foreground tracking should survive a temporary loss
  * of the Android location provider. A missing provider is recoverable, but
- * revoked runtime grants or a finished journey must not keep the service alive.
+ * revoked runtime grants must disarm the alarm before stopping the service;
+ * a finished journey only needs the service to stop.
  */
 internal object LocationProviderRecovery {
-    enum class Decision { STOP, KEEP, RETRY }
+    enum class Decision { STOP, DISARM_AND_STOP, KEEP, RETRY }
 
     /**
      * Android location FGS startup requires the system-wide location switch ON.
@@ -33,7 +34,8 @@ internal object LocationProviderRecovery {
         hasRuntimeGrants: Boolean,
         locationServicesEnabled: Boolean,
     ): Decision = when {
-        !locationServicesEnabled || journeyPhase != JourneyPhase.ARMED || !hasRuntimeGrants -> Decision.STOP
+        journeyPhase != JourneyPhase.ARMED -> Decision.STOP
+        !locationServicesEnabled || !hasRuntimeGrants -> Decision.DISARM_AND_STOP
         locationRegistered && registeredProviderEnabled -> Decision.KEEP
         else -> Decision.RETRY
     }
