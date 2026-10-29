@@ -204,9 +204,9 @@ class BoundedHttpTransport(
             val seconds = value.toLongOrNull() ?: return Long.MAX_VALUE
             return saturatingMultiply(seconds, 1_000L)
         }
-        // IMF-fixdate uses the literal GMT zone. SimpleDateFormat also accepts
-        // PST/UTC/numeric offsets, which can incorrectly shift retry deadlines.
-        if (!value.endsWith(" GMT")) return null
+        // HTTP IMF-fixdate has fixed field widths, English case and literal GMT.
+        // SimpleDateFormat accepts noncanonical days, hours and month case.
+        if (!IMF_FIXDATE.matches(value)) return null
         return try {
             val formatter = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US).apply {
                 isLenient = false
@@ -268,6 +268,9 @@ class BoundedHttpTransport(
     }
 
     companion object {
+        private val IMF_FIXDATE = Regex(
+            """(Mon|Tue|Wed|Thu|Fri|Sat|Sun), (0[1-9]|[12][0-9]|3[01]) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) [0-9]{4} ([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9] GMT"""
+        )
         const val DEFAULT_CONNECT_TIMEOUT_MS = 6_000
         const val DEFAULT_READ_TIMEOUT_MS = 8_000
     }
