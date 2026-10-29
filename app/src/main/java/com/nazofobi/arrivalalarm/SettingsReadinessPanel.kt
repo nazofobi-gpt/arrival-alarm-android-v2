@@ -55,6 +55,10 @@ internal fun hasUsableNationwideIndex(state: NationwideDataState): Boolean =
 internal fun shouldOfferNationwideDataRetry(state: NationwideDataState): Boolean =
     state !is NationwideDataState.Loading && !hasUsableNationwideIndex(state)
 
+/** Stale session flags cannot establish a connection after its configuration is removed. */
+internal fun hasVerifiedConnectorConnection(configured: Boolean, connected: Boolean): Boolean =
+    configured && connected
+
 data class SettingsReadinessState(
     val themeMode: ArrivalThemeMode,
     val locationPermission: Boolean,
@@ -143,6 +147,7 @@ fun SettingsReadinessPanel(
     modifier: Modifier = Modifier,
 ) {
     var themeOptionsExpanded by rememberSaveable { mutableStateOf(false) }
+    val connectorReady = hasVerifiedConnectorConnection(state.connectorConfigured, state.connectorConnected)
 
     Card(
         modifier = modifier
@@ -310,13 +315,17 @@ fun SettingsReadinessPanel(
                 value = when {
                     !state.connectorConfigured ->
                         stringResource(R.string.readiness_connector_optional_unconfigured)
-                    state.connectorConnected ->
+                    connectorReady ->
                         stringResource(R.string.readiness_connector_connected)
                     else -> stringResource(R.string.readiness_connector_optional_disconnected)
                 },
-                level = if (state.connectorConnected) ReadinessLevel.READY else ReadinessLevel.INFO,
+                level = if (connectorReady) ReadinessLevel.READY else ReadinessLevel.INFO,
                 testTag = "connector-setup-status",
-                supporting = connectorStatus,
+                supporting = if (state.connectorConfigured) {
+                    connectorStatus
+                } else {
+                    stringResource(R.string.connector_url_missing)
+                },
             )
 
             OutlinedButton(
@@ -389,13 +398,13 @@ fun SettingsReadinessPanel(
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
                     .testTag(
-                        if (state.connectorConnected) "connector-disconnect" else "connector-connect"
+                        if (connectorReady) "connector-disconnect" else "connector-connect"
                     ),
             ) {
                 Text(
                     when {
                         connectorBusy -> stringResource(R.string.processing)
-                        state.connectorConnected -> stringResource(R.string.disconnect_chatgpt)
+                        connectorReady -> stringResource(R.string.disconnect_chatgpt)
                         else -> stringResource(R.string.connect_chatgpt)
                     }
                 )
