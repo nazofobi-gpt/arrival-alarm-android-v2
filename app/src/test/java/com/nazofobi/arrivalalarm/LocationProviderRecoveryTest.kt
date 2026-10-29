@@ -4,6 +4,21 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class LocationProviderRecoveryTest {
+    @Test fun rejectedForegroundPromotionDisarmsOnlyArmedJourney() {
+        assertEquals(
+            LocationProviderRecovery.Decision.DISARM_AND_STOP,
+            LocationProviderRecovery.foregroundStartFailureDecision(JourneyPhase.ARMED),
+        )
+        assertEquals(
+            LocationProviderRecovery.Decision.STOP,
+            LocationProviderRecovery.foregroundStartFailureDecision(JourneyPhase.ARRIVED),
+        )
+        assertEquals(
+            LocationProviderRecovery.Decision.STOP,
+            LocationProviderRecovery.foregroundStartFailureDecision(JourneyPhase.EMPTY),
+        )
+    }
+
     @Test fun armedStartupRetriesWhenLocationIsOnButProviderIsUnavailable() {
         // The Android-wide location switch is ON, but no enabled provider exists yet.
         assertEquals(
