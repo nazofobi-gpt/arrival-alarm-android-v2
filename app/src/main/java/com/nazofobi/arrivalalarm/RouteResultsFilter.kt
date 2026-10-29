@@ -17,6 +17,13 @@ internal data class RouteResultsFilter(
             // Never offer an unnamed or nonphysical itinerary as a selectable
             // arrival target; reject it before route-card limiting.
             option.id.isNotBlank() &&
+                // Opaque provider IDs with control or invisible format characters
+                // are unsafe selection keys (e.g. bidi overrides/zero-width IDs).
+                // Keep ordinary Unicode route IDs intact.
+                option.id.none { ch ->
+                    Character.isISOControl(ch) ||
+                        Character.getType(ch) == Character.FORMAT.toInt()
+                } &&
                 option.transfers >= 0 &&
                 option.walkingMinutes >= 0 &&
                 option.origin.latitude.isFinite() &&
