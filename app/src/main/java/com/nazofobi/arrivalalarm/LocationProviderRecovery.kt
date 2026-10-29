@@ -8,9 +8,18 @@ package com.nazofobi.arrivalalarm
 internal object LocationProviderRecovery {
     enum class Decision { STOP, KEEP, RETRY }
 
-    /** An already-armed journey may enter foreground recovery before GPS comes back. */
-    fun startupDecision(journeyPhase: JourneyPhase, hasRuntimeGrants: Boolean): Decision =
-        decide(
+    /**
+     * Android location FGS startup requires the system-wide location switch ON.
+     * With that prerequisite met, a transiently missing enabled provider can be
+     * retried while an already-armed journey stays in foreground.
+     */
+    fun startupDecision(
+        journeyPhase: JourneyPhase,
+        hasRuntimeGrants: Boolean,
+        locationServicesEnabled: Boolean,
+    ): Decision =
+        if (!locationServicesEnabled) Decision.STOP
+        else decide(
             journeyPhase = journeyPhase,
             locationRegistered = false,
             registeredProviderEnabled = false,
