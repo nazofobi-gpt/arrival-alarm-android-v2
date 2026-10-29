@@ -27,6 +27,10 @@ internal object LocationProviderRecovery {
             locationServicesEnabled = locationServicesEnabled,
         )
 
+    /** If Android refuses foreground startup, an armed alarm has no active tracker. */
+    fun foregroundStartFailureDecision(journeyPhase: JourneyPhase): Decision =
+        if (journeyPhase == JourneyPhase.ARMED) Decision.DISARM_AND_STOP else Decision.STOP
+
     fun decide(
         journeyPhase: JourneyPhase,
         locationRegistered: Boolean,
