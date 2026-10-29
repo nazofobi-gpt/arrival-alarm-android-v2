@@ -137,10 +137,10 @@ class GtfsDeutschlandLoaderTest {
 
     @Test fun malformedUtf8InAnyRequiredCoreTableFailsClosed() {
         val core = linkedMapOf(
-            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\\ns1,Lohne,52.66,8.23\\n",
-            "routes.txt" to "route_id,route_short_name\\nr1,RE\\n",
-            "trips.txt" to "route_id,trip_id\\nr1,t1\\n",
-            "stop_times.txt" to "trip_id,stop_id,stop_sequence\\nt1,s1,1\\n",
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,stop_id,stop_sequence\nt1,s1,1\n",
         )
         for (corruptTable in core.keys) {
             val bytes = ByteArrayOutputStream()
