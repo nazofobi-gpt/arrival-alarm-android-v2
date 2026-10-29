@@ -197,16 +197,12 @@ class BoundedHttpTransport(
     }
 
     private fun parseRetryAfterMs(value: String): Long? {
-        value.toLongOrNull()?.let { seconds ->
-            if (seconds < 0) return null
-            return saturatingMultiply(seconds, 1_000L)
-        }
-        // An overflowed but otherwise valid delta-seconds is still a server
-        // backoff request. Treat it as saturated, then apply maxRetryDelayMs;
-        // falling back to exponential backoff would retry a rate-limited
-        // provider almost immediately.
+        // RFC delta-seconds is 1*DIGIT. Kotlin's toLongOrNull accepts a
+        // leading '+', which is not legal here; invalid values use backoff.
+        // Keep overflowed all-digit values saturated to honor rate limits.
         if (value.isNotEmpty() && value.all { it in '0'..'9' }) {
-            return Long.MAX_VALUE
+            val seconds = value.toLongOrNull() ?: return Long.MAX_VALUE
+            return saturatingMultiply(seconds, 1_000L)
         }
         return try {
             val formatter = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US).apply {
