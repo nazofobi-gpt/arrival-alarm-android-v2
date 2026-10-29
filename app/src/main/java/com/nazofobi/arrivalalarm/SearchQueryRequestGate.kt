@@ -30,7 +30,16 @@ internal fun isSupportedSearchQuery(rawQuery: String): Boolean {
     // Reject invisible control characters from pasted text and legacy history:
     // they are not meaningful stop-name evidence for provider search.
     return query.length in 2..MAX_SEARCH_QUERY_LENGTH &&
-        query.none { java.lang.Character.isISOControl(it) }
+        query.none { character ->
+            java.lang.Character.isISOControl(character) ||
+                character == '\u061C' || // Arabic letter mark (bidirectional formatting).
+                character == '\u200B' || // Zero-width space.
+                character == '\u200E' || character == '\u200F' || // Directional marks.
+                character in '\u202A'..'\u202E' || // Directional embeddings/overrides.
+                character == '\u2060' || // Word joiner.
+                character in '\u2066'..'\u2069' || // Bidirectional isolates.
+                character == '\uFEFF' // Invisible byte-order mark in pasted text.
+        }
 }
 
 // Reject legacy persisted search terms that predate the query length gate.
