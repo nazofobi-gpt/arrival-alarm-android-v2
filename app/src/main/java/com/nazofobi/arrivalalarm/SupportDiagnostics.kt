@@ -32,6 +32,13 @@ internal object SupportDiagnostics {
             else -> "over_7d"
         }
         fun flag(value: Boolean): String = if (value) "yes" else "no"
+        // Only emit reviewed coarse states; never include query, route or provider detail.
+        fun functionProbe(health: TransitFunctionHealth): String = when (health) {
+            TransitFunctionHealth.UNVERIFIED -> "not_measured"
+            TransitFunctionHealth.WORKING -> "working"
+            TransitFunctionHealth.DEGRADED -> "degraded"
+            TransitFunctionHealth.FAILED -> "failed"
+        }
 
         return listOf(
             "schema=VARIS_SUPPORT_DIAGNOSTICS_V1",
@@ -48,8 +55,8 @@ internal object SupportDiagnostics {
             "transit_index=${dataStatus}",
             "installed_stop_count=${ready?.stopCount?.coerceAtLeast(0) ?: "unknown"}",
             "feed_age_bucket=${feedAge}",
-            "search_probe=not_measured",
-            "routing_probe=not_measured",
+            "search_probe=${functionProbe(state.searchHealth)}",
+            "routing_probe=${functionProbe(state.routingHealth)}",
             "realtime_probe=not_measured",
         ).joinToString(separator = "\n", postfix = "\n")
     }
