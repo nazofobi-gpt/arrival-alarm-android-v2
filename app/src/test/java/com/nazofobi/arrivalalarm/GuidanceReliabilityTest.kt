@@ -77,6 +77,8 @@ class GuidanceReliabilityTest {
         assertEquals(VoiceChoice.DESIRED_LOCALE, TtsVoicePolicy.choose(true, true))
         assertEquals(VoiceChoice.DEVICE_FALLBACK, TtsVoicePolicy.choose(false, true))
         assertEquals(VoiceChoice.UNAVAILABLE, TtsVoicePolicy.choose(false, false))
+        // An unavailable speech engine must fail closed even if a locale was previously supported.
+        assertEquals(VoiceChoice.UNAVAILABLE, TtsVoicePolicy.choose(true, false))
     }
 
     @Test fun guidanceLanguageProvidesLocalizedDestinationTextAndStableLocaleFallback() {
