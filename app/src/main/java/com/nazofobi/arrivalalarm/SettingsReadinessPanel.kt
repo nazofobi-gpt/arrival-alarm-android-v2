@@ -321,7 +321,11 @@ fun SettingsReadinessPanel(
                 },
                 level = if (connectorReady) ReadinessLevel.READY else ReadinessLevel.INFO,
                 testTag = "connector-setup-status",
-                supporting = connectorStatus,
+                supporting = if (state.connectorConfigured) {
+                    connectorStatus
+                } else {
+                    stringResource(R.string.connector_url_missing)
+                },
             )
 
             OutlinedButton(
