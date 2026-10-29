@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -59,6 +60,12 @@ class MainActivityTest {
         rule.onNodeWithTag("first-run-onboarding")
             .performScrollTo()
             .assertIsDisplayed()
+        rule.onNodeWithTag("onboarding-brand-icon")
+            .assertIsDisplayed()
+        assertTrue(
+            "Onboarding brand must use a vector drawable instead of emoji text",
+            rule.onAllNodesWithText("🚆").fetchSemanticsNodes().isEmpty(),
+        )
         rule.onNodeWithTag("onboarding-privacy-note")
             .performScrollTo()
             .assertIsDisplayed()
