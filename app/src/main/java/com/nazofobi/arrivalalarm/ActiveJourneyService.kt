@@ -93,6 +93,10 @@ class ActiveJourneyService : Service(), LocationListener {
                         stopSelf()
                         return
                     }
+                    LocationProviderRecovery.Decision.DISARM_AND_STOP -> {
+                        disarmAndStopAfterLocationLoss()
+                        return
+                    }
                     LocationProviderRecovery.Decision.RETRY -> {
                         removeLocationUpdates()
                         registerLocationUpdates()
@@ -138,14 +142,21 @@ class ActiveJourneyService : Service(), LocationListener {
         // With that prerequisite met, a transiently missing enabled provider
         // must not kill the already-armed journey before recovery can run.
         // New journey initiation still uses the stricter hasRequired() UI gate.
-        if (LocationProviderRecovery.startupDecision(
-                journeyPhase = graph.controller.state.phase,
-                hasRuntimeGrants = ActiveJourneyPermissions.hasRuntimeGrants(this),
-                locationServicesEnabled = locationServicesEnabled(),
-            ) == LocationProviderRecovery.Decision.STOP
-        ) {
-            stopSelf()
-            return START_NOT_STICKY
+        when (LocationProviderRecovery.startupDecision(
+            journeyPhase = graph.controller.state.phase,
+            hasRuntimeGrants = ActiveJourneyPermissions.hasRuntimeGrants(this),
+            locationServicesEnabled = locationServicesEnabled(),
+        )) {
+            LocationProviderRecovery.Decision.STOP -> {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            LocationProviderRecovery.Decision.DISARM_AND_STOP -> {
+                disarmAndStopAfterLocationLoss()
+                return START_NOT_STICKY
+            }
+            LocationProviderRecovery.Decision.KEEP,
+            LocationProviderRecovery.Decision.RETRY -> Unit
         }
 
         if (!startLocationForeground()) {
@@ -168,6 +179,10 @@ class ActiveJourneyService : Service(), LocationListener {
         )) {
             LocationProviderRecovery.Decision.STOP -> {
                 stopSelf()
+                return START_NOT_STICKY
+            }
+            LocationProviderRecovery.Decision.DISARM_AND_STOP -> {
+                disarmAndStopAfterLocationLoss()
                 return START_NOT_STICKY
             }
             LocationProviderRecovery.Decision.RETRY -> {
@@ -242,6 +257,14 @@ class ActiveJourneyService : Service(), LocationListener {
         super.onDestroy()
     }
 
+    private fun disarmAndStopAfterLocationLoss() {
+        // Stopping the FGS alone would leave a silently armed alarm with no location updates.
+        if (graph.controller.state.phase == JourneyPhase.ARMED) {
+            graph.connectorPort.cancelArrivalAlarm()
+        }
+        stopSelf()
+    }
+
     private fun retryProviderRegistration() {
         if (arrivalHandled) return
         val registeredProviderEnabled = registeredProvider?.let { provider ->
@@ -255,6 +278,7 @@ class ActiveJourneyService : Service(), LocationListener {
             locationServicesEnabled(),
         )) {
             LocationProviderRecovery.Decision.STOP -> stopSelf()
+            LocationProviderRecovery.Decision.DISARM_AND_STOP -> disarmAndStopAfterLocationLoss()
             LocationProviderRecovery.Decision.KEEP -> Unit
             LocationProviderRecovery.Decision.RETRY -> {
                 removeLocationUpdates()
