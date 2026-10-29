@@ -88,6 +88,7 @@
     <string name="route_at_most_one_transfer_filter">Maximal 1 Umstieg</string>
     <string name="route_at_most_one_transfer_empty">Keine Verbindung mit höchstens einem Umstieg. Filter für weitere Optionen ausschalten.</string>
     <string name="route_fewer_transfers_filter">Weniger Umstiege zuerst</string>
+    <string name="route_shorter_walking_filter">Weniger Fußweg zuerst</string>
     <string name="route_direct_only_empty">Keine Direktverbindung verfügbar. Filter ausschalten, um Umsteigeverbindungen zu sehen.</string>
     <string name="route_results_title">Verbindungen</string>
     <string name="route_points_format">%1$s → %2$s</string>

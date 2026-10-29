@@ -75,6 +75,60 @@ class RouteResultsFilterTest {
         )
     }
 
+
+    @Test
+    fun shorterWalkingFirstSortsActualRoutesWithStableEqualWalkTies() {
+        val options = listOf(
+            option("long-walk", 0).copy(walkingMinutes = 18),
+            option("first-short", 1).copy(walkingMinutes = 2),
+            option("second-short", 0).copy(walkingMinutes = 2),
+            option("middle", 2).copy(walkingMinutes = 6),
+        )
+        assertEquals(
+            listOf("first-short", "second-short", "middle", "long-walk"),
+            RouteResultsFilter(shorterWalkingFirst = true).apply(options).map { it.id },
+        )
+        assertEquals("long-walk", options.first().id)
+    }
+
+    @Test
+    fun walkingTieBreakDoesNotOverrideFewerTransfersPreference() {
+        val options = listOf(
+            option("one-long", 1).copy(walkingMinutes = 19),
+            option("direct-long", 0).copy(walkingMinutes = 8),
+            option("direct-short", 0).copy(walkingMinutes = 3),
+            option("one-short", 1).copy(walkingMinutes = 1),
+        )
+        assertEquals(
+            listOf("direct-short", "direct-long", "one-short", "one-long"),
+            RouteResultsFilter(
+                fewerTransfersFirst = true,
+                shorterWalkingFirst = true,
+            ).apply(options).map { it.id },
+        )
+        assertEquals(
+            listOf("direct-short", "direct-long"),
+            RouteResultsFilter(
+                directOnly = true,
+                shorterWalkingFirst = true,
+                maxTransfers = 1,
+            ).apply(options).map { it.id },
+        )
+    }
+
+    @Test
+    fun shorterWalkingFirstStillRejectsNegativeWalkingOrTransferEvidence() {
+        val options = listOf(
+            option("negative-walk", 0).copy(walkingMinutes = -1),
+            option("negative-transfers", -1).copy(walkingMinutes = 0),
+            option("valid", 1).copy(walkingMinutes = 9),
+        )
+        assertEquals(
+            listOf("valid"),
+            RouteResultsFilter(shorterWalkingFirst = true).apply(options).map { it.id },
+        )
+    }
+
     @Test
     fun unfilteredRoutesAlsoRejectNegativeTransferCountsWithoutMutatingSource() {
         val candidates = listOf(

@@ -9,6 +9,7 @@ package com.nazofobi.arrivalalarm
 internal data class RouteResultsFilter(
     val directOnly: Boolean = false,
     val fewerTransfersFirst: Boolean = false,
+    val shorterWalkingFirst: Boolean = false,
     val maxTransfers: Int? = null,
 ) {
     fun apply(options: List<RouteOption>): List<RouteOption> {
@@ -47,10 +48,14 @@ internal data class RouteResultsFilter(
                 (limit == null || option.transfers <= limit)
         }
         // Keep provider order for equally convenient routes.
-        return if (fewerTransfersFirst) {
-            filtered.sortedBy { it.transfers }
-        } else {
-            filtered
+        return when {
+            // With both options enabled, transfers remain the primary preference;
+            // walking time breaks ties without overriding the user's transfer choice.
+            fewerTransfersFirst && shorterWalkingFirst ->
+                filtered.sortedWith(compareBy<RouteOption> { it.transfers }.thenBy { it.walkingMinutes })
+            fewerTransfersFirst -> filtered.sortedBy { it.transfers }
+            shorterWalkingFirst -> filtered.sortedBy { it.walkingMinutes }
+            else -> filtered
         }
     }
 }

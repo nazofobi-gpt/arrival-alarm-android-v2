@@ -71,6 +71,39 @@ class ArrivalUiPreferencesInstrumentedTest {
         }
     }
 
+
+    @Test
+    fun shorterWalkingPreferencePersistsIndependentlyAndMalformedTypeFailsClosed() {
+        val prefs = context.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+        withRestoredPreferenceKeys(
+            prefs,
+            ArrivalUiPreferences.KEY_SHORTER_WALKING_FIRST,
+            ArrivalUiPreferences.KEY_FEWER_TRANSFERS_FIRST,
+        ) {
+            prefs.edit()
+                .remove(ArrivalUiPreferences.KEY_SHORTER_WALKING_FIRST)
+                .remove(ArrivalUiPreferences.KEY_FEWER_TRANSFERS_FIRST)
+                .commit()
+            val initial = ArrivalUiPreferences(context)
+            assertFalse(initial.loadShorterWalkingFirst())
+
+            initial.saveFewerTransfersFirst(true)
+            initial.saveShorterWalkingFirst(true)
+            val restored = ArrivalUiPreferences(context)
+            assertTrue(restored.loadShorterWalkingFirst())
+            assertTrue(restored.loadFewerTransfersFirst())
+
+            restored.saveShorterWalkingFirst(false)
+            assertFalse(ArrivalUiPreferences(context).loadShorterWalkingFirst())
+            assertTrue(ArrivalUiPreferences(context).loadFewerTransfersFirst())
+
+            prefs.edit()
+                .putString(ArrivalUiPreferences.KEY_SHORTER_WALKING_FIRST, "invalid")
+                .commit()
+            assertFalse(ArrivalUiPreferences(context).loadShorterWalkingFirst())
+        }
+    }
+
     private inline fun withRestoredPreferenceKeys(
         prefs: SharedPreferences,
         vararg keys: String,
