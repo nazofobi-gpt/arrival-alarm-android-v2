@@ -204,6 +204,37 @@ class TransitProviderContractTest {
     }
 
     @Test
+    fun impossibleMatchingOrNearlyMatchingUtcClocksCannotClaimFreshData() {
+        val lastDisplayable = MAX_DISPLAYABLE_DEPARTURE_EPOCH_SECONDS
+        val invalidPairs = listOf(
+            (lastDisplayable + 1L) to (lastDisplayable + 1L),
+            Long.MAX_VALUE to Long.MAX_VALUE,
+            (Long.MAX_VALUE - 1L) to Long.MAX_VALUE,
+            lastDisplayable to (lastDisplayable + 1L),
+            (lastDisplayable + 1L) to lastDisplayable,
+        )
+        for ((deviceEpoch, providerEpoch) in invalidPairs) {
+            val freshness = TransitProviderFreshness.evaluate(
+                updatedAtEpochSeconds = providerEpoch,
+                nowEpochSeconds = deviceEpoch,
+                staleAfterSeconds = 60L,
+            )
+            assertEquals(TransitProviderFreshnessState.UNKNOWN, freshness.state)
+            assertNull(freshness.ageSeconds)
+            assertNull(freshness.updatedAtEpochSeconds)
+        }
+
+        // The valid upper boundary remains inclusive.
+        val atBoundary = TransitProviderFreshness.evaluate(
+            updatedAtEpochSeconds = lastDisplayable,
+            nowEpochSeconds = lastDisplayable,
+            staleAfterSeconds = 0L,
+        )
+        assertEquals(TransitProviderFreshnessState.FRESH, atBoundary.state)
+        assertEquals(0L, atBoundary.ageSeconds)
+    }
+
+    @Test
     fun farFutureProviderTimestampCannotMasqueradeAsFresh() {
         val invalid = TransitProviderFreshness.evaluate(
             updatedAtEpochSeconds = Long.MAX_VALUE,
