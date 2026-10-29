@@ -140,6 +140,36 @@ class SupportDiagnosticsTest {
         assertTrue(absent.contains("connector_connected=no\n"))
     }
 
+    @Test fun measuredSearchAndRoutingHealthUsesOnlyReviewedCoarseStates() {
+        val data = state(NationwideDataState.Idle)
+        val states = listOf(
+            TransitFunctionHealth.UNVERIFIED to "not_measured",
+            TransitFunctionHealth.WORKING to "working",
+            TransitFunctionHealth.DEGRADED to "degraded",
+            TransitFunctionHealth.FAILED to "failed",
+        )
+        for ((health, expected) in states) {
+            val report = SupportDiagnostics.render(
+                data.copy(searchHealth = health, routingHealth = health),
+                1_700_000_000L,
+            )
+            assertTrue(report.contains("search_probe=${expected}\\n".replace("\\n", "\n")))
+            assertTrue(report.contains("routing_probe=${expected}\\n".replace("\\n", "\n")))
+        }
+
+        // A healthy route probe must not mask a failed search (or vice versa).
+        val divergent = SupportDiagnostics.render(
+            data.copy(
+                searchHealth = TransitFunctionHealth.FAILED,
+                routingHealth = TransitFunctionHealth.WORKING,
+            ),
+            1_700_000_000L,
+        )
+        assertTrue(divergent.contains("search_probe=failed\\n".replace("\\n", "\n")))
+        assertTrue(divergent.contains("routing_probe=working\\n".replace("\\n", "\n")))
+        assertFalse(divergent.contains("provider_error_detail"))
+    }
+
     @Test fun outputHasOnlyFixedReviewedKeys() {
         val report = SupportDiagnostics.render(state(NationwideDataState.Idle), 100L)
         val keys = report.trim().lines().map { it.substringBefore('=') }.toSet()
