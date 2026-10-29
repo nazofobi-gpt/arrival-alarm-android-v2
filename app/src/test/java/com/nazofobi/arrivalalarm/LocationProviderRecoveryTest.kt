@@ -57,11 +57,11 @@ class LocationProviderRecoveryTest {
     @Test fun providerDropoutKeepsArmedJourneyReadyForRetry() {
         assertEquals(
             LocationProviderRecovery.Decision.RETRY,
-            LocationProviderRecovery.decide(JourneyPhase.ARMED, locationRegistered = false, registeredProviderEnabled = false, hasRuntimeGrants = true),
+            LocationProviderRecovery.decide(JourneyPhase.ARMED, locationRegistered = false, registeredProviderEnabled = false, hasRuntimeGrants = true, locationServicesEnabled = true),
         )
         assertEquals(
             LocationProviderRecovery.Decision.KEEP,
-            LocationProviderRecovery.decide(JourneyPhase.ARMED, locationRegistered = true, registeredProviderEnabled = true, hasRuntimeGrants = true),
+            LocationProviderRecovery.decide(JourneyPhase.ARMED, locationRegistered = true, registeredProviderEnabled = true, hasRuntimeGrants = true, locationServicesEnabled = true),
         )
     }
 
@@ -73,6 +73,7 @@ class LocationProviderRecoveryTest {
                 locationRegistered = true,
                 registeredProviderEnabled = false,
                 hasRuntimeGrants = true,
+                locationServicesEnabled = true,
             ),
         )
     }
@@ -80,15 +81,50 @@ class LocationProviderRecoveryTest {
     @Test fun permissionRevocationOrFinishedJourneyStopsTracking() {
         assertEquals(
             LocationProviderRecovery.Decision.STOP,
-            LocationProviderRecovery.decide(JourneyPhase.ARMED, locationRegistered = false, registeredProviderEnabled = false, hasRuntimeGrants = false),
+            LocationProviderRecovery.decide(JourneyPhase.ARMED, locationRegistered = false, registeredProviderEnabled = false, hasRuntimeGrants = false, locationServicesEnabled = true),
         )
         assertEquals(
             LocationProviderRecovery.Decision.STOP,
-            LocationProviderRecovery.decide(JourneyPhase.ARRIVED, locationRegistered = true, registeredProviderEnabled = true, hasRuntimeGrants = true),
+            LocationProviderRecovery.decide(JourneyPhase.ARRIVED, locationRegistered = true, registeredProviderEnabled = true, hasRuntimeGrants = true, locationServicesEnabled = true),
         )
         assertEquals(
             LocationProviderRecovery.Decision.STOP,
-            LocationProviderRecovery.decide(JourneyPhase.EMPTY, locationRegistered = false, registeredProviderEnabled = false, hasRuntimeGrants = true),
+            LocationProviderRecovery.decide(JourneyPhase.EMPTY, locationRegistered = false, registeredProviderEnabled = false, hasRuntimeGrants = true, locationServicesEnabled = true),
+        )
+    }
+    @Test fun systemWideLocationOffStopsArmedTrackingEvenWhenProviderStillReportsEnabled() {
+        assertEquals(
+            LocationProviderRecovery.Decision.STOP,
+            LocationProviderRecovery.decide(
+                journeyPhase = JourneyPhase.ARMED,
+                locationRegistered = true,
+                registeredProviderEnabled = true,
+                hasRuntimeGrants = true,
+                locationServicesEnabled = false,
+            ),
+        )
+    }
+
+    @Test fun providerDropoutRetriesOnlyWhileSystemLocationRemainsEnabled() {
+        assertEquals(
+            LocationProviderRecovery.Decision.RETRY,
+            LocationProviderRecovery.decide(
+                journeyPhase = JourneyPhase.ARMED,
+                locationRegistered = false,
+                registeredProviderEnabled = false,
+                hasRuntimeGrants = true,
+                locationServicesEnabled = true,
+            ),
+        )
+        assertEquals(
+            LocationProviderRecovery.Decision.STOP,
+            LocationProviderRecovery.decide(
+                journeyPhase = JourneyPhase.ARMED,
+                locationRegistered = false,
+                registeredProviderEnabled = false,
+                hasRuntimeGrants = true,
+                locationServicesEnabled = false,
+            ),
         )
     }
 }
