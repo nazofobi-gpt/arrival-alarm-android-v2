@@ -164,19 +164,19 @@ class GtfsDeutschlandLoaderTest {
 
     @Test fun malformedStopSequenceCannotPublishJourney() {
         val invalidTimes = linkedMapOf(
-            "missing" to "t1,s1,\\n" + "t1,s2,2\\n",
-            "nonnumeric" to "t1,s1,abc\\n" + "t1,s2,2\\n",
-            "negative" to "t1,s1,-1\\n" + "t1,s2,2\\n",
-            "duplicate" to "t1,s1,2\\n" + "t1,s2,2\\n",
-            "overflow" to "t1,s1,2147483648\\n" + "t1,s2,2\\n",
+            "missing" to "t1,s1,\n" + "t1,s2,2\n",
+            "nonnumeric" to "t1,s1,abc\n" + "t1,s2,2\n",
+            "negative" to "t1,s1,-1\n" + "t1,s2,2\n",
+            "duplicate" to "t1,s1,2\n" + "t1,s2,2\n",
+            "overflow" to "t1,s1,2147483648\n" + "t1,s2,2\n",
         )
         for ((case, times) in invalidTimes) {
             val snapshot = GtfsDeutschlandLoader.parse(
                 zipOf(
-                    "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\\ns1,Lohne,52.66,8.23\\ns2,Bremen,53.07,8.80\\n",
-                    "routes.txt" to "route_id,route_short_name\\nr1,RE\\n",
-                    "trips.txt" to "route_id,trip_id\\nr1,t1\\n",
-                    "stop_times.txt" to ("trip_id,stop_id,stop_sequence\\n" + times),
+                    "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\ns2,Bremen,53.07,8.80\n",
+                    "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+                    "trips.txt" to "route_id,trip_id\nr1,t1\n",
+                    "stop_times.txt" to ("trip_id,stop_id,stop_sequence\n" + times),
                 ),
                 "sequence-$case",
                 "2026-10-29",
@@ -189,13 +189,13 @@ class GtfsDeutschlandLoaderTest {
     @Test fun sparseAndZeroBasedSequencesAreOrderedNumerically() {
         val snapshot = GtfsDeutschlandLoader.parse(
             zipOf(
-                "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\\ns1,Lohne,52.66,8.23\\ns2,Bremen,53.07,8.80\\ns3,Hamburg,53.55,10.00\\n",
-                "routes.txt" to "route_id,route_short_name\\nr1,RE\\n",
-                "trips.txt" to "route_id,trip_id\\nr1,sparse\\nr1,zero\\n",
+                "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\ns2,Bremen,53.07,8.80\ns3,Hamburg,53.55,10.00\n",
+                "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+                "trips.txt" to "route_id,trip_id\nr1,sparse\nr1,zero\n",
                 "stop_times.txt" to (
-                    "trip_id,stop_id,stop_sequence\\n" +
-                    "sparse,s3,40\\nsparse,s1,10\\nsparse,s2,20\\n" +
-                    "zero,s2,2\\nzero,s1,0\\n"
+                    "trip_id,stop_id,stop_sequence\n" +
+                    "sparse,s3,40\nsparse,s1,10\nsparse,s2,20\n" +
+                    "zero,s2,2\nzero,s1,0\n"
                 ),
             ),
             "valid-sequence",
