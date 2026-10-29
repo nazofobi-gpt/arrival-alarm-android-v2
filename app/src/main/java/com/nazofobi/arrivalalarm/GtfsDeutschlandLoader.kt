@@ -73,7 +73,16 @@ object GtfsDeutschlandLoader {
         val stopTimesByTrip=files["stop_times.txt"].orEmpty().groupBy{it["trip_id"].orEmpty()}; val catalogRoutes=mutableListOf<CatalogRoute>(); val catalogTrips=mutableListOf<CatalogTrip>()
         trips.forEach { trip ->
             val tripId=trip["trip_id"]?:return@forEach; val routeId=trip["route_id"]?:return@forEach; val routeRow=routesById[routeId]?:return@forEach
-            val ordered=stopTimesByTrip[tripId].orEmpty().sortedBy{it["stop_sequence"]?.toIntOrNull()?:Int.MAX_VALUE}; if(ordered.size<2)return@forEach
+            // A malformed or repeated stop_sequence cannot define a reliable trip order.
+            // GTFS sequences need not be consecutive (or start at one).
+            val numberedStops = stopTimesByTrip[tripId].orEmpty().map { row ->
+                row["stop_sequence"]?.toIntOrNull() to row
+            }
+            if (numberedStops.size < 2 ||
+                numberedStops.any { (sequence, _) -> sequence == null || sequence < 0 } ||
+                numberedStops.map { it.first }.toSet().size != numberedStops.size
+            ) return@forEach
+            val ordered = numberedStops.sortedBy { it.first }.map { it.second }
             val stopIds=ordered.mapNotNull{it["stop_id"]}
             // Never publish a journey with an invalid or absent stop reference.
             if (stopIds.size != ordered.size || stopIds.any { it.isBlank() || it !in validStopIds }) return@forEach
