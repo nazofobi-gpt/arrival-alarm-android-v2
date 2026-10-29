@@ -8,8 +8,8 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
 import android.content.IntentFilter
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.Location
@@ -35,9 +35,14 @@ object ActiveJourneyPermissions {
     }
 
     fun hasRequired(context: Context): Boolean {
-        val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val hasProvider = runCatching { manager.getProviders(true).isNotEmpty() }.getOrDefault(false)
-        return hasRuntimeGrants(context) && hasProvider
+        if (!hasRuntimeGrants(context)) return false
+        val manager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+            ?: return false
+        if (!isDeviceLocationEnabledForTracking(manager)) return false
+        // Do not report a trackable journey if the only enabled provider is passive.
+        return runCatching {
+            ActiveJourneyLocationProviderSelection.choose(manager.getProviders(true)) != null
+        }.getOrDefault(false)
     }
 
     fun runtimePermissions(): Array<String> = buildList {
@@ -72,9 +77,13 @@ class ActiveJourneyService : Service(), LocationListener {
             // Keep an armed journey alive when a provider disappears; stop only
             // when the journey ends or the user no longer grants runtime access.
             if (!arrivalHandled) {
+                val registeredProviderEnabled = registeredProvider?.let { provider ->
+                    runCatching { locationManager.isProviderEnabled(provider) }.getOrDefault(false)
+                } == true
                 when (LocationProviderRecovery.decide(
                     graph.controller.state.phase,
                     locationRegistered,
+                    registeredProviderEnabled,
                     ActiveJourneyPermissions.hasRuntimeGrants(this@ActiveJourneyService),
                 )) {
                     LocationProviderRecovery.Decision.STOP -> {
@@ -82,9 +91,9 @@ class ActiveJourneyService : Service(), LocationListener {
                         return
                     }
                     LocationProviderRecovery.Decision.RETRY -> {
-                        if (!registerLocationUpdates()) {
-                            updateTrackingNotification(null, accuracyDegraded = true)
-                        }
+                        removeLocationUpdates()
+                        registerLocationUpdates()
+                        updateTrackingNotification(null, accuracyDegraded = true)
                     }
                     LocationProviderRecovery.Decision.KEEP -> Unit
                 }
@@ -94,6 +103,7 @@ class ActiveJourneyService : Service(), LocationListener {
     }
     @Volatile private var arrivalHandled = false
     private var locationRegistered = false
+    private var registeredProvider: String? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -108,6 +118,15 @@ class ActiveJourneyService : Service(), LocationListener {
             stopSelf()
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_CANCEL) {
+            // The notification action must disarm the authoritative journey state;
+            // stopping only the service would leave a silently armed alarm behind.
+            if (graph.controller.state.phase == JourneyPhase.ARMED) {
+                graph.connectorPort.cancelArrivalAlarm()
+            }
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (graph.controller.state.phase != JourneyPhase.ARMED) {
             stopSelf()
             return START_NOT_STICKY
@@ -117,9 +136,31 @@ class ActiveJourneyService : Service(), LocationListener {
             return START_NOT_STICKY
         }
 
-        if (!startLocationForeground() || !registerLocationUpdates()) {
+        if (!startLocationForeground()) {
             stopSelf()
             return START_NOT_STICKY
+        }
+        // Provider registration can fail after the initial availability check.
+        // Keep the armed foreground journey alive and retry through the existing
+        // state monitor, but stop promptly if grants are revoked or the trip ends.
+        val registered = registerLocationUpdates()
+        val providerEnabled = registeredProvider?.let { provider ->
+            runCatching { locationManager.isProviderEnabled(provider) }.getOrDefault(false)
+        } == true
+        when (LocationProviderRecovery.decide(
+            graph.controller.state.phase,
+            registered,
+            providerEnabled,
+            ActiveJourneyPermissions.hasRuntimeGrants(this),
+        )) {
+            LocationProviderRecovery.Decision.STOP -> {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            LocationProviderRecovery.Decision.RETRY -> {
+                updateTrackingNotification(null, accuracyDegraded = true)
+            }
+            LocationProviderRecovery.Decision.KEEP -> Unit
         }
         observeProviderChanges()
         mainHandler.removeCallbacks(stateMonitor)
@@ -128,7 +169,7 @@ class ActiveJourneyService : Service(), LocationListener {
     }
 
     override fun onLocationChanged(location: Location) {
-        if (!location.latitude.isFinite() || !location.longitude.isFinite()) return
+        if (!ArrivalLocationQuality.hasValidCoordinates(location.latitude, location.longitude)) return
         val destination = graph.controller.state.destination ?: return
         val distanceMeters = ArrivalProgressController.distanceMeters(
             GeoPoint(location.latitude, location.longitude),
@@ -166,6 +207,7 @@ class ActiveJourneyService : Service(), LocationListener {
     }
 
     override fun onProviderDisabled(provider: String) {
+        if (provider != registeredProvider) return
         removeLocationUpdates()
         if (graph.controller.state.phase != JourneyPhase.ARMED) return
         // Switch to another enabled provider if possible, otherwise retry later.
@@ -188,17 +230,24 @@ class ActiveJourneyService : Service(), LocationListener {
     }
 
     private fun retryProviderRegistration() {
-        // The broadcast is delivered after the old location listener has
-        // been removed, unlike onProviderEnabled() callbacks.
-        if (arrivalHandled || LocationProviderRecovery.decide(
-                journeyPhase = graph.controller.state.phase,
-                locationRegistered = locationRegistered,
-                hasRuntimeGrants = ActiveJourneyPermissions.hasRuntimeGrants(this),
-            ) != LocationProviderRecovery.Decision.RETRY
-        ) return
-        if (registerLocationUpdates()) {
-            // Provider presence is not proof of a fresh, accurate location fix.
-            updateTrackingNotification(null, accuracyDegraded = true)
+        if (arrivalHandled) return
+        val registeredProviderEnabled = registeredProvider?.let { provider ->
+            runCatching { locationManager.isProviderEnabled(provider) }.getOrDefault(false)
+        } == true
+        when (LocationProviderRecovery.decide(
+            graph.controller.state.phase,
+            locationRegistered,
+            registeredProviderEnabled,
+            ActiveJourneyPermissions.hasRuntimeGrants(this),
+        )) {
+            LocationProviderRecovery.Decision.STOP -> stopSelf()
+            LocationProviderRecovery.Decision.KEEP -> Unit
+            LocationProviderRecovery.Decision.RETRY -> {
+                removeLocationUpdates()
+                registerLocationUpdates()
+                // Provider availability is not evidence of a fresh, accurate GPS fix.
+                updateTrackingNotification(null, accuracyDegraded = true)
+            }
         }
     }
 
@@ -214,7 +263,7 @@ class ActiveJourneyService : Service(), LocationListener {
             }
             true
         }.getOrDefault(false)
-        // The existing state monitor retries if registration fails.
+        // The existing five-second monitor remains the fallback.
     }
 
     private fun registerLocationUpdates(): Boolean {
@@ -228,6 +277,7 @@ class ActiveJourneyService : Service(), LocationListener {
                 Looper.getMainLooper(),
             )
             locationRegistered = true
+            registeredProvider = provider
             true
         } catch (_: SecurityException) {
             false
@@ -237,18 +287,14 @@ class ActiveJourneyService : Service(), LocationListener {
     }
 
     private fun removeLocationUpdates() {
-        if (!locationRegistered) return
-        runCatching { locationManager.removeUpdates(this) }
+        if (locationRegistered) runCatching { locationManager.removeUpdates(this) }
         locationRegistered = false
+        registeredProvider = null
     }
 
     private fun enabledLocationProvider(): String? {
         val providers = runCatching { locationManager.getProviders(true) }.getOrDefault(emptyList())
-        return when {
-            LocationManager.GPS_PROVIDER in providers -> LocationManager.GPS_PROVIDER
-            LocationManager.NETWORK_PROVIDER in providers -> LocationManager.NETWORK_PROVIDER
-            else -> providers.firstOrNull()
-        }
+        return ActiveJourneyLocationProviderSelection.choose(providers)
     }
 
     private fun startLocationForeground(): Boolean {
@@ -278,17 +324,24 @@ class ActiveJourneyService : Service(), LocationListener {
 
     private fun trackingNotification(distanceMeters: Double?, accuracyDegraded: Boolean = false): Notification {
         val text = when {
-            accuracyDegraded -> "Konum doğruluğu yetersiz; alarm etkin, yeni GPS bekleniyor"
-            distanceMeters == null -> "Konum takip ediliyor"
-            else -> "Hedefe yaklaşık " + distanceMeters.roundToInt() + " m kaldı"
+            accuracyDegraded -> getString(R.string.active_tracking_degraded)
+            distanceMeters == null -> getString(R.string.active_tracking_in_progress)
+            else -> getString(R.string.active_tracking_distance, distanceMeters.roundToInt())
         }
         return notificationBuilder(TRACKING_CHANNEL_ID)
-            .setContentTitle("Varış alarmı etkin")
+            .setContentTitle(getString(R.string.active_tracking_title))
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_dialog_map)
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setContentIntent(openAppPendingIntent())
+            .addAction(
+                Notification.Action.Builder(
+                    android.R.drawable.ic_menu_close_clear_cancel,
+                    getString(R.string.cancel_alarm),
+                    cancelAlarmPendingIntent(),
+                ).build()
+            )
             .build()
     }
 
@@ -297,8 +350,8 @@ class ActiveJourneyService : Service(), LocationListener {
         manager.notify(
             ARRIVAL_NOTIFICATION_ID,
             notificationBuilder(ARRIVAL_CHANNEL_ID)
-                .setContentTitle("Varış noktasına ulaşıldı")
-                .setContentText("Varış alarmı tamamlandı.")
+                .setContentTitle(getString(R.string.arrival_notification_title))
+                .setContentText(getString(R.string.arrival_notification_body))
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setAutoCancel(true)
                 .setCategory(Notification.CATEGORY_ALARM)
@@ -321,20 +374,28 @@ class ActiveJourneyService : Service(), LocationListener {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
+    private fun cancelAlarmPendingIntent(): PendingIntent =
+        PendingIntent.getService(
+            this,
+            CANCEL_REQUEST_CODE,
+            cancellationIntent(this),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT < 26) return
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(
             NotificationChannel(
                 TRACKING_CHANNEL_ID,
-                "Aktif varış takibi",
+                getString(R.string.active_tracking_channel_name),
                 NotificationManager.IMPORTANCE_LOW,
             )
         )
         manager.createNotificationChannel(
             NotificationChannel(
                 ARRIVAL_CHANNEL_ID,
-                "Varış uyarıları",
+                getString(R.string.arrival_alerts_channel_name),
                 NotificationManager.IMPORTANCE_HIGH,
             )
         )
@@ -343,14 +404,19 @@ class ActiveJourneyService : Service(), LocationListener {
     companion object {
         const val ACTION_START = "com.nazofobi.arrivalalarm.action.START_ACTIVE_JOURNEY"
         const val ACTION_STOP = "com.nazofobi.arrivalalarm.action.STOP_ACTIVE_JOURNEY"
+        const val ACTION_CANCEL = "com.nazofobi.arrivalalarm.action.CANCEL_ACTIVE_JOURNEY"
         const val SERVICE_RUNTIME_OWNER = "active-journey-service"
         private const val TRACKING_CHANNEL_ID = "arrival_tracking"
         private const val ARRIVAL_CHANNEL_ID = "arrival_alerts"
         private const val TRACKING_NOTIFICATION_ID = 4101
         private const val ARRIVAL_NOTIFICATION_ID = 4102
+        private const val CANCEL_REQUEST_CODE = 4103
         private const val MIN_UPDATE_MILLIS = 10_000L
         private const val MIN_UPDATE_METERS = 25f
         private const val STATE_MONITOR_MILLIS = 5_000L
+
+        internal fun cancellationIntent(context: Context): Intent =
+            Intent(context, ActiveJourneyService::class.java).setAction(ACTION_CANCEL)
 
         fun tryStart(context: Context): Boolean {
             if (!ActiveJourneyPermissions.hasRequired(context)) return false

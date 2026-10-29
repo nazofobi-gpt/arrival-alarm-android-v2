@@ -18,15 +18,22 @@ export class GatewayService {
 
   getTripProgress(userId) {
     const snapshot = this.#requiredSnapshot(userId);
+    const snapshotStale = this.#isStale(snapshot);
     const trip = snapshot.active_trip ?? {};
-    const progressUpdatedAt = Number(trip.progress_updated_at_epoch_seconds ?? 0);
-    const progressStaleAfter = Number(snapshot.stale_after_seconds ?? 120);
+    const progressUpdatedAt = (trip.progress_updated_at_epoch_seconds ?? 0);
+    const progressStaleAfter = (snapshot.stale_after_seconds ?? 120);
+    const now = this.nowEpochSeconds();
     const progressStale =
+      snapshotStale ||
+      !Number.isFinite(progressUpdatedAt) ||
       progressUpdatedAt <= 0 ||
-      this.nowEpochSeconds() - progressUpdatedAt > progressStaleAfter;
+      progressUpdatedAt > now ||
+      !Number.isFinite(progressStaleAfter) ||
+      progressStaleAfter <= 0 ||
+      now - progressUpdatedAt > progressStaleAfter;
     return {
       state_version: snapshot.state_version,
-      stale: this.#isStale(snapshot),
+      stale: snapshotStale,
       trip_id: trip.trip_id ?? null,
       route_id: trip.route_id ?? null,
       line: trip.line ?? null,
@@ -98,10 +105,13 @@ export class GatewayService {
   }
 
   #isStale(snapshot) {
-    const staleAfter = Number(snapshot.stale_after_seconds ?? 120);
+    const staleAfter = (snapshot.stale_after_seconds ?? 120);
     // Device freshness is based on when this gateway actually received a snapshot.
     // Domain values may remain unchanged for minutes during an idle journey screen.
-    const receivedAt = Number(snapshot.gateway_received_at_epoch_seconds ?? 0);
-    return receivedAt <= 0 || this.nowEpochSeconds() - receivedAt > staleAfter;
+    const receivedAt = (snapshot.gateway_received_at_epoch_seconds ?? 0);
+    const now = this.nowEpochSeconds();
+    return !Number.isFinite(staleAfter) || staleAfter <= 0 ||
+      !Number.isFinite(receivedAt) || receivedAt <= 0 || receivedAt > now ||
+      now - receivedAt > staleAfter;
   }
 }

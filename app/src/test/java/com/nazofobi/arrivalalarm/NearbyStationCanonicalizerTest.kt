@@ -5,6 +5,21 @@ import org.junit.Test
 
 class NearbyStationCanonicalizerTest {
     @Test
+    fun nonPositiveLimitReturnsNoStopsWithoutThrowing() {
+        val stop = CatalogStop("station", "gtfs", "Lohne Bahnhof", 52.665, 8.237)
+        for (requestedLimit in listOf(0, -1, Int.MIN_VALUE)) {
+            assertEquals(
+                emptyList<NearbyStop>(),
+                NearbyStationCanonicalizer.canonicalize(
+                    52.665, 8.237,
+                    listOf(NearbyStop(stop, 0)),
+                    requestedLimit,
+                ),
+            )
+        }
+    }
+
+    @Test
     fun duplicatePlatformsCollapseToParentStation() {
         val station = CatalogStop("station", "gtfs", "Lohne Bahnhof", 52.665, 8.237)
         val first = CatalogStop("p1", "gtfs", "Lohne Bahnhof", 52.665, 8.237, "station")
@@ -17,6 +32,32 @@ class NearbyStationCanonicalizerTest {
         assertEquals(1, result.size)
         assertEquals("station", result.single().stop.id)
         assertEquals(listOf("p1", "p2"), result.single().childStops.map { it.id })
+    }
+
+    @Test
+    fun identicalParentIdsFromDifferentProvidersRemainSeparateStations() {
+        val berlin = CatalogStop("station", "vbb", "Berlin Hauptbahnhof", 52.525, 13.369)
+        val berlinPlatform = CatalogStop("platform", "vbb", "Berlin platform", 52.5251, 13.3691, "station")
+        val munich = CatalogStop("station", "mvv", "München Hauptbahnhof", 48.140, 11.558)
+        val munichPlatform = CatalogStop("platform", "mvv", "München platform", 48.1401, 11.5581, "station")
+        val candidates = listOf(berlinPlatform, munichPlatform, munich, berlin)
+            .map { NearbyStop(it, 1) }
+
+        val result = NearbyStationCanonicalizer.canonicalize(
+            52.525, 13.369, candidates, limit = 5,
+        )
+        assertEquals(2, result.size)
+        val byProvider = result.associateBy { it.stop.providerId }
+        assertEquals(setOf("vbb", "mvv"), byProvider.keys)
+        assertEquals("Berlin Hauptbahnhof", byProvider.getValue("vbb").stop.name)
+        assertEquals("München Hauptbahnhof", byProvider.getValue("mvv").stop.name)
+        assertEquals(listOf("platform"), byProvider.getValue("vbb").childStops.map { it.id })
+        assertEquals(listOf("platform"), byProvider.getValue("mvv").childStops.map { it.id })
+
+        val reversed = NearbyStationCanonicalizer.canonicalize(
+            52.525, 13.369, candidates.reversed(), limit = 5,
+        )
+        assertEquals(result, reversed)
     }
 
     @Test
@@ -51,4 +92,51 @@ class NearbyStationCanonicalizerTest {
             reversed.single().childStops.map { it.id },
         )
     }
+
+    @Test
+    fun fallbackStationsWithSameNameAndCoordinatesRemainSeparateAcrossProviders() {
+        val vbb = CatalogStop("vbb-central", "vbb", "Hauptbahnhof", 52.52, 13.405)
+        val mvv = CatalogStop("mvv-central", "mvv", "Hauptbahnhof", 52.52, 13.405)
+        val result = NearbyStationCanonicalizer.canonicalize(
+            52.52, 13.405,
+            listOf(NearbyStop(vbb, 0), NearbyStop(mvv, 0)),
+            limit = 5,
+        )
+        assertEquals(2, result.size)
+        assertEquals(setOf("vbb", "mvv"), result.map { it.stop.providerId }.toSet())
+        assertEquals(setOf("vbb-central", "mvv-central"), result.map { it.stop.id }.toSet())
+    }
+
+    @Test
+    fun sameProviderFallbackPlatformsStillCollapseToOneStation() {
+        val first = CatalogStop("a", "vbb", "Hauptbahnhof", 52.52, 13.405)
+        val second = CatalogStop("b", "vbb", "Hauptbahnhof", 52.52, 13.405)
+        val result = NearbyStationCanonicalizer.canonicalize(
+            52.52, 13.405,
+            listOf(NearbyStop(first, 0), NearbyStop(second, 0)),
+            limit = 5,
+        )
+        assertEquals(1, result.size)
+        assertEquals("a", result.single().stop.id)
+        assertEquals(listOf("b"), result.single().childStops.map { it.id })
+    }
+    @Test
+    fun equalDistanceNameAndStopIdAcrossProvidersSortIndependentlyOfInputOrder() {
+        val vbb = CatalogStop("shared-stop", "vbb", "Hauptbahnhof", 52.52, 13.405)
+        val mvv = CatalogStop("shared-stop", "mvv", "Hauptbahnhof", 52.52, 13.405)
+        val vbbFirst = NearbyStationCanonicalizer.canonicalize(
+            52.52, 13.405,
+            listOf(NearbyStop(vbb, 0), NearbyStop(mvv, 0)),
+            limit = 5,
+        )
+        val mvvFirst = NearbyStationCanonicalizer.canonicalize(
+            52.52, 13.405,
+            listOf(NearbyStop(mvv, 0), NearbyStop(vbb, 0)),
+            limit = 5,
+        )
+
+        assertEquals(listOf("mvv", "vbb"), vbbFirst.map { it.stop.providerId })
+        assertEquals(vbbFirst, mvvFirst)
+    }
+
 }

@@ -25,6 +25,115 @@ class GtfsDeutschlandLoaderTest {
         assertTrue(snapshot.providers.single().staticSource.contains("download.gtfs.de"))
     }
 
+
+    @Test fun missingCoreTablesFailClosedInsteadOfPublishingEmptySuccessfulSnapshot() {
+        val required = listOf(
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,stop_id,stop_sequence\nt1,s1,1\n",
+        )
+        for ((missing, _) in required) {
+            val partial = required.filterNot { it.first == missing }
+            val failure = runCatching {
+                GtfsDeutschlandLoader.parse(zipOf(*partial.toTypedArray()), "truncated", "2026-10-17")
+            }.exceptionOrNull()
+            assertTrue("Missing $missing must fail closed: $failure",
+                failure is IllegalArgumentException && failure.message.orEmpty().contains(missing))
+        }
+    }
+
+    @Test fun duplicateCoreZipMembersDoNotSilentlyOverwriteEarlierFeedData() {
+        val zip = zipOf(
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\n",
+            "nested/stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Wrong,52.66,8.23\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,stop_id,stop_sequence\nt1,s1,1\n",
+        )
+        val failure = runCatching {
+            GtfsDeutschlandLoader.parse(zip, "duplicate", "2026-10-17")
+        }.exceptionOrNull()
+        assertTrue(
+            "Duplicate normalized core member must fail closed: $failure",
+            failure is IllegalArgumentException && failure.message.orEmpty().contains("stops.txt"),
+        )
+    }
+
+
+    @Test fun multilineQuotedStopNamesAreNotSplitIntoPhantomRows() {
+        val zip = zipOf(
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,\"Lohne\nZOB\",52.66,8.23\ns2,\"Bremen \"\"Hbf\"\"\",53.08,8.80\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,departure_time,stop_id,stop_sequence\nt1,10:00:00,s1,1\nt1,11:00:00,s2,2\n",
+        )
+        val snapshot = GtfsDeutschlandLoader.parse(zip, "fixture", "2026-10-21")
+        assertEquals(2, snapshot.stops.size)
+        assertEquals("Lohne\nZOB", snapshot.stops.single { it.id == "s1" }.name)
+        assertEquals("Bremen \"Hbf\"", snapshot.stops.single { it.id == "s2" }.name)
+        assertEquals(listOf("s1", "s2"), snapshot.routes.single().stopIds)
+    }
+
+    @Test fun unterminatedQuotedGtfsRecordRejectsMalformedFeed() {
+        val zip = zipOf(
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,\"unterminated\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,stop_id,stop_sequence\nt1,s1,1\n",
+        )
+        val failure = runCatching {
+            GtfsDeutschlandLoader.parse(zip, "malformed", "2026-10-21")
+        }.exceptionOrNull()
+        assertTrue(failure is IllegalStateException && failure.message.orEmpty().contains("unterminated"))
+    }
+
+    @Test fun invalidStopGeometryAndMissingReferencesCannotPublishPhantomTrips() {
+        val zip = zipOf(
+            "stops.txt" to (
+                "stop_id,stop_name,stop_lat,stop_lon\n" +
+                "s1,Lohne,52.66,8.23\n" +
+                "s2,Achim,53.01,9.03\n" +
+                "nan,BadNaN,NaN,8.23\n" +
+                "infinite,BadInfinity,52.67,Infinity\n" +
+                "latitude,BadLatitude,91,8.23\n" +
+                "longitude,BadLongitude,52.67,-181\n"
+            ),
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to (
+                "route_id,trip_id\n" +
+                "r1,good\nr1,with_nan\nr1,with_infinite\n" +
+                "r1,with_latitude\nr1,with_longitude\nr1,missing\n"
+            ),
+            "stop_times.txt" to (
+                "trip_id,departure_time,stop_id,stop_sequence\n" +
+                "good,10:00:00,s1,1\ngood,11:00:00,s2,2\n" +
+                "with_nan,10:00:00,s1,1\nwith_nan,11:00:00,nan,2\n" +
+                "with_infinite,10:00:00,s1,1\nwith_infinite,11:00:00,infinite,2\n" +
+                "with_latitude,10:00:00,s1,1\nwith_latitude,11:00:00,latitude,2\n" +
+                "with_longitude,10:00:00,s1,1\nwith_longitude,11:00:00,longitude,2\n" +
+                "missing,10:00:00,s1,1\nmissing,11:00:00,unknown,2\n"
+            ),
+        )
+        val snapshot = GtfsDeutschlandLoader.parse(zip, "fixture", "2026-10-21")
+        assertEquals(listOf("s1", "s2"), snapshot.stops.map { it.id })
+        assertEquals(listOf("r1:good"), snapshot.routes.map { it.id })
+        assertEquals(listOf("s1", "s2"), snapshot.routes.single().stopIds)
+        assertEquals(1, snapshot.trips.size)
+    }
+
+    @Test fun legalGeographicBoundaryCoordinatesRemainAvailable() {
+        val zip = zipOf(
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\nsouth,South,-90,180\nnorth,North,90,-180\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,departure_time,stop_id,stop_sequence\nt1,10:00:00,south,1\nt1,11:00:00,north,2\n",
+        )
+        val snapshot = GtfsDeutschlandLoader.parse(zip, "fixture", "2026-10-21")
+        assertEquals(2, snapshot.stops.size)
+        assertEquals(listOf("south", "north"), snapshot.routes.single().stopIds)
+    }
+
     private fun zipOf(vararg files: Pair<String, String>): ByteArray {
         val bytes = ByteArrayOutputStream()
         ZipOutputStream(bytes).use { zip -> files.forEach { (name, content) -> zip.putNextEntry(ZipEntry(name)); zip.write(content.toByteArray()); zip.closeEntry() } }

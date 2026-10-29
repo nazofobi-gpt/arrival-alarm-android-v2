@@ -65,6 +65,25 @@ class GtfsScheduleRepositoryInstrumentedTest {
         assertTrue(repo.calendar("S")!!.monday)
         assertEquals(1, repo.calendarException("S", "20261003")?.exceptionType)
 
+        // A nonpositive caller limit must yield no results, never one surprising row.
+        for (badLimit in listOf(0, -1)) {
+            assertTrue(repo.childStops("A", limit = badLimit).isEmpty())
+            assertTrue(repo.routesMatching("AG", 2, limit = badLimit).isEmpty())
+            assertTrue(repo.tripsForRouteDirection("R", 0, limit = badLimit).isEmpty())
+            assertTrue(repo.stopTimesForTrip("T", limit = badLimit).isEmpty())
+            assertTrue(repo.candidateTripsAtStop("A", limit = badLimit).isEmpty())
+            assertTrue(repo.candidateTripsAtStop(
+                stopId = "A",
+                serviceDate = GtfsServiceDate(2026, 10, 3),
+                earliestBoardSeconds = 0,
+                limit = badLimit,
+            ).isEmpty())
+            assertTrue(repo.tripsInBlock("BLOCK-1", "S", limit = badLimit).isEmpty())
+            assertTrue(repo.linkedTransfersFromTrip("T", limit = badLimit).isEmpty())
+            assertTrue(repo.transfersFromStop("A", limit = badLimit).isEmpty())
+            assertTrue(repo.shapePoints("SH", limit = badLimit).isEmpty())
+        }
+
         assertNull(repo.stop("missing"))
         assertNull(repo.trip("missing"))
         assertTrue(repo.tripsForRouteDirection("missing", 0).isEmpty())
@@ -120,6 +139,8 @@ class GtfsScheduleRepositoryInstrumentedTest {
         assertEquals(listOf("25:00:00", "27:00:00"), rows.map { it.startTime })
         assertEquals(listOf(1, 0), rows.map { it.exactTimes })
         assertEquals(1, repo.frequenciesForTrip("F", limit = 1).size)
+        assertTrue(repo.frequenciesForTrip("F", limit = 0).isEmpty())
+        assertTrue(repo.frequenciesForTrip("F", limit = -1).isEmpty())
         assertTrue(repo.frequenciesForTrip("missing").isEmpty())
         assertEquals(
             listOf("F"),
@@ -222,10 +243,10 @@ class GtfsScheduleRepositoryInstrumentedTest {
               AND lat BETWEEN ? AND ?
               AND lon BETWEEN ? AND ?
               AND (location_type IS NULL OR location_type=0)
-            ORDER BY lat,lon,id
+            ORDER BY ((lat-?)*(lat-?) + (lon-?)*(lon-?)*?), id
             LIMIT ?
             """.trimIndent(),
-            arrayOf("X", "51.99", "52.01", "7.99", "8.01", "16"),
+            arrayOf("X", "51.99", "52.01", "7.99", "8.01", "52.0", "52.0", "8.0", "8.0", "0.38", "16"),
         ).use { cursor ->
             buildList {
                 val detail = cursor.getColumnIndexOrThrow("detail")
@@ -235,6 +256,32 @@ class GtfsScheduleRepositoryInstrumentedTest {
         assertTrue(plan.any { it.contains("idx_stops_lat_lon", ignoreCase = true) })
         assertFalse(plan.any { it.contains("SCAN stops", ignoreCase = true) })
 
+        index.close()
+    }
+
+    @Test
+    fun nearbyStopQueryRanksDistanceBeforeApplyingDenseAreaScanLimit() {
+        context.deleteDatabase("nationwide_transit.db")
+        val index = NationwideTransitIndex(context)
+        val db = index.writableDatabase
+        db.execSQL("INSERT INTO stops(id,name,lat,lon,location_type) VALUES('ORIGIN','Origin',52.0,8.0,0)")
+        // A one-result lookup scans at most eight rows. Latitude-first ordering used
+        // to fill all eight rows with distant southern stops, excluding CLOSE.
+        for (i in 0 until 9) {
+            db.execSQL(
+                "INSERT INTO stops(id,name,lat,lon,location_type) VALUES(?,?,?,?,0)",
+                arrayOf("SOUTH_$i", "South $i", 51.9990 - i * 0.00001, 8.0),
+            )
+        }
+        db.execSQL("INSERT INTO stops(id,name,lat,lon,location_type) VALUES('CLOSE','Close',52.00005,8.0,0)")
+
+        val nearest = GtfsScheduleRepository(index).nearbyStops(
+            stopId = "ORIGIN",
+            radiusMeters = 300,
+            limit = 1,
+        )
+        assertEquals(listOf("CLOSE"), nearest.map { it.stop.id })
+        assertTrue(nearest.single().distanceMeters < 20)
         index.close()
     }
 
@@ -402,5 +449,54 @@ class GtfsScheduleRepositoryInstrumentedTest {
         assertFalse(tripPlan.any { it.contains("SCAN stop_times", ignoreCase = true) })
 
         index.close()
+    }
+
+    @Test
+    fun nearbyTransfersRejectCorruptStoredStopGeometry() {
+        context.deleteDatabase("nationwide_transit.db")
+        val index = NationwideTransitIndex(context)
+        try {
+            val db = index.writableDatabase
+            val entries = listOf(
+                arrayOf("INVALID_LAT", "Bad latitude origin", 91.0, 8.237),
+                arrayOf("LAT_NEAR", "Nearby invalid latitude", 91.0001, 8.237),
+                arrayOf("INVALID_LON", "Bad longitude origin", 52.665, 181.0),
+                arrayOf("LON_NEAR", "Nearby invalid longitude", 52.665, 181.0001),
+                arrayOf("POLAR", "Valid north pole", 90.0, 8.237),
+                arrayOf("BAD_NORTH", "Out-of-range north", 90.0001, 8.237),
+                arrayOf("VALID_SOUTH", "Valid south stop", 89.9999, 8.237),
+                arrayOf("EDGE", "Valid east longitude", 52.665, 180.0),
+                arrayOf("BAD_EAST", "Out-of-range east", 52.665, 180.0001),
+                arrayOf("VALID_WEST", "Valid west stop", 52.665, 179.9999),
+            )
+            for (entry in entries) {
+                db.execSQL(
+                    "INSERT INTO stops(id,name,lat,lon,location_type) VALUES(?,?,?,?,0)",
+                    entry,
+                )
+            }
+
+            val repo = GtfsScheduleRepository(index)
+            // Invalid origin locations cannot become nearby transfer anchors.
+            assertTrue(repo.nearbyStops("INVALID_LAT", radiusMeters = 100).isEmpty())
+            assertTrue(repo.nearbyStops("INVALID_LON", radiusMeters = 100).isEmpty())
+            // A SQL bounding box near the coordinate boundary can include an
+            // out-of-range persisted row; only verified geographic stops survive.
+            assertEquals(
+                listOf("VALID_SOUTH"),
+                repo.nearbyStops("POLAR", radiusMeters = 100).map { it.stop.id },
+            )
+            assertEquals(
+                listOf("VALID_WEST"),
+                repo.nearbyStops("EDGE", radiusMeters = 100).map { it.stop.id },
+            )
+            // A normal, valid origin still provides a real nearby transfer.
+            assertEquals(
+                listOf("VALID_WEST"),
+                repo.nearbyStops("EDGE", radiusMeters = 100, limit = 1).map { it.stop.id },
+            )
+        } finally {
+            index.close()
+        }
     }
 }

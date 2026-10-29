@@ -122,6 +122,7 @@ fun ArrivalAlarmApp(
     onOAuthCallbackConsumed: () -> Unit = {},
     themeMode: ArrivalThemeMode = ArrivalThemeMode.SYSTEM,
     onThemeModeChange: (ArrivalThemeMode) -> Unit = {},
+    transitOverride: ArrivalTransitClient? = null,
 ) {
     val context = LocalContext.current.applicationContext
     val graph = remember(context) { ArrivalAlarmRuntimeGraph.get(context) }
@@ -132,7 +133,13 @@ fun ArrivalAlarmApp(
     val connectorSessionStore = graph.connectorSessionStore
     val connectorBaseUrl = BuildConfig.CONNECTOR_BASE_URL.trim().trimEnd('/')
     val coroutineScope = rememberCoroutineScope()
-    val transit = remember { NationwideTransitGateway(context) }
+    val selectedGtfsSession = remember(context) { AndroidSelectedGtfsTripSession(context) }
+    DisposableEffect(selectedGtfsSession) {
+        onDispose { selectedGtfsSession.close() }
+    }
+    val transit: ArrivalTransitClient = remember(context, transitOverride) {
+        transitOverride ?: NationwideTransitGateway(context)
+    }
     val currentLocation = remember { AndroidCurrentLocation(context) }
     val appPreferences = remember(context) {
         context.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
@@ -161,13 +168,11 @@ fun ArrivalAlarmApp(
     var activeScreen by rememberSaveable { mutableStateOf(ArrivalAppScreen.HOME) }
     var dataState by remember { mutableStateOf(transit.currentState()) }
     var query by remember { mutableStateOf("") }
-    var lastSearchedQuery by remember { mutableStateOf("") }
+    // Changing the active catalog must also invalidate remembered query deduplication.
+    val searchQueryRequestGate = remember(dataState) { SearchQueryRequestGate() }
     var recentSearches by remember {
         mutableStateOf(
-            searchRecentsPreferences.getString("queries", "").orEmpty()
-                .split('\u001F')
-                .filter { it.isNotBlank() }
-                .take(5)
+            restoredRecentSearchQueries(searchRecentsPreferences.getString("queries", ""))
         )
     }
     var favoriteStopIds by remember {
@@ -182,6 +187,7 @@ fun ArrivalAlarmApp(
     var searchSource by remember { mutableStateOf<String?>(null) }
     var searchMessage by remember { mutableStateOf<String?>(null) }
     var searchRequestId by remember { mutableStateOf(0L) }
+    var searchHealth by remember(dataState) { mutableStateOf(TransitFunctionHealth.UNVERIFIED) }
     var selectingOrigin by remember { mutableStateOf(controller.state.start == null) }
     var origin by remember(controller) {
         mutableStateOf(
@@ -198,6 +204,8 @@ fun ArrivalAlarmApp(
         )
     }
     var destinationStopId by remember { mutableStateOf<String?>(null) }
+    // Browsing departures must not create or modify the current journey.
+    var departureBoardStop by remember { mutableStateOf<CatalogStop?>(null) }
     var nearby by remember { mutableStateOf(emptyList<NearbyStop>()) }
     var nearbySource by remember { mutableStateOf<String?>(null) }
     var nearbyMessage by remember { mutableStateOf<String?>(null) }
@@ -208,6 +216,12 @@ fun ArrivalAlarmApp(
     var routeStatus by remember { mutableStateOf<String?>(null) }
     var routeOffline by remember { mutableStateOf(false) }
     var routeBusy by remember { mutableStateOf(false) }
+    var routingHealth by remember(dataState) { mutableStateOf(TransitFunctionHealth.UNVERIFIED) }
+    // In-flight responses must not overwrite a newer journey or station selection.
+    val currentLocationRequestGate = remember { LatestRequestGate() }
+    val routeRequestGate = remember { LatestRequestGate() }
+    val nearbyRequestGate = remember { LatestRequestGate() }
+    val stationRequestGate = remember { LatestRequestGate() }
     var stationDepartures by remember { mutableStateOf(emptyList<Departure>()) }
     var stationAlerts by remember { mutableStateOf(emptyList<ServiceAlert>()) }
     var stationSource by remember { mutableStateOf<String?>(null) }
@@ -215,6 +229,14 @@ fun ArrivalAlarmApp(
     var stationStatus by remember { mutableStateOf<String?>(null) }
     var stationLoading by remember { mutableStateOf(false) }
     var stationResolved by remember { mutableStateOf(false) }
+    // A departure preview has no side effects. Only a separate, explicit user
+    // confirmation may write the service-day/stop-role snapshot; it never arms GPS.
+    val gtfsConsentGate = remember { LatestRequestGate() }
+    var gtfsPreview by remember { mutableStateOf<GtfsDepartureInspection.Ready?>(null) }
+    var gtfsConfirmed by remember { mutableStateOf<GtfsSelectionRestore.Verified?>(null) }
+    var gtfsConsentBusy by remember { mutableStateOf(false) }
+    var gtfsConsentCompletionRevision by remember { mutableStateOf(0L) }
+    var gtfsConsentStatus by remember { mutableStateOf<String?>(null) }
     var liveNowEpochSeconds by remember { mutableStateOf(System.currentTimeMillis() / 1_000) }
     var readinessRefreshTick by remember { mutableStateOf(0) }
     val routeCache = remember(context) {
@@ -298,37 +320,52 @@ fun ArrivalAlarmApp(
     }
 
     fun loadNearby(point: MapPoint) {
+        val token = nearbyRequestGate.begin()
         nearbyMessage = null
-        transit.nearbyStopsResolved(point.latitude, point.longitude) { resolution ->
-            when (resolution) {
-                is NationwideLookupResolution.Results -> {
-                    nearby = resolution.values
-                    nearbySource = resolution.sourceLabel
-                    nearbyMessage = null
-                }
-                is NationwideLookupResolution.Stale -> {
-                    nearby = resolution.values
-                    nearbySource = resolution.sourceLabel
-                    nearbyMessage = context.getString(R.string.lookup_stale_results)
-                }
-                is NationwideLookupResolution.NoResult -> {
-                    nearby = emptyList()
-                    nearbySource = resolution.sourceLabel
-                    nearbyMessage = null
-                }
-                is NationwideLookupResolution.ProviderUnavailable -> {
-                    nearby = emptyList()
-                    nearbySource = resolution.sourceLabel
-                    nearbyMessage = context.getString(R.string.lookup_provider_unavailable)
+        transit.nearbyStopsResolved(point.latitude, point.longitude) callback@{ resolution ->
+            nearbyRequestGate.commitIfCurrent(token) {
+                when (resolution) {
+                    is NationwideLookupResolution.Results -> {
+                        nearby = resolution.values
+                        nearbySource = resolution.sourceLabel
+                        nearbyMessage = null
+                    }
+                    is NationwideLookupResolution.Stale -> {
+                        nearby = resolution.values
+                        nearbySource = resolution.sourceLabel
+                        nearbyMessage = context.getString(R.string.lookup_stale_results)
+                    }
+                    is NationwideLookupResolution.NoResult -> {
+                        nearby = emptyList()
+                        nearbySource = resolution.sourceLabel
+                        nearbyMessage = null
+                    }
+                    is NationwideLookupResolution.ProviderUnavailable -> {
+                        nearby = emptyList()
+                        nearbySource = resolution.sourceLabel
+                        nearbyMessage = context.getString(R.string.lookup_provider_unavailable)
+                    }
                 }
             }
         }
     }
 
     fun setOrigin(point: MapPoint) {
+        // A late device fix must never override a newer manual origin selection.
+        currentLocationRequestGate.invalidate()
+        locationMessage = null
+        // Changing origin cancels any pending route and station responses.
+        routeRequestGate.invalidate()
+        routingHealth = TransitFunctionHealth.UNVERIFIED
+        stationRequestGate.invalidate()
+        nearbyRequestGate.invalidate()
+        routeBusy = false
+        nearby = emptyList()
+        nearbySource = null
         origin = point
         destination = null
         destinationStopId = null
+        departureBoardStop = null
         routeOptions = emptyList()
         selectedRouteId = null
         graph.routeRegistry.clear()
@@ -351,34 +388,52 @@ fun ArrivalAlarmApp(
         "${a.latitude},${a.longitude}->${b.latitude},${b.longitude}"
 
     fun loadRoutes(a: MapPoint, b: MapPoint) {
+        val token = routeRequestGate.begin()
+        routingHealth = TransitFunctionHealth.UNVERIFIED
         routeBusy = true
         routeStatus = context.getString(R.string.route_calculating)
         val key = routeKey(a, b)
-        transit.journeyOptions(a, b) { options, status ->
-            routeBusy = false
-            if (options.isNotEmpty()) {
-                routeOffline = false
-                routeOptions = options
-                if (selectedRouteId !in options.map { it.id }) {
-                    selectedRouteId = null
+        transit.journeyOptions(a, b) callback@{ options, status ->
+            routeRequestGate.commitIfCurrent(token) {
+                routeBusy = false
+                if (options.isNotEmpty()) {
+                    routingHealth = TransitFunctionHealth.WORKING
+                    routeOffline = false
+                    val hadSelection = selectedRouteId != null
+                    val retainedSelection = retainSelectedRouteAfterRefresh(
+                        selectedRouteId, routeOptions, options,
+                    )
+                    routeOptions = options
+                    selectedRouteId = retainedSelection
+                    graph.routeRegistry.replace(options)
+                    routeStatus = if (hadSelection && retainedSelection == null) {
+                        context.getString(R.string.error_trip_required)
+                    } else status
+                    routeCache.put(CachedTransitPlan(key, options, emptyList(), System.currentTimeMillis() / 1000))
+                } else {
+                    val cached = routeCache.routeOptions(key)
+                    routingHealth = if (cached.isNotEmpty()) TransitFunctionHealth.DEGRADED
+                        else TransitFunctionHealth.FAILED
+                    routeOffline = cached.isNotEmpty()
+                    val hadSelection = selectedRouteId != null
+                    val retainedSelection = retainSelectedRouteAfterRefresh(
+                        selectedRouteId, routeOptions, cached,
+                    )
+                    routeOptions = cached
+                    selectedRouteId = retainedSelection
+                    graph.routeRegistry.replace(cached)
+                    routeStatus = when {
+                        hadSelection && retainedSelection == null -> context.getString(R.string.error_trip_required)
+                        cached.isNotEmpty() -> context.getString(R.string.route_offline_fallback)
+                        else -> status
+                    }
                 }
-                graph.routeRegistry.replace(options)
-                routeStatus = status
-                routeCache.put(CachedTransitPlan(key, options, emptyList(), System.currentTimeMillis() / 1000))
-            } else {
-                val cached = routeCache.routeOptions(key)
-                routeOffline = cached.isNotEmpty()
-                routeOptions = cached
-                if (selectedRouteId !in cached.map { it.id }) {
-                    selectedRouteId = null
-                }
-                graph.routeRegistry.replace(cached)
-                routeStatus = if (cached.isNotEmpty()) context.getString(R.string.route_offline_fallback) else status
             }
         }
     }
 
     fun loadStationDepartures(stop: CatalogStop) {
+        val token = stationRequestGate.begin()
         stationLoading = true
         stationResolved = false
         stationDepartures = emptyList()
@@ -386,19 +441,21 @@ fun ArrivalAlarmApp(
         stationSource = null
         stationRealtimeState = null
         stationStatus = null
-        transit.stationDepartures(stop) { snapshot ->
-            stationLoading = false
-            if (snapshot.error == null) {
-                stationResolved = true
-                stationDepartures = snapshot.departures
-                stationAlerts = snapshot.alerts
-                stationSource = snapshot.sourceLabel
-                stationRealtimeState = snapshot.realtimeState
-                stationStatus = null
-            } else {
-                stationResolved = false
-                stationRealtimeState = null
-                stationStatus = context.getString(R.string.departures_live_unavailable)
+        transit.stationDepartures(stop) callback@{ snapshot ->
+            stationRequestGate.commitIfCurrent(token) {
+                stationLoading = false
+                if (snapshot.error == null) {
+                    stationResolved = true
+                    stationDepartures = snapshot.departures
+                    stationAlerts = snapshot.alerts
+                    stationSource = snapshot.sourceLabel
+                    stationRealtimeState = snapshot.realtimeState
+                    stationStatus = null
+                } else {
+                    stationResolved = false
+                    stationRealtimeState = null
+                    stationStatus = context.getString(R.string.departures_live_unavailable)
+                }
             }
         }
     }
@@ -415,8 +472,14 @@ fun ArrivalAlarmApp(
             routeStatus = localizedDomainMessage(context, outcome.message)
             return false
         }
+        // Invalidate responses before the new selection changes visible state.
+        routeRequestGate.invalidate()
+        routingHealth = TransitFunctionHealth.UNVERIFIED
+        stationRequestGate.invalidate()
+        routeBusy = false
         destination = point
         destinationStopId = stopId
+        departureBoardStop = null
         routeOffline = false
         routeOptions = emptyList()
         selectedRouteId = null
@@ -444,9 +507,15 @@ fun ArrivalAlarmApp(
         }
     }
 
+    fun openDepartureBoard(stop: CatalogStop) {
+        departureBoardStop = stop
+        loadStationDepartures(stop)
+        activeScreen = ArrivalAppScreen.DEPARTURES
+    }
+
     fun saveRecentSearch(rawQuery: String) {
         val q = rawQuery.trim()
-        if (q.length < 2) return
+        if (!isSupportedSearchQuery(q)) return
         val next = (listOf(q) + recentSearches.filterNot { it.equals(q, ignoreCase = true) })
             .take(5)
         recentSearches = next
@@ -457,33 +526,56 @@ fun ArrivalAlarmApp(
 
     fun runSearch(rawQuery: String = query, recordRecent: Boolean = false) {
         val q = rawQuery.trim()
-        if (q.length < 2) return
+        if (!isSupportedSearchQuery(q)) {
+            if (q.length > MAX_SEARCH_QUERY_LENGTH) {
+                // Reject direct submissions as well as debounce-driven lookups.
+                // Invalidate any earlier provider callback before showing the error.
+                searchRequestId += 1
+                searchQueryRequestGate.reset()
+                searchBusy = false
+                searchHealth = TransitFunctionHealth.UNVERIFIED
+                searchResults = emptyList()
+                searchSource = null
+                searchMessage = context.getString(R.string.search_query_too_long)
+            }
+            return
+        }
         if (recordRecent) saveRecentSearch(q)
-        lastSearchedQuery = q
+        searchQueryRequestGate.markRequested(q)
         val requestId = searchRequestId + 1
         searchRequestId = requestId
         searchBusy = true
+        searchHealth = TransitFunctionHealth.UNVERIFIED
+        // An explicit recent/completion selection may replace the query before
+        // its Compose effect runs. Never show the previous query's results.
+        searchResults = emptyList()
+        searchSource = null
         searchMessage = null
         transit.searchLocationsResolved(q) callback@{ resolution ->
             if (requestId != searchRequestId) return@callback
             searchBusy = false
             when (resolution) {
                 is NationwideLookupResolution.Results -> {
+                    searchHealth = if (resolution.values.isNotEmpty()) TransitFunctionHealth.WORKING
+                        else TransitFunctionHealth.UNVERIFIED
                     searchResults = resolution.values
                     searchSource = resolution.sourceLabel
                     searchMessage = null
                 }
                 is NationwideLookupResolution.Stale -> {
+                    searchHealth = TransitFunctionHealth.DEGRADED
                     searchResults = resolution.values
                     searchSource = resolution.sourceLabel
                     searchMessage = context.getString(R.string.lookup_stale_results)
                 }
                 is NationwideLookupResolution.NoResult -> {
+                    searchHealth = TransitFunctionHealth.UNVERIFIED
                     searchResults = emptyList()
                     searchSource = resolution.sourceLabel
                     searchMessage = context.getString(R.string.no_stop_found)
                 }
                 is NationwideLookupResolution.ProviderUnavailable -> {
+                    searchHealth = TransitFunctionHealth.FAILED
                     searchResults = emptyList()
                     searchSource = resolution.sourceLabel
                     searchMessage = context.getString(R.string.lookup_provider_unavailable)
@@ -493,13 +585,16 @@ fun ArrivalAlarmApp(
     }
 
     fun useCurrentLocation() {
+        val token = currentLocationRequestGate.begin()
         locationMessage = context.getString(R.string.getting_location)
         currentLocation.request { result ->
-            result.onSuccess { point ->
-                locationMessage = null
-                setOrigin(MapPoint(point.latitude, point.longitude, context.getString(R.string.current_location_label)))
-            }.onFailure {
-                locationMessage = localizedDomainMessage(context, it.message)
+            currentLocationRequestGate.commitIfCurrent(token) {
+                result.onSuccess { point ->
+                    locationMessage = null
+                    setOrigin(MapPoint(point.latitude, point.longitude, context.getString(R.string.current_location_label)))
+                }.onFailure {
+                    locationMessage = localizedDomainMessage(context, it.message)
+                }
             }
         }
     }
@@ -658,17 +753,34 @@ fun ArrivalAlarmApp(
         }
     }
 
-    LaunchedEffect(query) {
+    // Cosmetic whitespace must not clear already-resolved results without a new lookup.
+    LaunchedEffect(normalizedSearchQuery(query), dataState) {
         val q = query.trim()
-        if (q.length < 2) {
-            searchResults = emptyList()
-            searchSource = null
-            searchMessage = null
-            searchBusy = false
+        searchQueryRequestGate.observeQuery(q)
+        // Recent searches and line/trip completions start a lookup immediately.
+        // They update query and mark the request in the same UI callback. The
+        // subsequent effect must not invalidate that in-flight callback and
+        // then suppress the duplicate search, leaving an empty result list.
+        if (isSupportedSearchQuery(q) && !searchQueryRequestGate.shouldAutoRequest(q)) {
+            return@LaunchedEffect
+        }
+        // The query or the active catalog changed: discard previous results
+        // immediately and reject pre-debounce callbacks from the old source.
+        searchRequestId += 1
+        searchHealth = TransitFunctionHealth.UNVERIFIED
+        searchResults = emptyList()
+        searchSource = null
+        searchMessage = null
+        searchBusy = false
+        if (!isSupportedSearchQuery(q)) {
+            searchQueryRequestGate.reset()
+            if (q.length > MAX_SEARCH_QUERY_LENGTH) {
+                searchMessage = context.getString(R.string.search_query_too_long)
+            }
             return@LaunchedEffect
         }
         delay(1_000)
-        if (q != lastSearchedQuery) {
+        if (searchQueryRequestGate.shouldAutoRequest(q)) {
             runSearch(q)
         }
     }
@@ -680,6 +792,7 @@ fun ArrivalAlarmApp(
 
     DisposableEffect(Unit) {
         onDispose {
+            currentLocationRequestGate.invalidate()
             guidanceSpeaker.shutdown()
             transit.close()
         }
@@ -757,6 +870,8 @@ fun ArrivalAlarmApp(
                     journey.phase,
                     connectorConnected,
                     connectorBaseUrl,
+                    searchHealth,
+                    routingHealth,
                 ) {
                     SettingsReadinessState.from(
                         context = context,
@@ -766,6 +881,8 @@ fun ArrivalAlarmApp(
                         backgroundJourneyActive = journey.phase == JourneyPhase.ARMED,
                         connectorConfigured = connectorBaseUrl.isNotBlank(),
                         connectorConnected = connectorConnected,
+                        searchHealth = searchHealth,
+                        routingHealth = routingHealth,
                     )
                 }
                 if (activeScreen == ArrivalAppScreen.SETTINGS) {
@@ -785,6 +902,22 @@ fun ArrivalAlarmApp(
                         )
                     },
                     onRefreshReadiness = { refreshReadiness() },
+                    onShareDiagnostics = {
+                        val report = SupportDiagnostics.render(
+                            state = readinessState,
+                            nowEpochSeconds = System.currentTimeMillis() / 1_000L,
+                        )
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, report)
+                        }
+                        context.startActivity(
+                            Intent.createChooser(
+                                send,
+                                context.getString(R.string.readiness_share_diagnostics),
+                            )
+                        )
+                    },
                     onOpenAppSettings = { openArrivalAlarmAppSettings(context) },
                     onRetryData = {
                         transit.ensureNationwideIndex { dataState = it }
@@ -856,6 +989,9 @@ fun ArrivalAlarmApp(
                             } else {
                                 setDestination(candidate.stop)
                             }
+                        },
+                        onNearbyDeparturesSelected = { candidate ->
+                            openDepartureBoard(candidate.stop)
                         },
                     )
                 }
@@ -1059,10 +1195,14 @@ fun ArrivalAlarmApp(
                 }
 
                 if (activeScreen == ArrivalAppScreen.DEPARTURES) {
-                val destinationPoint = destination
+                val selectedStop = departureBoardStop
+                val boardStopId = selectedStop?.id ?: destinationStopId
+                val destinationPoint = selectedStop?.let {
+                    MapPoint(it.latitude, it.longitude, it.name)
+                } ?: destination
                 if (destinationPoint != null && shouldDisplayDepartureBoard(
-                    hasDestination = true,
-                    hasSelectedStop = !destinationStopId.isNullOrBlank(),
+                    hasDestination = destination != null,
+                    hasSelectedStop = !boardStopId.isNullOrBlank(),
                     hasRouteOptions = routeOptions.isNotEmpty(),
                 )) {
                     val boardNow = System.currentTimeMillis() / 1_000
@@ -1077,17 +1217,55 @@ fun ArrivalAlarmApp(
                     }
                     val selectedRoute = routeOptions.firstOrNull { it.id == selectedRouteId }
                         ?: routeOptions.firstOrNull()
-                    val boardDepartures = if (destinationStopId != null) stationDepartures else departures
+                    val boardDepartures = if (boardStopId != null) stationDepartures else departures
                     val boardAlerts = if (stationResolved) stationAlerts else emptyList()
+                    LaunchedEffect(boardStopId, stationResolved) {
+                        gtfsConsentGate.invalidate()
+                        gtfsPreview = null
+                        gtfsConfirmed = null
+                        gtfsConsentBusy = false
+                        gtfsConsentStatus = null
+                        if (!boardStopId.isNullOrBlank() && stationResolved) {
+                            val token = gtfsConsentGate.begin()
+                            val restored = try {
+                                selectedGtfsSession.restore()
+                            } catch (_: RuntimeException) {
+                                GtfsSelectionRestore.Rejected(
+                                    GtfsSelectionRestoreProblem.TRIP_UNAVAILABLE,
+                                )
+                            }
+                            gtfsConsentGate.commitIfCurrent(token) {
+                                when (restored) {
+                                    is GtfsSelectionRestore.Verified -> {
+                                        // The saved trip may belong to a different departure
+                                        // board. Never display its confirmed stops here.
+                                        if (restored.selection.boarding.stopId == boardStopId) {
+                                            gtfsConfirmed = restored
+                                            gtfsConsentStatus = context.getString(
+                                                R.string.gtfs_consent_restored,
+                                            )
+                                        }
+                                    }
+                                    is GtfsSelectionRestore.Rejected -> {
+                                        gtfsConsentStatus = context.getString(
+                                            R.string.gtfs_consent_restore_invalid,
+                                        )
+                                    }
+                                    GtfsSelectionRestore.Empty -> Unit
+                                }
+                            }
+                        }
+                    }
                     TransitExperiencePanel(
-                        stopId = destinationStopId
+                        stopId = boardStopId
                             ?: "coord:${destinationPoint.latitude},${destinationPoint.longitude}",
+                        stopProviderId = selectedStop?.providerId,
                         stopName = destinationPoint.label,
                         lineName = selectedRoute?.line.orEmpty(),
                         direction = selectedRoute?.direction.orEmpty(),
                         departures = boardDepartures,
                         alerts = boardAlerts,
-                        isOfflineCache = destinationStopId == null && routeOffline,
+                        isOfflineCache = boardStopId == null && routeOffline,
                         nowEpochSeconds = boardNow,
                         providerCapabilities = TransitProviderCapabilities(
                             realtimeDepartures = stationResolved &&
@@ -1098,14 +1276,101 @@ fun ArrivalAlarmApp(
                             routeOptions.firstOrNull { it.id == routeId }
                                 ?.let { selectRouteOption(it) }
                         },
+                        onSelectDeparture = if (boardStopId != null && stationResolved) {
+                            departure: Departure ->
+                                val token = gtfsConsentGate.begin()
+                                gtfsPreview = null
+                                gtfsConfirmed = null
+                                gtfsConsentStatus = null
+                                gtfsConsentBusy = true
+                                coroutineScope.launch {
+                                    val inspected = try {
+                                        selectedGtfsSession.inspect(departure, boardStopId)
+                                    } catch (_: RuntimeException) {
+                                        GtfsDepartureInspection.Rejected(
+                                            GtfsDepartureInspectionFailure.TRIP_UNAVAILABLE,
+                                        )
+                                    }
+                                    gtfsConsentGate.commitIfCurrent(token) {
+                                        gtfsConsentBusy = false
+                                        gtfsPreview = inspected as? GtfsDepartureInspection.Ready
+                                        if (gtfsPreview == null) {
+                                            gtfsConsentStatus = context.getString(
+                                                R.string.gtfs_consent_inspect_failed,
+                                            )
+                                        }
+                                    }
+                                }
+                        } else null,
                         statusMessage = stationStatus
-                            ?: if (destinationStopId == null && !stationResolved && !stationLoading) {
+                            ?: if (boardStopId == null && !stationResolved && !stationLoading) {
                                 context.getString(R.string.departures_route_fallback)
                             } else null,
                         sourceLabel = if (stationResolved) stationSource else null,
                         loading = stationLoading,
                         modifier = Modifier.fillMaxWidth().testTag("transit-experience-panel"),
                     )
+                    if (gtfsConsentBusy) {
+                        Text(
+                            stringResource(R.string.gtfs_consent_loading),
+                            modifier = Modifier.testTag("gtfs-consent-loading"),
+                        )
+                    }
+                    gtfsConsentStatus?.let {
+                        Text(it, modifier = Modifier.testTag("gtfs-consent-status"))
+                    }
+                    gtfsConfirmed?.let { verified ->
+                        GtfsConfirmedTripSummary(verified)
+                    }
+                    gtfsPreview?.let { preview ->
+                        GtfsTripConsentPanel(
+                            preview = preview,
+                            busy = gtfsConsentBusy,
+                            completionRevision = gtfsConsentCompletionRevision,
+                            onDismiss = {
+                                gtfsConsentGate.invalidate()
+                                gtfsPreview = null
+                                gtfsConsentBusy = false
+                                gtfsConsentStatus = null
+                            },
+                            onConfirm = { selection ->
+                                val token = gtfsConsentGate.begin()
+                                gtfsConsentBusy = true
+                                coroutineScope.launch {
+                                    val saved = try {
+                                        selectedGtfsSession.confirmIfCurrent(selection, gtfsConsentGate, token)
+                                    } catch (_: RuntimeException) {
+                                        false
+                                    }
+                                    val verified = if (saved) {
+                                        try {
+                                            selectedGtfsSession.restore()
+                                        } catch (_: RuntimeException) {
+                                            null
+                                        }
+                                    } else null
+                                    gtfsConsentGate.commitIfCurrent(token) {
+                                        gtfsConsentCompletionRevision += 1L
+                                        gtfsConsentBusy = false
+                                        if (verified is GtfsSelectionRestore.Verified &&
+                                            verified.selection == selection
+                                        ) {
+                                            gtfsConfirmed = verified
+                                            gtfsPreview = null
+                                            gtfsConsentStatus = context.getString(
+                                                R.string.gtfs_consent_saved,
+                                            )
+                                        } else {
+                                            gtfsConsentStatus = context.getString(
+                                                R.string.gtfs_consent_save_failed,
+                                            )
+                                        }
+                                    }
+                                }
+                            },
+                            modifier = Modifier.testTag("gtfs-consent-container"),
+                        )
+                    }
                 } else {
                     ScreenEmptyState(
                         title = stringResource(R.string.departures_empty_title),

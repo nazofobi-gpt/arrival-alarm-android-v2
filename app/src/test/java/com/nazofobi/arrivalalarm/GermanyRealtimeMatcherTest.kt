@@ -67,6 +67,57 @@ class GermanyRealtimeMatcherTest {
     }
 
     @Test
+    fun sequencedStopRejectsConflictingStopIdButPreservesDeclaredReassignment() {
+        val trip = trip("T1", "R1", "S", direction = 0)
+        val data = FakeRealtimeStaticData(
+            trips = mapOf("T1" to trip),
+            routes = mapOf("R1" to route("R1", "agency", 3)),
+            stops = mapOf(
+                "scheduled-stop" to stop("scheduled-stop", "1"),
+                "other-stop" to stop("other-stop", "9"),
+            ),
+            stopTimes = mapOf(
+                "T1" to listOf(
+                    st("T1", 1, "origin", "08:00:00"),
+                    st("T1", 2, "scheduled-stop", "08:10:00"),
+                ),
+            ),
+        )
+        val realtimeStop = GermanyRealtimeStopUpdate(
+            stopSequence = 2,
+            stopId = "other-stop",
+            arrivalDelaySeconds = null,
+            departureDelaySeconds = 120,
+            arrivalTimeEpochSeconds = null,
+            departureTimeEpochSeconds = 1_800_000_120L,
+        )
+        val tripUpdate = update(tripId = "T1", routeId = "R1", directionId = 0)
+            .copy(stops = listOf(realtimeStop))
+        fun matchedStops(changed: GermanyRealtimeStopUpdate) =
+            (matcher(data).match(
+                snapshot(tripUpdates = listOf(tripUpdate.copy(stops = listOf(changed)))),
+                1_800_000_010L,
+            ) as GermanyRealtimeOverlayResult.Matched).tripOverlays.single().stopUpdates
+
+        // A sequence is not permission to apply another stop's delay or platform.
+        assertTrue(matchedStops(realtimeStop).isEmpty())
+        assertEquals("scheduled-stop", matchedStops(
+            realtimeStop.copy(stopId = "scheduled-stop"),
+        ).single().scheduledStopId)
+        assertEquals("scheduled-stop", matchedStops(
+            realtimeStop.copy(stopId = null),
+        ).single().scheduledStopId)
+
+        // A declared stop reassignment remains valid for the same sequence.
+        val assigned = matchedStops(
+            realtimeStop.copy(assignedStopId = "other-stop"),
+        ).single()
+        assertEquals("scheduled-stop", assigned.scheduledStopId)
+        assertEquals("other-stop", assigned.assignedStopId)
+        assertEquals("9", assigned.platformCode)
+    }
+
+    @Test
     fun frequencyTripRequiresCompleteInstanceIdentityAndValidHeadwayInstance() {
         val trip = trip("F1", "R1", "S", direction = 0)
         val data = FakeRealtimeStaticData(
@@ -335,6 +386,64 @@ class GermanyRealtimeMatcherTest {
             GermanyRealtimeUnavailableReason.NETWORK,
             (unavailable as GermanyRealtimeOverlayResult.Unavailable).reason,
         )
+    }
+
+    @Test
+    fun providerClockAcceptsAtMostThirtySecondsOfFutureSkew() {
+        val now = 1_800_000_010L
+        val matcher = matcher(FakeRealtimeStaticData())
+        val atLimit = matcher.match(snapshot(feedTimestamp = now + 30L), now)
+            as GermanyRealtimeOverlayResult.NoMatch
+        val beyondLimit = matcher.match(snapshot(feedTimestamp = now + 31L), now)
+            as GermanyRealtimeOverlayResult.NoMatch
+
+        assertEquals(GermanyRealtimeOverlayFreshnessState.FRESH, atLimit.freshness)
+        assertEquals(0L, atLimit.ageSeconds)
+        assertEquals(GermanyRealtimeOverlayFreshnessState.STALE, beyondLimit.freshness)
+    }
+
+    @Test
+    fun missingFeedTimestampUsesFetchedAtWithTheSameFutureSkewLimit() {
+        val now = 1_800_000_010L
+        val matcher = matcher(FakeRealtimeStaticData())
+        val atLimit = snapshot().copy(
+            feedTimestampEpochSeconds = null,
+            fetchedAtEpochSeconds = now + 30L,
+        )
+        val beyondLimit = atLimit.copy(fetchedAtEpochSeconds = now + 31L)
+
+        assertEquals(
+            GermanyRealtimeOverlayFreshnessState.FRESH,
+            (matcher.match(atLimit, now) as GermanyRealtimeOverlayResult.NoMatch).freshness,
+        )
+        assertEquals(
+            GermanyRealtimeOverlayFreshnessState.STALE,
+            (matcher.match(beyondLimit, now) as GermanyRealtimeOverlayResult.NoMatch).freshness,
+        )
+    }
+
+    @Test
+    fun invalidProviderEpochsAndNonpositiveDeviceClocksAreNeverFresh() {
+        val now = 1_800_000_010L
+        val matcher = matcher(FakeRealtimeStaticData())
+        for (invalidEpoch in listOf(0L, -1L, Long.MIN_VALUE, Long.MAX_VALUE)) {
+            val result = matcher.match(snapshot(feedTimestamp = invalidEpoch), now)
+                as GermanyRealtimeOverlayResult.NoMatch
+            assertEquals(
+                "provider epoch=$invalidEpoch",
+                GermanyRealtimeOverlayFreshnessState.STALE,
+                result.freshness,
+            )
+        }
+        for (invalidNow in listOf(0L, -1L)) {
+            val result = matcher.match(snapshot(feedTimestamp = 1L), invalidNow)
+                as GermanyRealtimeOverlayResult.NoMatch
+            assertEquals(
+                "device clock=$invalidNow",
+                GermanyRealtimeOverlayFreshnessState.STALE,
+                result.freshness,
+            )
+        }
     }
 
     private fun matcher(data: GermanyRealtimeStaticData) =

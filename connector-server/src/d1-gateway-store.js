@@ -14,6 +14,9 @@ function validateSnapshot(snapshot) {
   if (typeof snapshot.journey_phase !== "string" || !snapshot.journey_phase) {
     throw new Error("invalid_journey_phase");
   }
+  if (snapshot.alarm_armed != null && typeof snapshot.alarm_armed !== "boolean") {
+    throw new Error("invalid_alarm_armed");
+  }
   return snapshot;
 }
 
@@ -143,13 +146,16 @@ export class D1GatewayStore {
       throw new Error("device_mismatch");
     }
 
+    // Do not allow duplicate device receipts to rewrite a completed command.
+    if (existing.status === "completed") return existing;
+
     await this.db
       .prepare(`
         UPDATE commands
         SET status = 'completed',
             receipt_json = ?,
             completed_at_epoch_seconds = ?
-        WHERE user_id = ? AND idempotency_key = ?
+        WHERE user_id = ? AND idempotency_key = ? AND status = 'queued'
       `)
       .bind(JSON.stringify(receipt), this.nowEpochSeconds(), userId, key)
       .run();

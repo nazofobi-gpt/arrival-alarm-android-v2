@@ -3,7 +3,6 @@ package com.nazofobi.arrivalalarm
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -34,6 +33,7 @@ import java.util.Locale
 @Composable
 fun TransitExperiencePanel(
     stopId: String,
+    stopProviderId: String? = null,
     stopName: String,
     lineName: String,
     direction: String,
@@ -43,22 +43,48 @@ fun TransitExperiencePanel(
     nowEpochSeconds: Long,
     providerCapabilities: TransitProviderCapabilities = TransitProviderCapabilities(),
     onSelectJourney: (String) -> Unit = {},
+    onSelectDeparture: ((Departure) -> Unit)? = null,
     statusMessage: String? = null,
     sourceLabel: String? = null,
     loading: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val engine = remember(providerCapabilities) { TransitExperienceEngine(providerCapabilities) }
+    val engine = remember(providerCapabilities, isOfflineCache) {
+        TransitExperienceEngine(providerCapabilities, isOfflineCache = isOfflineCache)
+    }
     val context = LocalContext.current.applicationContext
     val prefs = remember(context) {
         context.getSharedPreferences("transit_experience", Context.MODE_PRIVATE)
     }
+    // History is private, device-only, and never collected without opt-in.
+    var historyEnabled by remember(prefs) {
+        mutableStateOf(try {
+            prefs.getBoolean("recent_trip_history_enabled", false)
+        } catch (_: ClassCastException) {
+            false
+        })
+    }
     val store = remember(prefs) {
-        val recentTripIds = prefs.getString("recent_trip_ids", "").orEmpty()
-            .split('\u001F')
-            .filter { it.isNotBlank() }
+        // Wrong-typed legacy preferences must not crash the departure board.
+        // Keep valid data in the other field, and recover malformed fields on
+        // the next normal store update instead of clearing the entire store.
+        val savedRecents = try {
+            prefs.getString("recent_trip_ids", "").orEmpty()
+        } catch (_: ClassCastException) {
+            ""
+        }
+        val savedFavorites = try {
+            prefs.getStringSet("favorite_stop_ids", emptySet()).orEmpty().toList()
+        } catch (_: ClassCastException) {
+            emptyList()
+        }
+        // Legacy implicit-history data is not retained or displayed without consent.
+        if (!historyEnabled) prefs.edit().remove("recent_trip_ids").apply()
+        val recentTripIds = if (historyEnabled) {
+            savedRecents.split('\u001F').filter { it.isNotBlank() }
+        } else emptyList()
         TransitRecentsStore(
-            favoriteIds = prefs.getStringSet("favorite_stop_ids", emptySet()).orEmpty().toList(),
+            favoriteIds = savedFavorites,
             recentTripIds = recentTripIds,
         ) { favorites, recents ->
             prefs.edit()
@@ -68,9 +94,20 @@ fun TransitExperiencePanel(
         }
     }
     var favorite by remember(stopId) { mutableStateOf(store.isFavorite(stopId)) }
-    var selectedTrip by remember { mutableStateOf<String?>(null) }
+    var selectedDeparture by remember(stopId) { mutableStateOf<Departure?>(null) }
+    var recentTripCount by remember(store) { mutableStateOf(store.recents().size) }
+    // Stop-scoped route bookmarks never imply realtime alert subscriptions.
+    // Fail closed on legacy/malformed preference types, preserving the departure board.
+    var pinnedLineKeys by remember(prefs) {
+        mutableStateOf(try {
+            prefs.getStringSet("pinned_stop_line_keys_v1", emptySet())
+                .orEmpty().filter(String::isNotBlank).toSet()
+        } catch (_: ClassCastException) {
+            emptySet()
+        })
+    }
     val board = engine.departureBoard(departures, nowEpochSeconds)
-    val cancelled = departures.filter { it.cancelled }
+    val cancelled = upcomingCancelledDepartures(departures, nowEpochSeconds)
 
     Column(
         modifier = modifier.padding(vertical = 8.dp),
@@ -216,9 +253,11 @@ fun TransitExperiencePanel(
                     }
                     Button(
                         onClick = {
-                            selectedTrip = departure.tripId
-                            store.recordTrip(departure.tripId)
-                            departure.routeId?.let(onSelectJourney)
+                            selectedDeparture = departure
+                            if (historyEnabled) store.recordTrip(departure.tripId)
+                            recentTripCount = store.recents().size
+                            if (onSelectDeparture != null) onSelectDeparture(departure)
+                            else departure.routeId?.let(onSelectJourney)
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -227,11 +266,44 @@ fun TransitExperiencePanel(
                     ) {
                         Text(stringResource(R.string.departure_select))
                     }
+                    pinnedStopLineKey(stopId, departure.routeId, stopProviderId)?.let { pinKey ->
+                        val pinned = pinKey in pinnedLineKeys
+                        if (pinned) {
+                            Text(
+                                text = stringResource(R.string.pin_line_local_only),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.testTag("pinned-departure-$index"),
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                val updated = if (pinKey in pinnedLineKeys) {
+                                    pinnedLineKeys - pinKey
+                                } else {
+                                    pinnedLineKeys + pinKey
+                                }
+                                prefs.edit()
+                                    .putStringSet("pinned_stop_line_keys_v1", updated)
+                                    .apply()
+                                pinnedLineKeys = updated
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("pin-departure-$index"),
+                        ) {
+                            Text(stringResource(
+                                if (pinned) R.string.unpin_line_at_stop
+                                else R.string.pin_line_at_stop,
+                            ))
+                        }
+                    }
                 }
             }
         }
 
-        cancelled.take(3).forEachIndexed { index, departure ->
+        cancelled.forEachIndexed { index, departure ->
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -250,6 +322,14 @@ fun TransitExperiencePanel(
                         color = MaterialTheme.colorScheme.onErrorContainer,
                     )
                     Text(
+                        text = stringResource(
+                            R.string.departure_time_source,
+                            formatDepartureEpoch(departure.scheduledEpochSeconds),
+                            stringResource(R.string.departure_source_planned),
+                        ),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                    Text(
                         text = stringResource(R.string.departure_cancelled),
                         color = MaterialTheme.colorScheme.onErrorContainer,
                     )
@@ -257,12 +337,34 @@ fun TransitExperiencePanel(
             }
         }
 
-        selectedTrip?.let { tripId ->
-            val alternatives = engine.alternateDepartures(departures, tripId, nowEpochSeconds)
-            Text(
-                stringResource(R.string.alternate_departures, alternatives.size),
-                modifier = Modifier.testTag("alternate-departures"),
-            )
+        selectedDeparture?.let { selected ->
+            if (board.any { it.sameScheduledInstanceAs(selected) }) {
+                val alternatives = engine.alternateDepartures(departures, selected, nowEpochSeconds)
+                Text(
+                    stringResource(R.string.alternate_departures, alternatives.size),
+                    modifier = Modifier.testTag("alternate-departures"),
+                )
+                alternatives.take(3).forEachIndexed { index, alternative ->
+                    OutlinedButton(
+                        onClick = {
+                            selectedDeparture = alternative
+                            if (historyEnabled) store.recordTrip(alternative.tripId)
+                            recentTripCount = store.recents().size
+                            if (onSelectDeparture != null) onSelectDeparture(alternative)
+                            else alternative.routeId?.let(onSelectJourney)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("alternate-departure-$index"),
+                    ) {
+                        Text(
+                            "${alternative.line} → ${alternative.direction} • " +
+                                formatDepartureEpoch(alternative.effectiveEpochSeconds),
+                        )
+                    }
+                }
+            }
         }
 
         engine.alerts(alerts).forEachIndexed { index, alert ->
@@ -284,13 +386,57 @@ fun TransitExperiencePanel(
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Text(
-                stringResource(R.string.recent_trips, store.recents().size),
+                stringResource(R.string.recent_trips, recentTripCount),
                 modifier = Modifier.testTag("recent-trips"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Text(
+                stringResource(R.string.recent_trips_privacy_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = {
+                    val enable = !historyEnabled
+                    if (!enable) store.clearRecents()
+                    // Always erase the durable key on opt-out, even if memory was
+                    // empty or the prior asynchronous persistence callback failed.
+                    val editor = prefs.edit().putBoolean("recent_trip_history_enabled", enable)
+                    if (!enable) editor.remove("recent_trip_ids")
+                    editor.apply()
+                    historyEnabled = enable
+                    recentTripCount = store.recents().size
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("recent-trips-consent-toggle"),
+            ) {
+                Text(stringResource(
+                    if (historyEnabled) R.string.recent_trips_disable
+                    else R.string.recent_trips_enable,
+                ))
+            }
+            if (historyEnabled && recentTripCount > 0) {
+                OutlinedButton(
+                    onClick = {
+                        store.clearRecents()
+                        recentTripCount = store.recents().size
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("recent-trips-clear"),
+                ) {
+                    Text(stringResource(R.string.recent_trips_clear))
+                }
+            }
         }
     }
 }
