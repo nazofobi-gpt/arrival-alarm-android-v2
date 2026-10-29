@@ -74,6 +74,8 @@ internal object NearbyStationCanonicalizer {
                     { it.distanceMeters },
                     { it.stop.name.lowercase(Locale.GERMANY) },
                     { it.stop.id },
+                    // Break equal-distance/name/ID ties across GTFS providers deterministically.
+                    { it.stop.providerId ?: "" },
                 ),
             )
             .take(limit)
