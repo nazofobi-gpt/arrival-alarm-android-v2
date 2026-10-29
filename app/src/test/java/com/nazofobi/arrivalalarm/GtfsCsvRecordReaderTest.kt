@@ -46,6 +46,18 @@ class GtfsCsvRecordReaderTest {
         assertTrue(failure?.message?.contains("unterminated") == true)
     }
 
+    @Test fun nulCharacterInHeaderOrQuotedAndUnquotedDataIsRejected() {
+        for (csv in listOf(
+            "i\u0000d,name\n1,Achim",
+            "id,name\n1,Bre\u0000men",
+            "id,name\n1,\"Bre\u0000men\"",
+        )) {
+            val failure = runCatching { records(csv) }.exceptionOrNull()
+            assertTrue(failure is IllegalStateException)
+            assertTrue(failure?.message?.contains("NUL") == true)
+        }
+    }
+
     @Test fun physicalLineOverLimitFailsBeforeReadingEntireUntrustedLine() {
         val counting = object : java.io.Reader() {
             private val input = StringReader("X".repeat(100_000))
