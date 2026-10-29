@@ -4,6 +4,29 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class LocationProviderRecoveryTest {
+    @Test fun armedStartupRetriesWhileGpsIsUnavailable() {
+        // No provider has been registered yet: absence of GPS is a recoverable state.
+        assertEquals(
+            LocationProviderRecovery.Decision.RETRY,
+            LocationProviderRecovery.startupDecision(JourneyPhase.ARMED, hasRuntimeGrants = true),
+        )
+    }
+
+    @Test fun startupNeverSurvivesRevokedGrantsOrTerminalJourney() {
+        assertEquals(
+            LocationProviderRecovery.Decision.STOP,
+            LocationProviderRecovery.startupDecision(JourneyPhase.ARMED, hasRuntimeGrants = false),
+        )
+        assertEquals(
+            LocationProviderRecovery.Decision.STOP,
+            LocationProviderRecovery.startupDecision(JourneyPhase.ARRIVED, hasRuntimeGrants = true),
+        )
+        assertEquals(
+            LocationProviderRecovery.Decision.STOP,
+            LocationProviderRecovery.startupDecision(JourneyPhase.EMPTY, hasRuntimeGrants = true),
+        )
+    }
+
     @Test fun providerDropoutKeepsArmedJourneyReadyForRetry() {
         assertEquals(
             LocationProviderRecovery.Decision.RETRY,
