@@ -67,9 +67,10 @@ interface GuidanceSpeaker {
 
 object TtsVoicePolicy {
     fun choose(desiredLocaleSupported: Boolean, deviceTtsAvailable: Boolean): VoiceChoice = when {
+        // A cached language-availability result cannot make an absent TTS engine usable.
+        !deviceTtsAvailable -> VoiceChoice.UNAVAILABLE
         desiredLocaleSupported -> VoiceChoice.DESIRED_LOCALE
-        deviceTtsAvailable -> VoiceChoice.DEVICE_FALLBACK
-        else -> VoiceChoice.UNAVAILABLE
+        else -> VoiceChoice.DEVICE_FALLBACK
     }
 }
 
