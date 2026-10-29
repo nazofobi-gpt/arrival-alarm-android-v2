@@ -3,6 +3,7 @@ package com.nazofobi.arrivalalarm
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.net.SocketTimeoutException
+import java.text.ParsePosition
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
@@ -212,7 +213,11 @@ class BoundedHttpTransport(
                 isLenient = false
                 timeZone = TimeZone.getTimeZone("GMT")
             }
-            val deadline = formatter.parse(value)?.time ?: return null
+            val position = ParsePosition(0)
+            val deadline = formatter.parse(value, position)?.time ?: return null
+            // Java's date parser accepts valid prefixes with trailing junk.
+            // A malformed Retry-After header must not override bounded backoff.
+            if (position.index != value.length) return null
             saturatingSubtractNonNegative(deadline, clock.nowMillis())
         } catch (_: Exception) {
             null

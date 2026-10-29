@@ -186,6 +186,32 @@ class BoundedHttpTransportTest {
     }
 
     @Test
+    fun retryAfterHttpDateRejectsTrailingGarbageAndHonorsValidDate() {
+        val responses = ArrayDeque(listOf(
+            HttpTransportResponse(503, mapOf("Retry-After" to listOf("Sun, 06 Nov 1994 08:49:39 GMT; invalid"))),
+            HttpTransportResponse(503, mapOf("Retry-After" to listOf("Sun, 06 Nov 1994 08:49:39 GMT"))),
+            HttpTransportResponse(200),
+        ))
+        val delays = mutableListOf<Long>()
+        val transport = BoundedHttpTransport(
+            exchange = HttpExchange { _, _, _ -> responses.removeFirst() },
+            clock = HttpTransportClock { 784111777000L },
+            sleeper = HttpTransportSleeper { delays += it },
+            maxRetries = 2,
+            baseBackoffMs = 125L,
+            maxRetryDelayMs = 4_000L,
+        )
+
+        val response = transport.execute(
+            HttpTransportRequest("https://example.invalid", method = "GET")
+        ) as HttpTransportResult.Response
+
+        assertEquals(200, response.response.status)
+        assertEquals(3, response.attempts)
+        assertEquals(listOf(125L, 2_000L), delays)
+    }
+
+    @Test
     fun retryAfterPastInvalidAndHugeDecimalAreSafe() {
         val clock = FakeClock(784111777000L)
         val headers = ArrayDeque(listOf(
