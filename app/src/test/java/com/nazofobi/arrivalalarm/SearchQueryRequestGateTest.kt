@@ -202,4 +202,26 @@ class SearchQueryRequestGateTest {
         assertEquals(listOf("Achim", "Bremen"), restoredRecentSearchQueries(serialized))
     }
 
+
+    @Test fun invisibleUnicodeSearchFormatControlsAreRejectedWithoutPoisoningRetryOrRecents() {
+        val invalidCharacters = listOf(
+            '\u061C', '\u200B', '\u200E', '\u200F',
+            '\u202A', '\u202C', '\u202E', '\u2060',
+            '\u2066', '\u2069', '\uFEFF',
+        )
+        val gate = SearchQueryRequestGate()
+        for (character in invalidCharacters) {
+            val invalid = "Loh${character}ne"
+            assertFalse("Unexpectedly allowed U+${character.code.toString(16)}", isSupportedSearchQuery(invalid))
+            assertFalse(gate.shouldAutoRequest(invalid))
+            gate.markRequested(invalid)
+            assertTrue(gate.shouldAutoRequest("Lohne"))
+        }
+
+        val history = listOf("Loh\u202Ene", "Achim", "Bremen\u200B", "Lohne")
+            .joinToString("\u001F")
+        assertEquals(listOf("Achim", "Lohne"), restoredRecentSearchQueries(history))
+        assertTrue(isSupportedSearchQuery("Lohne Hbf"))
+        assertTrue(isSupportedSearchQuery("Bremen"))
+    }
 }
