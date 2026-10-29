@@ -94,7 +94,7 @@ class ActiveJourneyService : Service(), LocationListener {
                         return
                     }
                     LocationProviderRecovery.Decision.DISARM_AND_STOP -> {
-                        disarmAndStopAfterLocationLoss()
+                        disarmAndStopAfterTrackingFailure()
                         return
                     }
                     LocationProviderRecovery.Decision.RETRY -> {
@@ -152,7 +152,7 @@ class ActiveJourneyService : Service(), LocationListener {
                 return START_NOT_STICKY
             }
             LocationProviderRecovery.Decision.DISARM_AND_STOP -> {
-                disarmAndStopAfterLocationLoss()
+                disarmAndStopAfterTrackingFailure()
                 return START_NOT_STICKY
             }
             LocationProviderRecovery.Decision.KEEP,
@@ -160,7 +160,12 @@ class ActiveJourneyService : Service(), LocationListener {
         }
 
         if (!startLocationForeground()) {
-            stopSelf()
+            // Android may deny foreground entry despite earlier permission checks.
+            // Never leave an ARMED alarm claiming background tracking is active.
+            when (LocationProviderRecovery.foregroundStartFailureDecision(graph.controller.state.phase)) {
+                LocationProviderRecovery.Decision.DISARM_AND_STOP -> disarmAndStopAfterTrackingFailure()
+                else -> stopSelf()
+            }
             return START_NOT_STICKY
         }
         // Provider registration can fail after the initial availability check.
@@ -182,7 +187,7 @@ class ActiveJourneyService : Service(), LocationListener {
                 return START_NOT_STICKY
             }
             LocationProviderRecovery.Decision.DISARM_AND_STOP -> {
-                disarmAndStopAfterLocationLoss()
+                disarmAndStopAfterTrackingFailure()
                 return START_NOT_STICKY
             }
             LocationProviderRecovery.Decision.RETRY -> {
@@ -257,8 +262,9 @@ class ActiveJourneyService : Service(), LocationListener {
         super.onDestroy()
     }
 
-    private fun disarmAndStopAfterLocationLoss() {
-        // Stopping the FGS alone would leave a silently armed alarm with no location updates.
+    private fun disarmAndStopAfterTrackingFailure() {
+        // A lost location prerequisite or failed foreground start would otherwise leave
+        // a silently armed alarm without a working location tracker.
         if (graph.controller.state.phase == JourneyPhase.ARMED) {
             graph.connectorPort.cancelArrivalAlarm()
         }
@@ -278,7 +284,7 @@ class ActiveJourneyService : Service(), LocationListener {
             locationServicesEnabled(),
         )) {
             LocationProviderRecovery.Decision.STOP -> stopSelf()
-            LocationProviderRecovery.Decision.DISARM_AND_STOP -> disarmAndStopAfterLocationLoss()
+            LocationProviderRecovery.Decision.DISARM_AND_STOP -> disarmAndStopAfterTrackingFailure()
             LocationProviderRecovery.Decision.KEEP -> Unit
             LocationProviderRecovery.Decision.RETRY -> {
                 removeLocationUpdates()
@@ -351,6 +357,9 @@ class ActiveJourneyService : Service(), LocationListener {
         } catch (_: SecurityException) {
             false
         } catch (_: IllegalArgumentException) {
+            false
+        } catch (_: IllegalStateException) {
+            // Includes Android's ForegroundServiceStartNotAllowedException.
             false
         }
     }
