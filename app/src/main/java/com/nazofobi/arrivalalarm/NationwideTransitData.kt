@@ -509,7 +509,14 @@ class NationwideTransitGateway(
         callback: (List<RouteOption>, String) -> Unit,
     ) {
         io.execute {
-            val resolution = resolveJourneyOptions(origin, destination, limit)
+            // A cancelled realtime lookup must end this worker without crashing the app
+            // or dispatching a stale journey result to the UI.
+            val resolution = try {
+                resolveJourneyOptions(origin, destination, limit)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return@execute
+            }
             val options = when (resolution) {
                 is NationwideJourneyResolution.Results -> resolution.options
                 is NationwideJourneyResolution.NoRoute,
