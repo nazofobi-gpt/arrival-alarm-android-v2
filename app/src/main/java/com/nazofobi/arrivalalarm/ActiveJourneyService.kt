@@ -62,6 +62,8 @@ object ActiveJourneyPermissions {
 class ActiveJourneyService : Service(), LocationListener {
     private lateinit var graph: ArrivalAlarmProcessGraph
     private lateinit var locationManager: LocationManager
+    private fun locationServicesEnabled(): Boolean =
+        runCatching { isDeviceLocationEnabledForTracking(locationManager) }.getOrDefault(false)
     private val completionExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private var providerReceiverRegistered = false
@@ -85,6 +87,7 @@ class ActiveJourneyService : Service(), LocationListener {
                     locationRegistered,
                     registeredProviderEnabled,
                     ActiveJourneyPermissions.hasRuntimeGrants(this@ActiveJourneyService),
+                    locationServicesEnabled(),
                 )) {
                     LocationProviderRecovery.Decision.STOP -> {
                         stopSelf()
@@ -138,9 +141,7 @@ class ActiveJourneyService : Service(), LocationListener {
         if (LocationProviderRecovery.startupDecision(
                 journeyPhase = graph.controller.state.phase,
                 hasRuntimeGrants = ActiveJourneyPermissions.hasRuntimeGrants(this),
-                locationServicesEnabled = runCatching {
-                    isDeviceLocationEnabledForTracking(locationManager)
-                }.getOrDefault(false),
+                locationServicesEnabled = locationServicesEnabled(),
             ) == LocationProviderRecovery.Decision.STOP
         ) {
             stopSelf()
@@ -163,6 +164,7 @@ class ActiveJourneyService : Service(), LocationListener {
             registered,
             providerEnabled,
             ActiveJourneyPermissions.hasRuntimeGrants(this),
+            locationServicesEnabled(),
         )) {
             LocationProviderRecovery.Decision.STOP -> {
                 stopSelf()
@@ -250,6 +252,7 @@ class ActiveJourneyService : Service(), LocationListener {
             locationRegistered,
             registeredProviderEnabled,
             ActiveJourneyPermissions.hasRuntimeGrants(this),
+            locationServicesEnabled(),
         )) {
             LocationProviderRecovery.Decision.STOP -> stopSelf()
             LocationProviderRecovery.Decision.KEEP -> Unit
