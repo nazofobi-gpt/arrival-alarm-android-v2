@@ -131,13 +131,16 @@ class ActiveJourneyService : Service(), LocationListener {
             stopSelf()
             return START_NOT_STICKY
         }
-        // This journey is already armed. A temporarily disabled location provider
-        // must not kill its foreground recovery path before the provider receiver
-        // and periodic retry monitor have a chance to register GPS again.
+        // Android requires system-wide location services ON for a location FGS.
+        // With that prerequisite met, a transiently missing enabled provider
+        // must not kill the already-armed journey before recovery can run.
         // New journey initiation still uses the stricter hasRequired() UI gate.
         if (LocationProviderRecovery.startupDecision(
-                graph.controller.state.phase,
-                ActiveJourneyPermissions.hasRuntimeGrants(this),
+                journeyPhase = graph.controller.state.phase,
+                hasRuntimeGrants = ActiveJourneyPermissions.hasRuntimeGrants(this),
+                locationServicesEnabled = runCatching {
+                    isDeviceLocationEnabledForTracking(locationManager)
+                }.getOrDefault(false),
             ) == LocationProviderRecovery.Decision.STOP
         ) {
             stopSelf()
