@@ -8,6 +8,15 @@ package com.nazofobi.arrivalalarm
 internal object LocationProviderRecovery {
     enum class Decision { STOP, KEEP, RETRY }
 
+    /** An already-armed journey may enter foreground recovery before GPS comes back. */
+    fun startupDecision(journeyPhase: JourneyPhase, hasRuntimeGrants: Boolean): Decision =
+        decide(
+            journeyPhase = journeyPhase,
+            locationRegistered = false,
+            registeredProviderEnabled = false,
+            hasRuntimeGrants = hasRuntimeGrants,
+        )
+
     fun decide(
         journeyPhase: JourneyPhase,
         locationRegistered: Boolean,
