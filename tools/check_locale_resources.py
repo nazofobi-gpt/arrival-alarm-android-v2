@@ -153,6 +153,15 @@ def validate(root: Path) -> list[str]:
             else:
                 defaults[name] = entry
 
+    # Nontranslatable defaults have no localized counterpart to compare, but
+    # their formatted arguments can still crash Android String.format().
+    for key, source in sorted(defaults.items()):
+        if not source.translatable and source.formatted:
+            try:
+                placeholders(source.text)
+            except ValueError as exc:
+                errors.append(f"values: invalid nontranslatable format for {key}: {exc}")
+
     for locale in LOCALES:
         directory = root / f"values-{locale}"
         localized: dict[str, StringValue] = {}
