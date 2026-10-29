@@ -131,7 +131,15 @@ class ActiveJourneyService : Service(), LocationListener {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (!ActiveJourneyPermissions.hasRequired(this) || enabledLocationProvider() == null) {
+        // This journey is already armed. A temporarily disabled location provider
+        // must not kill its foreground recovery path before the provider receiver
+        // and periodic retry monitor have a chance to register GPS again.
+        // New journey initiation still uses the stricter hasRequired() UI gate.
+        if (LocationProviderRecovery.startupDecision(
+                graph.controller.state.phase,
+                ActiveJourneyPermissions.hasRuntimeGrants(this),
+            ) == LocationProviderRecovery.Decision.STOP
+        ) {
             stopSelf()
             return START_NOT_STICKY
         }
