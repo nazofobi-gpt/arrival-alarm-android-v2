@@ -13,6 +13,15 @@ class NationwideIndexReadinessTest {
         assertFalse(hasUsableNationwideIndex(NationwideDataState.Ready(-1, 1L, "feed")))
     }
 
+    @Test fun zeroStopReadyIndexCanBeRetriedWithoutOfferingDuplicateDownloads() {
+        assertTrue(shouldOfferNationwideDataRetry(NationwideDataState.Idle))
+        assertTrue(shouldOfferNationwideDataRetry(NationwideDataState.Error("network failure")))
+        assertTrue(shouldOfferNationwideDataRetry(NationwideDataState.Ready(0, 1L, "feed")))
+        assertTrue(shouldOfferNationwideDataRetry(NationwideDataState.Ready(-1, 1L, "feed")))
+        assertFalse(shouldOfferNationwideDataRetry(NationwideDataState.Loading("loading")))
+        assertFalse(shouldOfferNationwideDataRetry(NationwideDataState.Ready(1, 1L, "feed")))
+    }
+
     @Test fun populatedStopIndexCanBeConsideredUsable() {
         assertTrue(hasUsableNationwideIndex(NationwideDataState.Ready(1, 1L, "feed")))
         assertTrue(hasUsableNationwideIndex(NationwideDataState.Ready(100_000, 1L, "feed")))
