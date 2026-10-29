@@ -32,6 +32,8 @@ internal fun isSupportedSearchQuery(rawQuery: String): Boolean {
     return query.length in 2..MAX_SEARCH_QUERY_LENGTH &&
         query.none { character ->
             java.lang.Character.isISOControl(character) ||
+                // Unicode Cf characters (including ZWNJ/ZWJ) are invisible query modifiers.
+                java.lang.Character.getType(character) == java.lang.Character.FORMAT.toInt() ||
                 character == '\u061C' || // Arabic letter mark (bidirectional formatting).
                 character == '\u200B' || // Zero-width space.
                 character == '\u200E' || character == '\u200F' || // Directional marks.
