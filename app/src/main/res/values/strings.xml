@@ -92,6 +92,7 @@
     <string name="route_at_most_one_transfer_filter">En fazla 1 aktarma</string>
     <string name="route_at_most_one_transfer_empty">En fazla bir aktarmalı rota bulunamadı. Alternatifler için filtreyi kapatın.</string>
     <string name="route_fewer_transfers_filter">Önce az aktarmalı rotalar</string>
+    <string name="route_shorter_walking_filter">Önce az yürüyüşlü rotalar</string>
     <string name="route_direct_only_empty">Aktarmasız rota bulunamadı. Diğer seçenekleri görmek için filtreyi kapatın.</string>
     <string name="route_results_title">Rota Sonuçları</string>
     <string name="route_points_format">%1$s → %2$s</string>

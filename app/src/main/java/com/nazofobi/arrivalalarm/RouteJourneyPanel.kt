@@ -56,6 +56,9 @@ fun RouteJourneyPanel(
     var fewerTransfersFirst by rememberSaveable {
         mutableStateOf(preferences.loadFewerTransfersFirst())
     }
+    var shorterWalkingFirst by rememberSaveable {
+        mutableStateOf(preferences.loadShorterWalkingFirst())
+    }
     var atMostOneTransfer by rememberSaveable {
         mutableStateOf(preferences.loadAtMostOneTransfer())
     }
@@ -137,6 +140,7 @@ fun RouteJourneyPanel(
                 val visibleOptions = RouteResultsFilter(
                     directOnly = directOnly,
                     fewerTransfersFirst = fewerTransfersFirst,
+                    shorterWalkingFirst = shorterWalkingFirst,
                     maxTransfers = if (atMostOneTransfer) 1 else null,
                 ).apply(routeOptions)
                 FilterChip(
@@ -160,6 +164,17 @@ fun RouteJourneyPanel(
                     modifier = Modifier
                         .heightIn(min = 48.dp)
                         .testTag("route-fewer-transfers-filter"),
+                )
+                FilterChip(
+                    selected = shorterWalkingFirst,
+                    onClick = {
+                        shorterWalkingFirst = !shorterWalkingFirst
+                        preferences.saveShorterWalkingFirst(shorterWalkingFirst)
+                    },
+                    label = { Text(stringResource(R.string.route_shorter_walking_filter)) },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("route-shorter-walking-filter"),
                 )
 
                 FilterChip(
