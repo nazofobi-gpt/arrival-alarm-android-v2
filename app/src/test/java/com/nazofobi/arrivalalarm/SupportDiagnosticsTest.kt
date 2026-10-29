@@ -170,6 +170,48 @@ class SupportDiagnosticsTest {
         assertFalse(divergent.contains("provider_error_detail"))
     }
 
+    @Test fun feedBucketBoundariesAreExactAndNonLeaking() {
+        val fetchedAt = 1_700_000_000L
+        val sensitiveSource = "private-origin-and-auth-secret"
+        val snapshot = state(NationwideDataState.Ready(17, fetchedAt, sensitiveSource))
+        val samples = listOf(
+            0L to "under_24h",
+            86_399L to "under_24h",
+            86_400L to "1_to_7d",
+            604_799L to "1_to_7d",
+            604_800L to "over_7d",
+        )
+        for ((age, expected) in samples) {
+            val report = SupportDiagnostics.render(snapshot, fetchedAt + age)
+            assertTrue("Incorrect bucket at age=$age", report.contains("feed_age_bucket=$expected\n"))
+            assertFalse(report.contains(sensitiveSource))
+            assertFalse(report.contains(fetchedAt.toString()))
+        }
+    }
+
+    @Test fun redactedOutputHasExactlyOneValuePerReviewedKey() {
+        val rawError = "raw-user-coordinates-51.123-8.123?token=private"
+        val candidateStates = listOf(
+            state(NationwideDataState.Error(rawError)),
+            state(NationwideDataState.Ready(31, 1_700_000_000L, rawError)),
+            state(NationwideDataState.Idle),
+        )
+        for (candidate in candidateStates) {
+            val report = SupportDiagnostics.render(candidate, 1_700_000_500L)
+            val lines = report.trimEnd('\n').lines()
+            val pairs = lines.map { line ->
+                assertTrue("Malformed support field", line.count { it == '=' } == 1)
+                val separator = line.indexOf('=')
+                assertTrue("Missing support key", separator > 0)
+                line.substring(0, separator) to line.substring(separator + 1)
+            }
+            assertEquals("Support schema must not add duplicate fields", 17, pairs.size)
+            assertEquals("Each key must appear once", pairs.size, pairs.map { it.first }.toSet().size)
+            assertTrue(report.endsWith("\n"))
+            assertFalse(report.contains(rawError))
+        }
+    }
+
     @Test fun outputHasOnlyFixedReviewedKeys() {
         val report = SupportDiagnostics.render(state(NationwideDataState.Idle), 100L)
         val keys = report.trim().lines().map { it.substringBefore('=') }.toSet()
