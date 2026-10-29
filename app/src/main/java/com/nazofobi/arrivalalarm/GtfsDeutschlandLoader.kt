@@ -3,7 +3,6 @@ package com.nazofobi.arrivalalarm
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.BufferedReader
-import java.io.StringReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.text.SimpleDateFormat
@@ -51,7 +50,8 @@ object GtfsDeutschlandLoader {
                         if (count < 0) break
                         entryBytes.write(buffer, 0, count)
                     }
-                    files[name] = parseCsv(entryBytes.toString(Charsets.UTF_8.name()))
+                    // Reject malformed UTF-8 in every required table instead of replacing invalid bytes.
+                    files[name] = strictGtfsUtf8Reader(ByteArrayInputStream(entryBytes.toByteArray())).use { parseCsv(it) }
                 }
                 zip.closeEntry()
             }
@@ -90,8 +90,8 @@ object GtfsDeutschlandLoader {
 
     // Parse logical CSV records: a quoted GTFS stop_name can contain newlines.
     // The shared bounded reader also rejects malformed quoting before ingestion.
-    private fun parseCsv(contents: String): List<Map<String, String>> {
-        val records = gtfsCsvRecords(BufferedReader(StringReader(contents))).iterator()
+    private fun parseCsv(reader: BufferedReader): List<Map<String, String>> {
+        val records = gtfsCsvRecords(reader).iterator()
         if (!records.hasNext()) return emptyList()
         val header = csvLine(records.next()).map { it.removePrefix("\uFEFF") }
         return buildList {

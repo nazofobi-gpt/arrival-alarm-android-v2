@@ -134,6 +134,34 @@ class GtfsDeutschlandLoaderTest {
         assertEquals(listOf("south", "north"), snapshot.routes.single().stopIds)
     }
 
+
+    @Test fun malformedUtf8InAnyRequiredCoreTableFailsClosed() {
+        val core = linkedMapOf(
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,stop_id,stop_sequence\nt1,s1,1\n",
+        )
+        for (corruptTable in core.keys) {
+            val bytes = ByteArrayOutputStream()
+            ZipOutputStream(bytes).use { zip ->
+                for ((name, content) in core) {
+                    zip.putNextEntry(ZipEntry(name))
+                    zip.write(content.toByteArray(Charsets.UTF_8))
+                    if (name == corruptTable) zip.write(byteArrayOf(0xC3.toByte(), 0x28))
+                    zip.closeEntry()
+                }
+            }
+            val failure = runCatching {
+                GtfsDeutschlandLoader.parse(bytes.toByteArray(), "malformed", "2026-10-29")
+            }.exceptionOrNull()
+            assertTrue(
+                "Malformed UTF-8 in $corruptTable must fail closed: $failure",
+                failure is java.nio.charset.CharacterCodingException,
+            )
+        }
+    }
+
     private fun zipOf(vararg files: Pair<String, String>): ByteArray {
         val bytes = ByteArrayOutputStream()
         ZipOutputStream(bytes).use { zip -> files.forEach { (name, content) -> zip.putNextEntry(ZipEntry(name)); zip.write(content.toByteArray()); zip.closeEntry() } }
