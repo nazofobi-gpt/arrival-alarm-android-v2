@@ -4,12 +4,13 @@ import android.location.LocationManager
 import android.os.Build
 
 /**
- * Passive callbacks alone cannot drive arrival tracking on pre-P devices.
+ * Match the active-journey provider selector on pre-P devices. OEM wrappers may
+ * vary the casing of provider names, and an enabled non-passive fallback can
+ * still supply location updates when GPS/network are unavailable.
  * Android P+ exposes the user's effective location-services toggle directly.
  */
 internal fun hasEnabledDeviceLocationProvider(enabledProviders: Collection<String>): Boolean =
-    LocationManager.GPS_PROVIDER in enabledProviders ||
-        LocationManager.NETWORK_PROVIDER in enabledProviders
+    ActiveJourneyLocationProviderSelection.choose(enabledProviders.toList()) != null
 
 /**
  * One fail-closed location-services policy shared by Settings and active-journey startup.

@@ -31,6 +31,43 @@ class SettingsLocationReadinessPolicyTest {
     }
 
     @Test
+    fun preAndroidPMatchesTrackingProviderNormalizationForOemNames() {
+        assertTrue(hasEnabledDeviceLocationProvider(listOf(" GPS ", " passive ")))
+        assertTrue(hasEnabledDeviceLocationProvider(listOf(" Network ")))
+        assertTrue(
+            isDeviceLocationEnabledForTracking(
+                sdkInt = 27,
+                locationEnabled = { error("not available before P") },
+                enabledProviders = { listOf(" GPS ") },
+            )
+        )
+    }
+
+    @Test
+    fun preAndroidPAcceptsNonPassiveFallbackLikeTrackingService() {
+        assertTrue(hasEnabledDeviceLocationProvider(listOf("passive", "fused")))
+        assertTrue(
+            isDeviceLocationEnabledForTracking(
+                sdkInt = 27,
+                locationEnabled = { error("not available before P") },
+                enabledProviders = { listOf("fused") },
+            )
+        )
+    }
+
+    @Test
+    fun preAndroidPStillRejectsNormalizedPassiveAndBlankOnly() {
+        assertFalse(hasEnabledDeviceLocationProvider(listOf(" PASSIVE ", " ", "")))
+        assertFalse(
+            isDeviceLocationEnabledForTracking(
+                sdkInt = 27,
+                locationEnabled = { error("not available before P") },
+                enabledProviders = { listOf(" PASSIVE ", "") },
+            )
+        )
+    }
+
+    @Test
     fun androidPAndLaterRejectsDisabledLocationToggleEvenWithGpsListed() {
         assertFalse(
             isDeviceLocationEnabledForTracking(
