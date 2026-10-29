@@ -59,6 +59,21 @@ object GtfsDeutschlandLoader {
         require(files.keys.containsAll(requiredCoreFiles)) {
             "Missing GTFS core members: ${(requiredCoreFiles - files.keys).sorted().joinToString(", ")}"
         }
+        // GTFS identity keys must be unique. A duplicate would silently alias stops,
+        // overwrite route metadata or publish two trips under the same identity.
+        // Reject the candidate snapshot so callers can retain the old-known-good feed.
+        for ((table, key) in listOf(
+            "stops.txt" to "stop_id",
+            "routes.txt" to "route_id",
+            "trips.txt" to "trip_id",
+        )) {
+            val seen = HashSet<String>()
+            files.getValue(table).forEach { row ->
+                val id = row[key]
+                require(!id.isNullOrBlank()) { "Missing $key in $table" }
+                require(seen.add(id)) { "Duplicate $key in $table: $id" }
+            }
+        }
         val provider = TransitProvider("delfi","DELFI / GTFS Deutschland","Germany",FEED_URL,"Creative Commons 4.0",sourceVersion,fetchedAt,true,"https://realtime.gtfs.de/realtime-free.pb")
         val stops = files["stops.txt"].orEmpty().mapNotNull { row ->
             val id=row["stop_id"]?:return@mapNotNull null; val name=row["stop_name"]?:return@mapNotNull null
