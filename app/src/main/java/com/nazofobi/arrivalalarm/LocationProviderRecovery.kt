@@ -27,6 +27,14 @@ internal object LocationProviderRecovery {
             locationServicesEnabled = locationServicesEnabled,
         )
 
+    /**
+     * A denied foreground promotion cannot keep a journey armed: there will
+     * be no reliable location updates or arrival notification. Terminal
+     * journeys should only tear down the service, never cancel retroactively.
+     */
+    fun foregroundStartFailureDecision(journeyPhase: JourneyPhase): Decision =
+        if (journeyPhase == JourneyPhase.ARMED) Decision.DISARM_AND_STOP else Decision.STOP
+
     fun decide(
         journeyPhase: JourneyPhase,
         locationRegistered: Boolean,

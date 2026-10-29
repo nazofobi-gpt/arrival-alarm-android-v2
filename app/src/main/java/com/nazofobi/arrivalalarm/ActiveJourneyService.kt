@@ -160,7 +160,12 @@ class ActiveJourneyService : Service(), LocationListener {
         }
 
         if (!startLocationForeground()) {
-            stopSelf()
+            // A rejected location FGS cannot protect an armed destination alarm.
+            // Never leave the controller ARMED with no tracking service.
+            when (LocationProviderRecovery.foregroundStartFailureDecision(graph.controller.state.phase)) {
+                LocationProviderRecovery.Decision.DISARM_AND_STOP -> disarmAndStopAfterLocationLoss()
+                else -> stopSelf()
+            }
             return START_NOT_STICKY
         }
         // Provider registration can fail after the initial availability check.
@@ -349,6 +354,9 @@ class ActiveJourneyService : Service(), LocationListener {
         } catch (_: SecurityException) {
             false
         } catch (_: IllegalArgumentException) {
+            false
+        } catch (_: IllegalStateException) {
+            // Includes Android foreground-service start restrictions.
             false
         }
     }
