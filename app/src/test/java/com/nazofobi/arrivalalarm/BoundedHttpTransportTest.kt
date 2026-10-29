@@ -259,6 +259,30 @@ class BoundedHttpTransportTest {
     }
 
     @Test
+    fun retryAfterRejectsSignedDeltaSecondsAndUsesNormalBoundedBackoff() {
+        val responses = ArrayDeque(listOf(
+            HttpTransportResponse(429, mapOf("Retry-After" to listOf("+99"))),
+            HttpTransportResponse(503, mapOf("retry-after" to listOf("-3"))),
+            HttpTransportResponse(200),
+        ))
+        val delays = mutableListOf<Long>()
+        val transport = BoundedHttpTransport(
+            exchange = HttpExchange { _, _, _ -> responses.removeFirst() },
+            clock = HttpTransportClock { 0L },
+            sleeper = HttpTransportSleeper { delays += it },
+            maxRetries = 2,
+            baseBackoffMs = 50L,
+            maxRetryDelayMs = 4_000L,
+        )
+
+        val result = transport.execute(HttpTransportRequest("https://example.invalid")) as HttpTransportResult.Response
+
+        assertEquals(200, result.response.status)
+        assertEquals(3, result.attempts)
+        assertEquals(listOf(50L, 100L), delays)
+    }
+
+    @Test
     fun networkFailuresAreBoundedWithoutRealSleep() {
         var calls = 0
         val delays = mutableListOf<Long>()
