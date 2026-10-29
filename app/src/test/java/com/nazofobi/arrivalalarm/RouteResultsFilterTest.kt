@@ -238,6 +238,26 @@ class RouteResultsFilterTest {
     }
 
     @Test
+    fun invisibleOrControlRouteIdsNeverBecomeSelectableJourneyCards() {
+        val unsafe = listOf(
+            option("\u200B", 0), // zero-width space is not ordinary whitespace
+            option("route\u202Ereversed", 0), // bidirectional override
+            option("route\nnew-line", 0),
+            option("route\tseparator", 0),
+        )
+        val valid = option("München-RE-42", 0)
+        val source = unsafe + valid
+
+        assertEquals(listOf(valid), RouteResultsFilter().apply(source))
+        assertEquals(listOf(valid), RouteResultsFilter(directOnly = true).apply(source))
+        assertEquals(
+            listOf(valid),
+            RouteResultsFilter(fewerTransfersFirst = true, maxTransfers = 0).apply(source),
+        )
+        assertEquals(5, source.size)
+    }
+
+    @Test
     fun validGeographicBoundaryCoordinatesRemainSelectable() {
         val boundary = option("boundary", 0).copy(
             origin = origin.copy(latitude = -90.0, longitude = 180.0),
