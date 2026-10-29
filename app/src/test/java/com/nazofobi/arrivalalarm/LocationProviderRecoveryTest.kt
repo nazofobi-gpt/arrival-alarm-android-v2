@@ -16,9 +16,9 @@ class LocationProviderRecoveryTest {
         )
     }
 
-    @Test fun startupStopsWhenSystemLocationIsDisabledOrPermissionsRevoked() {
+    @Test fun startupDisarmsWhenSystemLocationIsDisabledOrPermissionsRevoked() {
         assertEquals(
-            LocationProviderRecovery.Decision.STOP,
+            LocationProviderRecovery.Decision.DISARM_AND_STOP,
             LocationProviderRecovery.startupDecision(
                 JourneyPhase.ARMED,
                 hasRuntimeGrants = true,
@@ -26,7 +26,7 @@ class LocationProviderRecoveryTest {
             ),
         )
         assertEquals(
-            LocationProviderRecovery.Decision.STOP,
+            LocationProviderRecovery.Decision.DISARM_AND_STOP,
             LocationProviderRecovery.startupDecision(
                 JourneyPhase.ARMED,
                 hasRuntimeGrants = false,
@@ -80,7 +80,7 @@ class LocationProviderRecoveryTest {
 
     @Test fun permissionRevocationOrFinishedJourneyStopsTracking() {
         assertEquals(
-            LocationProviderRecovery.Decision.STOP,
+            LocationProviderRecovery.Decision.DISARM_AND_STOP,
             LocationProviderRecovery.decide(JourneyPhase.ARMED, locationRegistered = false, registeredProviderEnabled = false, hasRuntimeGrants = false, locationServicesEnabled = true),
         )
         assertEquals(
@@ -94,12 +94,25 @@ class LocationProviderRecoveryTest {
     }
     @Test fun systemWideLocationOffStopsArmedTrackingEvenWhenProviderStillReportsEnabled() {
         assertEquals(
-            LocationProviderRecovery.Decision.STOP,
+            LocationProviderRecovery.Decision.DISARM_AND_STOP,
             LocationProviderRecovery.decide(
                 journeyPhase = JourneyPhase.ARMED,
                 locationRegistered = true,
                 registeredProviderEnabled = true,
                 hasRuntimeGrants = true,
+                locationServicesEnabled = false,
+            ),
+        )
+    }
+
+    @Test fun finishedJourneyDoesNotCancelAlarmWhenLocationPrerequisitesAreMissing() {
+        assertEquals(
+            LocationProviderRecovery.Decision.STOP,
+            LocationProviderRecovery.decide(
+                journeyPhase = JourneyPhase.ARRIVED,
+                locationRegistered = true,
+                registeredProviderEnabled = true,
+                hasRuntimeGrants = false,
                 locationServicesEnabled = false,
             ),
         )
@@ -117,7 +130,7 @@ class LocationProviderRecoveryTest {
             ),
         )
         assertEquals(
-            LocationProviderRecovery.Decision.STOP,
+            LocationProviderRecovery.Decision.DISARM_AND_STOP,
             LocationProviderRecovery.decide(
                 journeyPhase = JourneyPhase.ARMED,
                 locationRegistered = false,
