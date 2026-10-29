@@ -20,6 +20,8 @@ private fun readBoundedGtfsPhysicalLine(reader: BufferedReader, maxChars: Int): 
                 return line.toString()
             }
             else -> {
+                // NUL is not valid GTFS text; reject before it can enter the SQL index.
+                check(next != 0) { "GTFS CSV record contains NUL" }
                 check(line.length < maxChars) { "GTFS CSV record exceeds size limit" }
                 line.append(next.toChar())
             }
