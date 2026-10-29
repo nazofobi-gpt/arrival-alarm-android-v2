@@ -208,15 +208,15 @@ class GtfsDeutschlandLoaderTest {
 
     @Test fun duplicateCoreGtfsIdsFailClosedInsteadOfAliasingCatalogObjects() {
         val base = linkedMapOf(
-            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\\ns1,Lohne,52.66,8.23\\ns2,Bremen,53.07,8.80\\n",
-            "routes.txt" to "route_id,route_short_name\\nr1,RE\\n",
-            "trips.txt" to "route_id,trip_id\\nr1,t1\\n",
-            "stop_times.txt" to "trip_id,stop_id,stop_sequence\\nt1,s1,1\\nt1,s2,2\\n",
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\ns2,Bremen,53.07,8.80\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,stop_id,stop_sequence\nt1,s1,1\nt1,s2,2\n",
         )
         val duplicateCases = listOf(
-            Triple("stops.txt", "stop_id", "s1,Conflicting Stop,50.0,10.0\\n"),
-            Triple("routes.txt", "route_id", "r1,Conflicting Route\\n"),
-            Triple("trips.txt", "trip_id", "r1,t1\\n"),
+            Triple("stops.txt", "stop_id", "s1,Conflicting Stop,50.0,10.0\n"),
+            Triple("routes.txt", "route_id", "r1,Conflicting Route\n"),
+            Triple("trips.txt", "trip_id", "r1,t1\n"),
         )
         for ((table, key, duplicateRow) in duplicateCases) {
             val feed = base.toMutableMap()
@@ -238,15 +238,15 @@ class GtfsDeutschlandLoaderTest {
 
     @Test fun blankCoreGtfsIdsFailClosedBeforePublishingAmbiguousCatalog() {
         val base = linkedMapOf(
-            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\\ns1,Lohne,52.66,8.23\\ns2,Bremen,53.07,8.80\\n",
-            "routes.txt" to "route_id,route_short_name\\nr1,RE\\n",
-            "trips.txt" to "route_id,trip_id\\nr1,t1\\n",
-            "stop_times.txt" to "trip_id,stop_id,stop_sequence\\nt1,s1,1\\nt1,s2,2\\n",
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\ns2,Bremen,53.07,8.80\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,stop_id,stop_sequence\nt1,s1,1\nt1,s2,2\n",
         )
         val blankCases = listOf(
-            Triple("stops.txt", "stop_id", ",Blank Stop,52.66,8.23\\n"),
-            Triple("routes.txt", "route_id", ",Blank Route\\n"),
-            Triple("trips.txt", "trip_id", "r1,\\n"),
+            Triple("stops.txt", "stop_id", ",Blank Stop,52.66,8.23\n"),
+            Triple("routes.txt", "route_id", ",Blank Route\n"),
+            Triple("trips.txt", "trip_id", "r1,\n"),
         )
         for ((table, key, blankRow) in blankCases) {
             val feed = base.toMutableMap()
