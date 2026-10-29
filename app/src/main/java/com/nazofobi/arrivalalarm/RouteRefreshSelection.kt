@@ -17,7 +17,14 @@ internal fun retainSelectedRouteAfterRefresh(
     updatedOptions: List<RouteOption>,
 ): String? {
     // A blank UI key is not an identifiable itinerary and must never preserve consent.
-    val id = selectedRouteId?.takeIf { it.isNotBlank() } ?: return null
+    // The route-card filter rejects invisible/control provider keys. A refresh
+    // must enforce the same rule or it could silently retain an unsafe choice.
+    val id = selectedRouteId?.takeIf { key ->
+        key.isNotBlank() && key.none { ch ->
+            Character.isISOControl(ch) ||
+                Character.getType(ch) == Character.FORMAT.toInt()
+        }
+    } ?: return null
     val previous = previousOptions.singleOrNull { it.id == id } ?: return null
     val updated = updatedOptions.singleOrNull { it.id == id } ?: return null
 
