@@ -252,6 +252,28 @@ class RouteRefreshSelectionTest {
     }
 
     @Test
+    fun invisibleOrControlRouteKeyCannotSilentlyRetainJourneyConsent() {
+        val valid = option()
+        val rejectedKeys = listOf(
+            "\u200B", // nonblank zero-width provider identifier
+            "trip\u202Ereverse", // bidirectional override
+            "trip\nnewline",
+            "trip\tseparator",
+        )
+        for (id in rejectedKeys) {
+            val candidate = valid.copy(id = id)
+            assertNull(retainSelectedRouteAfterRefresh(
+                id, listOf(candidate), listOf(candidate),
+            ))
+        }
+        // Unicode letters remain valid physical journey keys.
+        val localized = valid.copy(id = "München-RE-42")
+        assertEquals(localized.id, retainSelectedRouteAfterRefresh(
+            localized.id, listOf(localized), listOf(localized),
+        ))
+    }
+
+    @Test
     fun missingOrAmbiguousCandidateDoesNotSelectAnotherRoute() {
         val old = option()
         assertNull(retainSelectedRouteAfterRefresh(null, listOf(old), listOf(old)))
