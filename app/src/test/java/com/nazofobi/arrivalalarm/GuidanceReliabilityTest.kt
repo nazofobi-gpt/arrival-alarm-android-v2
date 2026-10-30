@@ -215,6 +215,43 @@ class GuidanceReliabilityTest {
         assertNull(controller.state.pendingSinceEpochMillis)
     }
 
+    @Test fun directRetryAfterTtsFailureCannotResurrectExpiredStop() {
+        val speaker = RecordingSpeaker(available = false)
+        var now = 1_000_000L
+        val controller = GuidanceReliabilityController(speaker, nowEpochMillis = { now })
+        controller.onPermissions(GuidancePermissionSnapshot(true, true, true))
+        val stop = GuidanceUtterance("stop:stale", "Sıradaki durak Lohne", "tr-TR")
+
+        assertFalse(controller.requestGuidance(stop))
+        assertEquals(1_000_000L, controller.state.pendingSinceEpochMillis)
+        now += GuidanceReliabilityController.MAX_PENDING_AGE_MILLIS + 1L
+        speaker.available = true
+
+        assertFalse(controller.requestGuidance(stop))
+        assertTrue(speaker.spoken.isEmpty())
+        assertNull(controller.state.pending)
+        assertNull(controller.state.pendingSinceEpochMillis)
+    }
+
+    @Test fun directRetryBeforeExpiryRecoversTtsWithoutRefreshingAge() {
+        val speaker = RecordingSpeaker(available = false)
+        var now = 1_000_000L
+        val controller = GuidanceReliabilityController(speaker, nowEpochMillis = { now })
+        controller.onPermissions(GuidancePermissionSnapshot(true, true, true))
+        val stop = GuidanceUtterance("stop:recent", "Sıradaki durak Bremen Hbf", "tr-TR")
+
+        assertFalse(controller.requestGuidance(stop))
+        now += 30_000L
+        assertFalse(controller.requestGuidance(stop))
+        assertEquals(1_000_000L, controller.state.pendingSinceEpochMillis)
+        speaker.available = true
+        assertTrue(controller.requestGuidance(stop))
+        assertEquals(listOf(stop), speaker.spoken)
+        assertEquals(stop.key, controller.state.lastSpokenKey)
+        assertNull(controller.state.pending)
+        assertFalse(controller.requestGuidance(stop))
+    }
+
     @Test fun repeatedTtsFailureDoesNotRefreshPendingExpiry() {
         val speaker = RecordingSpeaker(available = false)
         var now = 100_000L
