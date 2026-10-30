@@ -304,6 +304,57 @@ class OfflineTransitCachePersistenceInstrumentedTest {
     }
 
     @Test
+    fun partialRestoredStopCoordinatePairRejectsItineraryWithoutDiscardingOtherCacheEntries() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val store = SharedPreferencesTransitCacheStore(context)
+        val route = RouteOption(
+            id = "coordinate-pair-route",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen"),
+            line = "RE", direction = "Bremen",
+            departure = "10:00", arrival = "11:00",
+            walkingMinutes = 0, transfers = 0,
+            stops = listOf(RouteStop(id = "start", name = "Lohne", latitude = 52.665, longitude = 8.237)),
+        )
+        try {
+            prefs.edit().clear().commit()
+            store.save(listOf(
+                CachedTransitPlan("known-good", listOf(route), emptyList(), 100L),
+                CachedTransitPlan("partial", listOf(route.copy(id = "partial-route")), emptyList(), 101L),
+            ))
+            val baseline = requireNotNull(prefs.getString("plans_json", null))
+            for (coordinate in listOf("latitude", "longitude")) {
+                for (asNull in listOf(false, true)) {
+                    val plans = org.json.JSONArray(baseline)
+                    val stop = plans.getJSONObject(1).getJSONArray("routeOptions")
+                        .getJSONObject(0).getJSONArray("stops").getJSONObject(0)
+                    if (asNull) stop.put(coordinate, org.json.JSONObject.NULL)
+                    else stop.remove(coordinate)
+                    assertTrue(prefs.edit().putString("plans_json", plans.toString()).commit())
+                    val loaded = store.load()
+                    assertEquals(listOf("known-good", "partial"), loaded.map { it.key })
+                    assertEquals(1, loaded.first().routeOptions.size)
+                    assertTrue("Partial $coordinate must not expose a routable itinerary",
+                        loaded.last().routeOptions.isEmpty())
+                }
+            }
+            // Legacy offline stops with BOTH coordinates absent remain supported.
+            val plans = org.json.JSONArray(baseline)
+            val stop = plans.getJSONObject(1).getJSONArray("routeOptions")
+                .getJSONObject(0).getJSONArray("stops").getJSONObject(0)
+            stop.remove("latitude")
+            stop.remove("longitude")
+            assertTrue(prefs.edit().putString("plans_json", plans.toString()).commit())
+            val restoredStop = store.load().last().routeOptions.single().stops.single()
+            assertEquals(null, restoredStop.latitude)
+            assertEquals(null, restoredStop.longitude)
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
+    @Test
     fun corruptedCachedStopDoesNotSilentlyShortenJourney() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
