@@ -5,9 +5,14 @@ package com.nazofobi.arrivalalarm
  * When a route is offline, only explicitly scheduled values may be displayed.
  * Absence of a scheduled value must remain unknown, not fall back to stale realtime.
  */
-// Blank provider platform fields are missing evidence, not usable values.
-// Preserve platform labels; presentation formatting is owned by the UI.
-private fun String?.usableRouteEvidence(): String? = this?.takeIf { it.isNotBlank() }
+// Blank or control-bearing provider platforms are not trustworthy evidence.
+// Preserve ordinary labels; reject control/format characters that could spoof
+// the visible platform or disturb the departure board's accessibility text.
+private fun String?.usableRouteEvidence(): String? = this?.takeIf { value ->
+    value.isNotBlank() && value.none { ch ->
+        Character.isISOControl(ch) || Character.getType(ch) == Character.FORMAT.toInt()
+    }
+}
 
 // Malformed provider clocks must not mask a valid scheduled fallback.
 // Normalize incidental whitespace so RouteJourneyPanel.routeClock can display the
@@ -75,4 +80,4 @@ internal fun routeHasTrustedRealtime(routeOffline: Boolean, suppliedRealtime: Bo
 
 /** A missing/blank provider platform must never receive a live platform badge. */
 internal fun routeHasTrustedRealtimePlatform(routeOffline: Boolean, actualPlatform: String?): Boolean =
-    routeHasTrustedRealtime(routeOffline, !actualPlatform.isNullOrBlank())
+    routeHasTrustedRealtime(routeOffline, actualPlatform.usableRouteEvidence() != null)
