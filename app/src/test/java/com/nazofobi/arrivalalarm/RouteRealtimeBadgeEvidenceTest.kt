@@ -30,6 +30,48 @@ class RouteRealtimeBadgeEvidenceTest {
         assertFalse(routeHasVerifiedRealtimePlatform(true, fresh, actualPlatform = "3"))
     }
 
+    @Test fun unsafeProviderPlatformCannotReceiveFreshRealtimeBadge() {
+        val unsafeLabels = listOf(
+            "Gleis\n2",
+            "Gleis\t2",
+            "2\u200B",
+            "2\u202E",
+            "\u0000",
+        )
+        for (platform in unsafeLabels) {
+            assertFalse(routeHasVerifiedRealtimePlatform(
+                routeOffline = false,
+                state = RouteRealtimeState.FRESH_MATCHED,
+                actualPlatform = platform,
+            ))
+        }
+        assertTrue(routeHasVerifiedRealtimePlatform(
+            routeOffline = false,
+            state = RouteRealtimeState.FRESH_MATCHED,
+            actualPlatform = "Gleis 2",
+        ))
+    }
+
+    @Test fun realtimePlatformBadgeUsesSameTrustedEvidenceAsRouteBoard() {
+        val platforms = listOf<String?>(null, "", " ", "Gleis 4", "2\u200B", "9\n1")
+        for (offline in listOf(false, true)) {
+            for (platform in platforms) {
+                assertTrue(
+                    routeHasVerifiedRealtimePlatform(
+                        routeOffline = offline,
+                        state = RouteRealtimeState.FRESH_MATCHED,
+                        actualPlatform = platform,
+                    ) == routeHasTrustedRealtimePlatform(offline, platform),
+                )
+                assertFalse(routeHasVerifiedRealtimePlatform(
+                    routeOffline = offline,
+                    state = RouteRealtimeState.STALE,
+                    actualPlatform = platform,
+                ))
+            }
+        }
+    }
+
     @Test fun cancelledRouteBadgeNeedsFreshMatchedOnlineEvidence() {
         val untrusted = listOf<RouteRealtimeState?>(
             null,
