@@ -429,10 +429,15 @@ class GtfsDeutschlandLoaderTest {
                     "misquoted", "2026-10-30",
                 )
             }.exceptionOrNull()
+            // The logical-record reader may reject this before the field parser.
+            // Both layers must fail closed rather than silently rewrite stop names.
+            val recordReaderRejected = failure is IllegalStateException &&
+                failure.message.orEmpty().contains("GTFS CSV record has a quote")
+            val fieldParserRejected = failure is IllegalArgumentException &&
+                failure.message.orEmpty().contains("Malformed GTFS CSV quoting")
             assertTrue(
                 "Misquoted GTFS stop name must fail closed: $failure",
-                failure is IllegalArgumentException &&
-                    failure.message.orEmpty().contains("Malformed GTFS CSV quoting"),
+                recordReaderRejected || fieldParserRejected,
             )
         }
     }
