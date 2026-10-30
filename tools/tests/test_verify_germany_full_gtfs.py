@@ -289,13 +289,13 @@ class GtfsArchiveMemberTest(unittest.TestCase):
     def test_present_agency_and_feed_info_require_gtfs_columns(self):
         cases = (
             ("agency.txt", "agency_timezone",
-             b"agency_name,agency_url\\nExample,https://example.org\\n"),
+             b"agency_name,agency_url\nExample,https://example.org\n"),
             ("agency.txt", "agency_url",
-             b"agency_name,agency_timezone\\nExample,Europe/Berlin\\n"),
+             b"agency_name,agency_timezone\nExample,Europe/Berlin\n"),
             ("feed_info.txt", "feed_lang",
-             b"feed_publisher_name,feed_publisher_url\\nExample,https://example.org\\n"),
+             b"feed_publisher_name,feed_publisher_url\nExample,https://example.org\n"),
             ("feed_info.txt", "feed_publisher_url",
-             b"feed_publisher_name,feed_lang\\nExample,de\\n"),
+             b"feed_publisher_name,feed_lang\nExample,de\n"),
         )
         for optimized in (False, True):
             for member, missing, content in cases:
