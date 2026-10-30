@@ -111,6 +111,12 @@ object GtfsDeutschlandLoader {
             val direction=trip["trip_headsign"].orEmpty().ifBlank{routeRow["route_long_name"].orEmpty()}; val shortName=routeRow["route_short_name"].orEmpty().ifBlank{routeRow["route_long_name"].orEmpty()}
             val uniqueRouteId="$routeId:$tripId"; catalogRoutes+=CatalogRoute(uniqueRouteId,provider.id,shortName,direction,stopIds); catalogTrips+=CatalogTrip(tripId,provider.id,uniqueRouteId,ordered.first()["departure_time"].orEmpty())
         }
+        // A nonempty set of CSV rows is insufficient: broken stop references or
+        // unusable coordinates can still yield zero usable journeys. Keep the
+        // previously installed offline catalog instead of publishing that state.
+        require(stops.isNotEmpty() && catalogTrips.isNotEmpty()) {
+            "No usable stops or journeys in GTFS core tables"
+        }
         return CatalogSnapshot(listOf(provider),stops,catalogRoutes,catalogTrips,fetchedAt,stale=false)
     }
 
