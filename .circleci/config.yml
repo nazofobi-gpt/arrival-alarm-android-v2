@@ -1,0 +1,72 @@
+# H-003 Varış V2: opt-in, isolated source/build validation when Actions is unavailable.
+# No paid runner, release signing, device claims or job dispatch is authorized by this file.
+# Requires the repository to be connected to CircleCI separately.
+version: 2.1
+parameters:
+  run_source_validation:
+    type: boolean
+    default: false
+jobs:
+  arrival_source_and_debug:
+    docker:
+      - image: cimg/android:2026.10.1
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: Verify exact source, Java 17 and pre-accepted Android SDK
+          command: |
+            set -euo pipefail
+            mkdir -p ci-artifacts
+            git rev-parse HEAD | tee ci-artifacts/exact-head.txt
+            JDK17="$(find /usr/lib/jvm -mindepth 1 -maxdepth 1 -iname '*17*' | head -n 1)"
+            test -n "$JDK17" && test -x "$JDK17/bin/java"
+            echo "export JAVA_HOME=$JDK17" >> "$BASH_ENV"
+            echo 'export PATH=$JAVA_HOME/bin:$PATH' >> "$BASH_ENV"
+            source "$BASH_ENV"
+            java -version
+            SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+            test -n "$SDK_ROOT" && test -d "$SDK_ROOT"
+            test -d "$SDK_ROOT/platforms/android-36" || {
+              echo 'Android SDK 36 not preinstalled; no implicit license acceptance' >&2
+              exit 2
+            }
+      - run:
+          name: Deterministic Python checks, JVM tests, lint and debug APK
+          command: |
+            set -euo pipefail
+            source "$BASH_ENV"
+            python3 -m unittest discover -s tools/tests -p 'test_*.py'
+            python3 tools/check_locale_resources.py
+            python3 -m unittest discover -s tools -p 'test_android_privacy_manifest.py' -v
+            python3 tools/check_android_privacy_manifest.py app/src/main/AndroidManifest.xml
+            ./gradlew --no-daemon lint testDebugUnitTest assembleDebug
+      - run:
+          name: Verify source-bound debug APK and signature
+          command: |
+            set -euo pipefail
+            source "$BASH_ENV"
+            APK=app/build/outputs/apk/debug/app-debug.apk
+            test -s "$APK"
+            mkdir -p ci-artifacts
+            sha256sum "$APK" | tee ci-artifacts/debug-apk.sha256
+            stat -c '%n %s bytes' "$APK" | tee ci-artifacts/debug-apk-size.txt
+            SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+            SIGNER="$(find "$SDK_ROOT/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -n 1)"
+            test -n "$SIGNER" && test -x "$SIGNER"
+            "$SIGNER" verify --verbose --print-certs "$APK" | tee ci-artifacts/debug-apk-signature.txt
+      - store_test_results:
+          path: app/build/test-results
+      - store_artifacts:
+          path: ci-artifacts
+      - store_artifacts:
+          path: app/build/reports
+          destination: reports
+      - store_artifacts:
+          path: app/build/outputs/apk/debug
+          destination: debug-apk
+workflows:
+  authorized_source_validation_only:
+    when: << pipeline.parameters.run_source_validation >>
+    jobs:
+      - arrival_source_and_debug
