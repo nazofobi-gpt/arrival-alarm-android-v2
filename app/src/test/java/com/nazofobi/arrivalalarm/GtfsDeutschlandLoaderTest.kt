@@ -410,14 +410,14 @@ class GtfsDeutschlandLoaderTest {
 
     @Test fun balancedButMisplacedGtfsQuotesFailClosedInsteadOfRewritingNames() {
         val validCore = linkedMapOf(
-            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\\ns1,Lohne,52.66,8.23\\ns2,Bremen,53.08,8.80\\n",
-            "routes.txt" to "route_id,route_short_name\\nr1,RE\\n",
-            "trips.txt" to "route_id,trip_id\\nr1,t1\\n",
-            "stop_times.txt" to "trip_id,stop_id,stop_sequence\\nt1,s1,1\\nt1,s2,2\\n",
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\ns2,Bremen,53.08,8.80\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,stop_id,stop_sequence\nt1,s1,1\nt1,s2,2\n",
         )
         for (badStop in listOf(
-            "s1,Bre\\\"men\\\" Hbf,52.66,8.23",
-            "s1,\\\"Bremen\\\"junk,52.66,8.23",
+            "s1,Bre\"men\" Hbf,52.66,8.23",
+            "s1,\"Bremen\"junk,52.66,8.23",
         )) {
             val feed = validCore.toMutableMap()
             feed["stops.txt"] = feed.getValue("stops.txt").replace(
