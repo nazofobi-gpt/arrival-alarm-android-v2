@@ -172,8 +172,8 @@ private fun JSONObject.toRouteStop(): RouteStop? {
     if (hasNonStringOptional("id")) return null
     // Only scheduled baselines may survive offline; corrupt planned facts must
     // reject the stop instead of being rendered as text from another JSON type.
-    if (listOf("plannedArrival", "plannedDeparture", "plannedPlatform")
-            .any { hasNonStringOptional(it) }
+    if (listOf("plannedArrival", "plannedDeparture", "plannedPlatform",
+            "arrival", "departure", "platform").any { hasNonStringOptional(it) }
     ) return null
     // Optional coordinates may be absent, but supplied invalid values cannot be trusted.
     if (hasInvalidCoordinate("latitude", -90.0, 90.0) ||
@@ -212,7 +212,7 @@ private fun JSONObject.toDeparture(): Departure? {
     // A coerced numeric/boolean JSON value is not an authoritative GTFS trip identity.
     val tripId = (opt("tripId") as? String)?.takeIf { it.isNotBlank() } ?: return null
     // Reject a forged route identity, rather than stringifying a stored JSON number.
-    if (hasNonStringOptional("routeId")) return null
+    if (listOf("routeId", "platform").any { hasNonStringOptional(it) }) return null
     if (listOf("line", "direction").any { hasNonStringOptional(it) }) return null
     // JSON getters silently coerce missing, malformed or fractional times to epoch zero.
     // Keep offline departures only when a positive whole-second timestamp is proven.
