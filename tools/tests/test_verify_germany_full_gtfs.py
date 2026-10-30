@@ -27,6 +27,8 @@ class GtfsArchiveMemberTest(unittest.TestCase):
                 "routes.txt": "route_id,route_type\nR,3\n",
                 "trips.txt": "route_id,service_id,trip_id\nR,S,T\n",
                 "stop_times.txt": "trip_id,arrival_time,departure_time,stop_id,stop_sequence\nT,10:00:00,10:00:00,1,1\n",
+                "calendar.txt": "service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\nS,1,1,1,1,1,1,1,20260101,20261231\n",
+                "calendar_dates.txt": "service_id,date,exception_type\nS,20261030,1\n",
             }
             with zipfile.ZipFile(archive, "w") as zf:
                 for member in entries:
