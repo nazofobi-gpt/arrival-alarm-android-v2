@@ -268,15 +268,15 @@ private fun JSONObject.hasNonStringOptional(key: String): Boolean =
 private fun JSONObject.optNullableString(key: String): String? =
     if (!has(key) || isNull(key)) null else optString(key).takeIf { it.isNotBlank() }
 
-/** Reject JSON coercions that could turn corrupt realtime times into false live departures. */
+/** Reject JSON coercions and times beyond year 9999 before offline departures are shown. */
 private fun JSONObject.strictPositiveEpochSecondsOrNull(key: String): Long? =
     (opt(key) as? Number)?.toString()?.toLongOrNull()
-        ?.takeIf { it > 0L && it <= Long.MAX_VALUE / 1_000L }
+        ?.takeIf { it > 0L && it <= 253_402_300_799L }
 
-/** Strictly numeric, whole and bounded persisted source epoch; zero means unknown age. */
+/** Strict numeric whole seconds through year 9999; zero means unknown age. */
 private fun JSONObject.strictNonNegativeEpochSecondsOrNull(key: String): Long? =
     (opt(key) as? Number)?.toString()?.toLongOrNull()
-        ?.takeIf { it >= 0L && it <= Long.MAX_VALUE / 1_000L }
+        ?.takeIf { it >= 0L && it <= 253_402_300_799L }
 
 /** Exact positive numeric milliseconds, bounded to the supported calendar range through year 9999. */
 private fun JSONObject.strictPositiveStoredEpochMillisOrNull(key: String): Long? =
