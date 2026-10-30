@@ -171,18 +171,23 @@ class GtfsDeutschlandLoaderTest {
             "overflow" to "t1,s1,2147483648\n" + "t1,s2,2\n",
         )
         for ((case, times) in invalidTimes) {
-            val snapshot = GtfsDeutschlandLoader.parse(
-                zipOf(
-                    "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\ns2,Bremen,53.07,8.80\n",
-                    "routes.txt" to "route_id,route_short_name\nr1,RE\n",
-                    "trips.txt" to "route_id,trip_id\nr1,t1\n",
-                    "stop_times.txt" to ("trip_id,stop_id,stop_sequence\n" + times),
-                ),
-                "sequence-$case",
-                "2026-10-29",
+            val failure = runCatching {
+                GtfsDeutschlandLoader.parse(
+                    zipOf(
+                        "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\ns2,Bremen,53.07,8.80\n",
+                        "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+                        "trips.txt" to "route_id,trip_id\nr1,t1\n",
+                        "stop_times.txt" to ("trip_id,stop_id,stop_sequence\n" + times),
+                    ),
+                    "sequence-$case",
+                    "2026-10-29",
+                )
+            }.exceptionOrNull()
+            assertTrue(
+                "$case must fail closed instead of replacing a usable catalog: $failure",
+                failure is IllegalArgumentException &&
+                    failure.message.orEmpty().contains("No usable stops or journeys"),
             )
-            assertTrue("$case must not publish a route", snapshot.routes.isEmpty())
-            assertTrue("$case must not publish a trip", snapshot.trips.isEmpty())
         }
     }
 
@@ -355,6 +360,52 @@ class GtfsDeutschlandLoaderTest {
                     failure.message.orEmpty().contains(error),
             )
         }
+    }
+
+    @Test fun nonemptyGtfsCoreRowsWithoutUsableJourneysFailClosed() {
+        val validStops =
+            "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\ns2,Bremen,53.08,8.80\n"
+        val invalidStops =
+            "stop_id,stop_name,stop_lat,stop_lon\ns1,NotFinite,NaN,8.23\ns2,OutOfBounds,91,8.80\n"
+        val validStopTimes =
+            "trip_id,stop_id,stop_sequence\nt1,s1,1\nt1,s2,2\n"
+        val brokenStopTimes =
+            "trip_id,stop_id,stop_sequence\nt1,s1,1\nt1,missing,2\n"
+
+        for ((stopRows, stopTimeRows) in listOf(
+            validStops to brokenStopTimes,
+            invalidStops to validStopTimes,
+        )) {
+            val zip = zipOf(
+                "stops.txt" to stopRows,
+                "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+                "trips.txt" to "route_id,trip_id\nr1,t1\n",
+                "stop_times.txt" to stopTimeRows,
+            )
+            val failure = runCatching {
+                GtfsDeutschlandLoader.parse(zip, "unusable-refresh", "2026-10-30")
+            }.exceptionOrNull()
+            assertTrue(
+                "A header-valid but unusable feed must not publish an empty catalog: $failure",
+                failure is IllegalArgumentException &&
+                    failure.message.orEmpty().contains("No usable stops or journeys"),
+            )
+        }
+
+        // A valid two-stop journey is still accepted; fail-closed only applies
+        // after the consumer-visible catalog has been constructed.
+        val valid = GtfsDeutschlandLoader.parse(
+            zipOf(
+                "stops.txt" to validStops,
+                "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+                "trips.txt" to "route_id,trip_id\nr1,t1\n",
+                "stop_times.txt" to validStopTimes,
+            ),
+            "valid-refresh", "2026-10-30",
+        )
+        assertEquals(2, valid.stops.size)
+        assertEquals(1, valid.trips.size)
+        assertEquals(listOf("s1", "s2"), valid.routes.single().stopIds)
     }
 
     private fun zipOf(vararg files: Pair<String, String>): ByteArray {
