@@ -143,6 +143,7 @@ object GtfsDeutschlandLoader {
         require(header.containsAll(required)) {
             "Missing GTFS columns in $table: ${(required - header.toSet()).sorted().joinToString(", ")}"
         }
+        require(header.none { it.isBlank() }) { "Empty GTFS CSV column name in $table" }
         require(header.size == header.toSet().size) { "Duplicate GTFS CSV header in $table" }
         return buildList {
             while (records.hasNext()) {
