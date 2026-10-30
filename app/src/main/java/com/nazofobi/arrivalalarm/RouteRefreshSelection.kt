@@ -10,6 +10,14 @@ package com.nazofobi.arrivalalarm
  */
 private const val MAX_ROUTE_DEPARTURE_EPOCH_MILLIS = 253_402_300_799_999L
 
+// Provider route, trip and stop identifiers must all be usable UI/identity keys.
+// Reject invisible controls even when both snapshots repeat the same bad value.
+private fun isUsableIdentityKey(value: String?): Boolean =
+    value != null && value.isNotBlank() && value.none { ch ->
+        Character.isISOControl(ch) ||
+            Character.getType(ch) == Character.FORMAT.toInt()
+    }
+
 /** Route identity cannot be proved with timestamps beyond supported UTC year 9999. */
 internal fun retainSelectedRouteAfterRefresh(
     selectedRouteId: String?,
@@ -19,18 +27,13 @@ internal fun retainSelectedRouteAfterRefresh(
     // A blank UI key is not an identifiable itinerary and must never preserve consent.
     // The route-card filter rejects invisible/control provider keys. A refresh
     // must enforce the same rule or it could silently retain an unsafe choice.
-    val id = selectedRouteId?.takeIf { key ->
-        key.isNotBlank() && key.none { ch ->
-            Character.isISOControl(ch) ||
-                Character.getType(ch) == Character.FORMAT.toInt()
-        }
-    } ?: return null
+    val id = selectedRouteId?.takeIf(::isUsableIdentityKey) ?: return null
     val previous = previousOptions.singleOrNull { it.id == id } ?: return null
     val updated = updatedOptions.singleOrNull { it.id == id } ?: return null
 
     if (
         previous.tripIds.isEmpty() ||
-        previous.tripIds.any { it.isBlank() } ||
+        previous.tripIds.any { !isUsableIdentityKey(it) } ||
         previous.tripIds != updated.tripIds
     ) return null
 
@@ -69,7 +72,8 @@ internal fun retainSelectedRouteAfterRefresh(
     // Even matching route IDs and trip IDs must not silently preserve selection.
     if (previous.stops.isEmpty() || updated.stops.isEmpty()) return null
     if (previous.stops.size != updated.stops.size) return null
-    if (previous.stops.any { it.id.isNullOrBlank() } || updated.stops.any { it.id.isNullOrBlank() }) {
+    if (previous.stops.any { !isUsableIdentityKey(it.id) } ||
+        updated.stops.any { !isUsableIdentityKey(it.id) }) {
         return null
     }
     if (previous.stops.indices.any { index ->
