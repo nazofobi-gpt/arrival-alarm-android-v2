@@ -170,6 +170,33 @@ class SupportDiagnosticsTest {
         assertFalse(divergent.contains("provider_error_detail"))
     }
 
+    @Test fun independentSearchAndRoutingProbeMatrixNeverConflatesResults() {
+        val expected = mapOf(
+            TransitFunctionHealth.UNVERIFIED to "not_measured",
+            TransitFunctionHealth.WORKING to "working",
+            TransitFunctionHealth.DEGRADED to "degraded",
+            TransitFunctionHealth.FAILED to "failed",
+        )
+        for ((search, searchValue) in expected) {
+            for ((routing, routingValue) in expected) {
+                val report = SupportDiagnostics.render(
+                    state(NationwideDataState.Error("private-provider-error")).copy(
+                        searchHealth = search,
+                        routingHealth = routing,
+                    ),
+                    nowEpochSeconds = 1_700_000_000L,
+                )
+                val fields = report.trimEnd('\n').lines().associate {
+                    it.substringBefore('=') to it.substringAfter('=')
+                }
+                assertEquals("search=$search routing=$routing", searchValue, fields["search_probe"])
+                assertEquals("search=$search routing=$routing", routingValue, fields["routing_probe"])
+                assertEquals("not_measured", fields["realtime_probe"])
+                assertFalse(report.contains("private-provider-error"))
+            }
+        }
+    }
+
     @Test fun feedBucketBoundariesAreExactAndNonLeaking() {
         val fetchedAt = 1_700_000_000L
         val sensitiveSource = "private-origin-and-auth-secret"
