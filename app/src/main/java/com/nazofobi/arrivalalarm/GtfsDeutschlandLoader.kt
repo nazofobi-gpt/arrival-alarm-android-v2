@@ -149,6 +149,8 @@ object GtfsDeutschlandLoader {
                 val record = records.next()
                 if (record.isBlank()) continue
                 val values = csvLine(record)
+                // Extra cells can shift GTFS identities or coordinates; never drop them silently.
+                require(values.size <= header.size) { "Extra GTFS CSV columns in $table" }
                 add(header.mapIndexed { index, key ->
                     key to values.getOrElse(index) { "" }
                 }.toMap())
