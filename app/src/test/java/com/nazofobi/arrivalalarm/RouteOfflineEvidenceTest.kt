@@ -90,6 +90,24 @@ class RouteOfflineEvidenceTest {
         assertTrue(routeHasUsableRealtimeDelta("24:01:00", "24:00:59"))
     }
 
+    @Test fun unsafeProviderPlatformCharactersAreNotDisplayedOrBadged() {
+        val unsafePlatforms = listOf(
+            "Gleis\\n2",
+            "Gleis\\t2",
+            "2\\u200B", // zero-width format character
+            "2\\u202E", // bidirectional override
+            "\\u0000", // control character
+        )
+        for (unsafe in unsafePlatforms) {
+            assertEquals("Gleis 1", routeEvidencePlatform(unsafe, "Gleis 1", routeOffline = false))
+            assertNull(routeEvidencePlatform(unsafe, null, routeOffline = false))
+            assertFalse(routeHasTrustedRealtimePlatform(routeOffline = false, actualPlatform = unsafe))
+            assertNull(routeEvidencePlatform("Gleis 2", unsafe, routeOffline = true))
+        }
+        assertEquals("Gleis 2", routeEvidencePlatform("Gleis 2", "Gleis 1", routeOffline = false))
+        assertTrue(routeHasTrustedRealtimePlatform(routeOffline = false, actualPlatform = "Gleis 2"))
+    }
+
     @Test fun blankRealtimePlatformNeverClaimsARealtimeBadge() {
         for (missing in listOf<String?>(null, "", " ", "\t")) {
             assertFalse(routeHasTrustedRealtimePlatform(routeOffline = false, actualPlatform = missing))
