@@ -29,6 +29,8 @@ class GtfsArchiveMemberTest(unittest.TestCase):
                 "stop_times.txt": "trip_id,arrival_time,departure_time,stop_id,stop_sequence\nT,10:00:00,10:00:00,1,1\n",
                 "calendar.txt": "service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\nS,1,1,1,1,1,1,1,20260101,20261231\n",
                 "calendar_dates.txt": "service_id,date,exception_type\nS,20261030,1\n",
+                "agency.txt": "agency_name,agency_url,agency_timezone\nExample,https://example.org,Europe/Berlin\n",
+                "feed_info.txt": "feed_publisher_name,feed_publisher_url,feed_lang\nExample,https://example.org,de\n",
             }
             with zipfile.ZipFile(archive, "w") as zf:
                 for member in entries:
@@ -283,6 +285,40 @@ class GtfsArchiveMemberTest(unittest.TestCase):
                     self.assertIn("stops.txt row count below minimum", result.stderr)
                     self.assertNotIn("missing required GTFS column", result.stderr)
                     self.assertNotIn("Traceback", result.stderr)
+
+    def test_present_agency_and_feed_info_require_gtfs_columns(self):
+        cases = (
+            ("agency.txt", "agency_timezone",
+             b"agency_name,agency_url\\nExample,https://example.org\\n"),
+            ("agency.txt", "agency_url",
+             b"agency_name,agency_timezone\\nExample,Europe/Berlin\\n"),
+            ("feed_info.txt", "feed_lang",
+             b"feed_publisher_name,feed_publisher_url\\nExample,https://example.org\\n"),
+            ("feed_info.txt", "feed_publisher_url",
+             b"feed_publisher_name,feed_lang\\nExample,de\\n"),
+        )
+        for optimized in (False, True):
+            for member, missing, content in cases:
+                with self.subTest(optimized=optimized, member=member, missing=missing):
+                    result, _ = self.run_archive(
+                        REQUIRED + (member,), {member: content}, optimized=optimized,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn(
+                        f"{member} missing required GTFS column {missing}", result.stderr,
+                    )
+                    self.assertNotIn("Traceback", result.stderr)
+
+    def test_valid_agency_and_feed_info_headers_reach_size_gate(self):
+        for optimized in (False, True):
+            with self.subTest(optimized=optimized):
+                result, _ = self.run_archive(
+                    REQUIRED + ("agency.txt", "feed_info.txt"), optimized=optimized,
+                )
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("stops.txt row count below minimum", result.stderr)
+                self.assertNotIn("missing required GTFS column", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
 
     def test_present_service_calendar_tables_require_gtfs_columns(self):
         cases = (
