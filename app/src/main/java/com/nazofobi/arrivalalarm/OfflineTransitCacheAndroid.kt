@@ -179,11 +179,16 @@ private fun JSONObject.toRouteStop(): RouteStop? {
     if (hasInvalidCoordinate("latitude", -90.0, 90.0) ||
         hasInvalidCoordinate("longitude", -180.0, 180.0)
     ) return null
+    // A stop with only one coordinate cannot be safely located offline.
+    // Older records with both coordinates absent remain valid.
+    val latitude = optNullableDouble("latitude")
+    val longitude = optNullableDouble("longitude")
+    if ((latitude == null) != (longitude == null)) return null
     return RouteStop(
         id = optNullableString("id"),
         name = name,
-        latitude = optNullableDouble("latitude"),
-        longitude = optNullableDouble("longitude"),
+        latitude = latitude,
+        longitude = longitude,
         arrival = optNullableString("arrival"),
         plannedArrival = optNullableString("plannedArrival"),
         departure = optNullableString("departure"),
