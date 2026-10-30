@@ -97,6 +97,12 @@ with zf:
     missing = [name for name in required if name not in names]
     if missing:
         raise SystemExit(f"missing required GTFS files: {missing}")
+    # All GTFS tables belong to one dataset. Preserve support for a single
+    # enclosing folder, but reject archives that mix tables from directories.
+    # Otherwise valid-looking files can be silently combined across feeds.
+    table_directories = {member.rpartition("/")[0] for member in names.values()}
+    if len(table_directories) != 1:
+        raise SystemExit("GTFS ZIP tables span multiple directories")
     report = {name: inspect(zf, names[name]) for name in required}
     for name in optional:
         if name in names:
