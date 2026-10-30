@@ -116,6 +116,11 @@ required_columns = {
     # Optional GTFS files still require their core columns when present.
     "shapes.txt": ("shape_id", "shape_pt_lat", "shape_pt_lon", "shape_pt_sequence"),
     "frequencies.txt": ("trip_id", "start_time", "end_time", "headway_secs"),
+    # Station navigation tables are optional, but their identity and edge
+    # columns are mandatory if those files are supplied by a GTFS producer.
+    "levels.txt": ("level_id", "level_index"),
+    "pathways.txt": ("pathway_id", "from_stop_id", "to_stop_id",
+                     "pathway_mode", "is_bidirectional"),
 }
 for table, columns in required_columns.items():
     if table not in report:

@@ -247,6 +247,43 @@ class GtfsArchiveMemberTest(unittest.TestCase):
                     self.assertNotIn("missing required GTFS column", result.stderr)
                     self.assertNotIn("Traceback", result.stderr)
 
+    def test_optional_station_navigation_headers_fail_closed_when_incomplete(self):
+        cases = (
+            ("levels.txt", b"level_id\nL\n", "level_index"),
+            ("pathways.txt",
+             b"pathway_id,from_stop_id,to_stop_id,pathway_mode\nP,A,B,1\n",
+             "is_bidirectional"),
+        )
+        for optimized in (False, True):
+            for member, malformed, missing in cases:
+                with self.subTest(optimized=optimized, member=member):
+                    result, _ = self.run_archive(
+                        REQUIRED + (member,), {member: malformed}, optimized=optimized,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn(
+                        f"{member} missing required GTFS column {missing}", result.stderr,
+                    )
+                    self.assertNotIn("Traceback", result.stderr)
+
+    def test_valid_optional_station_navigation_headers_reach_feed_size_gate(self):
+        cases = (
+            ("levels.txt", b"level_id,level_index\nL,0\n"),
+            ("pathways.txt",
+             b"pathway_id,from_stop_id,to_stop_id,pathway_mode,is_bidirectional\n"
+             b"P,A,B,1,1\n"),
+        )
+        for optimized in (False, True):
+            for member, valid in cases:
+                with self.subTest(optimized=optimized, member=member):
+                    result, _ = self.run_archive(
+                        REQUIRED + (member,), {member: valid}, optimized=optimized,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn("stops.txt row count below minimum", result.stderr)
+                    self.assertNotIn("missing required GTFS column", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+
     def test_present_service_calendar_tables_require_gtfs_columns(self):
         cases = (
             ("calendar.txt", b"service_id,monday,tuesday,wednesday,thursday,friday,sunday,start_date,end_date\nS,1,1,1,1,1,1,20260101,20261231\n", "saturday"),
