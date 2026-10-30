@@ -15,8 +15,14 @@ internal fun stationDepartureEvidence(
     stopSequence: Int,
     serviceDate: GtfsServiceDate?,
 ): StationDepartureEvidence? {
+    // Do not offer a selectable trip whose opaque provider identity contains
+    // invisible format or control characters (for example bidi overrides).
+    // Normal printable Unicode GTFS identifiers remain valid.
+    fun usableId(id: String): Boolean = id.isNotBlank() && id.none { ch ->
+        Character.isISOControl(ch) || Character.getType(ch) == Character.FORMAT.toInt()
+    }
     if (serviceDate == null || stopSequence < 0 ||
-        trip.id.isBlank() || trip.serviceId.isBlank() || trip.routeId.isBlank()
+        !usableId(trip.id) || !usableId(trip.serviceId) || !usableId(trip.routeId)
     ) return null
     return StationDepartureEvidence(
         identity = GtfsTripInstanceIdentity.scheduled(trip, serviceDate),
