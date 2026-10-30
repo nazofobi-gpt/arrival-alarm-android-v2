@@ -72,6 +72,12 @@ internal fun routeHasUsableRealtimeDelta(actual: String?, planned: String?): Boo
     // A seconds-only difference must not create a misleading realtime-change badge.
     val observedClock = observed.usableRouteTime()?.let(::routeClock) ?: return false
     val scheduledClock = scheduled.usableRouteTime()?.let(::routeClock) ?: return false
+    // Route clocks omit the calendar day. Two independently validated ISO local
+    // instants on different dates are not the same departure, even when HH:mm
+    // matches. Do not infer a day shift from a bare GTFS service-day clock.
+    val observedDate = observed.takeIf(::isValidRouteIsoClock)?.substring(0, 10)
+    val scheduledDate = scheduled.takeIf(::isValidRouteIsoClock)?.substring(0, 10)
+    if (observedDate != null && scheduledDate != null && observedDate != scheduledDate) return true
     return observedClock != scheduledClock
 }
 
