@@ -326,6 +326,32 @@ class GtfsArchiveMemberTest(unittest.TestCase):
                     self.assertIn(f"{table} missing required GTFS column {column}", result.stderr)
                     self.assertNotIn("Traceback", result.stderr)
 
+    def test_gtfs_tables_from_different_directories_fail_closed(self):
+        cases = (
+            tuple("feed/" + member for member in REQUIRED[:2])
+            + tuple("other/" + member for member in REQUIRED[2:]),
+            tuple("feed/" + member for member in REQUIRED)
+            + ("meta/feed_info.txt",),
+        )
+        for optimized in (False, True):
+            for entries in cases:
+                with self.subTest(optimized=optimized, entries=entries):
+                    result, _ = self.run_archive(entries, optimized=optimized)
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn("GTFS ZIP tables span multiple directories", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+
+    def test_consistent_nested_gtfs_tables_reach_normal_size_gate(self):
+        entries = tuple("feed/" + member for member in REQUIRED)
+        entries += ("feed/calendar.txt", "feed/feed_info.txt")
+        for optimized in (False, True):
+            with self.subTest(optimized=optimized):
+                result, _ = self.run_archive(entries, optimized=optimized)
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("stops.txt row count below minimum", result.stderr)
+                self.assertNotIn("GTFS ZIP tables span multiple directories", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+
     def test_duplicate_required_table_in_nested_directory_fails_closed(self):
         result, _ = self.run_archive(REQUIRED + ("feed/STOPS.TXT",))
         self.assertNotEqual(0, result.returncode)
