@@ -268,14 +268,14 @@ class GtfsDeutschlandLoaderTest {
 
     @Test fun headerOnlyCoreGtfsTableCannotReplaceValidOfflineCatalog() {
         val core = linkedMapOf(
-            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\\ns1,Lohne,52.66,8.23\\ns2,Bremen,53.07,8.80\\n",
-            "routes.txt" to "route_id,route_short_name\\nr1,RE\\n",
-            "trips.txt" to "route_id,trip_id\\nr1,t1\\n",
-            "stop_times.txt" to "trip_id,stop_id,stop_sequence\\nt1,s1,1\\nt1,s2,2\\n",
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\ns2,Bremen,53.07,8.80\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,stop_id,stop_sequence\nt1,s1,1\nt1,s2,2\n",
         )
         for (emptyTable in core.keys) {
             val fixture = core.toMutableMap()
-            fixture[emptyTable] = fixture.getValue(emptyTable).substringBefore('\\n') + "\\n\\n"
+            fixture[emptyTable] = fixture.getValue(emptyTable).substringBefore('\n') + "\n\n"
             val failure = runCatching {
                 GtfsDeutschlandLoader.parse(
                     zipOf(*fixture.map { it.key to it.value }.toTypedArray()),
