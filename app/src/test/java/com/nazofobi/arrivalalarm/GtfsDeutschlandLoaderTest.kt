@@ -362,6 +362,34 @@ class GtfsDeutschlandLoaderTest {
         }
     }
 
+    @Test fun blankColumnNamesInAnyGtfsCoreHeaderFailClosed() {
+        val valid = linkedMapOf(
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\ns2,Bremen,53.07,8.80\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,stop_id,stop_sequence\nt1,s1,1\nt1,s2,2\n",
+        )
+        for (table in valid.keys) {
+            val malformed = valid.toMutableMap()
+            val rows = malformed.getValue(table).lines().toMutableList()
+            rows[0] += ","
+            rows[1] += ","
+            if (table == "stop_times.txt") rows[2] += ","
+            malformed[table] = rows.joinToString("\n")
+            val failure = runCatching {
+                GtfsDeutschlandLoader.parse(
+                    zipOf(*malformed.map { it.key to it.value }.toTypedArray()),
+                    "blank-column", "2026-10-30",
+                )
+            }.exceptionOrNull()
+            assertTrue(
+                "$table blank column name must be rejected: $failure",
+                failure is IllegalArgumentException &&
+                    failure.message.orEmpty().contains("Empty GTFS CSV column name in $table"),
+            )
+        }
+    }
+
     @Test fun nonemptyGtfsCoreRowsWithoutUsableJourneysFailClosed() {
         val validStops =
             "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\ns2,Bremen,53.08,8.80\n"
