@@ -113,6 +113,9 @@ required_columns = {
     "calendar.txt": ("service_id", "monday", "tuesday", "wednesday", "thursday",
                      "friday", "saturday", "sunday", "start_date", "end_date"),
     "calendar_dates.txt": ("service_id", "date", "exception_type"),
+    # Optional GTFS files still require their core columns when present.
+    "shapes.txt": ("shape_id", "shape_pt_lat", "shape_pt_lon", "shape_pt_sequence"),
+    "frequencies.txt": ("trip_id", "start_time", "end_time", "headway_secs"),
 }
 for table, columns in required_columns.items():
     if table not in report:
