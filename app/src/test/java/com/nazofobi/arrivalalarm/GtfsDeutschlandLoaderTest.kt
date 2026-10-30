@@ -408,6 +408,32 @@ class GtfsDeutschlandLoaderTest {
         assertEquals(listOf("s1", "s2"), valid.routes.single().stopIds)
     }
 
+    @Test fun surplusColumnsInAnyGtfsCoreRowFailClosed() {
+        val base = linkedMapOf(
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\ns2,Bremen,53.08,8.80\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,stop_id,stop_sequence\nt1,s1,1\nt1,s2,2\n",
+        )
+        for (table in base.keys) {
+            val feed = base.toMutableMap()
+            val rows = feed.getValue(table).lines().toMutableList()
+            rows[1] = rows[1] + ",unadvertised"
+            feed[table] = rows.joinToString("\n")
+            val failure = runCatching {
+                GtfsDeutschlandLoader.parse(
+                    zipOf(*feed.map { it.key to it.value }.toTypedArray()),
+                    "surplus-columns", "2026-10-30",
+                )
+            }.exceptionOrNull()
+            assertTrue(
+                "$table must reject a data row with more fields than its header: $failure",
+                failure is IllegalArgumentException &&
+                    failure.message.orEmpty().contains("Extra GTFS CSV columns in $table"),
+            )
+        }
+    }
+
     private fun zipOf(vararg files: Pair<String, String>): ByteArray {
         val bytes = ByteArrayOutputStream()
         ZipOutputStream(bytes).use { zip -> files.forEach { (name, content) -> zip.putNextEntry(ZipEntry(name)); zip.write(content.toByteArray()); zip.closeEntry() } }
