@@ -92,11 +92,11 @@ class RouteOfflineEvidenceTest {
 
     @Test fun unsafeProviderPlatformCharactersAreNotDisplayedOrBadged() {
         val unsafePlatforms = listOf(
-            "Gleis\\n2",
-            "Gleis\\t2",
-            "2\\u200B", // zero-width format character
-            "2\\u202E", // bidirectional override
-            "\\u0000", // control character
+            "Gleis\n2",
+            "Gleis\t2",
+            "2\u200B", // zero-width format character
+            "2\u202E", // bidirectional override
+            "\u0000", // control character
         )
         for (unsafe in unsafePlatforms) {
             assertEquals("Gleis 1", routeEvidencePlatform(unsafe, "Gleis 1", routeOffline = false))
