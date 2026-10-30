@@ -158,6 +158,39 @@ class GtfsConditionalRevalidationInstrumentedTest {
         }
     }
 
+    @Test fun disconnectedGtfsGraphRollsBackSqliteAndRetainsHttpValidators() {
+        context.deleteDatabase("nationwide_transit.db")
+        val index = NationwideTransitIndex(context)
+        try {
+            index.importFeedWithConnection(
+                sourceUrl, {},
+                FakeGtfsHttpConnection(URL(sourceUrl), HttpURLConnection.HTTP_OK, validFeed(), etag = "\"known-good\""),
+            )
+            val before = snapshot(index)
+            assertTrue(before.ready)
+            for ((label, bytes) in listOf(
+                "orphan route" to validFeed(tripRouteId = "unknown-route"),
+                "orphan stop" to validFeed(secondStopId = "unknown-stop"),
+            )) {
+                val bad = FakeGtfsHttpConnection(
+                    URL(sourceUrl), HttpURLConnection.HTTP_OK, bytes, etag = "\"bad-$label\"",
+                )
+                val failure = runCatching { index.importFeedWithConnection(sourceUrl, {}, bad) }
+                    .exceptionOrNull()
+                assertTrue("$label must fail closed: $failure",
+                    failure is IllegalStateException && failure.message.orEmpty().contains("bağlantısız"))
+                assertEquals(before, snapshot(index))
+            }
+            val notModified = FakeGtfsHttpConnection(
+                URL(sourceUrl), HttpURLConnection.HTTP_NOT_MODIFIED, byteArrayOf(),
+            )
+            index.importFeedWithConnection(sourceUrl, {}, notModified)
+            assertEquals("\"known-good\"", notModified.getRequestProperty("If-None-Match"))
+            assertEquals(before, snapshot(index))
+        } finally {
+            index.close()
+        }
+    }
     private fun snapshot(index: NationwideTransitIndex): Snapshot {
         val db = index.readableDatabase
         return Snapshot(
@@ -200,7 +233,7 @@ class GtfsConditionalRevalidationInstrumentedTest {
         bytes.toByteArray()
     }
 
-    private fun validFeed(): ByteArray = ByteArrayOutputStream().use { bytes ->
+    private fun validFeed(tripRouteId: String = "route-1", secondStopId: String = "fixture-1"): ByteArray = ByteArrayOutputStream().use { bytes ->
         ZipOutputStream(bytes).use { zip ->
             add(zip, "stops.txt", buildString {
                 appendLine("stop_id,stop_name,stop_lat,stop_lon")
@@ -212,11 +245,11 @@ class GtfsConditionalRevalidationInstrumentedTest {
             add(zip, "routes.txt",
                 "route_id,route_short_name,route_long_name,route_type\nroute-1,R1,Fixture Route,3\n")
             add(zip, "trips.txt",
-                "route_id,service_id,trip_id,trip_headsign\nroute-1,service-1,trip-1,Known Good Bahnhof\n")
+                "route_id,service_id,trip_id,trip_headsign\n$tripRouteId,service-1,trip-1,Known Good Bahnhof\n")
             add(zip, "stop_times.txt",
                 "trip_id,arrival_time,departure_time,stop_id,stop_sequence\n" +
                     "trip-1,08:00:00,08:00:00,known-good,1\n" +
-                    "trip-1,08:05:00,08:05:00,fixture-1,2\n")
+                    "trip-1,08:05:00,08:05:00,$secondStopId,2\n")
             add(zip, "calendar.txt",
                 "service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n" +
                     "service-1,1,1,1,1,1,1,1,20260101,20261231\n")
