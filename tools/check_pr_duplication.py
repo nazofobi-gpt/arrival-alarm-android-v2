@@ -134,7 +134,10 @@ def request_json(repo: str, path: str, token: str) -> Any:
         return json.load(response)
 
 
-def list_prs(repo: str, token: str, state: str, max_pages: int = 6) -> list[dict[str, Any]]:
+# The repository has more than 600 historic closed PRs. Preserve a hard fail-closed
+# cap, but scan enough pages to verify complete current history, not a stale prefix.
+# If this upper bound is exceeded, admissions remain blocked until re-evaluation.
+def list_prs(repo: str, token: str, state: str, max_pages: int = 30) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for page in range(1, max_pages + 1):
         rows = request_json(
