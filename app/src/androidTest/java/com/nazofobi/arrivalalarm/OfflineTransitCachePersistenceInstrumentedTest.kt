@@ -455,6 +455,8 @@ class OfflineTransitCachePersistenceInstrumentedTest {
             "zero" to 0L,
             "negative" to -1L,
             "overflow" to (Long.MAX_VALUE / 1_000L + 1L),
+            "beyond-year-9999" to 253_402_300_800L,
+            "year-9999-boundary" to 253_402_300_799L,
             "valid" to 1_700_000_000L,
         )
         cases.forEach { (id, timestamp) ->
@@ -475,7 +477,7 @@ class OfflineTransitCachePersistenceInstrumentedTest {
         ).commit()
         try {
             val loaded = SharedPreferencesTransitCacheStore(context).load().single()
-            assertEquals(listOf("valid"), loaded.departures.map { it.tripId })
+            assertEquals(listOf("year-9999-boundary", "valid"), loaded.departures.map { it.tripId })
             assertEquals(1_700_000_000L, loaded.departures.single().scheduledEpochSeconds)
         } finally {
             prefs.edit().clear().commit()
@@ -631,6 +633,7 @@ class OfflineTransitCachePersistenceInstrumentedTest {
             "zero" to 0L,
             "negative" to -1L,
             "overflow" to Long.MAX_VALUE,
+            "beyond-year-9999" to 253_402_300_800L,
             "valid" to 1_700_000_000L,
         )
         val plans = org.json.JSONArray()
@@ -729,6 +732,7 @@ class OfflineTransitCachePersistenceInstrumentedTest {
             }
             val invalid: List<Any> = listOf(
                 "1700000000", true, -1L, 1.5, Long.MAX_VALUE,
+                253_402_300_800L,
                 org.json.JSONObject().put("epoch", 1_700_000_000L),
                 org.json.JSONArray().put(1_700_000_000L),
             )
@@ -738,6 +742,8 @@ class OfflineTransitCachePersistenceInstrumentedTest {
             }
             assertEquals(1_700_000_000L,
                 restoredWith(1_700_000_000L).single().sourceUpdatedAtEpochSeconds)
+            assertEquals(253_402_300_799L,
+                restoredWith(253_402_300_799L).single().sourceUpdatedAtEpochSeconds)
             assertEquals(0L, restoredWith(0L).single().sourceUpdatedAtEpochSeconds)
             assertEquals(null,
                 restoredWith(org.json.JSONObject.NULL).single().sourceUpdatedAtEpochSeconds)
