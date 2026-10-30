@@ -33,6 +33,8 @@ def inspect(zf, member):
             text = io.TextIOWrapper(raw, encoding="utf-8-sig", newline="")
             reader = csv.reader(text, strict=True)
             header = next(reader)
+            if any("\x00" in column for column in header):
+                raise SystemExit(f"invalid NUL in GTFS table {member} header")
             if not any(column.strip() for column in header):
                 raise SystemExit(f"empty GTFS table {member}: missing CSV header")
             if any(not column.strip() for column in header):
@@ -44,6 +46,10 @@ def inspect(zf, member):
                 seen.add(column)
             rows = 0
             for row in reader:
+                if any("\x00" in value for value in row):
+                    raise SystemExit(
+                        f"invalid NUL in GTFS table {member} at CSV line {reader.line_num}"
+                    )
                 if len(row) != len(header):
                     raise SystemExit(
                         f"GTFS table {member} has {len(row)} columns at CSV line "
