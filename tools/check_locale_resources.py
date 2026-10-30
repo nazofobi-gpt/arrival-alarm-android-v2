@@ -53,6 +53,19 @@ def placeholders(value: str) -> Counter[tuple[int, str]]:
                 raise ValueError(f"unsupported date/time conversion %{conversion} at offset {start}")
         elif conversion not in VALID_CONVERSIONS:
             raise ValueError(f"unsupported format conversion %{conversion} at offset {start}")
+        if conversion.lower() in ("b", "h"):
+            # Boolean and hash conversions accept only left alignment and
+            # argument reuse. Java Formatter rejects sign, sharp, zero padding
+            # and grouping flags even if all translations agree on the token.
+            if set(flags).difference("-<"):
+                raise ValueError(f"invalid boolean/hash format flags at offset {start}")
+            if "-" in flags:
+                token_suffix = match.group(0)[1:]
+                if match.group(1):
+                    token_suffix = token_suffix[len(match.group(1)) + 1:]
+                width_and_precision = token_suffix[len(flags):-len(conversion)]
+                if not width_and_precision or not width_and_precision[0].isdigit():
+                    raise ValueError(f"missing boolean/hash format width at offset {start}")
         if conversion.lower() == "s":
             # Ordinary Android String arguments do not implement Formattable:
             # Java Formatter rejects # as well as numeric/sign/grouping flags.
