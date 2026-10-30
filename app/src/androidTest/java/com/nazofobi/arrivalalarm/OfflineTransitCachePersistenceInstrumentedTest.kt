@@ -102,9 +102,12 @@ class OfflineTransitCachePersistenceInstrumentedTest {
             assertTrue(restoredWith {
                 it.getJSONObject("origin").put("latitude", org.json.JSONObject.NULL)
             }.isEmpty())
-            assertEquals(null, restoredWith {
-                it.getJSONArray("stops").getJSONObject(0).put("latitude", org.json.JSONObject.NULL)
-            }.single().stops.single().latitude)
+            // A lone longitude no longer establishes a routable stop.
+            assertTrue("Null latitude with a non-null longitude must reject the route",
+                restoredWith {
+                    it.getJSONArray("stops").getJSONObject(0)
+                        .put("latitude", org.json.JSONObject.NULL)
+                }.isEmpty())
             // Zero and geographic boundaries are valid JSON numeric coordinates.
             val valid = restoredWith {
                 it.getJSONObject("origin").put("latitude", -90.0).put("longitude", -180.0)
