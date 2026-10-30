@@ -17,11 +17,8 @@ internal fun routeHasVerifiedRealtimePlatform(
     state: RouteRealtimeState?,
     actualPlatform: String?,
 ): Boolean =
-    routeHasVerifiedRealtimeDelta(
-        routeOffline = routeOffline,
-        state = state,
-        suppliedDelta = !actualPlatform.isNullOrBlank(),
-    )
+    state == RouteRealtimeState.FRESH_MATCHED &&
+        routeHasTrustedRealtimePlatform(routeOffline, actualPlatform)
 
 /** A cached cancelled-trip ID alone does not prove a fresh provider cancellation. */
 internal fun routeHasVerifiedRealtimeCancellation(
