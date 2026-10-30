@@ -6,6 +6,8 @@ import sys
 import zipfile
 from pathlib import Path
 
+from atomic_json_report import write_atomic_json_report
+
 archive = sys.argv[1]
 report_path = sys.argv[2] if len(sys.argv) > 2 else "g174-real-feed-report.json"
 
@@ -125,7 +127,6 @@ if not (
 ):
     raise SystemExit("service calendar missing")
 
-with open(report_path, "w", encoding="utf-8") as output:
-    json.dump(report, output, ensure_ascii=False, indent=2)
+write_atomic_json_report(report_path, report)
 
 print(json.dumps({name: data["rows"] for name, data in report.items()}, indent=2))
