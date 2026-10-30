@@ -5,6 +5,7 @@ import java.io.ByteArrayOutputStream
 import java.io.BufferedReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -25,9 +26,11 @@ object GtfsDeutschlandLoader {
         return try {
             connection.inputStream.use { stream ->
                 val bytes = stream.readBytes()
-                val revision = connection.getHeaderField("ETag")
-                    ?: connection.getHeaderField("Last-Modified")
-                    ?: "bytes-${bytes.size}"
+                val revision = chooseFeedRevision(
+                    bytes,
+                    connection.getHeaderField("ETag"),
+                    connection.getHeaderField("Last-Modified"),
+                )
                 parse(bytes, revision, nowUtcIso8601())
             }
         } finally {
@@ -118,6 +121,16 @@ object GtfsDeutschlandLoader {
             "No usable stops or journeys in GTFS core tables"
         }
         return CatalogSnapshot(listOf(provider),stops,catalogRoutes,catalogTrips,fetchedAt,stale=false)
+    }
+
+    // Size-only revision keys collide for different feeds of identical length.
+    // Keep the provider's validator when present; hash the complete payload otherwise.
+    internal fun chooseFeedRevision(bytes: ByteArray, etag: String?, lastModified: String?): String {
+        etag?.takeIf { it.isNotBlank() }?.let { return it }
+        lastModified?.takeIf { it.isNotBlank() }?.let { return it }
+        return "sha256-" + MessageDigest.getInstance("SHA-256")
+            .digest(bytes)
+            .joinToString("") { "%02x".format(Locale.ROOT, it.toInt() and 0xff) }
     }
 
     private fun nowUtcIso8601(): String =
