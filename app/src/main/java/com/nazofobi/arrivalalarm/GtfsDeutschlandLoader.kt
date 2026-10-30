@@ -158,5 +158,49 @@ object GtfsDeutschlandLoader {
         }
     }
 
-    private fun csvLine(line:String):List<String>{val out=mutableListOf<String>();val current=StringBuilder();var quoted=false;var i=0;while(i<line.length){val c=line[i];when{c=='"'&&quoted&&i+1<line.length&&line[i+1]=='"'->{current.append('"');i++};c=='"'->quoted=!quoted;c==','&&!quoted->{out+=current.toString();current.clear()};else->current.append(c)};i++};out+=current.toString();return out}
+    // Do not reinterpret stray quotes in unquoted GTFS identities or stop names.
+    // A quoted field may contain doubled quotes and embedded line breaks, but
+    // the closing quote must be followed by a delimiter or the end of a record.
+    private fun csvLine(line: String): List<String> {
+        val fields = mutableListOf<String>()
+        val field = StringBuilder()
+        var state = 0 // 0=start, 1=unquoted, 2=quoted, 3=after closing quote
+        var index = 0
+        fun emit() {
+            fields += field.toString()
+            field.clear()
+            state = 0
+        }
+        while (index < line.length) {
+            val c = line[index]
+            when (state) {
+                0 -> when (c) {
+                    '"' -> state = 2
+                    ',' -> emit()
+                    else -> { field.append(c); state = 1 }
+                }
+                1 -> when (c) {
+                    '"' -> throw IllegalArgumentException("Malformed GTFS CSV quoting")
+                    ',' -> emit()
+                    else -> field.append(c)
+                }
+                2 -> when {
+                    c == '"' && index + 1 < line.length && line[index + 1] == '"' -> {
+                        field.append('"')
+                        index++
+                    }
+                    c == '"' -> state = 3
+                    else -> field.append(c)
+                }
+                3 -> when (c) {
+                    ',' -> emit()
+                    else -> throw IllegalArgumentException("Malformed GTFS CSV quoting")
+                }
+            }
+            index++
+        }
+        require(state != 2) { "Malformed GTFS CSV quoting" }
+        fields += field.toString()
+        return fields
+    }
 }
