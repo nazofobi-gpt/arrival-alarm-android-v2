@@ -478,7 +478,7 @@ class OfflineTransitCachePersistenceInstrumentedTest {
         try {
             val loaded = SharedPreferencesTransitCacheStore(context).load().single()
             assertEquals(listOf("year-9999-boundary", "valid"), loaded.departures.map { it.tripId })
-            assertEquals(1_700_000_000L, loaded.departures.single().scheduledEpochSeconds)
+            assertEquals(1_700_000_000L, loaded.departures.single { it.tripId == "valid" }.scheduledEpochSeconds)
         } finally {
             prefs.edit().clear().commit()
         }
