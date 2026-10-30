@@ -147,6 +147,9 @@ class GuidanceReliabilityController(
             ))
             return false
         }
+        // Direct repeats of a failed announcement must obey the same expiry
+        // rule as permission or audio-route recovery; never resurrect a stale stop.
+        if (state.pending == utterance) return retryPending()
         return deliver(utterance)
     }
 
