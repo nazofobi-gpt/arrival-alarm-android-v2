@@ -77,6 +77,23 @@ class RouteOfflineEvidenceTest {
         assertTrue(routeHasUsableRealtimeDelta("24:15", "23:55"))
     }
 
+    @Test fun isoCalendarDayShiftWithSameVisibleClockCountsAsChangedDeparture() {
+        // Two validated ISO local dates are distinct provider schedule evidence.
+        // Route cards render only HH:mm, so comparing the clock alone misses this.
+        assertTrue(routeHasUsableRealtimeDelta(
+            "2026-10-26T08:15:00", "2026-10-25T08:15:00"))
+        assertTrue(routeHasUsableRealtimeDelta(
+            "2026-10-25T08:15", "2026-10-26T08:15:59"))
+        assertFalse(routeHasUsableRealtimeDelta(
+            "2026-10-25T08:15:59", "2026-10-25T08:15:00"))
+
+        // An undated GTFS clock cannot establish a calendar-day difference.
+        assertFalse(routeHasUsableRealtimeDelta("2026-10-26T08:15", "08:15"))
+        // Invalid calendar dates cannot create verified realtime evidence.
+        assertFalse(routeHasUsableRealtimeDelta(
+            "2026-02-30T08:15", "2026-02-28T08:15"))
+    }
+
     @Test fun providerClockPrecisionAloneCannotClaimRealtimeDelay() {
         // Both fields render as 08:15. Formatting or seconds-only variance
         // is not a visible departure-time change.
