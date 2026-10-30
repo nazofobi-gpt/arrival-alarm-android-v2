@@ -266,6 +266,73 @@ class GtfsDeutschlandLoaderTest {
         }
     }
 
+    @Test fun absentRequiredGtfsCoreColumnsFailClosed() {
+        val base = linkedMapOf(
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\ns2,Bremen,53.07,8.80\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,stop_id,stop_sequence\nt1,s1,1\nt1,s2,2\n",
+        )
+        val required = mapOf(
+            "stops.txt" to listOf("stop_id", "stop_name", "stop_lat", "stop_lon"),
+            "routes.txt" to listOf("route_id"),
+            "trips.txt" to listOf("route_id", "trip_id"),
+            "stop_times.txt" to listOf("trip_id", "stop_id", "stop_sequence"),
+        )
+        for ((table, columns) in required) {
+            for (missingColumn in columns) {
+                val feed = base.toMutableMap()
+                val original = feed.getValue(table)
+                val header = original.substringBefore('\n').split(',')
+                val invalidHeader = header.map {
+                    if (it == missingColumn) "renamed_$it" else it
+                }.joinToString(",")
+                feed[table] = invalidHeader + original.substringAfter('\n', missingDelimiterValue = "").let { "\n" + it }
+                val failure = runCatching {
+                    GtfsDeutschlandLoader.parse(
+                        zipOf(*feed.map { it.key to it.value }.toTypedArray()),
+                        "missing-header",
+                        "2026-10-30",
+                    )
+                }.exceptionOrNull()
+                assertTrue(
+                    "$table missing $missingColumn must be rejected: $failure",
+                    failure is IllegalArgumentException &&
+                        failure.message.orEmpty().contains(missingColumn),
+                )
+            }
+        }
+    }
+
+    @Test fun duplicatedOrEmptyGtfsCoreHeaderCannotReplaceUsableCatalog() {
+        val base = linkedMapOf(
+            "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,Lohne,52.66,8.23\ns2,Bremen,53.07,8.80\n",
+            "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+            "trips.txt" to "route_id,trip_id\nr1,t1\n",
+            "stop_times.txt" to "trip_id,stop_id,stop_sequence\nt1,s1,1\nt1,s2,2\n",
+        )
+        val invalid = listOf(
+            "stop_id,stop_name,stop_lat,stop_lon,stop_id\ns1,Lohne,52.66,8.23,s1\n" to "Duplicate",
+            "" to "Missing",
+        )
+        for ((badHeader, error) in invalid) {
+            val feed = base.toMutableMap()
+            feed["stops.txt"] = badHeader
+            val failure = runCatching {
+                GtfsDeutschlandLoader.parse(
+                    zipOf(*feed.map { it.key to it.value }.toTypedArray()),
+                    "invalid-header",
+                    "2026-10-30",
+                )
+            }.exceptionOrNull()
+            assertTrue(
+                "Invalid core header must fail closed: $failure",
+                failure is IllegalArgumentException &&
+                    failure.message.orEmpty().contains(error),
+            )
+        }
+    }
+
     private fun zipOf(vararg files: Pair<String, String>): ByteArray {
         val bytes = ByteArrayOutputStream()
         ZipOutputStream(bytes).use { zip -> files.forEach { (name, content) -> zip.putNextEntry(ZipEntry(name)); zip.write(content.toByteArray()); zip.closeEntry() } }
