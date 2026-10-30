@@ -164,7 +164,7 @@ object GtfsDeutschlandLoader {
     private fun csvLine(line: String): List<String> {
         val fields = mutableListOf<String>()
         val field = StringBuilder()
-        var state = 0 // 0=start, 1=unquoted, 2=quoted, 3=after closing quote
+        var state = 0 // 0=start, 1=unquoted, 2=quoted, 3=closed, 4=closed whitespace
         var index = 0
         fun emit() {
             fields += field.toString()
@@ -194,6 +194,12 @@ object GtfsDeutschlandLoader {
                 }
                 3 -> when (c) {
                     ',' -> emit()
+                    ' ', '\t' -> state = 4 // accepted by the bounded logical-record reader
+                    else -> throw IllegalArgumentException("Malformed GTFS CSV quoting")
+                }
+                4 -> when (c) {
+                    ',' -> emit()
+                    ' ', '\t' -> Unit
                     else -> throw IllegalArgumentException("Malformed GTFS CSV quoting")
                 }
             }
