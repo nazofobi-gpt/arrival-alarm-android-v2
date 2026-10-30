@@ -432,7 +432,7 @@ class GtfsDeutschlandLoaderTest {
             // The logical-record reader may reject this before the field parser.
             // Both layers must fail closed rather than silently rewrite stop names.
             val recordReaderRejected = failure is IllegalStateException &&
-                failure.message.orEmpty().contains("GTFS CSV record has a quote")
+                failure.message.orEmpty().startsWith("GTFS CSV record has ")
             val fieldParserRejected = failure is IllegalArgumentException &&
                 failure.message.orEmpty().contains("Malformed GTFS CSV quoting")
             assertTrue(
@@ -440,6 +440,20 @@ class GtfsDeutschlandLoaderTest {
                 recordReaderRejected || fieldParserRejected,
             )
         }
+    }
+
+    @Test fun whitespaceAfterClosingQuotedGtfsFieldMatchesBoundedReader() {
+        val snapshot = GtfsDeutschlandLoader.parse(
+            zipOf(
+                "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\ns1,\"Lohne\" \t,52.66,8.23\ns2,Bremen,53.08,8.80\n",
+                "routes.txt" to "route_id,route_short_name\nr1,RE\n",
+                "trips.txt" to "route_id,trip_id\nr1,t1\n",
+                "stop_times.txt" to "trip_id,stop_id,stop_sequence\nt1,s1,1\nt1,s2,2\n",
+            ),
+            "legal-quoted-whitespace", "2026-10-30",
+        )
+        assertEquals("Lohne", snapshot.stops.first().name)
+        assertEquals(listOf("s1", "s2"), snapshot.routes.single().stopIds)
     }
 
     @Test fun surplusColumnsInAnyGtfsCoreRowFailClosed() {
