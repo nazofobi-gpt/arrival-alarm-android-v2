@@ -102,8 +102,15 @@ required_columns = {
     "routes.txt": ("route_id", "route_type"),
     "trips.txt": ("route_id", "service_id", "trip_id"),
     "stop_times.txt": ("trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence"),
+    # Optional service tables are authoritative when present: missing fields must
+    # not turn a large but unroutable schedule into a verified offline pack.
+    "calendar.txt": ("service_id", "monday", "tuesday", "wednesday", "thursday",
+                     "friday", "saturday", "sunday", "start_date", "end_date"),
+    "calendar_dates.txt": ("service_id", "date", "exception_type"),
 }
 for table, columns in required_columns.items():
+    if table not in report:
+        continue  # calendar and calendar_dates are individually optional.
     header = set(report[table]["header"])
     for column in columns:
         if column not in header:
