@@ -51,7 +51,7 @@ object GtfsDeutschlandLoader {
                         entryBytes.write(buffer, 0, count)
                     }
                     // Reject malformed UTF-8 in every required table instead of replacing invalid bytes.
-                    files[name] = strictGtfsUtf8Reader(ByteArrayInputStream(entryBytes.toByteArray())).use { parseCsv(it) }
+                    files[name] = strictGtfsUtf8Reader(ByteArrayInputStream(entryBytes.toByteArray())).use { parseCsv(it, name) }
                 }
                 zip.closeEntry()
             }
@@ -114,10 +114,23 @@ object GtfsDeutschlandLoader {
 
     // Parse logical CSV records: a quoted GTFS stop_name can contain newlines.
     // The shared bounded reader also rejects malformed quoting before ingestion.
-    private fun parseCsv(reader: BufferedReader): List<Map<String, String>> {
+    private fun parseCsv(reader: BufferedReader, table: String): List<Map<String, String>> {
         val records = gtfsCsvRecords(reader).iterator()
-        if (!records.hasNext()) return emptyList()
+        require(records.hasNext()) { "Missing GTFS CSV header in $table" }
         val header = csvLine(records.next()).map { it.removePrefix("\uFEFF") }
+        // Each core table must expose the identity/ordering columns consumed below.
+        // Missing or repeated headers must not turn a corrupt import into a fresh, empty catalog.
+        val required = when (table) {
+            "stops.txt" -> setOf("stop_id", "stop_name", "stop_lat", "stop_lon")
+            "routes.txt" -> setOf("route_id")
+            "trips.txt" -> setOf("route_id", "trip_id")
+            "stop_times.txt" -> setOf("trip_id", "stop_id", "stop_sequence")
+            else -> emptySet()
+        }
+        require(header.containsAll(required)) {
+            "Missing GTFS columns in $table: ${(required - header.toSet()).sorted().joinToString(", ")}"
+        }
+        require(header.size == header.toSet().size) { "Duplicate GTFS CSV header in $table" }
         return buildList {
             while (records.hasNext()) {
                 val record = records.next()
