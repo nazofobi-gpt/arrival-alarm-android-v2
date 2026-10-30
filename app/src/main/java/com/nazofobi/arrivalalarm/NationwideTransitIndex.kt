@@ -854,7 +854,12 @@ internal fun gtfsConditionalHeaders(
 ): Map<String, String> {
     if (!ready || !sameSource) return emptyMap()
     return buildMap {
-        etag?.takeIf(String::isNotBlank)?.let { put("If-None-Match", it) }
-        lastModified?.takeIf(String::isNotBlank)?.let { put("If-Modified-Since", it) }
+        // Persisted provider validators are untrusted network data. Never echo
+        // C0/DEL control characters into a subsequent HTTP request header.
+        fun safeValidator(value: String?): String? = value?.takeIf { candidate ->
+            candidate.isNotBlank() && candidate.none { char -> char.code < 0x20 || char.code == 0x7f }
+        }
+        safeValidator(etag)?.let { put("If-None-Match", it) }
+        safeValidator(lastModified)?.let { put("If-Modified-Since", it) }
     }
 }
