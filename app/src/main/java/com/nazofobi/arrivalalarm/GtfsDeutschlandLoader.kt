@@ -59,6 +59,13 @@ object GtfsDeutschlandLoader {
         require(files.keys.containsAll(requiredCoreFiles)) {
             "Missing GTFS core members: ${(requiredCoreFiles - files.keys).sorted().joinToString(", ")}"
         }
+        // A header-only core table is not a valid refreshed transit catalog.
+        // Fail the candidate snapshot instead of replacing an offline known-good feed.
+        for (table in requiredCoreFiles) {
+            require(files.getValue(table).isNotEmpty()) {
+                "Empty GTFS core table: $table"
+            }
+        }
         // GTFS identity keys must be unique. A duplicate would silently alias stops,
         // overwrite route metadata or publish two trips under the same identity.
         // Reject the candidate snapshot so callers can retain the old-known-good feed.
