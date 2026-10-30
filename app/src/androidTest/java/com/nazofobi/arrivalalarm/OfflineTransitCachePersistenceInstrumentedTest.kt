@@ -1013,8 +1013,9 @@ class OfflineTransitCachePersistenceInstrumentedTest {
             )
             val fields = listOf(
                 "route" to listOf("line", "direction", "departure", "arrival"),
-                "stop" to listOf("plannedArrival", "plannedDeparture", "plannedPlatform"),
-                "departure" to listOf("line", "direction"),
+                "stop" to listOf("plannedArrival", "plannedDeparture", "plannedPlatform",
+                    "arrival", "departure", "platform"),
+                "departure" to listOf("line", "direction", "platform"),
             )
             for ((scope, names) in fields) {
                 for (field in names) {
