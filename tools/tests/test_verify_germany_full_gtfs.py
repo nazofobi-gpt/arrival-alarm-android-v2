@@ -27,6 +27,8 @@ class GtfsArchiveMemberTest(unittest.TestCase):
                 "routes.txt": "route_id,route_type\nR,3\n",
                 "trips.txt": "route_id,service_id,trip_id\nR,S,T\n",
                 "stop_times.txt": "trip_id,arrival_time,departure_time,stop_id,stop_sequence\nT,10:00:00,10:00:00,1,1\n",
+                "calendar.txt": "service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\nS,1,1,1,1,1,1,1,20260101,20261231\n",
+                "calendar_dates.txt": "service_id,date,exception_type\nS,20261030,1\n",
             }
             with zipfile.ZipFile(archive, "w") as zf:
                 for member in entries:
@@ -166,6 +168,25 @@ class GtfsArchiveMemberTest(unittest.TestCase):
                     )
                     self.assertNotEqual(0, result.returncode)
                     self.assertIn(f"invalid CSV in GTFS table {member}", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+
+    def test_present_service_calendar_tables_require_gtfs_columns(self):
+        cases = (
+            ("calendar.txt", b"service_id,monday,tuesday,wednesday,thursday,friday,sunday,start_date,end_date\nS,1,1,1,1,1,1,20260101,20261231\n", "saturday"),
+            ("calendar.txt", b"service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,end_date\nS,1,1,1,1,1,1,1,20261231\n", "start_date"),
+            ("calendar_dates.txt", b"service_id,date\nS,20261030\n", "exception_type"),
+            ("calendar_dates.txt", b"service_id,exception_type\nS,1\n", "date"),
+        )
+        for optimized in (False, True):
+            for member, content, missing in cases:
+                with self.subTest(optimized=optimized, member=member, missing=missing):
+                    result, _ = self.run_archive(
+                        REQUIRED + (member,), {member: content}, optimized=optimized,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn(
+                        f"{member} missing required GTFS column {missing}", result.stderr,
+                    )
                     self.assertNotIn("Traceback", result.stderr)
 
     def test_missing_required_columns_fail_closed_in_normal_and_optimized_python(self):
