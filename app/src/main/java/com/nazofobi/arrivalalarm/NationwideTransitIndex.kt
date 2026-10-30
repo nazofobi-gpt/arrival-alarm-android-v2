@@ -185,6 +185,22 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
                 error("GTFS service calendar eksik")
             }
 
+            // Core table counts alone cannot prove a usable journey. A feed with
+            // orphaned route/stop references must not replace last-known-good SQLite.
+            val hasConnectedTrip = db.rawQuery(
+                """
+                SELECT 1 FROM trips t
+                JOIN routes r ON r.route_id = t.route_id
+                JOIN stop_times first_time ON first_time.trip_id = t.trip_id
+                JOIN stop_times second_time ON second_time.trip_id = t.trip_id
+                    AND second_time.stop_sequence > first_time.stop_sequence
+                JOIN stops first_stop ON first_stop.id = first_time.stop_id
+                JOIN stops second_stop ON second_stop.id = second_time.stop_id
+                LIMIT 1
+                """.trimIndent(),
+                null,
+            ).use { it.moveToFirst() }
+            if (!hasConnectedTrip) error("GTFS schedule graph bağlantısız: geçerli iki duraklı sefer yok")
             putMetadata(db, READY_KEY, "1")
             putMetadata(db, FETCHED_KEY, (System.currentTimeMillis() / 1000).toString())
             putMetadata(db, COUNT_KEY, stops.toString())
