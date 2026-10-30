@@ -37,6 +37,26 @@ class GtfsFeedRevalidationTest {
     }
 
     @Test
+    fun persistedControlCharactersCannotBecomeHttpRequestHeaders() {
+        val safeDate = "Sun, 11 Oct 2026 12:00:00 GMT"
+        val safeEtag = "W/\\\"feed-42\\\""
+        for (unsafe in listOf("\\\"old\\\"\\r\\nX-Injected: true", "v1\\u0000bad", "v1\\tbad", "v1\\u007fbad")) {
+            assertEquals(
+                mapOf("If-Modified-Since" to safeDate),
+                gtfsConditionalHeaders(true, true, unsafe, safeDate),
+            )
+            assertEquals(
+                mapOf("If-None-Match" to safeEtag),
+                gtfsConditionalHeaders(true, true, safeEtag, unsafe),
+            )
+        }
+        assertEquals(
+            mapOf("If-None-Match" to safeEtag, "If-Modified-Since" to safeDate),
+            gtfsConditionalHeaders(true, true, safeEtag, safeDate),
+        )
+    }
+
+    @Test
     fun lastModifiedOnlyFeedCanRevalidateWithoutEtag() {
         val headers = gtfsConditionalHeaders(
             ready = true,
