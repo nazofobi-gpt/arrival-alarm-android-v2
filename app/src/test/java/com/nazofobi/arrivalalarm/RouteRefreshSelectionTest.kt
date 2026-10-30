@@ -274,6 +274,42 @@ class RouteRefreshSelectionTest {
     }
 
     @Test
+    fun invisibleTripIdsCannotProvePhysicalJourneyIdentity() {
+        val valid = option()
+        for (invalidId in listOf("trip\u200Bhidden", "trip\u202Ereversed", "trip\nnewline", "trip\tseparator")) {
+            val malformed = valid.copy(tripIds = listOf(invalidId))
+            // A repeat of the same invalid provider identifier in both snapshots
+            // is not independent evidence of a physical selected TripInstance.
+            assertNull(retainSelectedRouteAfterRefresh(
+                malformed.id, listOf(malformed), listOf(malformed),
+            ))
+        }
+        val localized = valid.copy(tripIds = listOf("München-RE-42"))
+        assertEquals(localized.id, retainSelectedRouteAfterRefresh(
+            localized.id, listOf(localized), listOf(localized),
+        ))
+    }
+
+    @Test
+    fun invisibleStopIdsCannotPreserveBoardingAndAlightingConsent() {
+        val valid = option()
+        for (invalidId in listOf("stop\u200Bhidden", "stop\u202Ereversed", "stop\nnewline", "stop\tseparator")) {
+            val malformed = valid.copy(stops = valid.stops.mapIndexed { index, stop ->
+                if (index == 1) stop.copy(id = invalidId) else stop
+            })
+            assertNull(retainSelectedRouteAfterRefresh(
+                malformed.id, listOf(malformed), listOf(malformed),
+            ))
+        }
+        val localized = valid.copy(stops = valid.stops.mapIndexed { index, stop ->
+            if (index == 1) stop.copy(id = "Köln-Hbf") else stop
+        })
+        assertEquals(localized.id, retainSelectedRouteAfterRefresh(
+            localized.id, listOf(localized), listOf(localized),
+        ))
+    }
+
+    @Test
     fun missingOrAmbiguousCandidateDoesNotSelectAnotherRoute() {
         val old = option()
         assertNull(retainSelectedRouteAfterRefresh(null, listOf(old), listOf(old)))
