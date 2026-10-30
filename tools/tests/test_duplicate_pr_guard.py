@@ -21,6 +21,34 @@ def pr(number, body="", title="fix(G-168): search", created="2026-10-19T12:00:00
 
 
 class DuplicateGuardTest(unittest.TestCase):
+    def test_closed_pr_history_beyond_page_six_is_scanned_for_merged_duplicate(self):
+        current = pr(700, "Work-Unit: G-173/complete-history-test\\nOverlap-Review: none".replace("\\n", "\n"))
+        merged_duplicate = pr(
+            699,
+            "Work-Unit: G-173/complete-history-test",
+            merged="2026-10-29T09:00:00Z",
+        )
+        pages = []
+
+        def fake_request(repo, path, token):
+            page = int(path.rsplit("page=", 1)[1])
+            pages.append(page)
+            if page <= 6:
+                return [pr(page * 100 + offset) for offset in range(100)]
+            return [merged_duplicate]
+
+        with patch.object(guard, "request_json", side_effect=fake_request):
+            closed = guard.list_prs("owner/repo", "token", "closed")
+        self.assertEqual(pages, list(range(1, 8)))
+        self.assertEqual(len(closed), 601)
+        errors, _ = guard.analyze(current, [current], closed)
+        self.assertTrue(any("already merged" in error for error in errors))
+
+    def test_bounded_history_scan_still_fails_closed_on_incomplete_pages(self):
+        with patch.object(guard, "request_json", return_value=[pr(i) for i in range(100)]):
+            with self.assertRaisesRegex(RuntimeError, "cannot attest complete dedup scan"):
+                guard.list_prs("owner/repo", "token", "closed", max_pages=2)
+
     def test_rerun_uses_live_pr_body_after_metadata_edit(self):
         stale = pr(571, "", "fix(G-173): search replay")
         live = pr(571, "Work-Unit: G-173/search-replay-catalog-refresh\nOverlap-Review: #111",
