@@ -1,5 +1,6 @@
 package com.nazofobi.arrivalalarm
 
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -28,9 +29,52 @@ fun interface EpochClock { fun nowEpochSeconds(): Long }
 
 // GTFS-RT Delay is a signed integer. optInt() silently coerces strings,
 // booleans and malformed data to zero, falsely claiming on-time evidence.
+private fun JSONObject.firstValue(vararg keys: String): Any? {
+    for (key in keys) {
+        if (has(key)) return opt(key)
+    }
+    return null
+}
+
+private fun JSONObject.firstObject(vararg keys: String): JSONObject? {
+    for (key in keys) {
+        optJSONObject(key)?.let { return it }
+    }
+    return null
+}
+
+private fun JSONObject.firstArray(vararg keys: String): JSONArray? {
+    for (key in keys) {
+        optJSONArray(key)?.let { return it }
+    }
+    return null
+}
+
+private fun JSONObject.firstNonBlankString(vararg keys: String): String? {
+    for (key in keys) {
+        val value = firstValue(key) as? String ?: continue
+        if (value.isNotBlank()) return value
+    }
+    return null
+}
+
+private fun parseProviderEpochSeconds(value: Any?): Long? {
+    val timestamp = when (value) {
+        is Int -> value.toLong()
+        is Long -> value
+        // ProtoJSON represents uint64 as a decimal string. Accept only canonical
+        // ASCII decimal digits; reject signs, whitespace, fractions and overflow.
+        is String -> value.takeIf { text ->
+            text.isNotEmpty() && text.all { digit -> digit in '0'..'9' }
+        }?.toLongOrNull()
+        else -> null
+    }
+    return timestamp?.takeIf { it > 0L }
+}
+
 private fun parseRealtimeDelay(event: JSONObject?): Int? {
-    if (event?.has("Delay") != true) return null
-    return when (val value = event.opt("Delay")) {
+    val value = event?.firstValue("Delay", "delay") ?: return null
+    return when (value) {
         is Int -> value
         is Long -> value.takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() }?.toInt()
         else -> null
@@ -48,36 +92,32 @@ class VbnJsonRealtimeSource(
 
     internal fun parse(json: String): RealtimeSnapshot? {
         val root = JSONObject(json)
-        // optLong() accepts numeric strings and truncates fractional values.
-        // Neither is valid source-backed freshness evidence for this feed.
-        val timestamp = when (val value = root.optJSONObject("Header")?.opt("Timestamp")) {
-            is Int -> value.toLong()
-            is Long -> value
-            else -> return null
-        }
-        if (timestamp <= 0L) return null
-        val entities = root.optJSONArray("Entity") ?: return RealtimeSnapshot(timestamp, emptyList())
+        val header = root.firstObject("Header", "header") ?: return null
+        // VBN's published sample uses PascalCase and a JSON number; the live endpoint
+        // also emits canonical ProtoJSON lowerCamelCase with uint64 as a decimal string.
+        val timestamp = parseProviderEpochSeconds(header.firstValue("Timestamp", "timestamp")) ?: return null
+        val entities = root.firstArray("Entity", "entity") ?: return RealtimeSnapshot(timestamp, emptyList())
         val updates = buildList {
             for (i in 0 until entities.length()) {
-                val tripUpdate = entities.optJSONObject(i)?.optJSONObject("TripUpdate") ?: continue
-                val trip = tripUpdate.optJSONObject("Trip") ?: continue
-                val tripId = trip.optString("TripId").takeIf { it.isNotBlank() } ?: continue
-                val cancelled = trip.optString("ScheduleRelationship").equals("Canceled", true) ||
-                    trip.optString("ScheduleRelationship").equals("Cancelled", true)
-                val stops = tripUpdate.optJSONArray("StopTimeUpdate")
+                val tripUpdate = entities.optJSONObject(i)?.firstObject("TripUpdate", "tripUpdate") ?: continue
+                val trip = tripUpdate.firstObject("Trip", "trip") ?: continue
+                val tripId = trip.firstNonBlankString("TripId", "tripId") ?: continue
+                val relationship = trip.firstNonBlankString("ScheduleRelationship", "scheduleRelationship")
+                val cancelled = relationship.equals("Canceled", true) ||
+                    relationship.equals("Cancelled", true)
+                val stops = tripUpdate.firstArray("StopTimeUpdate", "stopTimeUpdate")
                 var delay: Int? = null
                 var platform: String? = null
                 if (stops != null) {
                     for (j in 0 until stops.length()) {
                         val stop = stops.optJSONObject(j) ?: continue
                         if (delay == null) {
-                            val departure = stop.optJSONObject("Departure")
-                            val arrival = stop.optJSONObject("Arrival")
+                            val departure = stop.firstObject("Departure", "departure")
+                            val arrival = stop.firstObject("Arrival", "arrival")
                             delay = parseRealtimeDelay(departure) ?: parseRealtimeDelay(arrival)
                         }
                         if (platform == null) {
-                            platform = stop.optString("StopPlatform", "").takeIf { it.isNotBlank() }
-                                ?: stop.optString("Platform", "").takeIf { it.isNotBlank() }
+                            platform = stop.firstNonBlankString("StopPlatform", "stopPlatform", "Platform", "platform")
                         }
                     }
                 }
