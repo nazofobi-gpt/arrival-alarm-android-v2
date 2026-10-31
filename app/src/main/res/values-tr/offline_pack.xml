@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="offline_pack_metadata">Çevrimdışı indeks %1$s (DB + WAL/SHM) · kaynak sürümü %2$s · son kontrol %3$s</string>
-    <string name="offline_pack_size_unknown">boyut bilinmiyor</string>
-    <string name="offline_pack_version_unknown">sürüm bilinmiyor</string>
-    <string name="offline_pack_checked_unknown">henüz kontrol edilmedi</string>
-</resources>
