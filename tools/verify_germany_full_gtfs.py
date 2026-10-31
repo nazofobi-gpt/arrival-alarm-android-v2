@@ -27,6 +27,17 @@ optional = [
     "attributions.txt", "feed_info.txt",
 ]
 
+# These identity fields must be populated in every GTFS record. Do not require
+# stop_times.stop_id here: GTFS Flex may use a location_group_id or location_id.
+NONEMPTY_ID_FIELDS = {
+    "stops.txt": ("stop_id",),
+    "routes.txt": ("route_id",),
+    "trips.txt": ("route_id", "service_id", "trip_id"),
+    "stop_times.txt": ("trip_id", "stop_sequence"),
+    "calendar.txt": ("service_id",),
+    "calendar_dates.txt": ("service_id",),
+}
+
 def inspect(zf, member):
     try:
         with zf.open(member) as raw:
@@ -44,6 +55,13 @@ def inspect(zf, member):
                 if column in seen:
                     raise SystemExit(f"duplicate GTFS column {member}: {column}")
                 seen.add(column)
+            # Header presence is checked below for all required GTFS columns.
+            # Validate present identity fields while records are already streamed.
+            identity_positions = [
+                (field, header.index(field))
+                for field in NONEMPTY_ID_FIELDS.get(member, ())
+                if field in seen
+            ]
             rows = 0
             for row in reader:
                 if any("\x00" in value for value in row):
@@ -55,6 +73,12 @@ def inspect(zf, member):
                         f"GTFS table {member} has {len(row)} columns at CSV line "
                         f"{reader.line_num}; expected {len(header)}"
                     )
+                for field, position in identity_positions:
+                    if not row[position].strip():
+                        raise SystemExit(
+                            f"GTFS table {member} has blank required value {field} "
+                            f"at CSV line {reader.line_num}"
+                        )
                 rows += 1
             return {"rows": rows, "header": header}
     except zipfile.BadZipFile:
