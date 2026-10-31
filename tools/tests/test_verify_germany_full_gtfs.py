@@ -358,6 +358,34 @@ class GtfsArchiveMemberTest(unittest.TestCase):
                     self.assertNotIn("missing required GTFS column", result.stderr)
                     self.assertNotIn("Traceback", result.stderr)
 
+    def test_blank_required_gtfs_identity_values_fail_closed(self):
+        cases = (
+            ("stops.txt", REQUIRED, "stop_id",
+             b"stop_id,stop_name,stop_lat,stop_lon\n,Test,52.0,8.0\n"),
+            ("routes.txt", REQUIRED, "route_id",
+             b"route_id,route_type\n  ,3\n"),
+            ("trips.txt", REQUIRED, "service_id",
+             b"route_id,service_id,trip_id\nR,,T\n"),
+            ("stop_times.txt", REQUIRED, "stop_sequence",
+             b"trip_id,arrival_time,departure_time,stop_id,stop_sequence\n"
+             b"T,10:00:00,10:00:00,1,\n"),
+            ("calendar.txt", REQUIRED + ("calendar.txt",), "service_id",
+             b"service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n"
+             b",1,1,1,1,1,1,1,20260101,20261231\n"),
+        )
+        for optimized in (False, True):
+            for member, entries, field, content in cases:
+                with self.subTest(optimized=optimized, member=member):
+                    result, _ = self.run_archive(
+                        entries, {member: content}, optimized=optimized,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn(
+                        f"GTFS table {member} has blank required value {field} at CSV line 2",
+                        result.stderr,
+                    )
+                    self.assertNotIn("Traceback", result.stderr)
+
     def test_present_service_calendar_tables_require_gtfs_columns(self):
         cases = (
             ("calendar.txt", b"service_id,monday,tuesday,wednesday,thursday,friday,sunday,start_date,end_date\nS,1,1,1,1,1,1,20260101,20261231\n", "saturday"),
