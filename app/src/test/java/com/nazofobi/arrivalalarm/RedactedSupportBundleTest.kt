@@ -135,4 +135,19 @@ class RedactedSupportBundleTest {
         assertEquals("no", fields["support_connector_connected"])
         assertFalse(report.contains(privateDetail))
     }
+
+    @Test fun userInitiatedShareWithoutProviderSamplesKeepsHealthUnverified() {
+        // Settings does not issue active probes just to prepare a share payload.
+        val report = RedactedSupportBundle.render(state(), now)
+        val fields = report.fields()
+        assertEquals("VARIS_REDACTED_SUPPORT_BUNDLE_V1", fields["schema"])
+        assertEquals(25, fields.size)
+        for (slot in listOf("local_static", "realtime", "enrichment")) {
+            assertEquals("not_measured", fields["provider_${slot}_state"])
+            assertEquals("not_measured", fields["provider_${slot}_latency_bucket"])
+        }
+        assertEquals("no", fields["support_connector_connected"])
+        assertFalse(report.contains(privateDetail))
+        assertFalse(report.contains("private-token"))
+    }
 }
