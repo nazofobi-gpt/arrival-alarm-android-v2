@@ -30,6 +30,38 @@ internal object RedactedSupportBundle {
         "enrichment" to ArrivalAlarmTransitProviders.DbEnrichment.id,
     )
 
+    // Keep the user-share boundary independent of the lower-level probe serializer.
+    // Never export arbitrary values, extra keys, wrong roles or malformed lines.
+    internal fun reviewedProviderFields(
+        summary: String,
+        expectedRole: String,
+    ): Pair<String, String> {
+        val requiredKeys = listOf(
+            "schema", "scope", "provider_role", "provider_state", "latency_bucket",
+        )
+        val pairs = summary.trimEnd('\n').lines().map { line ->
+            if (line.count { it == '=' } != 1) null
+            else line.substringBefore('=') to line.substringAfter('=')
+        }
+        val fallback = "not_measured" to "not_measured"
+        if (pairs.size != requiredKeys.size || pairs.any { it == null } ||
+            pairs.mapNotNull { it?.first } != requiredKeys
+        ) return fallback
+        val fields = pairs.filterNotNull().toMap()
+        val allowedStates = setOf("ready", "degraded", "unavailable", "not_measured")
+        val allowedLatencies = setOf(
+            "under_250ms", "250ms_to_1s", "1s_to_5s", "over_5s", "not_measured",
+        )
+        val state = fields["provider_state"] ?: return fallback
+        val latency = fields["latency_bucket"] ?: return fallback
+        if (fields["schema"] != "VARIS_PROVIDER_PROBE_V1" ||
+            fields["scope"] != "provider_health_only" ||
+            fields["provider_role"] != expectedRole ||
+            state !in allowedStates || latency !in allowedLatencies
+        ) return fallback
+        return state to latency
+    }
+
     fun render(
         state: SettingsReadinessState,
         nowEpochSeconds: Long,
@@ -62,12 +94,10 @@ internal object RedactedSupportBundle {
             val summary = ProviderProbeDiagnostics.renderAt(
                 measured?.health, measured?.latencyMillis, nowEpochSeconds,
             )
-            val values = summary.trimEnd('\n').lines().associate {
-                it.substringBefore('=') to it.substringAfter('=')
-            }
+            val (stateValue, latencyValue) = reviewedProviderFields(summary, slot)
             listOf(
-                "provider_${slot}_state=${values["provider_state"] ?: "not_measured"}",
-                "provider_${slot}_latency_bucket=${values["latency_bucket"] ?: "not_measured"}",
+                "provider_${slot}_state=$stateValue",
+                "provider_${slot}_latency_bucket=$latencyValue",
             )
         }
         return (listOf(
