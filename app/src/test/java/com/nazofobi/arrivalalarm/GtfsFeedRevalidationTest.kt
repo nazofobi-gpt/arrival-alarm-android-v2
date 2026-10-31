@@ -76,7 +76,7 @@ class GtfsFeedRevalidationTest {
     fun nonLatin1ValidatorsAreNotReplayedAsInvalidHttpFields() {
         val safeEtag = "\"germany-feed-42\""
         val safeDate = "Sun, 11 Oct 2026 12:00:00 GMT"
-        for (unsafe in listOf("\"bad\\u2028line\"", "\"euro\\u20ac\"", "\"train\\ud83d\\ude86\"")) {
+        for (unsafe in listOf("\"bad\u2028line\"", "\"euro\u20ac\"", "\"train\ud83d\ude86\"")) {
             assertEquals(
                 mapOf("If-Modified-Since" to safeDate),
                 gtfsConditionalHeaders(true, true, unsafe, safeDate),
