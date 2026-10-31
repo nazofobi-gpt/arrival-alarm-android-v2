@@ -152,7 +152,7 @@ internal fun GtfsTripSearchConsentPanel(
                     )
                     OutlinedButton(
                         onClick = onChangeServiceDate,
-                        enabled = !busy && confirmed == null,
+                        enabled = !busy,
                         modifier = Modifier.fillMaxWidth().testTag("gtfs-trip-search-change-date"),
                     ) {
                         Text(stringResource(R.string.gtfs_trip_search_change_date))
@@ -301,7 +301,7 @@ internal fun GtfsTripSearchConsentPanel(
                 chooseLabel = stringResource(R.string.gtfs_trip_search_choose_destination),
                 selected = selectedDestination,
                 options = destinationOptions,
-                enabled = !busy && selectedBoarding != null && confirmed == null,
+                enabled = !busy && selectedBoarding != null,
                 tag = "gtfs-trip-search-destination-picker",
                 onSelect = { sequence ->
                     destinationSequence = sequence
@@ -316,7 +316,7 @@ internal fun GtfsTripSearchConsentPanel(
                 chooseLabel = stringResource(R.string.gtfs_trip_search_choose_alarm_target),
                 selected = selectedAlarm,
                 options = alarmOptions,
-                enabled = !busy && selectedDestination != null && confirmed == null,
+                enabled = !busy && selectedDestination != null,
                 tag = "gtfs-trip-search-alarm-picker",
                 onSelect = { alarmSequence = it },
             )
