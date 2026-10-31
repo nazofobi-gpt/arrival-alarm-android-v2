@@ -163,7 +163,7 @@ class AndroidSelectedGtfsTripSession(context: Context) : AutoCloseable {
      */
     internal suspend fun inspect(identity: GtfsTripInstanceIdentity): GtfsTripDetailResult =
         withContext(Dispatchers.IO) {
-            synchronized(lock) {
+            synchronized(mutex) {
                 if (closed) {
                     return@synchronized GtfsTripDetailResult.Unavailable(
                         GtfsTripDetailFailure.SESSION_CLOSED,
