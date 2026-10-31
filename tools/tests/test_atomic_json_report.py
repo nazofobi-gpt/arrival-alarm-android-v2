@@ -56,7 +56,7 @@ class AtomicJsonReportTest(unittest.TestCase):
             with self.subTest(value=str(value)):
                 with tempfile.TemporaryDirectory() as directory:
                     path = Path(directory) / "result.json"
-                    original = b'{"verified": "old"}\\n'
+                    original = b'{"verified": "old"}\n'
                     path.write_bytes(original)
                     with self.assertRaisesRegex(ValueError, "Out of range float values"):
                         write_atomic_json_report(path, {"measurements": {"sample": value}})
