@@ -297,7 +297,8 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
 
         val trips = readableDatabase.rawQuery(
             """
-            SELECT t.trip_id, COALESCE(r.short_name, ''), COALESCE(t.headsign, '')
+            SELECT t.trip_id, COALESCE(r.short_name, ''), COALESCE(t.headsign, ''),
+                   t.route_id, t.service_id, t.direction_id
             FROM trips t
             JOIN routes r ON r.route_id = t.route_id
             WHERE t.headsign LIKE ? ESCAPE '!' COLLATE NOCASE
@@ -315,6 +316,9 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
                     val tripId = cursor.getString(0)
                     val shortName = cursor.getString(1).trim()
                     val headsign = cursor.getString(2).trim()
+                    val routeId = cursor.getString(3)
+                    val serviceId = cursor.getString(4)
+                    val directionId = if (cursor.isNull(5)) null else cursor.getInt(5)
                     val completion = headsign.ifBlank { shortName }.ifBlank { tripId }
                     val label = when {
                         shortName.isNotBlank() && headsign.isNotBlank() -> "$shortName → $headsign"
@@ -329,8 +333,11 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
                             label = label,
                             latitude = 0.0,
                             longitude = 0.0,
+                            routeId = routeId,
                             tripId = tripId,
                             autocompleteText = completion,
+                            serviceId = serviceId,
+                            directionId = directionId,
                         )
                     )
                 }
