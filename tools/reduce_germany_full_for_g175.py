@@ -50,14 +50,29 @@ def member_map(zf):
     return names
 
 def rows(zf, member):
-    raw = zf.open(member)
-    text = io.TextIOWrapper(raw, encoding="utf-8-sig", newline="")
-    reader = csv.DictReader(text)
+    # The reducer is an acceptance-evidence generator. Never turn malformed
+    # GTFS CSV into a plausible subset by dropping surplus/missing columns.
     try:
-        for row in reader:
-            yield row
-    finally:
-        text.close()
+        with zf.open(member) as raw:
+            with io.TextIOWrapper(raw, encoding="utf-8-sig", newline="") as text:
+                reader = csv.DictReader(text, strict=True)
+                fields = reader.fieldnames
+                if (
+                    not fields
+                    or len(set(fields)) != len(fields)
+                    or any(not field.strip() or "\x00" in field for field in fields)
+                ):
+                    raise SystemExit(f"invalid GTFS CSV header {member}")
+                for row in reader:
+                    if None in row or any(
+                        value is None or "\x00" in value for value in row.values()
+                    ):
+                        raise SystemExit(f"invalid GTFS CSV row {member}")
+                    yield row
+    except UnicodeError:
+        raise SystemExit(f"invalid GTFS CSV UTF-8 {member}") from None
+    except csv.Error:
+        raise SystemExit(f"invalid GTFS CSV syntax {member}") from None
 
 def valid_stop_coordinates(row):
     # A malformed provider coordinate must not abort nationwide fixture selection.
