@@ -91,9 +91,9 @@ internal fun GtfsTripSearchConsentPanel(
     ) {
         buildGtfsTripConsentDraft(
             detail = detail,
-            boardingStopSequence = boardingSequence,
-            destinationStopSequence = destinationSequence,
-            alarmTargetStopSequence = effectiveAlarmSequence,
+            boardingSequence = boardingSequence,
+            destinationSequence = destinationSequence,
+            alarmTargetSequence = effectiveAlarmSequence,
         )
     } else {
         null
@@ -211,7 +211,7 @@ internal fun GtfsTripSearchConsentPanel(
             )
         } else if (selection != null && detail != null && identityMatches) {
             Text(
-                detail.headsign.ifBlank { template.displayLabel },
+                detail.headsign?.takeIf { it.isNotBlank() } ?: template.displayLabel,
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
@@ -388,9 +388,9 @@ private fun TripSearchStopPicker(
 private fun tripSearchStopLabel(stop: GtfsTripDetailStop): String {
     val clock = stop.scheduledDeparture ?: stop.scheduledArrival
     return if (clock.isNullOrBlank()) {
-        "${stop.stopName} (#${stop.stopSequence})"
+        "${stop.name} (#${stop.stopSequence})"
     } else {
-        "${stop.stopName} (#${stop.stopSequence}) • $clock"
+        "${stop.name} (#${stop.stopSequence}) • $clock"
     }
 }
 
