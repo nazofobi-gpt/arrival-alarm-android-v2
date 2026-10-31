@@ -1,18 +1,22 @@
 package com.nazofobi.arrivalalarm
 
 import android.content.ContextWrapper
+import android.text.format.DateUtils
 import android.text.format.Formatter
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.fetchSemanticsNode
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,7 +27,7 @@ class OfflinePackMetadataInstrumentedTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun readyIndexShowsStoredSizeSourceVersionAndLastCheck() {
+    fun readyIndexShowsStoredSizeSourceVersionAndLastUpdate() {
         val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
         val database = File(targetContext.cacheDir, "offline-pack-metadata-test.db")
         val wal = File("${database.path}-wal")
@@ -44,6 +48,12 @@ class OfflinePackMetadataInstrumentedTest {
             assertEquals(expectedBytes, offlineIndexStorageBytes(context))
 
             val nowMillis = System.currentTimeMillis()
+            val fetchedAtEpochSeconds = nowMillis / 1_000L - 17L * 60L
+            val expectedRelativeUpdate = DateUtils.getRelativeTimeSpanString(
+                fetchedAtEpochSeconds * 1_000L,
+                nowMillis,
+                DateUtils.MINUTE_IN_MILLIS,
+            ).toString()
             val state = SettingsReadinessState(
                 themeMode = ArrivalThemeMode.SYSTEM,
                 locationPermission = true,
@@ -54,7 +64,7 @@ class OfflinePackMetadataInstrumentedTest {
                 audioRoute = GuidanceAudioRoute.DEVICE,
                 dataState = NationwideDataState.Ready(
                     stopCount = 12,
-                    fetchedAtEpochSeconds = nowMillis / 1_000L,
+                    fetchedAtEpochSeconds = fetchedAtEpochSeconds,
                     sourceVersion = "\"etag-g185-test\"",
                 ),
                 backgroundJourneyActive = false,
@@ -84,10 +94,26 @@ class OfflinePackMetadataInstrumentedTest {
                 }
             }
 
-            composeRule.onNodeWithTag("offline-pack-metadata")
-                .assertIsDisplayed()
-                .assertTextContains(Formatter.formatShortFileSize(context, expectedBytes))
-                .assertTextContains("etag-g185-test")
+            val metadataNode = composeRule.onNodeWithTag("offline-pack-metadata")
+            metadataNode.assertIsDisplayed().assertTextContains("etag-g185-test")
+            val renderedText = metadataNode.fetchSemanticsNode()
+                .config[SemanticsProperties.Text]
+                .joinToString(" ") { it.text }
+            fun normalizeWhitespace(value: String): String = value
+                .replace('\u00A0', ' ')
+                .replace('\u202F', ' ')
+                .replace(Regex("\\s+"), " ")
+                .trim()
+
+            val expectedSize = Formatter.formatShortFileSize(context, expectedBytes)
+            assertTrue(
+                "Rendered metadata should include the combined DB/WAL/SHM size.",
+                normalizeWhitespace(renderedText).contains(normalizeWhitespace(expectedSize)),
+            )
+            assertTrue(
+                "Rendered metadata should include the relative last content-update time.",
+                normalizeWhitespace(renderedText).contains(normalizeWhitespace(expectedRelativeUpdate)),
+            )
         } finally {
             files.forEach { it.delete() }
         }
