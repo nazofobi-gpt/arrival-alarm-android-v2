@@ -44,6 +44,8 @@ data class TransitLocationResult(
     val routeId: String? = null,
     val tripId: String? = null,
     val autocompleteText: String? = null,
+    val serviceId: String? = null,
+    val directionId: Int? = null,
 ) {
     val point: MapPoint
         get() {
@@ -68,12 +70,15 @@ internal fun mergeTransitLocationResults(
 ): List<TransitLocationResult> {
     if (limit <= 0) return emptyList()
     return (local + live).distinctBy { result ->
-        if (result.kind == TransitLocationKind.STOP && result.stop != null) {
-            providerScopedStopLocationKey(result.stop)
-        } else {
-            "${result.kind}:${result.label.lowercase(Locale.ROOT)}:" +
-                "${"%.5f".format(Locale.ROOT, result.latitude)}:" +
-                "${"%.5f".format(Locale.ROOT, result.longitude)}"
+        when {
+            result.kind == TransitLocationKind.STOP && result.stop != null ->
+                providerScopedStopLocationKey(result.stop)
+            result.kind == TransitLocationKind.LINE || result.kind == TransitLocationKind.TRIP ->
+                result.key
+            else ->
+                "${result.kind}:${result.label.lowercase(Locale.ROOT)}:" +
+                    "${"%.5f".format(Locale.ROOT, result.latitude)}:" +
+                    "${"%.5f".format(Locale.ROOT, result.longitude)}"
         }
     }.take(limit)
 }

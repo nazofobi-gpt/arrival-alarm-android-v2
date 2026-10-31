@@ -65,6 +65,7 @@ enum class GtfsTripDetailFailure {
     INVALID_STOP_SEQUENCE,
     INVALID_STOP_TIME,
     MISSING_STOP_METADATA,
+    SESSION_CLOSED,
 }
 
 sealed interface GtfsTripDetailResult {
