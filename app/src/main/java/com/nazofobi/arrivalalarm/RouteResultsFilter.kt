@@ -34,7 +34,17 @@ internal data class RouteResultsFilter(
                 option.destination.latitude.isFinite() &&
                 option.destination.latitude in -90.0..90.0 &&
                 option.destination.longitude.isFinite() &&
-                option.destination.longitude in -180.0..180.0
+                option.destination.longitude in -180.0..180.0 &&
+                // Intermediate stops can omit both coordinates, but one-sided,
+                // nonfinite or out-of-range evidence must not select a route.
+                option.stops.all { stop ->
+                    val latitude = stop.latitude
+                    val longitude = stop.longitude
+                    (latitude == null && longitude == null) ||
+                        (latitude != null && longitude != null &&
+                            latitude.isFinite() && latitude in -90.0..90.0 &&
+                            longitude.isFinite() && longitude in -180.0..180.0)
+                }
         }.distinct()
         // Detail selection resolves against the original candidates by ID.
         // Include rejected/nonphysical candidates when identifying collisions:
