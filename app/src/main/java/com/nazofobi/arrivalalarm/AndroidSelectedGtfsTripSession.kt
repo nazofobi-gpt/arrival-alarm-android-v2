@@ -157,6 +157,31 @@ class AndroidSelectedGtfsTripSession(context: Context) : AutoCloseable {
      * so invalidation and the write cannot race between check and mutation.
      * No alarm is armed here.
      */
+    /**
+     * Resolve a search-selected concrete GTFS trip after the rider explicitly
+     * chooses its service date. This method is read-only; confirm() owns persistence.
+     */
+    internal suspend fun inspect(identity: GtfsTripInstanceIdentity): GtfsTripDetailResult =
+        withContext(Dispatchers.IO) {
+            synchronized(lock) {
+                if (closed) {
+                    return@synchronized GtfsTripDetailResult.Unavailable(
+                        GtfsTripDetailFailure.SESSION_CLOSED,
+                    )
+                }
+                if (!index.isReady()) {
+                    return@synchronized GtfsTripDetailResult.Unavailable(
+                        GtfsTripDetailFailure.INDEX_NOT_READY,
+                    )
+                }
+                try {
+                    resolver.resolve(identity)
+                } catch (_: Exception) {
+                    GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.DATA_READ_FAILED)
+                }
+            }
+        }
+
     internal suspend fun confirmIfCurrent(
         selection: GtfsSelectedTrip,
         gate: LatestRequestGate,
