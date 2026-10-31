@@ -202,6 +202,9 @@ class ActiveJourneyService : Service(), LocationListener {
     }
 
     override fun onLocationChanged(location: Location) {
+        // LocationManager can deliver a queued fix after cancellation or arrival.
+        // Never update terminal journey state or publish a stale tracking notification.
+        if (!LocationProviderRecovery.acceptsLocationCallback(graph.controller.state.phase, arrivalHandled)) return
         if (!ArrivalLocationQuality.hasValidCoordinates(location.latitude, location.longitude)) return
         val destination = graph.controller.state.destination ?: return
         val distanceMeters = ArrivalProgressController.distanceMeters(
