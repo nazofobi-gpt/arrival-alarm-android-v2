@@ -62,6 +62,11 @@ def inspect(zf, member):
                 for field in NONEMPTY_ID_FIELDS.get(member, ())
                 if field in seen
             ]
+            sequence_position = (
+                header.index("stop_sequence")
+                if member == "stop_times.txt" and "stop_sequence" in seen
+                else None
+            )
             rows = 0
             for row in reader:
                 if any("\x00" in value for value in row):
@@ -77,6 +82,13 @@ def inspect(zf, member):
                     if not row[position].strip():
                         raise SystemExit(
                             f"GTFS table {member} has blank required value {field} "
+                            f"at CSV line {reader.line_num}"
+                        )
+                if sequence_position is not None:
+                    sequence = row[sequence_position]
+                    if not sequence.isascii() or not sequence.isdecimal():
+                        raise SystemExit(
+                            f"GTFS table {member} has invalid stop_sequence "
                             f"at CSV line {reader.line_num}"
                         )
                 rows += 1
