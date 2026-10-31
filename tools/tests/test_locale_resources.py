@@ -54,6 +54,29 @@ class LocaleResourceContractTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "invalid string format flags"):
                     placeholders(token)
 
+    def test_java_character_conversion_rejects_invalid_flags_precision_and_width(self):
+        # Independently reproduced with Java 21 String.format(Locale.ROOT, ...).
+        for token in ("%+c", "%#C", "%0c", "%,c", "%(c", "% c", "%1$05c"):
+            with self.subTest(token=token):
+                with self.assertRaisesRegex(ValueError, "invalid character format flags"):
+                    placeholders(token)
+        for token in ("%.2c", "%5.2c", "%1$.2C"):
+            with self.subTest(token=token):
+                with self.assertRaisesRegex(ValueError, "invalid character format precision"):
+                    placeholders(token)
+        for token in ("%-c", "%1$-C"):
+            with self.subTest(token=token):
+                with self.assertRaisesRegex(ValueError, "missing character format width"):
+                    placeholders(token)
+        for token in ("%c", "%1$C", "%5c", "%1$-5c"):
+            with self.subTest(token=token):
+                self.assertEqual({(1, "c"): 1}, dict(placeholders(token)))
+
+    def test_invalid_character_conversion_fails_even_when_all_locales_agree(self):
+        for locale in ("values", "values-de", "values-en"):
+            self.write(locale, '<string name="arrival">Stop %1$#c</string>')
+        self.assertTrue(any("invalid format for arrival" in e for e in validate(self.root)))
+
     def test_boolean_and_hash_java_formatter_flags_are_checked(self):
         # Reproduced with Java 21: unsupported flags throw
         # FormatFlagsConversionMismatchException and bare '-' needs width.
