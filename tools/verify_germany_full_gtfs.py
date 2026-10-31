@@ -38,7 +38,7 @@ NONEMPTY_ID_FIELDS = {
     "calendar_dates.txt": ("service_id",),
 }
 
-def inspect(zf, member):
+def inspect(zf, member, table):
     try:
         with zf.open(member) as raw:
             text = io.TextIOWrapper(raw, encoding="utf-8-sig", newline="")
@@ -59,12 +59,12 @@ def inspect(zf, member):
             # Validate present identity fields while records are already streamed.
             identity_positions = [
                 (field, header.index(field))
-                for field in NONEMPTY_ID_FIELDS.get(member, ())
+                for field in NONEMPTY_ID_FIELDS.get(table, ())
                 if field in seen
             ]
             sequence_position = (
                 header.index("stop_sequence")
-                if member == "stop_times.txt" and "stop_sequence" in seen
+                if table == "stop_times.txt" and "stop_sequence" in seen
                 else None
             )
             rows = 0
@@ -150,10 +150,10 @@ with zf:
     table_directories = {member.rpartition("/")[0] for member in names.values()}
     if len(table_directories) != 1:
         raise SystemExit("GTFS ZIP tables span multiple directories")
-    report = {name: inspect(zf, names[name]) for name in required}
+    report = {name: inspect(zf, names[name], name) for name in required}
     for name in optional:
         if name in names:
-            report[name] = inspect(zf, names[name])
+            report[name] = inspect(zf, names[name], name)
 
 # Require structural GTFS columns before counting a feed as valid.
 required_columns = {
