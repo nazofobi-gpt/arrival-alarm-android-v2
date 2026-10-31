@@ -51,10 +51,10 @@ internal fun GtfsTripSearchConsentPanel(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var boardingSequence by remember(selection?.identity, selection?.sourceVersion, detail?.stops) { mutableStateOf<Int?>(null) }
-    var destinationSequence by remember(selection?.identity, selection?.sourceVersion, detail?.stops) { mutableStateOf<Int?>(null) }
-    var alarmSequence by remember(selection?.identity, selection?.sourceVersion, detail?.stops) { mutableStateOf<Int?>(null) }
-    var confirmPending by remember(selection?.identity, selection?.sourceVersion, detail?.stops) { mutableStateOf(false) }
+    var boardingSequence by remember(selection?.identity, selection?.sourceVersion, (inspection as? GtfsTripDetailResult.Available)?.detail?.stops) { mutableStateOf<Int?>(null) }
+    var destinationSequence by remember(selection?.identity, selection?.sourceVersion, (inspection as? GtfsTripDetailResult.Available)?.detail?.stops) { mutableStateOf<Int?>(null) }
+    var alarmSequence by remember(selection?.identity, selection?.sourceVersion, (inspection as? GtfsTripDetailResult.Available)?.detail?.stops) { mutableStateOf<Int?>(null) }
+    var confirmPending by remember(selection?.identity, selection?.sourceVersion, (inspection as? GtfsTripDetailResult.Available)?.detail?.stops) { mutableStateOf(false) }
 
     LaunchedEffect(completionRevision, busy) {
         if (!busy) confirmPending = false
