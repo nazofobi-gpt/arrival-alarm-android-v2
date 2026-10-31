@@ -6,10 +6,8 @@ import android.text.format.Formatter
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
-import androidx.compose.ui.test.fetchSemanticsNode
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -96,24 +94,9 @@ class OfflinePackMetadataInstrumentedTest {
 
             val metadataNode = composeRule.onNodeWithTag("offline-pack-metadata")
             metadataNode.assertIsDisplayed().assertTextContains("etag-g185-test")
-            val renderedText = metadataNode.fetchSemanticsNode()
-                .config[SemanticsProperties.Text]
-                .joinToString(" ") { it.text }
-            fun normalizeWhitespace(value: String): String = value
-                .replace('\u00A0', ' ')
-                .replace('\u202F', ' ')
-                .replace(Regex("\\s+"), " ")
-                .trim()
-
             val expectedSize = Formatter.formatShortFileSize(context, expectedBytes)
-            assertTrue(
-                "Rendered metadata should include the combined DB/WAL/SHM size.",
-                normalizeWhitespace(renderedText).contains(normalizeWhitespace(expectedSize)),
-            )
-            assertTrue(
-                "Rendered metadata should include the relative last content-update time.",
-                normalizeWhitespace(renderedText).contains(normalizeWhitespace(expectedRelativeUpdate)),
-            )
+            metadataNode.assertTextContains(expectedSize, substring = true)
+            metadataNode.assertTextContains(expectedRelativeUpdate, substring = true)
         } finally {
             files.forEach { it.delete() }
         }
