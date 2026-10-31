@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import android.content.Context
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.TimeZone
@@ -86,6 +87,8 @@ class AndroidSelectedGtfsTripSession(context: Context) : AutoCloseable {
 
                 val resolved = try {
                     if (index.isReady()) resolver.resolve(identity) else null
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (_: RuntimeException) {
                     null
                 }
@@ -152,12 +155,6 @@ class AndroidSelectedGtfsTripSession(context: Context) : AutoCloseable {
     }
 
     /**
-     * A superseded/cancelled UI request must not persist a stale trip selection.
-     * Hold the request gate for the short synchronous SharedPreferences commit,
-     * so invalidation and the write cannot race between check and mutation.
-     * No alarm is armed here.
-     */
-    /**
      * Resolve a search-selected concrete GTFS trip after the rider explicitly
      * chooses its service date. This method is read-only; confirm() owns persistence.
      */
@@ -176,12 +173,20 @@ class AndroidSelectedGtfsTripSession(context: Context) : AutoCloseable {
                 }
                 try {
                     resolver.resolve(identity)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (_: Exception) {
                     GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.DATA_READ_FAILED)
                 }
             }
         }
 
+    /**
+     * A superseded/cancelled UI request must not persist a stale trip selection.
+     * Hold the request gate for the short synchronous SharedPreferences commit,
+     * so invalidation and the write cannot race between check and mutation.
+     * No alarm is armed here.
+     */
     internal suspend fun confirmIfCurrent(
         selection: GtfsSelectedTrip,
         gate: LatestRequestGate,
