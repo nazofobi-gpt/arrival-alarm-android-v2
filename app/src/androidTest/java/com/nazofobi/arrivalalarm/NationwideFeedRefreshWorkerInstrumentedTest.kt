@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.work.ListenableWorker
 import androidx.work.NetworkType
+import androidx.work.testing.SynchronousExecutor
 import androidx.work.testing.TestWorkerBuilder
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -38,7 +39,11 @@ class NationwideFeedRefreshWorkerInstrumentedTest {
         val isolatedContext = IsolatedDatabaseContext(base, directory)
 
         try {
-            val worker = TestWorkerBuilder<NationwideFeedRefreshWorker>(isolatedContext).build()
+            val worker = TestWorkerBuilder.from(
+                isolatedContext,
+                NationwideFeedRefreshWorker::class.java,
+                SynchronousExecutor(),
+            ).build()
             assertEquals(ListenableWorker.Result.success(), worker.doWork())
         } finally {
             directory.deleteRecursively()
