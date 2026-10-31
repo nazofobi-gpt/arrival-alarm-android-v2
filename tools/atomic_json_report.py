@@ -21,7 +21,7 @@ def write_atomic_json_report(destination: str | Path, payload: dict) -> None:
             prefix=f".{path.name}.", suffix=".tmp", delete=False,
         ) as output:
             temporary_path = Path(output.name)
-            json.dump(payload, output, ensure_ascii=False, indent=2)
+            json.dump(payload, output, ensure_ascii=False, indent=2, allow_nan=False)
             output.flush()
             os.fsync(output.fileno())
         os.replace(temporary_path, path)

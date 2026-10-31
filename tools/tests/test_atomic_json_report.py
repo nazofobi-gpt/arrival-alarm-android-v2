@@ -51,5 +51,25 @@ class AtomicJsonReportTest(unittest.TestCase):
             self.assertEqual([], list(Path(directory).iterdir()))
 
 
+    def test_nonfinite_numbers_rejected_without_replacing_verified_report(self):
+        for value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=str(value)):
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "result.json"
+                    original = b'{"verified": "old"}\n'
+                    path.write_bytes(original)
+                    with self.assertRaisesRegex(ValueError, "Out of range float values"):
+                        write_atomic_json_report(path, {"measurements": {"sample": value}})
+                    self.assertEqual(original, path.read_bytes())
+                    self.assertEqual([path.name], [p.name for p in path.parent.iterdir()])
+
+    def test_nonfinite_numbers_rejected_without_creating_new_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "result.json"
+            with self.assertRaisesRegex(ValueError, "Out of range float values"):
+                write_atomic_json_report(path, {"value": float("nan")})
+            self.assertEqual([], list(Path(directory).iterdir()))
+
+
 if __name__ == "__main__":
     unittest.main()
