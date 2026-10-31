@@ -57,6 +57,47 @@ class ReducerMemberIdentityTest(unittest.TestCase):
         self.assertFalse(created_output)
 
 
+    def test_mixed_required_table_roots_fail_before_any_fixture_output(self):
+        result, created_output = self.run_fixture((
+            "feed/stops.txt", "feed/routes.txt", "feed/trips.txt",
+            "elsewhere/stop_times.txt", "feed/calendar.txt",
+        ))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("GTFS tables must share one ZIP directory", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertFalse(created_output)
+
+    def test_mixed_optional_table_root_is_also_rejected(self):
+        result, created_output = self.run_fixture((
+            "feed/stops.txt", "feed/routes.txt", "feed/trips.txt",
+            "feed/stop_times.txt", "calendar_dates.txt",
+        ))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("GTFS tables must share one ZIP directory", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertFalse(created_output)
+
+    def test_consistent_nested_root_remains_supported(self):
+        result, created_output = self.run_fixture((
+            "feed/stops.txt", "feed/routes.txt", "feed/trips.txt",
+            "feed/stop_times.txt", "feed/calendar.txt",
+        ))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no active service", result.stderr)
+        self.assertNotIn("GTFS tables must share one ZIP directory", result.stderr)
+        self.assertFalse(created_output)
+
+    def test_unrelated_zip_metadata_in_another_directory_is_ignored(self):
+        result, created_output = self.run_fixture((
+            "README.txt", "feed/stops.txt", "feed/routes.txt",
+            "feed/trips.txt", "feed/stop_times.txt", "feed/calendar.txt",
+        ))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no active service", result.stderr)
+        self.assertNotIn("GTFS tables must share one ZIP directory", result.stderr)
+        self.assertFalse(created_output)
+
+
 class ReducerSourceZipOpenTest(unittest.TestCase):
     """Source ZIP failures are controlled, without traceback or partial output."""
 
