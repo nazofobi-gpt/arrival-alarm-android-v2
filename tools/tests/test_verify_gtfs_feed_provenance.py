@@ -174,6 +174,28 @@ class VerifyGtfsFeedProvenanceTest(unittest.TestCase):
                 self.report.write_text(json.dumps(report), encoding="utf-8")
                 self.assert_rejected("invalid structural header evidence: stops.txt")
 
+    def test_nonfinite_json_numbers_rejected_in_receipt_and_report(self):
+        receipt_text = self.receipt.read_text(encoding="utf-8")
+        report_text = self.report.read_text(encoding="utf-8")
+        size_field = f'"source_zip_bytes": {self.archive.stat().st_size}'
+        self.assertIn(size_field, receipt_text)
+        self.assertIn('"rows": 1', report_text)
+        for value in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(value=value, document="receipt"):
+                self.receipt.write_text(
+                    receipt_text.replace(size_field, f'"source_zip_bytes": {value}', 1),
+                    encoding="utf-8",
+                )
+                self.assert_rejected("non-finite JSON evidence constant")
+                self.receipt.write_text(receipt_text, encoding="utf-8")
+            with self.subTest(value=value, document="report"):
+                self.report.write_text(
+                    report_text.replace('"rows": 1', f'"rows": {value}', 1),
+                    encoding="utf-8",
+                )
+                self.assert_rejected("non-finite JSON evidence constant")
+                self.report.write_text(report_text, encoding="utf-8")
+
     def test_missing_archive_is_rejected_without_traceback(self):
         self.archive.unlink()
         for optimized in (False, True):
