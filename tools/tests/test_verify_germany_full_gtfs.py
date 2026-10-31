@@ -445,13 +445,14 @@ class GtfsArchiveMemberTest(unittest.TestCase):
                     self.assertIn(f"invalid {invalid_field} at CSV line 2", result.stderr)
                     self.assertNotIn("Traceback", result.stderr)
 
-    def test_boundary_coordinates_and_blank_generic_node_coordinates_pass_preflight(self):
+    def test_boundary_coordinates_and_blank_optional_location_coordinates_pass_preflight(self):
         newline = bytes((10,))
         stops = newline.join((
             b"stop_id,stop_name,stop_lat,stop_lon,location_type",
             b"1,North,90,-180,0",
             b"2,Generic,,,3",
-            b"3,South,-90,180,0",
+            b"3,Boarding,,,4",
+            b"4,South,-90,180,0",
         )) + newline
         for optimized in (False, True):
             with self.subTest(optimized=optimized):
@@ -460,9 +461,60 @@ class GtfsArchiveMemberTest(unittest.TestCase):
                 )
                 self.assertNotEqual(0, result.returncode)
                 self.assertIn("stops.txt row count below minimum", result.stderr)
+                self.assertNotIn("blank required value stop_lat", result.stderr)
+                self.assertNotIn("blank required value stop_lon", result.stderr)
                 self.assertNotIn("invalid stop_lat", result.stderr)
                 self.assertNotIn("invalid stop_lon", result.stderr)
                 self.assertNotIn("Traceback", result.stderr)
+
+    def test_blank_required_stop_coordinates_fail_for_location_types_0_1_2(self):
+        cases = (
+            (b"0", b"", b"8.0", "stop_lat"),
+            (b"1", b"53.0", b"", "stop_lon"),
+            (b"2", b"", b"", "stop_lat"),
+            (b"", b"", b"", "stop_lat"),
+            (None, b"", b"", "stop_lat"),
+        )
+        newline = bytes((10,))
+        for optimized in (False, True):
+            for location_type, latitude, longitude, missing_field in cases:
+                with self.subTest(
+                    optimized=optimized, location_type=location_type,
+                    latitude=latitude, longitude=longitude,
+                ):
+                    header = b"stop_id,stop_name,stop_lat,stop_lon"
+                    row = b"1,Test," + latitude + b"," + longitude
+                    if location_type is not None:
+                        header += b",location_type"
+                        row += b"," + location_type
+                    stops = header + newline + row + newline
+                    result, _ = self.run_archive(
+                        REQUIRED, {"stops.txt": stops}, optimized=optimized,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn(
+                        f"blank required value {missing_field} at CSV line 2",
+                        result.stderr,
+                    )
+                    self.assertNotIn("Traceback", result.stderr)
+
+    def test_invalid_location_type_fails_closed(self):
+        newline = bytes((10,))
+        for optimized in (False, True):
+            for location_type in (b"5", b"not-a-type", "١".encode("utf-8")):
+                with self.subTest(optimized=optimized, location_type=location_type):
+                    stops = (
+                        b"stop_id,stop_name,stop_lat,stop_lon,location_type"
+                        + newline + b"1,Test,,," + location_type + newline
+                    )
+                    result, _ = self.run_archive(
+                        REQUIRED, {"stops.txt": stops}, optimized=optimized,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn(
+                        "invalid location_type at CSV line 2", result.stderr,
+                    )
+                    self.assertNotIn("Traceback", result.stderr)
 
     def test_malformed_gtfs_stop_sequence_is_rejected_before_feed_size_gate(self):
         cases = (b"-1", b"1.5", b"abc", "١".encode("utf-8"), b" 2", b"2 ")
