@@ -80,11 +80,13 @@ jobs:
           github.head_ref == 'exec2/g174-full-gtfs-schema' ||
           github.ref_name == 'exec2/g174-full-gtfs-schema' ||
           github.head_ref == 'verify/g185-real-feed-20261031-chat' ||
+          github.head_ref == 'verify/g185-real-feed-20261031-current-chat' ||
           (github.event_name == 'workflow_dispatch' && inputs.verify_germany_full)
         run: |
           curl -fL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 600 https://download.gtfs.de/germany/free/latest.zip -o /tmp/germany-full.zip
           python3 tools/verify_germany_full_gtfs.py /tmp/germany-full.zip /tmp/g174-real-feed-report.json
           python3 tools/gtfs_feed_provenance.py /tmp/germany-full.zip /tmp/g174-real-feed-report.json /tmp/g174-real-feed-provenance.json
+          python3 tools/verify_gtfs_feed_provenance.py /tmp/germany-full.zip /tmp/g174-real-feed-report.json /tmp/g174-real-feed-provenance.json
 
       - name: Upload reports
         if: always()
