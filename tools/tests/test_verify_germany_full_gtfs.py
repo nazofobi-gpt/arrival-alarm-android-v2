@@ -419,6 +419,42 @@ class GtfsArchiveMemberTest(unittest.TestCase):
                 self.assertIn("stops.txt row count below minimum", result.stderr)
                 self.assertNotIn("invalid stop_sequence", result.stderr)
 
+    def test_stop_sequence_over_int32_limit_fails_closed(self):
+        # Values beyond Android's signed Int range must not pass preflight.
+        cases = (b"2147483648", b"0002147483648", b"9" * 5000)
+        for optimized in (False, True):
+            for sequence in cases:
+                with self.subTest(optimized=optimized, sequence_length=len(sequence)):
+                    malformed = (
+                        b"trip_id,arrival_time,departure_time,stop_id,stop_sequence\\n"
+                        b"T,10:00:00,10:00:00,1," + sequence + b"\\n"
+                    ).replace(b"\\n", b"\n")
+                    result, _ = self.run_archive(
+                        REQUIRED, {"stop_times.txt": malformed}, optimized=optimized,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn(
+                        "GTFS table stop_times.txt has out-of-range stop_sequence at CSV line 2",
+                        result.stderr,
+                    )
+                    self.assertNotIn("Traceback", result.stderr)
+
+    def test_stop_sequence_int32_max_and_zero_are_not_rejected(self):
+        for optimized in (False, True):
+            for sequence in (b"2147483647", b"0002147483647", b"0", b"0000"):
+                with self.subTest(optimized=optimized, sequence=sequence):
+                    valid = (
+                        b"trip_id,arrival_time,departure_time,stop_id,stop_sequence\\n"
+                        b"T,10:00:00,10:00:00,1," + sequence + b"\\n"
+                    ).replace(b"\\n", b"\n")
+                    result, _ = self.run_archive(
+                        REQUIRED, {"stop_times.txt": valid}, optimized=optimized,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn("stops.txt row count below minimum", result.stderr)
+                    self.assertNotIn("out-of-range stop_sequence", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+
     def test_present_service_calendar_tables_require_gtfs_columns(self):
         cases = (
             ("calendar.txt", b"service_id,monday,tuesday,wednesday,thursday,friday,sunday,start_date,end_date\nS,1,1,1,1,1,1,20260101,20261231\n", "saturday"),
