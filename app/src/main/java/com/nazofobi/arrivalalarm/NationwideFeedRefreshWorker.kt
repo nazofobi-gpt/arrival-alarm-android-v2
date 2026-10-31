@@ -22,28 +22,28 @@ class NationwideFeedRefreshWorker(
     workerParams: WorkerParameters,
 ) : Worker(appContext, workerParams) {
 
-    override fun doWork(): Result =
-        try {
+    override fun doWork(): Result {
+        return try {
             val index = NationwideTransitIndex(applicationContext)
             try {
                 if (!index.isReady()) {
                     // No existing offline pack: do not silently download the full feed in the background.
-                    return Result.success()
-                }
+                    Result.success()
+                } else {
+                    // A full Germany feed can take longer than WorkManager's ordinary ten-minute window.
+                    // Promote the work to a typed dataSync foreground service before the conditional request.
+                    setForegroundAsync(foregroundInfo(applicationContext, null)).get()
 
-                // A full Germany feed can take longer than WorkManager's ordinary ten-minute window.
-                // Promote the work to a typed dataSync foreground service before the conditional request.
-                setForegroundAsync(foregroundInfo(applicationContext, null)).get()
-
-                index.importFeed(GtfsDeutschlandLoader.FEED_URL) { importedStopCount ->
-                    if (isStopped || Thread.currentThread().isInterrupted) {
-                        throw CancellationException("Offline feed refresh was stopped")
+                    index.importFeed(GtfsDeutschlandLoader.FEED_URL) { importedStopCount ->
+                        if (isStopped || Thread.currentThread().isInterrupted) {
+                            throw CancellationException("Offline feed refresh was stopped")
+                        }
+                        // Stop counts are emitted by the importer at bounded intervals; this keeps the
+                        // notification useful without inventing a percentage or total row count.
+                        setForegroundAsync(foregroundInfo(applicationContext, importedStopCount))
                     }
-                    // Stop counts are emitted by the importer at bounded intervals; this keeps the
-                    // notification useful without inventing a percentage or total row count.
-                    setForegroundAsync(foregroundInfo(applicationContext, importedStopCount))
+                    Result.success()
                 }
-                Result.success()
             } finally {
                 runCatching { index.close() }
             }
@@ -61,6 +61,7 @@ class NationwideFeedRefreshWorker(
             // the previous known-good schedule graph and are retried with WorkManager backoff.
             Result.retry()
         }
+    }
 
     private fun foregroundInfo(context: Context, importedStopCount: Int?): ForegroundInfo {
         ensureNotificationChannel(context)
