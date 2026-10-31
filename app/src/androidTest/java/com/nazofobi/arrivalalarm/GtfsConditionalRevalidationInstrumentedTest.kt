@@ -6,6 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.io.InterruptedIOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.zip.ZipEntry
@@ -191,6 +192,50 @@ class GtfsConditionalRevalidationInstrumentedTest {
             index.close()
         }
     }
+
+    @Test fun interruptedGtfsDownloadRestoresKnownGoodSqliteAndHttpValidators() {
+        context.deleteDatabase("nationwide_transit.db")
+        val index = NationwideTransitIndex(context)
+        try {
+            index.importFeedWithConnection(
+                sourceUrl, {},
+                FakeGtfsHttpConnection(
+                    URL(sourceUrl), HttpURLConnection.HTTP_OK, validFeed(), etag = "\"stable-snapshot\"",
+                ),
+            )
+            val before = snapshot(index)
+            val partialReplacement = incompleteRefreshFeed()
+            val interrupted = FakeGtfsHttpConnection(
+                URL(sourceUrl), HttpURLConnection.HTTP_OK, partialReplacement,
+                etag = "\"uncommitted-snapshot\"",
+                interruptionAtBytes = partialReplacement.size / 2,
+            )
+            var callbackInvoked = false
+            val failure = runCatching {
+                index.importFeedWithConnection(sourceUrl, { callbackInvoked = true }, interrupted)
+            }.exceptionOrNull()
+            assertTrue(
+                "A mid-download transport interruption must propagate: $failure",
+                failure is InterruptedIOException,
+            )
+            assertFalse("An unsuccessful import must not announce completion", callbackInvoked)
+            assertEquals(1, interrupted.streamReads)
+            assertEquals(before, snapshot(index))
+
+            val unchanged = FakeGtfsHttpConnection(
+                URL(sourceUrl), HttpURLConnection.HTTP_NOT_MODIFIED, byteArrayOf(),
+            )
+            var retainedCount = -1
+            index.importFeedWithConnection(sourceUrl, { retainedCount = it }, unchanged)
+            assertEquals("\"stable-snapshot\"", unchanged.getRequestProperty("If-None-Match"))
+            assertEquals(10_000, retainedCount)
+            assertEquals(0, unchanged.streamReads)
+            assertEquals(before, snapshot(index))
+        } finally {
+            index.close()
+        }
+    }
+
     private fun snapshot(index: NationwideTransitIndex): Snapshot {
         val db = index.readableDatabase
         return Snapshot(
@@ -282,6 +327,7 @@ class GtfsConditionalRevalidationInstrumentedTest {
         private val bytes: ByteArray,
         private val etag: String? = null,
         private val lastModified: String? = null,
+        private val interruptionAtBytes: Int? = null,
     ) : HttpURLConnection(url) {
         var streamReads: Int = 0
             private set
@@ -298,7 +344,25 @@ class GtfsConditionalRevalidationInstrumentedTest {
         override fun getInputStream(): InputStream {
             streamReads++
             assertFalse("304 must never expose a feed stream", status == HttpURLConnection.HTTP_NOT_MODIFIED)
-            return ByteArrayInputStream(bytes)
+            val source = ByteArrayInputStream(bytes)
+            val cutoff = interruptionAtBytes ?: return source
+            return object : InputStream() {
+                private var consumed = 0
+                override fun read(): Int {
+                    if (consumed >= cutoff) throw InterruptedIOException("synthetic GTFS stream interruption")
+                    val value = source.read()
+                    if (value >= 0) consumed++
+                    return value
+                }
+                override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                    if (length == 0) return 0
+                    if (consumed >= cutoff) throw InterruptedIOException("synthetic GTFS stream interruption")
+                    val count = source.read(buffer, offset, minOf(length, cutoff - consumed))
+                    if (count > 0) consumed += count
+                    return count
+                }
+                override fun close() = source.close()
+            }
         }
     }
 }
