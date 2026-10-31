@@ -70,11 +70,24 @@ def reject_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict:
     return result
 
 
+def reject_nonfinite_json_constant(value: str) -> None:
+    """Standard JSON evidence cannot contain NaN or Infinity literals."""
+    raise ValueError(f"non-finite JSON evidence constant: {value}")
+
+
 def verify(archive: Path, report: Path, receipt_path: Path) -> None:
     receipt_bytes = read_bounded(receipt_path)
     report_bytes = read_bounded(report)
-    receipt = json.loads(receipt_bytes.decode("utf-8"), object_pairs_hook=reject_duplicate_json_keys)
-    report_data = json.loads(report_bytes.decode("utf-8"), object_pairs_hook=reject_duplicate_json_keys)
+    receipt = json.loads(
+        receipt_bytes.decode("utf-8"),
+        object_pairs_hook=reject_duplicate_json_keys,
+        parse_constant=reject_nonfinite_json_constant,
+    )
+    report_data = json.loads(
+        report_bytes.decode("utf-8"),
+        object_pairs_hook=reject_duplicate_json_keys,
+        parse_constant=reject_nonfinite_json_constant,
+    )
     if not isinstance(receipt, dict) or set(receipt) != EXPECTED_KEYS:
         raise ValueError("GTFS receipt fields do not match schema")
     if (receipt["schema"] != "GTFS_PREFLIGHT_SOURCE_BINDING_V1" or
