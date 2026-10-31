@@ -43,7 +43,7 @@ class GtfsConditionalRevalidationInstrumentedTest {
             assertEquals(1, first.streamReads)
             assertTrue(index.isReady())
             val before = snapshot(index)
-            assertEquals("\"g185-v1\"", index.sourceVersion())
+            assertEquals("$sourceUrl|etag:\"g185-v1\"", index.sourceVersion())
             assertEquals("Known Good Bahnhof", before.knownStopName)
 
             // Provider revalidation must not reopen the ZIP or modify any SQLite state.
