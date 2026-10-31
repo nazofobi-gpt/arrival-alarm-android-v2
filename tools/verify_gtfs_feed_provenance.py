@@ -15,6 +15,17 @@ EXPECTED_KEYS = {
     "schema", "acceptance", "source_zip_sha256", "source_zip_bytes",
     "verifier_report_sha256", "verified_table_rows",
 }
+# Minimum required columns independently checked by the structural preflight.
+# A receipt bound to a malformed report must never be accepted.
+REQUIRED_HEADER_FIELDS = {
+    "stops.txt": ("stop_id", "stop_name", "stop_lat", "stop_lon"),
+    "routes.txt": ("route_id", "route_type"),
+    "trips.txt": ("route_id", "service_id", "trip_id"),
+    "stop_times.txt": (
+        "trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence",
+    ),
+}
+
 MAX_JSON_BYTES = 2 * 1024 * 1024
 CHUNK_BYTES = 1024 * 1024
 
@@ -77,6 +88,13 @@ def verify(archive: Path, report: Path, receipt_path: Path) -> None:
         if (not isinstance(entry, dict) or type(entry.get("rows")) is not int or
                 entry["rows"] <= 0 or not isinstance(entry.get("header"), list)):
             raise ValueError(f"invalid structural evidence: {table}")
+        header = entry["header"]
+        if (not header or
+                any(type(column) is not str or not column.strip() or
+                    "\x00" in column for column in header) or
+                len(set(header)) != len(header) or
+                any(required not in header for required in REQUIRED_HEADER_FIELDS[table])):
+            raise ValueError(f"invalid structural header evidence: {table}")
         counts[table] = entry["rows"]
     if receipt["verified_table_rows"] != counts:
         raise ValueError("GTFS table counts differ from receipt")
