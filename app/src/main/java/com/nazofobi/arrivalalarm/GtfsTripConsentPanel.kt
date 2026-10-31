@@ -40,13 +40,25 @@ internal fun GtfsTripConsentPanel(
 ) {
     val boarding = preview.boarding
     val detail = preview.detail
-    key(detail.identity, boarding.stopSequence, boarding.stopId, detail.stops) {
+    key(detail.identity, boarding.stopSequence, boarding.stopId) {
         val boardingActionable = boarding.hasActionableBoardingClock()
-        var destinationSequence by remember { mutableStateOf<Int?>(null) }
-        var alarmOverride by remember { mutableStateOf<Int?>(null) }
+        var selectionState by remember { mutableStateOf(TripStopSelectionReducer.initial(detail, boarding)) }
+        LaunchedEffect(detail, boarding) {
+            selectionState = TripStopSelectionReducer.reduce(
+                selectionState,
+                TripStopSelectionAction.ReplaceTrip(detail, boarding),
+            )
+        }
+        val activeSelectionState = if (
+            selectionState.detail == detail &&
+            selectionState.boarding == GtfsSelectedStopRef(boarding.stopSequence, boarding.stopId)
+        ) {
+            selectionState
+        } else {
+            TripStopSelectionReducer.initial(detail, boarding)
+        }
         var destinationExpanded by remember { mutableStateOf(false) }
         var alarmExpanded by remember { mutableStateOf(false) }
-        var invalidRoles by remember { mutableStateOf(false) }
         // A rapid double tap must not issue two saves before the caller sets busy.
         // Once the parent's busy cycle ends, failed saves can be retried.
         var confirmationPending by remember { mutableStateOf(false) }
@@ -74,27 +86,31 @@ internal fun GtfsTripConsentPanel(
                 (it.dropOffType == null || it.dropOffType == 0) &&
                 it.hasActionableArrivalClock()
         }
-        val destination = destinations.singleOrNull { it.stopSequence == destinationSequence }
+        val destination = TripStopSelectionReducer.destinationStop(activeSelectionState)
+            ?.takeIf { selected ->
+                destinations.any {
+                    it.stopSequence == selected.stopSequence && it.stopId == selected.stopId
+                }
+            }
         // The boarding event is not a valid arrival-alarm target.
         val alarmStops = if (destination != null) detail.stops.filter {
             it.stopSequence > boarding.stopSequence &&
                 it.stopSequence <= destination.stopSequence &&
                 it.hasActionableArrivalClock()
         } else emptyList()
-        val alarm = alarmStops.singleOrNull { it.stopSequence == alarmOverride }
+        val alarm = TripStopSelectionReducer.alarmTargetStop(activeSelectionState)
+            ?.takeIf { selected -> alarmStops.any { it.stopSequence == selected.stopSequence && it.stopId == selected.stopId } }
             ?: destination
 
         // Preview the same source-backed stop-role contract enforced at persistence.
         // An impossible service-day clock must disable consent before the rider taps Save,
         // rather than offer a button that can only reject after the tap.
         // Keep invalid destination choices visible so the feed defect is explicit.
+        val consentDraft = TripStopSelectionReducer.draft(activeSelectionState)
         val consentReady = destination != null && boardingActionable &&
-            buildGtfsTripConsentDraft(
-                detail = detail,
-                boardingSequence = boarding.stopSequence,
-                destinationSequence = destination.stopSequence,
-                alarmTargetSequence = alarm?.stopSequence,
-            ) is GtfsTripConsentDraft.Ready
+            consentDraft is GtfsTripConsentDraft.Ready
+        val invalidRoles = activeSelectionState.roleProblem != null ||
+            (destination != null && consentDraft is GtfsTripConsentDraft.Rejected)
 
         Card(modifier = modifier.fillMaxWidth().testTag("gtfs-consent-panel")) {
             Column(
@@ -126,9 +142,10 @@ internal fun GtfsTripConsentPanel(
                                 text = { Text("${stop.name} (#${stop.stopSequence})") },
                                 enabled = !busy && !confirmationPending,
                                 onClick = {
-                                    destinationSequence = stop.stopSequence
-                                    alarmOverride = null
-                                    invalidRoles = false
+                                    selectionState = TripStopSelectionReducer.reduce(
+                                        activeSelectionState,
+                                        TripStopSelectionAction.SelectDestination(stop.stopSequence),
+                                    )
                                     destinationExpanded = false
                                 },
                                 modifier = Modifier.testTag("gtfs-destination-${stop.stopSequence}"),
@@ -157,8 +174,10 @@ internal fun GtfsTripConsentPanel(
                                     text = { Text("${stop.name} (#${stop.stopSequence})") },
                                     enabled = !busy && !confirmationPending,
                                     onClick = {
-                                        alarmOverride = stop.stopSequence
-                                        invalidRoles = false
+                                        selectionState = TripStopSelectionReducer.reduce(
+                                            activeSelectionState,
+                                            TripStopSelectionAction.SelectAlarmTarget(stop.stopSequence),
+                                        )
                                         alarmExpanded = false
                                     },
                                     modifier = Modifier.testTag("gtfs-alarm-${stop.stopSequence}"),
@@ -183,13 +202,7 @@ internal fun GtfsTripConsentPanel(
                 )
                 Button(
                     onClick = {
-                        val selected = destination ?: return@Button
-                        when (val draft = buildGtfsTripConsentDraft(
-                            detail = detail,
-                            boardingSequence = boarding.stopSequence,
-                            destinationSequence = selected.stopSequence,
-                            alarmTargetSequence = alarm?.stopSequence,
-                        )) {
+                        when (val draft = consentDraft) {
                             is GtfsTripConsentDraft.Ready -> {
                                 if (!confirmationPending) {
                                     startedAtCompletionRevision = completionRevision
@@ -197,7 +210,7 @@ internal fun GtfsTripConsentPanel(
                                     onConfirm(draft.selection)
                                 }
                             }
-                            is GtfsTripConsentDraft.Rejected -> invalidRoles = true
+                            is GtfsTripConsentDraft.Rejected -> Unit
                         }
                     },
                     enabled = consentReady && !busy && !confirmationPending,
