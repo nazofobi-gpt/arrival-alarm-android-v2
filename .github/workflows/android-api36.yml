@@ -117,6 +117,12 @@ jobs:
             # The provider-backed G-176 smoke runs separately above only when a real GTFS-RT payload exists.
             # Exclude only that input-dependent method from the generic API 36 regression suite.
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notClass=com.nazofobi.arrivalalarm.G176LiveRealtimeInstrumentedTest#currentGermanyRealtimePayloadParsesWithProductionDefaults
+            # Later viewport-only Gradle runs replace these JUnit/HTML reports; preserve the full suite first.
+            report_snapshot=app/build/outputs/androidTest-results/full-regression-suite
+            mkdir -p "$report_snapshot"
+            cp -R app/build/outputs/androidTest-results/connected "$report_snapshot/junit"
+            cp -R app/build/reports/androidTests/connected "$report_snapshot/html"
+            test -n "$(find "$report_snapshot/junit" -type f -name 'TEST-*.xml' -print -quit)"
             mkdir -p app/build/outputs/androidTest-results/ui-qa
             adb shell ls -l /sdcard/Download/arrival-alarm-ui-qa
             adb pull /sdcard/Download/arrival-alarm-ui-qa/. app/build/outputs/androidTest-results/ui-qa/
