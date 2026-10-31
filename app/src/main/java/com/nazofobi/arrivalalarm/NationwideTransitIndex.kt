@@ -860,8 +860,11 @@ internal fun gtfsConditionalHeaders(
             // An oversized persisted provider header can make every subsequent
             // conditional refresh fail (HTTP 431) while the cached feed stays stale.
             // Bound untrusted validators before replaying them over the network.
+            // HTTP field values permit one-byte obs-text, not arbitrary Unicode.
             candidate.isNotBlank() && candidate.length <= 1024 &&
-                candidate.none { char -> char.code < 0x20 || char.code == 0x7f }
+                candidate.none { char ->
+                    char.code < 0x20 || char.code == 0x7f || char.code > 0xff
+                }
         }
         safeValidator(etag)?.let { put("If-None-Match", it) }
         safeValidator(lastModified)?.let { put("If-Modified-Since", it) }
