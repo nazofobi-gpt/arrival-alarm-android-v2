@@ -91,8 +91,8 @@ internal fun GtfsTripSearchConsentPanel(
     ) {
         buildGtfsTripConsentDraft(
             detail = detail,
-            boardingSequence = boardingSequence,
-            destinationSequence = destinationSequence,
+            boardingSequence = boardingSequence!!,
+            destinationSequence = destinationSequence!!,
             alarmTargetSequence = effectiveAlarmSequence,
         )
     } else {
