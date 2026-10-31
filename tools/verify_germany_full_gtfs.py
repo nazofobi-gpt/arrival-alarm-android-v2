@@ -122,6 +122,9 @@ required_columns = {
     # When supplied, GTFS metadata must carry its required identity fields.
     "agency.txt": ("agency_name", "agency_url", "agency_timezone"),
     "feed_info.txt": ("feed_publisher_name", "feed_publisher_url", "feed_lang"),
+    # Optional connection and attribution tables have required columns when present.
+    "transfers.txt": ("transfer_type",),
+    "attributions.txt": ("organization_name",),
     # Optional GTFS files still require their core columns when present.
     "shapes.txt": ("shape_id", "shape_pt_lat", "shape_pt_lon", "shape_pt_sequence"),
     "frequencies.txt": ("trip_id", "start_time", "end_time", "headway_secs"),
