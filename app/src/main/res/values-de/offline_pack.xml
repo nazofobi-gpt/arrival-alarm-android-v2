@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="offline_pack_metadata">Offline-Index %1$s (DB + WAL/SHM) · Quellversion %2$s · zuletzt geprüft %3$s</string>
+    <string name="offline_pack_metadata">Offline-Index %1$s (DB + WAL/SHM) · Quellversion %2$s · letzte Datenaktualisierung %3$s</string>
     <string name="offline_pack_size_unknown">Größe unbekannt</string>
     <string name="offline_pack_version_unknown">Version unbekannt</string>
-    <string name="offline_pack_checked_unknown">noch nicht geprüft</string>
+    <string name="offline_pack_updated_unknown">Aktualisierungszeit unbekannt</string>
 </resources>
