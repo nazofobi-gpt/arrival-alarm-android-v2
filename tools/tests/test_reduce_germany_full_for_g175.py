@@ -263,5 +263,76 @@ class ReducerStopCoordinateTest(unittest.TestCase):
                 self.assertIsNone(self.point(row))
 
 
+
+class ReducerPublicationTest(unittest.TestCase):
+    """Failed report publication must not replace the last verified GTFS ZIP."""
+
+    def test_invalid_report_destination_preserves_previous_fixture_then_recovers(self):
+        import json
+
+        with tempfile.TemporaryDirectory() as dirname:
+            root = Path(dirname)
+            source = root / "source.zip"
+            output = root / "accepted.zip"
+            report = root / "report.json"
+            tables = {
+                "stops.txt": "\n".join([
+                    "stop_id,stop_name,stop_lat,stop_lon",
+                    "lohne,Lohne Bahnhof,52.6669,8.2387",
+                    "achim,Achim Bahnhof,53.0144,9.0356",
+                    "berlin_a,Berlin Hbf,52.5251,13.3694",
+                    "berlin_b,Berlin Mitte,52.5103,13.4348",
+                    "munich_a,Munich Hbf,48.1402,11.5586",
+                    "munich_b,Munich Ost,48.1277,11.6040",
+                    "",
+                ]),
+                "routes.txt": "route_id,route_short_name,route_long_name,route_type\nr1,R1,Test,2\n",
+                "trips.txt": (
+                    "route_id,service_id,trip_id,trip_headsign\n"
+                    "r1,s1,t1,Achim\nr1,s1,t2,Berlin\n"
+                    "r1,s1,t3,Munich\nr1,s1,t4,Munich\n"
+                ),
+                "stop_times.txt": (
+                    "trip_id,arrival_time,departure_time,stop_id,stop_sequence\n"
+                    "t1,08:00:00,08:00:00,lohne,1\nt1,09:00:00,09:00:00,achim,2\n"
+                    "t2,09:00:00,09:00:00,berlin_a,1\nt2,09:20:00,09:20:00,berlin_b,2\n"
+                    "t3,10:00:00,10:00:00,munich_a,1\nt3,10:25:00,10:25:00,munich_b,2\n"
+                    "t4,11:00:00,11:00:00,berlin_a,1\nt4,13:00:00,13:00:00,munich_a,2\n"
+                ),
+                "calendar.txt": (
+                    "service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n"
+                    "s1,1,1,1,1,1,1,1,20250101,20291231\n"
+                ),
+            }
+            with zipfile.ZipFile(source, "w") as archive:
+                for name, contents in tables.items():
+                    archive.writestr(name, contents)
+            previous = b"prior verified fixture remains untouched"
+            output.write_bytes(previous)
+            report.mkdir()
+
+            def invoke():
+                return subprocess.run(
+                    [sys.executable, str(SCRIPT), str(source), str(output), str(report)],
+                    capture_output=True, text=True, timeout=15, check=False,
+                )
+
+            blocked = invoke()
+            self.assertNotEqual(blocked.returncode, 0)
+            self.assertIn("REPORT must be a file", blocked.stderr)
+            self.assertNotIn("Traceback", blocked.stderr)
+            self.assertEqual(previous, output.read_bytes())
+
+            report.rmdir()
+            success = invoke()
+            self.assertEqual(success.returncode, 0, success.stderr)
+            with zipfile.ZipFile(output) as archive:
+                self.assertIn("g175_acceptance.json", archive.namelist())
+            recorded = json.loads(report.read_text(encoding="utf-8"))
+            self.assertEqual(output.stat().st_size, recorded["fixtureBytes"])
+            self.assertEqual(4, recorded["selectedTripCount"])
+            self.assertEqual([], list(root.glob(".g175-*")))
+
+
 if __name__ == "__main__":
     unittest.main()
