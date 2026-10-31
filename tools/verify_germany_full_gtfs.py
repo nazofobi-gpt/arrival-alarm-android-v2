@@ -122,6 +122,12 @@ def inspect(zf, member, table):
                                 f"at CSV line {reader.line_num}"
                             )
                         continue
+                    # Do not inherit Python-specific numeric syntax from float().
+                    # GTFS coordinate tokens must be ASCII decimal values.
+                    if not raw_coordinate.isascii() or "_" in raw_coordinate:
+                        raise SystemExit(
+                            f"invalid {field} at CSV line {reader.line_num}"
+                        )
                     try:
                         coordinate = float(raw_coordinate)
                     except ValueError:
