@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -49,10 +51,10 @@ internal fun GtfsTripSearchConsentPanel(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var boardingSequence by remember(selection?.identity) { mutableStateOf<Int?>(null) }
-    var destinationSequence by remember(selection?.identity) { mutableStateOf<Int?>(null) }
-    var alarmSequence by remember(selection?.identity) { mutableStateOf<Int?>(null) }
-    var confirmPending by remember(selection?.identity) { mutableStateOf(false) }
+    var boardingSequence by remember(selection?.identity, selection?.sourceVersion, detail?.stops) { mutableStateOf<Int?>(null) }
+    var destinationSequence by remember(selection?.identity, selection?.sourceVersion, detail?.stops) { mutableStateOf<Int?>(null) }
+    var alarmSequence by remember(selection?.identity, selection?.sourceVersion, detail?.stops) { mutableStateOf<Int?>(null) }
+    var confirmPending by remember(selection?.identity, selection?.sourceVersion, detail?.stops) { mutableStateOf(false) }
 
     LaunchedEffect(completionRevision, busy) {
         if (!busy) confirmPending = false
@@ -218,15 +220,17 @@ internal fun GtfsTripSearchConsentPanel(
                 stringResource(R.string.gtfs_trip_search_ordered_stops),
                 style = MaterialTheme.typography.titleSmall,
             )
-            Column(
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 280.dp)
-                    .verticalScroll(rememberScrollState())
                     .testTag("gtfs-trip-search-ordered-stops"),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                detail.stops.forEach { stop ->
+                items(
+                    items = detail.stops,
+                    key = { stop -> "${stop.stopSequence}:${stop.stopId}" },
+                ) { stop ->
                     val roles = buildList {
                         if (stop.stopSequence == boardingSequence) add(
                             stringResource(R.string.gtfs_trip_search_role_boarding),
@@ -265,6 +269,31 @@ internal fun GtfsTripSearchConsentPanel(
                             if (time.isNotBlank()) {
                                 Text(time, style = MaterialTheme.typography.bodySmall)
                             }
+                            stop.platformCode?.takeIf(String::isNotBlank)?.let { platform ->
+                                Text(
+                                    stringResource(R.string.gtfs_trip_search_platform, platform),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.testTag(
+                                        "gtfs-trip-search-stop-${stop.stopSequence}-platform",
+                                    ),
+                                )
+                            }
+                            stop.parentStationId?.takeIf(String::isNotBlank)?.let { parent ->
+                                Text(
+                                    stringResource(R.string.gtfs_trip_search_parent_station, parent),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.testTag(
+                                        "gtfs-trip-search-stop-${stop.stopSequence}-parent",
+                                    ),
+                                )
+                            }
+                            Text(
+                                stringResource(wheelchairBoardingLabel(stop.wheelchairBoarding)),
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.testTag(
+                                    "gtfs-trip-search-stop-${stop.stopSequence}-wheelchair",
+                                ),
+                            )
                             if (roles.isNotEmpty()) {
                                 Text(
                                     roles.joinToString(" • "),
@@ -370,15 +399,17 @@ private fun TripSearchStopPicker(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
             ) {
-                options.forEach { stop ->
-                    DropdownMenuItem(
-                        text = { Text(tripSearchStopLabel(stop)) },
-                        onClick = {
-                            onSelect(stop.stopSequence)
-                            expanded = false
-                        },
-                        modifier = Modifier.testTag("$tag-option-${stop.stopSequence}"),
-                    )
+                LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
+                    items(options, key = { stop -> stop.stopSequence }) { stop ->
+                        DropdownMenuItem(
+                            text = { Text(tripSearchStopLabel(stop)) },
+                            onClick = {
+                                onSelect(stop.stopSequence)
+                                expanded = false
+                            },
+                            modifier = Modifier.testTag("$tag-option-${stop.stopSequence}"),
+                        )
+                    }
                 }
             }
         }
@@ -394,10 +425,18 @@ private fun tripSearchStopLabel(stop: GtfsTripDetailStop): String {
     }
 }
 
+private fun wheelchairBoardingLabel(value: Int?): Int = when (value) {
+    1 -> R.string.gtfs_trip_search_wheelchair_accessible
+    2 -> R.string.gtfs_trip_search_wheelchair_not_accessible
+    else -> R.string.gtfs_trip_search_wheelchair_unknown
+}
+
 private fun formatServiceDate(serviceDate: GtfsServiceDate): String {
     val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"), Locale.getDefault()).apply {
         clear()
         set(serviceDate.year, serviceDate.month - 1, serviceDate.day)
     }
-    return DateFormat.getDateInstance(DateFormat.MEDIUM, Locale.getDefault()).format(calendar.time)
+    return DateFormat.getDateInstance(DateFormat.MEDIUM, Locale.getDefault()).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }.format(calendar.time)
 }
