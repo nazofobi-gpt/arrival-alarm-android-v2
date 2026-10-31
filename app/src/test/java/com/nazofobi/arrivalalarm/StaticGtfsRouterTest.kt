@@ -21,6 +21,101 @@ class StaticGtfsRouterTest {
         assertEquals(120_000L, journey.arrivalEpochMillis - journey.legs.single().arrivalEpochMillis)
     }
 
+    @Test fun duplicateAccessStopsUseShortestWalkForBoardingAndEgress() {
+        val data = FakeData(
+            candidates = mapOf("A" to listOf(candidate("SHORT", "R1", "S", 1, "10:01:00"))),
+            times = mapOf(
+                "SHORT" to listOf(
+                    st("SHORT", 1, "A", "10:01:00"),
+                    st("SHORT", 2, "B", "10:15:00"),
+                ),
+            ),
+        )
+        val result = StaticGtfsRouter(data, zone).route(
+            origins = listOf(StaticRouterAccess("A", 600), StaticRouterAccess("A", 60)),
+            destinations = listOf(StaticRouterAccess("B", 300), StaticRouterAccess("B", 30)),
+            serviceDate = date,
+            departureEpochMillis = at("09:55:00"),
+        )
+        val journey = (result as StaticRouterResult.Journeys).journeys.single()
+        assertEquals("SHORT", journey.legs.single().tripId)
+        assertEquals(60, journey.access.walkSeconds)
+        assertEquals(30, journey.egress.walkSeconds)
+        assertEquals(30_000L, journey.arrivalEpochMillis - journey.legs.single().arrivalEpochMillis)
+    }
+
+    @Test fun nearbyStopAfterSixteenDistantCandidatesIsStillRoutable() {
+        val data = FakeData(
+            candidates = mapOf("A" to listOf(candidate("NEAR", "R1", "S", 1, "10:01:00"))),
+            times = mapOf(
+                "NEAR" to listOf(
+                    st("NEAR", 1, "A", "10:01:00"),
+                    st("NEAR", 2, "B", "10:15:00"),
+                ),
+            ),
+        )
+        val distant = (1..16).map { StaticRouterAccess("DISTANT-$it", 900) }
+        val result = StaticGtfsRouter(data, zone).route(
+            origins = distant + StaticRouterAccess("A", 60),
+            destinations = listOf(StaticRouterAccess("B", 0)),
+            serviceDate = date,
+            departureEpochMillis = at("09:55:00"),
+        )
+        val journey = (result as StaticRouterResult.Journeys).journeys.single()
+        assertEquals("NEAR", journey.legs.single().tripId)
+        assertEquals("A", journey.access.stopId)
+    }
+
+    @Test fun nearbyDestinationAfterSixteenDistantCandidatesIsStillRoutable() {
+        val data = FakeData(
+            candidates = mapOf("A" to listOf(candidate("NEAR-EGRESS", "R1", "S", 1, "10:01:00"))),
+            times = mapOf(
+                "NEAR-EGRESS" to listOf(
+                    st("NEAR-EGRESS", 1, "A", "10:01:00"),
+                    st("NEAR-EGRESS", 2, "B", "10:15:00"),
+                ),
+            ),
+        )
+        val distant = (1..16).map { StaticRouterAccess("DISTANT-EGRESS-$it", 900) }
+        val result = StaticGtfsRouter(data, zone).route(
+            origins = listOf(StaticRouterAccess("A", 0)),
+            destinations = distant + StaticRouterAccess("B", 30),
+            serviceDate = date,
+            departureEpochMillis = at("09:55:00"),
+        )
+        val journey = (result as StaticRouterResult.Journeys).journeys.single()
+        assertEquals("B", journey.egress.stopId)
+        assertEquals(30, journey.egress.walkSeconds)
+        assertEquals(at("10:15:00") + 30_000L, journey.arrivalEpochMillis)
+    }
+
+    @Test fun nextServiceDayBoardsAfterMidnightFromPriorEvening() {
+        val tomorrow = GtfsServiceDate(2026, 10, 3)
+        val data = FakeData(
+            candidates = mapOf("A" to listOf(candidate("NEXT", "R1", "S", 1, "00:10:00"))),
+            times = mapOf(
+                "NEXT" to listOf(
+                    st("NEXT", 1, "A", "00:10:00"),
+                    st("NEXT", 2, "B", "00:25:00"),
+                ),
+            ),
+        )
+        val result = StaticGtfsRouter(data, zone).route(
+            origins = listOf(StaticRouterAccess("A")),
+            destinations = listOf(StaticRouterAccess("B")),
+            serviceDate = tomorrow,
+            departureEpochMillis = at("23:50:00"),
+        )
+
+        val journey = (result as StaticRouterResult.Journeys).journeys.single()
+        assertEquals("NEXT", journey.legs.single().tripId)
+        assertEquals(
+            GtfsServiceTime.parse("00:25:00").resolve(tomorrow, zone).epochMillis,
+            journey.arrivalEpochMillis,
+        )
+        assertTrue(data.candidateQueryCount > 0)
+    }
+
     @Test fun implicitSameStopTransferWorksWithoutTransfersFile() {
         val data = baseTransferData()
         val result = StaticGtfsRouter(data, zone, implicitTransferSeconds = 120).route(
@@ -125,6 +220,54 @@ class StaticGtfsRouterTest {
         )
     }
 
+    @Test fun implicitSiblingTransferRejectsInvalidStopCoordinates() {
+        val parent = stop("P", locationType = 1, lat = 52.0, lon = 8.0)
+        val scenarios = listOf(
+            52.0 to Double.NaN,
+            Double.POSITIVE_INFINITY to 52.0002,
+            52.0 to 91.0,
+            -91.0 to 52.0002,
+        )
+        for ((fromLatitude, toLatitude) in scenarios) {
+            val x = stop("X", parent = "P", lat = fromLatitude, lon = 8.0)
+            val y = stop("Y", parent = "P", lat = toLatitude, lon = 8.0)
+            val data = baseTransferData(targetStop = "Y").copy(
+                stops = mapOf("P" to parent, "X" to x, "Y" to y),
+                children = mapOf("P" to listOf(x, y)),
+            )
+            val result = StaticGtfsRouter(data, zone, implicitTransferSeconds = 60).route(
+                listOf(StaticRouterAccess("A")),
+                listOf(StaticRouterAccess("B")),
+                date,
+                at("09:55:00"),
+            )
+            assertTrue("Invalid sibling coordinates must not create a transfer", result is StaticRouterResult.NoPath)
+        }
+    }
+
+    @Test fun implicitNearbyTransferRejectsInvalidGeometryEvenWithReportedDistance() {
+        val validX = stop("X", lat = 52.0, lon = 8.0)
+        val validY = stop("Y", lat = 52.0002, lon = 8.0)
+        for ((from, to) in listOf(
+            validX to validY.copy(longitude = Double.NaN),
+            validX.copy(latitude = Double.NEGATIVE_INFINITY) to validY,
+            validX to validY.copy(longitude = 181.0),
+        )) {
+            val data = baseTransferData(targetStop = "Y").copy(
+                stops = mapOf("X" to from, "Y" to to),
+                nearby = listOf(GtfsScheduleNearbyStop(to, 100)),
+            )
+            val result = StaticGtfsRouter(data, zone, implicitTransferSeconds = 60).route(
+                listOf(StaticRouterAccess("A")),
+                listOf(StaticRouterAccess("B")),
+                date,
+                at("09:55:00"),
+            )
+            assertTrue("Nearby distance without valid coordinates must not create a transfer",
+                result is StaticRouterResult.NoPath)
+        }
+    }
+
     @Test fun implicitNearbyTransferUsesRadiusAndDistanceDerivedWalkTime() {
         val x = stop("X", lat = 52.0, lon = 8.0)
         val y = stop("Y", lat = 52.001, lon = 8.0)
@@ -193,6 +336,45 @@ class StaticGtfsRouterTest {
             at("09:55:00"),
         )
         assertTrue(laterResult is StaticRouterResult.Journeys)
+    }
+
+    @Test fun nearbyProviderCannotBypassDistanceBoundary() {
+        val x = stop("X", lat = 52.0, lon = 8.0)
+        val y = stop("Y", lat = 52.001, lon = 8.0)
+        val base = baseTransferData(targetStop = "Y", secondDeparture = "10:12:00").copy(
+            stops = mapOf("X" to x, "Y" to y),
+        )
+
+        fun routeWithUntrustedDistance(distanceMeters: Int): StaticRouterResult {
+            // Simulate a provider returning an invalid/out-of-radius row despite the query radius.
+            val untrusted = object : StaticGtfsScheduleData by base {
+                override fun nearbyStops(
+                    stopId: String,
+                    radiusMeters: Int,
+                    limit: Int,
+                ): List<GtfsScheduleNearbyStop> = listOf(GtfsScheduleNearbyStop(y, distanceMeters))
+            }
+            return StaticGtfsRouter(
+                untrusted,
+                zone,
+                implicitTransferSeconds = 60,
+                maxImplicitTransferRadiusMeters = 300,
+                implicitWalkingMetersPerSecond = 1.0,
+            ).route(
+                listOf(StaticRouterAccess("A")),
+                listOf(StaticRouterAccess("B")),
+                date,
+                at("09:55:00"),
+            )
+        }
+
+        for (invalidMeters in listOf(-1, 301, Int.MAX_VALUE)) {
+            assertTrue(
+                "Invalid nearby distance $invalidMeters must not create a transfer",
+                routeWithUntrustedDistance(invalidMeters) is StaticRouterResult.NoPath,
+            )
+        }
+        assertTrue(routeWithUntrustedDistance(100) is StaticRouterResult.Journeys)
     }
 
     @Test fun explicitRulesRemainAuthoritativeOverImplicitNearbyTransfer() {

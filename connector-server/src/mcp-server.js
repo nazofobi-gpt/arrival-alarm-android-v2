@@ -3,15 +3,15 @@ import { z } from "zod";
 
 const stopSchema = z.object({
   id: z.string().nullable().optional(),
-  name: z.string(),
-  latitude: z.number().nullable().optional(),
-  longitude: z.number().nullable().optional(),
+  name: z.string().trim().min(1).max(200),
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
 });
 
 const pointInput = {
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
-  label: z.string().min(1).max(200),
+  label: z.string().trim().min(1).max(200),
 };
 
 const writeBaseInput = {
@@ -53,15 +53,58 @@ function ok(data, message) {
   };
 }
 
+// Do not serialize provider exceptions, secret values, SQL diagnostics, or token contents.
+// Only documented, actionable gateway errors are safe to return through MCP tools.
+const PUBLIC_MCP_ERROR_CODES = new Set([
+  "unauthorized",
+  "insufficient_scope",
+  "device_state_unavailable",
+  "stale_device_state",
+  "state_version_mismatch",
+  "invalid_command",
+]);
+
+// The metadata URL is placed inside a quoted WWW-Authenticate parameter.
+// Reject untrusted syntax before URL parsing (which may silently strip controls).
+function safeResourceMetadataUrl(value) {
+  if (
+    typeof value !== "string" ||
+    value !== value.trim() ||
+    /[\u0000-\u001f\u007f"\\]/.test(value) ||
+    value.includes("#")
+  ) {
+    return null;
+  }
+  try {
+    const url = new URL(value);
+    const loopback =
+      url.protocol === "http:" &&
+      ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+    if (
+      (url.protocol !== "https:" && !loopback) ||
+      !url.hostname ||
+      url.username ||
+      url.password
+    ) {
+      return null;
+    }
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
 export function mcpErrorResult(error, resourceMetadataUrl = null) {
-  const message = error instanceof Error ? error.message : "connector_error";
+  const candidate = error instanceof Error ? error.message : null;
+  const message = PUBLIC_MCP_ERROR_CODES.has(candidate) ? candidate : "connector_error";
   const result = {
     isError: true,
     content: [{ type: "text", text: message }],
   };
 
+  const metadataUrl = safeResourceMetadataUrl(resourceMetadataUrl);
   if (
-    resourceMetadataUrl &&
+    metadataUrl &&
     (message === "insufficient_scope" || message === "unauthorized")
   ) {
     const errorCode =
@@ -72,7 +115,7 @@ export function mcpErrorResult(error, resourceMetadataUrl = null) {
         : "Authentication is required for this tool.";
     result._meta = {
       "mcp/www_authenticate": [
-        `Bearer resource_metadata="${resourceMetadataUrl}", error="${errorCode}", error_description="${description}"`,
+        `Bearer resource_metadata="${metadataUrl}", error="${errorCode}", error_description="${description}"`,
       ],
     };
   }

@@ -1,0 +1,227 @@
+package com.nazofobi.arrivalalarm
+
+import android.content.Context
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.util.TimeZone
+
+/**
+ * A departure-board tap may preview a concrete GTFS trip, but it is not consent
+ * to save stop roles or arm an arrival alarm.
+ */
+enum class GtfsDepartureInspectionFailure {
+    SESSION_CLOSED,
+    CANCELLED_DEPARTURE,
+    SOURCE_IDENTITY_MISSING,
+    SOURCE_EVIDENCE_MISMATCH,
+    TRIP_UNAVAILABLE,
+    BOARDING_NOT_ALLOWED,
+    NO_DOWNSTREAM_ALIGHTING_STOP,
+}
+
+sealed interface GtfsDepartureInspection {
+    data class Ready(
+        val detail: GtfsTripDetail,
+        val boarding: GtfsTripDetailStop,
+    ) : GtfsDepartureInspection
+
+    data class Rejected(val reason: GtfsDepartureInspectionFailure) : GtfsDepartureInspection
+}
+
+/**
+ * Binds explicitly confirmed GTFS trip/stop roles to the installed SQLite schedule.
+ * No route label, display time or guessed service day can create a selection.
+ */
+class AndroidSelectedGtfsTripSession(context: Context) : AutoCloseable {
+    private val application = context.applicationContext
+    private val index = NationwideTransitIndex(application)
+    private val mutex = Any()
+    private var closed = false
+    private val resolver = GtfsTripDetailResolver(GtfsScheduleRepository(index))
+    private val store = SelectedGtfsTripStore(
+        application.getSharedPreferences("selected_gtfs_trip_state", Context.MODE_PRIVATE)
+    ) { identity ->
+        if (!index.isReady()) {
+            GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.TRIP_NOT_FOUND)
+        } else {
+            resolver.resolve(identity)
+        }
+    }
+
+    /**
+     * Preview only the exact provider-backed departure at the explicitly selected stop_id.
+     * Synthetic/frequency departures and stale/mismatched evidence fail closed.
+     * This method has no persistence or journey/alarm side effects; the UI must
+     * collect explicit destination and alarm-target consent before confirm().
+     */
+    suspend fun inspect(departure: Departure, expectedBoardingStopId: String): GtfsDepartureInspection =
+        withContext(Dispatchers.IO) {
+            synchronized(mutex) {
+                fun reject(reason: GtfsDepartureInspectionFailure) =
+                    GtfsDepartureInspection.Rejected(reason)
+
+                if (closed) return@synchronized reject(GtfsDepartureInspectionFailure.SESSION_CLOSED)
+                if (departure.cancelled) {
+                    return@synchronized reject(GtfsDepartureInspectionFailure.CANCELLED_DEPARTURE)
+                }
+
+                val identity = departure.gtfsInstance
+                    ?: return@synchronized reject(
+                        GtfsDepartureInspectionFailure.SOURCE_IDENTITY_MISSING,
+                    )
+                val boardingSequence = departure.boardingStopSequence
+                    ?: return@synchronized reject(
+                        GtfsDepartureInspectionFailure.SOURCE_IDENTITY_MISSING,
+                    )
+                if (identity.frequencyStartSeconds != null ||
+                    departure.tripId != identity.tripId ||
+                    departure.routeId != identity.routeId ||
+                    departure.scheduledEpochSeconds <= 0L ||
+                    boardingSequence < 0 || expectedBoardingStopId.isBlank()
+                ) {
+                    return@synchronized reject(
+                        GtfsDepartureInspectionFailure.SOURCE_EVIDENCE_MISMATCH,
+                    )
+                }
+
+                val resolved = try {
+                    if (index.isReady()) resolver.resolve(identity) else null
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: RuntimeException) {
+                    null
+                }
+                val detail = (resolved as? GtfsTripDetailResult.Available)?.detail
+                    ?: return@synchronized reject(GtfsDepartureInspectionFailure.TRIP_UNAVAILABLE)
+                if (detail.identity != identity) {
+                    return@synchronized reject(
+                        GtfsDepartureInspectionFailure.SOURCE_EVIDENCE_MISMATCH,
+                    )
+                }
+                val boarding = detail.stops.singleOrNull {
+                    it.stopSequence == boardingSequence && it.stopId == expectedBoardingStopId
+                } ?: return@synchronized reject(
+                    GtfsDepartureInspectionFailure.SOURCE_EVIDENCE_MISMATCH,
+                )
+                // A valid trip ID and stop sequence are not sufficient evidence
+                // for the departure card's service-day clock. Reject mismatched
+                // timetable rows before asking the rider to confirm stop roles.
+                // Match the same Europe/Berlin GTFS service-time conversion used
+                // when creating scheduled station departures.
+                // Arrival time alone is not evidence of a boardable departure.
+                val boardingClock = boarding.scheduledDeparture
+                val verifiedEpochSeconds = try {
+                    boardingClock?.let {
+                        GtfsServiceTime.parse(it)
+                            .resolve(identity.serviceDate, TimeZone.getTimeZone("Europe/Berlin"))
+                            .epochMillis / 1_000L
+                    }
+                } catch (_: RuntimeException) {
+                    null
+                }
+                if (verifiedEpochSeconds == null ||
+                    departure.scheduledEpochSeconds != verifiedEpochSeconds
+                ) {
+                    return@synchronized reject(
+                        GtfsDepartureInspectionFailure.SOURCE_EVIDENCE_MISMATCH,
+                    )
+                }
+                if (boarding.pickupType != null && boarding.pickupType != 0) {
+                    return@synchronized reject(
+                        GtfsDepartureInspectionFailure.BOARDING_NOT_ALLOWED,
+                    )
+                }
+                // A boarding position is actionable only when the same verified
+                // trip has a later stop where normal alighting is permitted.
+                // This also rejects terminal/loop-end positions without
+                // inventing a destination from a repeated stop name or ID.
+                if (detail.stops.none { stop ->
+                        stop.stopSequence > boardingSequence &&
+                            (stop.dropOffType == null || stop.dropOffType == 0) &&
+                            stop.hasActionableArrivalClock()
+                    }) {
+                    return@synchronized reject(
+                        GtfsDepartureInspectionFailure.NO_DOWNSTREAM_ALIGHTING_STOP,
+                    )
+                }
+
+                GtfsDepartureInspection.Ready(detail, boarding)
+            }
+        }
+
+    suspend fun confirm(selection: GtfsSelectedTrip): Boolean = withContext(Dispatchers.IO) {
+        synchronized(mutex) { !closed && store.save(selection) }
+    }
+
+    /**
+     * Resolve a search-selected concrete GTFS trip after the rider explicitly
+     * chooses its service date. This method is read-only; confirm() owns persistence.
+     */
+    internal suspend fun inspect(identity: GtfsTripInstanceIdentity): GtfsTripDetailResult =
+        withContext(Dispatchers.IO) {
+            synchronized(mutex) {
+                if (closed) {
+                    return@synchronized GtfsTripDetailResult.Unavailable(
+                        GtfsTripDetailFailure.SESSION_CLOSED,
+                    )
+                }
+                if (!index.isReady()) {
+                    return@synchronized GtfsTripDetailResult.Unavailable(
+                        GtfsTripDetailFailure.INDEX_NOT_READY,
+                    )
+                }
+                try {
+                    resolver.resolve(identity)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.DATA_READ_FAILED)
+                }
+            }
+        }
+
+    /**
+     * A superseded/cancelled UI request must not persist a stale trip selection.
+     * Hold the request gate for the short synchronous SharedPreferences commit,
+     * so invalidation and the write cannot race between check and mutation.
+     * No alarm is armed here.
+     */
+    internal suspend fun confirmIfCurrent(
+        selection: GtfsSelectedTrip,
+        gate: LatestRequestGate,
+        requestToken: Long,
+    ): Boolean = withContext(Dispatchers.IO) {
+        synchronized(mutex) {
+            if (closed) return@synchronized false
+            var saved = false
+            if (!gate.commitIfCurrent(requestToken) { saved = store.save(selection) }) {
+                return@synchronized false
+            }
+            saved
+        }
+    }
+
+    suspend fun restore(): GtfsSelectionRestore = withContext(Dispatchers.IO) {
+        synchronized(mutex) {
+            if (closed) {
+                GtfsSelectionRestore.Rejected(GtfsSelectionRestoreProblem.TRIP_UNAVAILABLE)
+            } else {
+                store.restore()
+            }
+        }
+    }
+
+    suspend fun clear(): Boolean = withContext(Dispatchers.IO) {
+        synchronized(mutex) { !closed && store.clear() }
+    }
+
+    override fun close() {
+        synchronized(mutex) {
+            if (!closed) {
+                closed = true
+                index.close()
+            }
+        }
+    }
+}

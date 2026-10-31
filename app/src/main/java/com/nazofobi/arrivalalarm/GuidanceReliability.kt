@@ -46,6 +46,7 @@ data class GuidanceReliabilityState(
     val audioRoute: GuidanceAudioRoute = GuidanceAudioRoute.DEVICE,
     val lastSpokenKey: String? = null,
     val pending: GuidanceUtterance? = null,
+    val pendingSinceEpochMillis: Long? = null,
     val status: String = "İzinler bekleniyor",
 )
 
@@ -66,17 +67,33 @@ interface GuidanceSpeaker {
 
 object TtsVoicePolicy {
     fun choose(desiredLocaleSupported: Boolean, deviceTtsAvailable: Boolean): VoiceChoice = when {
+        // A cached language-availability result cannot make an absent TTS engine usable.
+        !deviceTtsAvailable -> VoiceChoice.UNAVAILABLE
         desiredLocaleSupported -> VoiceChoice.DESIRED_LOCALE
-        deviceTtsAvailable -> VoiceChoice.DEVICE_FALLBACK
-        else -> VoiceChoice.UNAVAILABLE
+        else -> VoiceChoice.DEVICE_FALLBACK
     }
 }
 
 class GuidanceReliabilityController(
     private val speaker: GuidanceSpeaker,
     private val store: GuidanceStateStore = InMemoryGuidanceStateStore(),
+    private val nowEpochMillis: () -> Long = { System.currentTimeMillis() },
 ) {
-    var state: GuidanceReliabilityState = store.load() ?: GuidanceReliabilityState()
+    companion object {
+        // A next-stop instruction is time-sensitive; never replay it hours later.
+        const val MAX_PENDING_AGE_MILLIS = 2 * 60_000L
+        // Android TextToSpeech input has a finite character bound; never enqueue
+        // unbounded provider labels/identifiers or replay oversized stored values.
+        const val MAX_UTTERANCE_TEXT_CHARACTERS = 3_900
+        const val MAX_UTTERANCE_KEY_CHARACTERS = 512
+        const val MAX_LOCALE_TAG_CHARACTERS = 64
+    }
+    var state: GuidanceReliabilityState = try {
+        store.load() ?: GuidanceReliabilityState()
+    } catch (_: RuntimeException) {
+        // Broken persistence must not prevent in-session TTS guidance.
+        GuidanceReliabilityState()
+    }
         private set
 
     fun onPermissions(snapshot: GuidancePermissionSnapshot) {
@@ -109,39 +126,98 @@ class GuidanceReliabilityController(
         retryPending()
     }
 
+    private fun isSafeUtterance(utterance: GuidanceUtterance): Boolean =
+        utterance.key.isNotBlank() && utterance.key.length <= MAX_UTTERANCE_KEY_CHARACTERS &&
+            utterance.text.isNotBlank() && utterance.text.length <= MAX_UTTERANCE_TEXT_CHARACTERS &&
+            utterance.localeTag.isNotBlank() && utterance.localeTag.length <= MAX_LOCALE_TAG_CHARACTERS
+
     fun requestGuidance(utterance: GuidanceUtterance): Boolean {
+        // Bound untrusted input before either TTS or durable pending-state mutation.
+        if (!isSafeUtterance(utterance)) return false
         if (utterance.key == state.lastSpokenKey) return false
         if (state.permissionState == GuidancePermissionState.DENIED) {
-            update(state.copy(pending = utterance, status = "Guidance beklemede • izin kurtarma gerekli"))
+            update(state.copy(
+                pending = utterance,
+                pendingSinceEpochMillis = if (state.pending == utterance) {
+                    state.pendingSinceEpochMillis ?: nowEpochMillis()
+                } else {
+                    nowEpochMillis()
+                },
+                status = "Guidance beklemede • izin kurtarma gerekli",
+            ))
             return false
         }
+        // Direct repeats of a failed announcement must obey the same expiry
+        // rule as permission or audio-route recovery; never resurrect a stale stop.
+        if (state.pending == utterance) return retryPending()
         return deliver(utterance)
     }
 
     fun retryPending(): Boolean {
         val pending = state.pending ?: return false
+        // A restored malformed announcement must never be spoken on permission recovery.
+        if (!isSafeUtterance(pending)) {
+            update(state.copy(pending = null, pendingSinceEpochMillis = null))
+            return false
+        }
+        if (pending.key == state.lastSpokenKey) {
+            update(state.copy(pending = null, pendingSinceEpochMillis = null))
+            return false
+        }
+        val queuedAt = state.pendingSinceEpochMillis
+        val now = nowEpochMillis()
+        if (queuedAt == null || queuedAt <= 0L || now < queuedAt ||
+            now - queuedAt > MAX_PENDING_AGE_MILLIS
+        ) {
+            update(state.copy(
+                pending = null,
+                pendingSinceEpochMillis = null,
+                status = "Eski durak anonsu atlandı",
+            ))
+            return false
+        }
         if (state.permissionState == GuidancePermissionState.DENIED) return false
         return deliver(pending)
     }
 
     private fun deliver(utterance: GuidanceUtterance): Boolean {
-        val spoken = speaker.speak(utterance)
+        // A disconnected Android TTS engine can throw during route changes.
+        // Keep the original queued timestamp so exception retries cannot
+        // make an expired stop instruction live forever.
+        val spoken = try {
+            speaker.speak(utterance)
+        } catch (_: RuntimeException) {
+            false
+        }
         update(
             if (spoken) state.copy(
                 lastSpokenKey = utterance.key,
                 pending = null,
+                pendingSinceEpochMillis = null,
                 status = when (state.audioRoute) {
                     GuidanceAudioRoute.BLUETOOTH_CONNECTED -> "Guidance Bluetooth üzerinden gönderildi"
                     GuidanceAudioRoute.BLUETOOTH_DISCONNECTED, GuidanceAudioRoute.DEVICE ->
                         "Guidance cihaz TTS üzerinden gönderildi"
                 },
-            ) else state.copy(pending = utterance, status = "TTS kullanılamıyor • guidance beklemede")
+            ) else state.copy(
+                pending = utterance,
+                pendingSinceEpochMillis = if (state.pending == utterance) {
+                    state.pendingSinceEpochMillis ?: nowEpochMillis()
+                } else {
+                    nowEpochMillis()
+                },
+                status = "TTS kullanılamıyor • guidance beklemede",
+            )
         )
         return spoken
     }
 
     private fun update(newState: GuidanceReliabilityState) {
         state = newState
-        store.save(newState)
+        try {
+            store.save(newState)
+        } catch (_: RuntimeException) {
+            // Keep the in-memory guidance state usable during storage failures.
+        }
     }
 }

@@ -63,9 +63,12 @@ data class GtfsServiceDate(
 
     companion object {
         private val UTC = TimeZone.getTimeZone("UTC")
+        private const val MAX_GTFS_DATE_CHARACTERS = 32
         private val pattern = Regex("""^(\d{4})(\d{2})(\d{2})$""")
 
         fun parse(raw: String): GtfsServiceDate {
+            // Limit untrusted feed scalars before trim/regex allocation.
+            require(raw.length <= MAX_GTFS_DATE_CHARACTERS) { "GTFS date exceeds size limit" }
             val match = pattern.matchEntire(raw.trim())
                 ?: throw IllegalArgumentException("Invalid GTFS service date: $raw")
             return GtfsServiceDate(
@@ -120,17 +123,31 @@ class GtfsServiceCalendar(
     exceptions: Collection<GtfsCalendarException>,
 ) {
     private val calendarByService = calendars.associateBy { it.serviceId }
-    private val exceptionByServiceDate = exceptions.associateBy { it.serviceId to it.date }
+    // One date bucket per service day avoids scanning all nationwide calendar_dates rows
+    // every time the UI requests the active services for a single date.
+    private val exceptionByDate: Map<GtfsServiceDate, Map<String, GtfsCalendarExceptionType>> =
+        mutableMapOf<GtfsServiceDate, MutableMap<String, GtfsCalendarExceptionType>>().apply {
+            exceptions.forEach { exception ->
+                val byService = getOrPut(exception.date) { mutableMapOf() }
+                require(byService.put(exception.serviceId, exception.type) == null) {
+                    "Duplicate calendar_dates service_id/date"
+                }
+            }
+        }
 
     init {
         require(calendarByService.size == calendars.size) { "Duplicate calendar service_id" }
-        require(exceptionByServiceDate.size == exceptions.size) {
-            "Duplicate calendar_dates service_id/date"
-        }
     }
 
-    fun isActive(serviceId: String, serviceDate: GtfsServiceDate): Boolean {
-        when (exceptionByServiceDate[serviceId to serviceDate]?.type) {
+    fun isActive(serviceId: String, serviceDate: GtfsServiceDate): Boolean =
+        isActiveForWeekday(serviceId, serviceDate, weekday = null)
+
+    private fun isActiveForWeekday(
+        serviceId: String,
+        serviceDate: GtfsServiceDate,
+        weekday: GtfsWeekday?,
+    ): Boolean {
+        when (exceptionByDate[serviceDate]?.get(serviceId)) {
             GtfsCalendarExceptionType.ADDED -> return true
             GtfsCalendarExceptionType.REMOVED -> return false
             null -> Unit
@@ -138,18 +155,20 @@ class GtfsServiceCalendar(
 
         val calendar = calendarByService[serviceId] ?: return false
         if (serviceDate < calendar.startDate || serviceDate > calendar.endDate) return false
-        return serviceDate.weekday in calendar.activeDays
+        return (weekday ?: serviceDate.weekday) in calendar.activeDays
     }
 
     fun activeServices(serviceDate: GtfsServiceDate): Set<String> {
+        // On a Germany-wide feed this can examine thousands of service IDs.
+        // Resolve the civil weekday once instead of constructing a calendar per ID.
+        val weekday = serviceDate.weekday
         val candidateIds = buildSet {
             addAll(calendarByService.keys)
-            exceptionByServiceDate.keys
-                .asSequence()
-                .filter { (_, date) -> date == serviceDate }
-                .forEach { (serviceId, _) -> add(serviceId) }
+            exceptionByDate[serviceDate]?.keys?.let { addAll(it) }
         }
-        return candidateIds.filterTo(sortedSetOf()) { isActive(it, serviceDate) }
+        return candidateIds.filterTo(sortedSetOf()) {
+            isActiveForWeekday(it, serviceDate, weekday)
+        }
     }
 }
 
@@ -216,9 +235,14 @@ value class GtfsServiceTime private constructor(val secondsFromServiceDayStart: 
 
     companion object {
         private const val TWELVE_HOURS_MILLIS = 12L * 60L * 60L * 1_000L
+        private const val MAX_GTFS_TIME_CHARACTERS = 32
         private val pattern = Regex("""^(\d{1,3}):([0-5]\d):([0-5]\d)$""")
 
         fun parse(raw: String): GtfsServiceTime {
+            // A GTFS clock has at most 3 hour digits plus MM:SS. Bound hostile
+            // feed values before trimming/regex allocation; ordinary padding
+            // and GTFS hours beyond 24 remain supported.
+            require(raw.length <= MAX_GTFS_TIME_CHARACTERS) { "GTFS time exceeds size limit" }
             val match = pattern.matchEntire(raw.trim())
                 ?: throw IllegalArgumentException("Invalid GTFS time: $raw")
             val hour = match.groupValues[1].toInt()

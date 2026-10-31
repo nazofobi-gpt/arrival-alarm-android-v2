@@ -6,12 +6,16 @@ trip, route and service rows for four direct routing scenarios plus enough real
 stops to exercise the production nationwide-index threshold without pushing the
 ~300 MiB source archive into an emulator.
 """
+import atexit
 import csv
 import io
 import json
 import math
+import os
 import sys
+import tempfile
 import zipfile
+from pathlib import Path
 from collections import defaultdict
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -27,17 +31,63 @@ CASES = {
 }
 
 def member_map(zf):
-    return {n.rsplit("/", 1)[-1].lower(): n for n in zf.namelist() if not n.endswith("/")}
+    consumed_tables = {
+        "stops.txt", "routes.txt", "trips.txt", "stop_times.txt",
+        "calendar.txt", "calendar_dates.txt", "feed_info.txt",
+    }
+    names = {}
+    table_root = None
+    for member in zf.namelist():
+        if member.endswith("/"):
+            continue
+        name = member.rsplit("/", 1)[-1].lower()
+        if name in consumed_tables:
+            if name in names:
+                raise SystemExit(f"duplicate GTFS table {name}: {names[name]} and {member}")
+            root = member.rpartition("/")[0]
+            if table_root is None:
+                table_root = root
+            elif root != table_root:
+                raise SystemExit("GTFS tables must share one ZIP directory")
+        names[name] = member
+    return names
 
 def rows(zf, member):
-    raw = zf.open(member)
-    text = io.TextIOWrapper(raw, encoding="utf-8-sig", newline="")
-    reader = csv.DictReader(text)
+    # The reducer is an acceptance-evidence generator. Never turn malformed
+    # GTFS CSV into a plausible subset by dropping surplus/missing columns.
     try:
-        for row in reader:
-            yield row
-    finally:
-        text.close()
+        with zf.open(member) as raw:
+            with io.TextIOWrapper(raw, encoding="utf-8-sig", newline="") as text:
+                reader = csv.DictReader(text, strict=True)
+                fields = reader.fieldnames
+                if (
+                    not fields
+                    or len(set(fields)) != len(fields)
+                    or any(not field.strip() or "\x00" in field for field in fields)
+                ):
+                    raise SystemExit(f"invalid GTFS CSV header {member}")
+                for row in reader:
+                    if None in row or any(
+                        value is None or "\x00" in value for value in row.values()
+                    ):
+                        raise SystemExit(f"invalid GTFS CSV row {member}")
+                    yield row
+    except UnicodeError:
+        raise SystemExit(f"invalid GTFS CSV UTF-8 {member}") from None
+    except csv.Error:
+        raise SystemExit(f"invalid GTFS CSV syntax {member}") from None
+
+def valid_stop_coordinates(row):
+    # A malformed provider coordinate must not abort nationwide fixture selection.
+    try:
+        latitude = float(row["stop_lat"])
+        longitude = float(row["stop_lon"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not (math.isfinite(latitude) and -90.0 <= latitude <= 90.0
+            and math.isfinite(longitude) and -180.0 <= longitude <= 180.0):
+        return None
+    return latitude, longitude
 
 def distance_m(a, b):
     lat1, lon1 = map(math.radians, a)
@@ -74,11 +124,26 @@ def active_services(zf, names, day):
     return active
 
 def clock_seconds(raw):
-    try:
-        h, m, s = map(int, raw.split(":"))
-        return h * 3600 + m * 60 + s
-    except Exception:
+    if not isinstance(raw, str):
         return -1
+    parts = raw.split(":")
+    # GTFS allows H:MM:SS and extended service-day hours, but not
+    # signs, whitespace, non-ASCII digits or abbreviated minute/second fields.
+    if (
+        len(parts) != 3
+        or not parts[0]
+        or len(parts[1]) != 2
+        or len(parts[2]) != 2
+        or any(not part.isascii() or not part.isdecimal() for part in parts)
+    ):
+        return -1
+    try:
+        h, m, s = map(int, parts)
+    except ValueError:
+        return -1
+    if m >= 60 or s >= 60:
+        return -1
+    return h * 3600 + m * 60 + s
 
 def write_csv(zf, filename, fieldnames, records):
     buffer = io.StringIO(newline="")
@@ -87,8 +152,35 @@ def write_csv(zf, filename, fieldnames, records):
     writer.writerows(records)
     zf.writestr(filename, buffer.getvalue().encode("utf-8"))
 
+def paths_alias(left, right):
+    first, second = Path(left), Path(right)
+    return first.resolve() == second.resolve() or (
+        first.is_file() and second.is_file() and first.samefile(second)
+    )
+
+
+for left_name, left, right_name, right in (
+    ("SOURCE", SOURCE, "OUTPUT", OUTPUT),
+    ("SOURCE", SOURCE, "REPORT", REPORT),
+    ("OUTPUT", OUTPUT, "REPORT", REPORT),
+):
+    if paths_alias(left, right):
+        raise SystemExit(f"{left_name} and {right_name} must be different files")
+
+# Fail before overwriting a known-good fixture if either output is invalid.
+for label, filename in (("OUTPUT", OUTPUT), ("REPORT", REPORT)):
+    destination = Path(filename)
+    if destination.is_dir() or not destination.parent.is_dir():
+        raise SystemExit(f"{label} must be a file in an existing directory")
+
+
 target_day = next_weekday()
-with zipfile.ZipFile(SOURCE) as source:
+try:
+    source_archive = zipfile.ZipFile(SOURCE)
+except (OSError, zipfile.BadZipFile):
+    raise SystemExit("unable to open Germany Full GTFS ZIP source") from None
+
+with source_archive as source:
     names = member_map(source)
     for required in ("stops.txt", "routes.txt", "trips.txt", "stop_times.txt"):
         if required not in names:
@@ -107,9 +199,8 @@ with zipfile.ZipFile(SOURCE) as source:
             stop_fields = list(row)
         if len(filler) < MIN_STOPS:
             filler.append(row)
-        try:
-            location = (float(row["stop_lat"]), float(row["stop_lon"]))
-        except (KeyError, ValueError):
+        location = valid_stop_coordinates(row)
+        if location is None:
             continue
         for point in points:
             if distance_m(location, point) <= 1_750:
@@ -172,6 +263,10 @@ with zipfile.ZipFile(SOURCE) as source:
                 (trip_rows[pair[0]]["stop_id"], trip_rows[pair[1]]["stop_id"]),
             )
 
+    # Streaming assumes each trip's stop_times occupy one contiguous block.
+    # Reject a reappearing trip rather than silently selecting an incomplete
+    # stop sequence and publishing misleading real-feed acceptance evidence.
+    completed_trip_ids = set()
     for row in rows(source, names["stop_times.txt"]):
         if stop_time_fields is None:
             stop_time_fields = list(row)
@@ -179,6 +274,9 @@ with zipfile.ZipFile(SOURCE) as source:
         if current_trip is None:
             current_trip = trip_id
         if trip_id != current_trip:
+            completed_trip_ids.add(current_trip)
+            if trip_id in completed_trip_ids:
+                raise SystemExit(f"noncontiguous stop_times for trip {trip_id}")
             consume(current_trip, current_rows)
             current_trip, current_rows = trip_id, []
         current_rows.append(row)
@@ -277,6 +375,9 @@ with zipfile.ZipFile(SOURCE) as source:
         )
 
     route_rows = [row for row in rows(source, names["routes.txt"]) if row.get("route_id") in route_ids]
+    missing_route_ids = route_ids - {row.get("route_id") for row in route_rows}
+    if missing_route_ids:
+        raise SystemExit(f"missing selected GTFS routes: {sorted(missing_route_ids)}")
     route_fields = list(route_rows[0])
     schedule_rows = []
     for trip in sorted(selected_trip_ids):
@@ -297,7 +398,11 @@ with zipfile.ZipFile(SOURCE) as source:
             if row.get("service_id") in service_ids:
                 date_rows.append(row)
 
-    with zipfile.ZipFile(OUTPUT, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as target:
+    # Stage ZIP contents; an unsuccessful export must not truncate the old fixture.
+    fd, staged_output = tempfile.mkstemp(prefix=".g175-fixture-", suffix=".zip", dir=Path(OUTPUT).parent)
+    os.close(fd)
+    atexit.register(lambda: Path(staged_output).unlink(missing_ok=True))
+    with zipfile.ZipFile(staged_output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as target:
         write_csv(target, "stops.txt", stop_fields, kept_stops.values())
         write_csv(target, "routes.txt", route_fields, route_rows)
         write_csv(target, "trips.txt", trip_fields, selected_trip_rows)
@@ -326,9 +431,9 @@ with zipfile.ZipFile(SOURCE) as source:
 report = {
     "taskId": "G-175-REAL-FEED-VERIFY-001",
     "source": SOURCE,
-    "sourceBytes": __import__("os").path.getsize(SOURCE),
+    "sourceBytes": os.path.getsize(SOURCE),
     "fixture": OUTPUT,
-    "fixtureBytes": __import__("os").path.getsize(OUTPUT),
+    "fixtureBytes": os.path.getsize(staged_output),
     "serviceDate": target_day.isoformat(),
     "selectedTrips": selected,
     "acceptanceCases": acceptance_cases,
@@ -336,6 +441,11 @@ report = {
     "selectedStopCount": len(kept_stops),
     "providerMode": "OFF_LOCAL_STATIC_ONLY",
 }
-with open(REPORT, "w", encoding="utf-8") as output:
+fd, staged_report = tempfile.mkstemp(prefix=".g175-report-", suffix=".json", dir=Path(REPORT).parent)
+os.close(fd)
+atexit.register(lambda: Path(staged_report).unlink(missing_ok=True))
+with open(staged_report, "w", encoding="utf-8") as output:
     json.dump(report, output, ensure_ascii=False, indent=2)
+os.replace(staged_output, OUTPUT)
+os.replace(staged_report, REPORT)
 print(json.dumps(report, ensure_ascii=False))

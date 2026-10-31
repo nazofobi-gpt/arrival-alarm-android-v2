@@ -38,7 +38,7 @@ jobs:
         uses: gradle/actions/wrapper-validation@v4
 
       - name: Download Germany Full acceptance feed
-        if: github.head_ref == 'exec1/g175-real-feed-verify-20261004' || github.ref_name == 'exec1/g175-real-feed-verify-20261004' || github.head_ref == 'g168-search-main-reconcile-20261007' || github.ref_name == 'g168-search-main-reconcile-20261007'
+        if: github.head_ref == 'exec1/g175-real-feed-verify-20261004' || github.ref_name == 'exec1/g175-real-feed-verify-20261004' || github.head_ref == 'g168-search-main-reconcile-20261007' || github.ref_name == 'g168-search-main-reconcile-20261007' || github.head_ref == 'verify/g185-real-feed-20261031-current-chat' || github.ref_name == 'verify/g185-real-feed-20261031-current-chat'
         run: |
           curl -fL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 1200 https://download.gtfs.de/germany/free/latest.zip -o /tmp/germany-full.zip
           sha256sum /tmp/germany-full.zip | tee /tmp/germany-full.sha256
@@ -114,7 +114,11 @@ jobs:
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.MainActivityTest#capturePrimaryScreensForVisualQa -Pandroid.testInstrumentationRunnerArguments.germanyFullPath=/data/local/tmp/g167-visual-qa.zip
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.G170NearbyVisualInstrumentedTest#realGermanyFeedLohneNearbyHasOneCanonicalStationAndRetainsScreenshot -Pandroid.testInstrumentationRunnerArguments.germanyFullPath=/data/local/tmp/g167-visual-qa.zip
             adb shell pm clear com.nazofobi.arrivalalarm || true
-            ./gradlew --no-daemon connectedDebugAndroidTest
+            # The provider-backed G-176 smoke runs separately above only when a real GTFS-RT payload exists.
+            # Exclude only that input-dependent method from the generic API 36 regression suite.
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notClass=com.nazofobi.arrivalalarm.G176LiveRealtimeInstrumentedTest#currentGermanyRealtimePayloadParsesWithProductionDefaults
+            # Each emulator-runner script line executes in a fresh shell; snapshot in one process.
+            python3 tools/snapshot_api36_instrumentation_reports.py app/build/outputs/androidTest-results/connected app/build/reports/androidTests/connected app/build/outputs/androidTest-results/full-regression-suite
             mkdir -p app/build/outputs/androidTest-results/ui-qa
             adb shell ls -l /sdcard/Download/arrival-alarm-ui-qa
             adb pull /sdcard/Download/arrival-alarm-ui-qa/. app/build/outputs/androidTest-results/ui-qa/
@@ -168,6 +172,7 @@ jobs:
             adb shell wm size reset
 
             bash .github/scripts/build-field-rc.sh
+            test -s app/build/outputs/androidTest-results/full-regression-suite/report-summary.json
 
       - name: Upload API 36 diagnostics
         if: always()

@@ -50,6 +50,7 @@ fun HomeSearchPanel(
     nearbyMessage: String?,
     recentSearches: List<String>,
     favoriteStopIds: Set<String>,
+    onToggleFavoriteStop: (String) -> Unit = {},
     onSelectOriginTarget: () -> Unit,
     onSelectDestinationTarget: () -> Unit,
     onQueryChange: (String) -> Unit,
@@ -62,7 +63,6 @@ fun HomeSearchPanel(
     onMapPointSelected: (MapPoint) -> Unit,
     onMapError: (String) -> Unit,
     onNearbyStopSelected: (NearbyStop) -> Unit,
-    onToggleFavoriteStop: (String) -> Unit,
     mode: HomeSearchMode = HomeSearchMode.HOME,
     modifier: Modifier = Modifier,
 ) {
@@ -312,7 +312,7 @@ fun HomeSearchPanel(
                             }
                             TextButton(
                                 onClick = { onToggleFavoriteStop(candidate.stop.id) },
-                                enabled = candidate.stop.id.isNotBlank(),
+                                enabled = isFavoriteStopIdValid(candidate.stop.id),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("nearby-stop-$index-favorite"),
@@ -467,7 +467,7 @@ fun HomeSearchPanel(
                         result.stop?.let { stop ->
                             TextButton(
                                 onClick = { onToggleFavoriteStop(stop.id) },
-                                enabled = stop.id.isNotBlank(),
+                                enabled = isFavoriteStopIdValid(stop.id),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("search-result-$index-favorite"),
