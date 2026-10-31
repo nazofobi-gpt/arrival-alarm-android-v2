@@ -321,13 +321,21 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             JOIN routes r ON r.route_id = t.route_id
             WHERE t.headsign LIKE ? ESCAPE '!' COLLATE NOCASE
                OR t.trip_id LIKE ? ESCAPE '!' COLLATE NOCASE
+               OR r.short_name LIKE ? ESCAPE '!' COLLATE NOCASE
+               OR r.long_name LIKE ? ESCAPE '!' COLLATE NOCASE
             ORDER BY
+                CASE
+                    WHEN t.trip_id LIKE ? ESCAPE '!' COLLATE NOCASE THEN 0
+                    WHEN t.headsign LIKE ? ESCAPE '!' COLLATE NOCASE THEN 1
+                    WHEN r.short_name LIKE ? ESCAPE '!' COLLATE NOCASE THEN 2
+                    ELSE 3
+                END,
                 t.headsign COLLATE NOCASE,
                 r.short_name COLLATE NOCASE,
                 t.trip_id
             LIMIT ?
             """.trimIndent(),
-            arrayOf(prefix, prefix, tripLimit.toString()),
+            arrayOf(prefix, prefix, prefix, prefix, prefix, prefix, prefix, tripLimit.toString()),
         ).use { cursor ->
             buildList {
                 while (cursor.moveToNext()) {

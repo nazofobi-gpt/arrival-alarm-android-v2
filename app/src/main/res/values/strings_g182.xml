@@ -34,4 +34,9 @@
     <string name="gtfs_trip_search_choose_alarm_target">Alarm hedefi seçin</string>
     <string name="gtfs_trip_search_invalid_roles">Durak sırası veya saatleri doğrulanamadı. Seçimleri kontrol edin.</string>
     <string name="gtfs_trip_search_confirm">Sefer ve durakları kaydet</string>
+    <string name="gtfs_trip_search_platform">Peron: %1$s</string>
+    <string name="gtfs_trip_search_parent_station">Üst istasyon: %1$s</string>
+    <string name="gtfs_trip_search_wheelchair_accessible">Tekerlekli sandalye erişimi: uygun</string>
+    <string name="gtfs_trip_search_wheelchair_not_accessible">Tekerlekli sandalye erişimi: uygun değil</string>
+    <string name="gtfs_trip_search_wheelchair_unknown">Tekerlekli sandalye erişimi: bilinmiyor</string>
 </resources>

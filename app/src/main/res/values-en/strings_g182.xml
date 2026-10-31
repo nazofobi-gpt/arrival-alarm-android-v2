@@ -34,4 +34,9 @@
     <string name="gtfs_trip_search_choose_alarm_target">Choose alarm target</string>
     <string name="gtfs_trip_search_invalid_roles">Stop order or times could not be verified. Review your choices.</string>
     <string name="gtfs_trip_search_confirm">Save trip and stops</string>
+    <string name="gtfs_trip_search_platform">Platform: %1$s</string>
+    <string name="gtfs_trip_search_parent_station">Parent station: %1$s</string>
+    <string name="gtfs_trip_search_wheelchair_accessible">Wheelchair access: accessible</string>
+    <string name="gtfs_trip_search_wheelchair_not_accessible">Wheelchair access: not accessible</string>
+    <string name="gtfs_trip_search_wheelchair_unknown">Wheelchair access: unknown</string>
 </resources>
