@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="offline_feed_refresh_notification_channel">Offline-Verkehrsdaten</string>
+    <string name="offline_feed_refresh_notification_title">Offline-Verkehrsdaten werden aktualisiert</string>
+    <string name="offline_feed_refresh_notification_checking">Deutschland-Fahrplandaten werden geprüft</string>
+    <string name="offline_feed_refresh_notification_progress">Importierte Haltestellen: %1$d</string>
+</resources>
