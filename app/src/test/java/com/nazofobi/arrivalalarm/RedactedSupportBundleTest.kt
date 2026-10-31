@@ -184,4 +184,30 @@ class RedactedSupportBundleTest {
             if (it == "provider_state=ready") "provider_state=ready=private" else it
         }))
     }
+
+    @Test fun capabilityProjectionRejectsSchemaAndScopeDrift() {
+        val approved = SupportDiagnostics.render(state(), now)
+        val reviewed = RedactedSupportBundle.reviewedCapabilityFields(approved)
+        assertEquals(17, reviewed.size)
+        assertEquals("support_schema=VARIS_SUPPORT_DIAGNOSTICS_V1", reviewed.first())
+        assertEquals("support_scope=capabilities_only", reviewed[1])
+
+        val fallback = listOf("support_snapshot=not_measured")
+        val invalid = listOf(
+            approved.replaceFirst(
+                "schema=VARIS_SUPPORT_DIAGNOSTICS_V1", "schema=VARIS_SUPPORT_DIAGNOSTICS_V2",
+            ),
+            approved.replaceFirst("scope=capabilities_only", "scope=private"),
+            approved.replaceFirst("location_permission=", "location_access="),
+            approved.replaceFirst("location_permission=yes", "location_permission=yes=private-token"),
+            approved + "unreviewed_field=private-token\n",
+            approved.replaceFirst(
+                "scope=capabilities_only\n", "scope=capabilities_only\nscope=private\n",
+            ),
+        )
+        for ((index, candidate) in invalid.withIndex()) {
+            assertEquals("invalid capability shape #$index", fallback,
+                RedactedSupportBundle.reviewedCapabilityFields(candidate))
+        }
+    }
 }
