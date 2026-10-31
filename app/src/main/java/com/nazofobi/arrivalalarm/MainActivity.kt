@@ -126,7 +126,8 @@ fun ArrivalAlarmApp(
     onThemeModeChange: (ArrivalThemeMode) -> Unit = {},
     transitOverride: ArrivalTransitClient? = null,
 ) {
-    val context = LocalContext.current.applicationContext
+    val uiContext = LocalContext.current
+    val context = uiContext.applicationContext
     val graph = remember(context) { ArrivalAlarmRuntimeGraph.get(context) }
     val controller = graph.controller
     val connectorPort = graph.connectorPort
@@ -1038,7 +1039,7 @@ fun ArrivalAlarmApp(
                         if (priorDate != null) set(priorDate.year, priorDate.month - 1, priorDate.day)
                     }
                     DatePickerDialog(
-                        context,
+                        uiContext,
                         { _, year, month, day ->
                             val currentTemplate = tripSearchTemplate ?: return@DatePickerDialog
                             val versionAtSelection = (dataState as? NationwideDataState.Ready)?.sourceVersion
