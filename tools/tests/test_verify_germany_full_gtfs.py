@@ -431,25 +431,28 @@ class GtfsArchiveMemberTest(unittest.TestCase):
             ("stop_lon", b"53.0", b"-181"),
             ("stop_lon", b"53.0", b"1e999"),
         )
+        newline = bytes((10,))
         for optimized in (False, True):
             for invalid_field, latitude, longitude in cases:
                 with self.subTest(optimized=optimized, field=invalid_field,
                                   latitude=latitude, longitude=longitude):
-                    stops = (b"stop_id,stop_name,stop_lat,stop_lon\\n"
-                             b"1,Test," + latitude + b"," + longitude + b"\\n")
+                    stops = (b"stop_id,stop_name,stop_lat,stop_lon" + newline
+                             + b"1,Test," + latitude + b"," + longitude + newline)
                     result, _ = self.run_archive(
-                        REQUIRED, {"stops.txt": stops.replace(b"\\\\n", b"\\n")},
-                        optimized=optimized,
+                        REQUIRED, {"stops.txt": stops}, optimized=optimized,
                     )
                     self.assertNotEqual(0, result.returncode)
                     self.assertIn(f"invalid {invalid_field} at CSV line 2", result.stderr)
                     self.assertNotIn("Traceback", result.stderr)
 
     def test_boundary_coordinates_and_blank_generic_node_coordinates_pass_preflight(self):
-        stops = (b"stop_id,stop_name,stop_lat,stop_lon,location_type\\n"
-                 b"1,North,90,-180,0\\n"
-                 b"2,Generic,,,3\\n"
-                 b"3,South,-90,180,0\\n").replace(b"\\\\n", b"\\n")
+        newline = bytes((10,))
+        stops = newline.join((
+            b"stop_id,stop_name,stop_lat,stop_lon,location_type",
+            b"1,North,90,-180,0",
+            b"2,Generic,,,3",
+            b"3,South,-90,180,0",
+        )) + newline
         for optimized in (False, True):
             with self.subTest(optimized=optimized):
                 result, _ = self.run_archive(
