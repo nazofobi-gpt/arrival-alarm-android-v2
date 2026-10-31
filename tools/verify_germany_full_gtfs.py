@@ -72,8 +72,15 @@ def inspect(zf, member, table):
                 else None
             )
             # Numeric WGS84 coordinates must be finite and within geographic bounds.
-            # Blank fields are left for location_type-dependent GTFS validation:
-            # generic nodes and boarding areas may omit their coordinates.
+            # Validate present coordinates and location_type-dependent requiredness.
+            location_type_position = (
+                header.index("location_type")
+                if table == "stops.txt" and "location_type" in seen
+                else None
+            )
+            # GTFS coordinates are required for stops, stations and entrances
+            # (location_type 0, 1, 2), and optional for generic nodes/boarding
+            # areas (3, 4). An absent/blank location_type defaults to 0.
             coordinate_positions = (
                 [(field, header.index(field), limit) for field, limit in
                  (("stop_lat", 90.0), ("stop_lon", 180.0)) if field in seen]
@@ -96,21 +103,37 @@ def inspect(zf, member, table):
                             f"GTFS table {member} has blank required value {field} "
                             f"at CSV line {reader.line_num}"
                         )
-                for field, position, limit in coordinate_positions:
-                    raw_coordinate = row[position].strip()
-                    if raw_coordinate:
-                        try:
-                            coordinate = float(raw_coordinate)
-                        except ValueError:
+                location_type = 0
+                if location_type_position is not None:
+                    raw_location_type = row[location_type_position].strip()
+                    if raw_location_type:
+                        if raw_location_type not in {"0", "1", "2", "3", "4"}:
                             raise SystemExit(
-                                f"GTFS table {member} has invalid {field} "
-                                f"at CSV line {reader.line_num}"
-                            ) from None
-                        if not math.isfinite(coordinate) or not -limit <= coordinate <= limit:
-                            raise SystemExit(
-                                f"GTFS table {member} has invalid {field} "
+                                f"GTFS table {member} has invalid location_type "
                                 f"at CSV line {reader.line_num}"
                             )
+                        location_type = int(raw_location_type)
+                for field, position, limit in coordinate_positions:
+                    raw_coordinate = row[position].strip()
+                    if not raw_coordinate:
+                        if location_type in (0, 1, 2):
+                            raise SystemExit(
+                                f"GTFS table {member} has blank required value {field} "
+                                f"at CSV line {reader.line_num}"
+                            )
+                        continue
+                    try:
+                        coordinate = float(raw_coordinate)
+                    except ValueError:
+                        raise SystemExit(
+                            f"GTFS table {member} has invalid {field} "
+                            f"at CSV line {reader.line_num}"
+                        ) from None
+                    if not math.isfinite(coordinate) or not -limit <= coordinate <= limit:
+                        raise SystemExit(
+                            f"GTFS table {member} has invalid {field} "
+                            f"at CSV line {reader.line_num}"
+                        )
                 if sequence_position is not None:
                     sequence = row[sequence_position]
                     if not sequence.isascii() or not sequence.isdecimal():
