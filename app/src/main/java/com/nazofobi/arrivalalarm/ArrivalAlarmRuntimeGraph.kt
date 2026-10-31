@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import android.content.Context
+import android.util.Log
 
 class ConnectorRouteRegistry {
     private var routes: List<RouteOption> = emptyList()
@@ -94,14 +95,38 @@ object ArrivalAlarmRuntimeGraph {
     @Volatile
     private var instance: ArrivalAlarmProcessGraph? = null
 
-    fun get(context: Context): ArrivalAlarmProcessGraph =
-        instance ?: synchronized(this) {
-            instance ?: ArrivalAlarmProcessGraph.create(context).also { created -> instance = created }
+    @Volatile
+    private var refreshSchedulingConfigured = false
+
+    fun get(context: Context): ArrivalAlarmProcessGraph {
+        val appContext = context.applicationContext
+        if (!refreshSchedulingConfigured) {
+            synchronized(this) {
+                if (!refreshSchedulingConfigured) {
+                    refreshSchedulingConfigured = try {
+                        NationwideFeedRefreshScheduler.ensureScheduled(appContext)
+                        true
+                    } catch (failure: Exception) {
+                        Log.w(
+                            "ArrivalAlarmRuntimeGraph",
+                            "Unable to schedule offline feed refresh",
+                            failure,
+                        )
+                        false
+                    }
+                }
+            }
         }
+
+        return instance ?: synchronized(this) {
+            instance ?: ArrivalAlarmProcessGraph.create(appContext).also { instance = it }
+        }
+    }
 
     @Synchronized
     fun resetForTests() {
         instance?.connectorRuntimeCoordinator?.close()
         instance = null
+        refreshSchedulingConfigured = false
     }
 }

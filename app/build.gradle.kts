@@ -56,6 +56,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-core")
     implementation(libs.maplibre.android)
     implementation("org.mobilitydata:gtfs-realtime-bindings:0.2.0")
+    implementation(libs.androidx.work.runtime)
 
     testImplementation(libs.junit)
     // JVM unit tests exercise the production org.json adapter. Android's compile-time
@@ -65,6 +66,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.work.testing)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
