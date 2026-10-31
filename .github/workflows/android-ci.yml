@@ -52,8 +52,28 @@ jobs:
       - name: Verify wrapper
         uses: gradle/actions/wrapper-validation@v4
 
-      - name: Build and test
-        run: ./gradlew --no-daemon lint testDebugUnitTest assembleDebug
+      # Produce a distributable debug APK before running potentially long test gates.
+      - name: Build debug APK first
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Record exact APK source and checksum
+        run: |
+          sha256sum app/build/outputs/apk/debug/app-debug.apk > app/build/outputs/apk/debug/SHA256SUMS.txt
+          printf 'source_commit=%s\n' "${{ github.event.pull_request.head.sha || github.sha }}" > app/build/outputs/apk/debug/BUILD_PROVENANCE.txt
+
+      - name: Upload debug APK before test batch
+        uses: actions/upload-artifact@v4
+        with:
+          name: arrival-alarm-v2-debug-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/debug/SHA256SUMS.txt
+            app/build/outputs/apk/debug/BUILD_PROVENANCE.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Run lint and JVM unit tests as one batch
+        run: ./gradlew --no-daemon lint testDebugUnitTest
 
       - name: G-174 real Germany Full feed acceptance
         if: >-
@@ -79,11 +99,3 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Upload debug APK
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: arrival-alarm-v2-debug-${{ github.event.pull_request.head.sha || github.sha }}
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
