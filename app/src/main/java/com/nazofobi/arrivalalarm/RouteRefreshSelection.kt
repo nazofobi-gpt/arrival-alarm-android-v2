@@ -5,7 +5,8 @@ package com.nazofobi.arrivalalarm
  *
  * Retain a selected itinerary after refresh only with matching, source-backed
  * trip IDs, scheduled boarding instant, ordered stop roles and coordinates.
- * Live delay, platform and status changes intentionally do not affect identity.
+ * Live delay, platform and status changes intentionally do not affect identity;
+ * static scheduled stop clocks do.
  * A provider without sufficient evidence requires explicit reselection.
  */
 private const val MAX_ROUTE_DEPARTURE_EPOCH_MILLIS = 253_402_300_799_999L
@@ -81,7 +82,9 @@ internal fun retainSelectedRouteAfterRefresh(
             val now = updated.stops[index]
             old.id != now.id ||
                 old.latitude != now.latitude ||
-                old.longitude != now.longitude
+                old.longitude != now.longitude ||
+                old.plannedArrival != now.plannedArrival ||
+                old.plannedDeparture != now.plannedDeparture
         }
     ) return null
 
