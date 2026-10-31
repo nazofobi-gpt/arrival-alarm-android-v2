@@ -47,6 +47,40 @@ class GtfsArchiveMemberTest(unittest.TestCase):
             self.assertFalse(report.exists(), "Unverified feed must not create a success report")
             return result, report
 
+    def test_nested_gtfs_tables_enforce_identity_and_stop_sequence(self):
+        # The logical GTFS table name is independent of its ZIP member path.
+        # A single enclosing directory is valid, but must not bypass checks.
+        entries = tuple("feed/" + name for name in REQUIRED)
+        cases = (
+            (
+                "trips.txt",
+                b"route_id,service_id,trip_id\nR,S,   \n",
+                "blank required value trip_id",
+            ),
+            (
+                "stop_times.txt",
+                b"trip_id,arrival_time,departure_time,stop_id,stop_sequence\n"
+                b"T,10:00:00,10:00:00,1,-1\n",
+                "invalid stop_sequence",
+            ),
+            (
+                "stop_times.txt",
+                b"trip_id,arrival_time,departure_time,stop_id,stop_sequence\n"
+                b"T,10:00:00,10:00:00,1,2147483648\n",
+                "out-of-range stop_sequence",
+            ),
+        )
+        for optimized in (False, True):
+            for table, malformed, diagnostic in cases:
+                with self.subTest(table=table, diagnostic=diagnostic, optimized=optimized):
+                    member = "feed/" + table
+                    result, _ = self.run_archive(
+                        entries, {member: malformed}, optimized=optimized,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn(diagnostic, result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+
     def test_mismatched_csv_record_columns_fail_closed_in_required_and_optional_tables(self):
         cases = (
             ("routes.txt", REQUIRED, b"route_id,route_type\nR\n", 1, 2),
