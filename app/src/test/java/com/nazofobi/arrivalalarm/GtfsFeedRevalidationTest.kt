@@ -57,6 +57,22 @@ class GtfsFeedRevalidationTest {
     }
 
     @Test
+    fun oversizedPersistedHeadersCannotBreakFutureConditionalRevalidation() {
+        val safeEtag = "\"germany-feed-42\""
+        val safeDate = "Sun, 11 Oct 2026 12:00:00 GMT"
+        val oversized = "X".repeat(1025)
+        assertEquals(
+            mapOf("If-Modified-Since" to safeDate),
+            gtfsConditionalHeaders(true, true, oversized, safeDate),
+        )
+        assertEquals(
+            mapOf("If-None-Match" to safeEtag),
+            gtfsConditionalHeaders(true, true, safeEtag, oversized),
+        )
+        assertTrue(gtfsConditionalHeaders(true, true, oversized, oversized).isEmpty())
+    }
+
+    @Test
     fun lastModifiedOnlyFeedCanRevalidateWithoutEtag() {
         val headers = gtfsConditionalHeaders(
             ready = true,

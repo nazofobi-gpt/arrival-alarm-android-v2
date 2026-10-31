@@ -857,7 +857,11 @@ internal fun gtfsConditionalHeaders(
         // Persisted provider validators are untrusted network data. Never echo
         // C0/DEL control characters into a subsequent HTTP request header.
         fun safeValidator(value: String?): String? = value?.takeIf { candidate ->
-            candidate.isNotBlank() && candidate.none { char -> char.code < 0x20 || char.code == 0x7f }
+            // An oversized persisted provider header can make every subsequent
+            // conditional refresh fail (HTTP 431) while the cached feed stays stale.
+            // Bound untrusted validators before replaying them over the network.
+            candidate.isNotBlank() && candidate.length <= 1024 &&
+                candidate.none { char -> char.code < 0x20 || char.code == 0x7f }
         }
         safeValidator(etag)?.let { put("If-None-Match", it) }
         safeValidator(lastModified)?.let { put("If-Modified-Since", it) }
