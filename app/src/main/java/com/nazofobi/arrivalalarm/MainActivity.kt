@@ -1253,6 +1253,7 @@ fun ArrivalAlarmApp(
                     }
                 }
 
+                if (
                     activeScreen == ArrivalAppScreen.ROUTES ||
                     activeScreen == ArrivalAppScreen.JOURNEY ||
                     activeScreen == ArrivalAppScreen.LIVE
