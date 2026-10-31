@@ -22,6 +22,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
@@ -152,6 +153,7 @@ fun SettingsReadinessPanel(
 ) {
     var themeOptionsExpanded by rememberSaveable { mutableStateOf(false) }
     val connectorReady = hasVerifiedConnectorConnection(state.connectorConfigured, state.connectorConnected)
+    val context = LocalContext.current
 
     Card(
         modifier = modifier
@@ -279,6 +281,10 @@ fun SettingsReadinessPanel(
                     else -> ReadinessLevel.ACTION_NEEDED
                 },
                 testTag = "nationwide-data-state",
+                supporting = (state.dataState as? NationwideDataState.Ready)
+                    ?.takeIf { hasUsableNationwideIndex(it) }
+                    ?.let { offlinePackMetadataText(context, it) },
+                supportingTestTag = "offline-pack-metadata",
             )
             ReadinessRow(
                 label = stringResource(R.string.readiness_search_function),
@@ -472,6 +478,7 @@ private fun ReadinessRow(
     level: ReadinessLevel,
     testTag: String,
     supporting: String? = null,
+    supportingTestTag: String? = null,
 ) {
     Column(
         modifier = Modifier
@@ -495,6 +502,7 @@ private fun ReadinessRow(
                 text = it,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = supportingTestTag?.let { Modifier.testTag(it) } ?: Modifier,
             )
         }
     }
