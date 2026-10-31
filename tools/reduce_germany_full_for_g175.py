@@ -33,12 +33,19 @@ def member_map(zf):
         "calendar.txt", "calendar_dates.txt", "feed_info.txt",
     }
     names = {}
+    table_root = None
     for member in zf.namelist():
         if member.endswith("/"):
             continue
         name = member.rsplit("/", 1)[-1].lower()
-        if name in consumed_tables and name in names:
-            raise SystemExit(f"duplicate GTFS table {name}: {names[name]} and {member}")
+        if name in consumed_tables:
+            if name in names:
+                raise SystemExit(f"duplicate GTFS table {name}: {names[name]} and {member}")
+            root = member.rpartition("/")[0]
+            if table_root is None:
+                table_root = root
+            elif root != table_root:
+                raise SystemExit("GTFS tables must share one ZIP directory")
         names[name] = member
     return names
 
