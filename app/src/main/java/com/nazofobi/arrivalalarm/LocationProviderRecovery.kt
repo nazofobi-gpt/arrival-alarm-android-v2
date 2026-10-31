@@ -9,6 +9,10 @@ package com.nazofobi.arrivalalarm
 internal object LocationProviderRecovery {
     enum class Decision { STOP, DISARM_AND_STOP, KEEP, RETRY }
 
+    /** Ignore queued GPS fixes after a trip ends or its arrival was handled. */
+    fun acceptsLocationCallback(journeyPhase: JourneyPhase, arrivalHandled: Boolean): Boolean =
+        journeyPhase == JourneyPhase.ARMED && !arrivalHandled
+
     /**
      * Android location FGS startup requires the system-wide location switch ON.
      * With that prerequisite met, a transiently missing enabled provider can be
