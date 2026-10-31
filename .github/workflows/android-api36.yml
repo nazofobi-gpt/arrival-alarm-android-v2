@@ -117,6 +117,8 @@ jobs:
             # The provider-backed G-176 smoke runs separately above only when a real GTFS-RT payload exists.
             # Exclude only that input-dependent method from the generic API 36 regression suite.
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notClass=com.nazofobi.arrivalalarm.G176LiveRealtimeInstrumentedTest#currentGermanyRealtimePayloadParsesWithProductionDefaults
+            # Each emulator-runner script line executes in a fresh shell; snapshot in one process.
+            python3 tools/snapshot_api36_instrumentation_reports.py app/build/outputs/androidTest-results/connected app/build/reports/androidTests/connected app/build/outputs/androidTest-results/full-regression-suite
             mkdir -p app/build/outputs/androidTest-results/ui-qa
             adb shell ls -l /sdcard/Download/arrival-alarm-ui-qa
             adb pull /sdcard/Download/arrival-alarm-ui-qa/. app/build/outputs/androidTest-results/ui-qa/
@@ -170,6 +172,7 @@ jobs:
             adb shell wm size reset
 
             bash .github/scripts/build-field-rc.sh
+            test -s app/build/outputs/androidTest-results/full-regression-suite/report-summary.json
 
       - name: Upload API 36 diagnostics
         if: always()
