@@ -134,6 +134,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         }
         val counts = linkedMapOf<String, Int>()
         val seenGtfsTables = hashSetOf<String>()
+        var gtfsTableDirectory: String? = null
 
         db.beginTransaction()
         try {
@@ -143,6 +144,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
                 while (entry != null) {
                     val file = entry.name.substringAfterLast('/').lowercase(Locale.ROOT)
                     if (!entry.isDirectory) {
+                        gtfsTableDirectory = enforceSingleGtfsTableDirectory(entry.name, gtfsTableDirectory)
                         rejectDuplicateGtfsZipMember(entry.name, seenGtfsTables)
                         val reader = strictGtfsUtf8Reader(zip)
                         val count = when (file) {
@@ -800,6 +802,20 @@ private val GTFS_IMPORT_TABLES = setOf(
     "calendar.txt", "calendar_dates.txt", "transfers.txt", "shapes.txt",
     "levels.txt", "pathways.txt", "frequencies.txt", "attributions.txt", "feed_info.txt",
 )
+
+// A valid GTFS archive may use one enclosing folder, but separate folders cannot
+// contribute tables to the same SQLite schedule graph. Unknown ZIP files are ignored.
+// The caller runs this inside the existing import transaction, so any rejection
+// restores the previous known-good dataset.
+internal fun enforceSingleGtfsTableDirectory(entryName: String, establishedDirectory: String?): String? {
+    val table = entryName.substringAfterLast('/').lowercase(Locale.ROOT)
+    if (table !in GTFS_IMPORT_TABLES) return establishedDirectory
+    val directory = entryName.substringBeforeLast('/', "")
+    check(establishedDirectory == null || establishedDirectory == directory) {
+        "GTFS ZIP tables span multiple directories"
+    }
+    return directory
+}
 
 internal fun rejectDuplicateGtfsZipMember(entryName: String, seen: MutableSet<String>) {
     val table = entryName.substringAfterLast('/').lowercase(Locale.ROOT)
