@@ -1,6 +1,6 @@
 package com.nazofobi.arrivalalarm
 
-import androidx.compose.ui.test.assertDoesNotExist
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -47,6 +47,6 @@ class GtfsTripSearchConsentPanelInstrumentedTest {
             .assertIsEnabled()
             .performClick()
         compose.runOnIdle { assertEquals(1, chooseCalls) }
-        compose.onNodeWithTag("gtfs-trip-search-confirm").assertDoesNotExist()
+        assertEquals(0, compose.onAllNodesWithTag("gtfs-trip-search-confirm").fetchSemanticsNodes().size)
     }
 }
