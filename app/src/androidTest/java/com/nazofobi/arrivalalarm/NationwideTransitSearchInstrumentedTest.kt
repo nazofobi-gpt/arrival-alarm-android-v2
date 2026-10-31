@@ -62,6 +62,13 @@ class NationwideTransitSearchInstrumentedTest {
                     it.label.contains("R1")
             }
         )
+        assertTrue(
+            lineResults.any {
+                it.kind == TransitLocationKind.TRIP &&
+                    it.tripId == "trip-1" &&
+                    it.routeId == "route-1"
+            }
+        )
         val tripResults = index.searchRouteAndTripLocations("Known", 6)
         assertTrue(
             tripResults.any {

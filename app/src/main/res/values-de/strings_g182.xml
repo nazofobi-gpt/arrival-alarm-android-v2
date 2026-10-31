@@ -34,4 +34,9 @@
     <string name="gtfs_trip_search_choose_alarm_target">Alarmziel auswählen</string>
     <string name="gtfs_trip_search_invalid_roles">Haltestellenreihenfolge oder Zeiten konnten nicht bestätigt werden. Prüfe deine Auswahl.</string>
     <string name="gtfs_trip_search_confirm">Fahrt und Haltestellen speichern</string>
+    <string name="gtfs_trip_search_platform">Bahnsteig: %1$s</string>
+    <string name="gtfs_trip_search_parent_station">Übergeordneter Bahnhof: %1$s</string>
+    <string name="gtfs_trip_search_wheelchair_accessible">Rollstuhlzugang: barrierefrei</string>
+    <string name="gtfs_trip_search_wheelchair_not_accessible">Rollstuhlzugang: nicht barrierefrei</string>
+    <string name="gtfs_trip_search_wheelchair_unknown">Rollstuhlzugang: unbekannt</string>
 </resources>
