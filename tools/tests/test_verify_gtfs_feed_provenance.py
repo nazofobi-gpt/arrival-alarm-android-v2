@@ -103,6 +103,48 @@ class VerifyGtfsFeedProvenanceTest(unittest.TestCase):
         self.receipt.write_text("{not-json", encoding="utf-8")
         self.assert_rejected("Expecting property name")
 
+    def test_duplicate_receipt_schema_key_is_rejected(self):
+        text = self.receipt.read_text(encoding="utf-8")
+        self.assertIn('"schema":', text)
+        self.receipt.write_text(
+            text.replace('"schema":', '"schema": "UNTRUSTED", "schema":', 1),
+            encoding="utf-8",
+        )
+        self.assert_rejected("duplicate JSON evidence key: schema")
+
+    def test_duplicate_report_table_key_is_rejected(self):
+        text = self.report.read_text(encoding="utf-8")
+        self.assertIn('"stops.txt":', text)
+        self.report.write_text(
+            text.replace(
+                '"stops.txt":',
+                '"stops.txt": {"rows": 999, "header": ["id"]}, "stops.txt":',
+                1,
+            ),
+            encoding="utf-8",
+        )
+        self.assert_rejected("duplicate JSON evidence key: stops.txt")
+
+    def test_duplicate_nested_report_rows_key_is_rejected(self):
+        text = self.report.read_text(encoding="utf-8")
+        self.assertIn('"rows": 1', text)
+        self.report.write_text(
+            text.replace('"rows": 1', '"rows": 999, "rows": 1', 1),
+            encoding="utf-8",
+        )
+        self.assert_rejected("duplicate JSON evidence key: rows")
+
+    def test_duplicate_nested_receipt_table_count_key_is_rejected(self):
+        text = self.receipt.read_text(encoding="utf-8")
+        self.assertIn('"routes.txt": 2', text)
+        self.receipt.write_text(
+            text.replace(
+                '"routes.txt": 2', '"routes.txt": 999, "routes.txt": 2', 1,
+            ),
+            encoding="utf-8",
+        )
+        self.assert_rejected("duplicate JSON evidence key: routes.txt")
+
     def test_missing_archive_is_rejected_without_traceback(self):
         self.archive.unlink()
         for optimized in (False, True):
