@@ -18,6 +18,20 @@ import kotlin.math.absoluteValue
 import kotlin.math.cos
 import kotlin.math.roundToInt
 
+internal fun resolveGtfsSourceVersion(
+    sourceUrl: String,
+    etag: String?,
+    lastModified: String?,
+    connectionLastModified: Long,
+    importedAtMillis: Long,
+): String {
+    val versionToken = etag?.trim()?.takeIf { it.isNotEmpty() }?.let { "etag:$it" }
+        ?: lastModified?.trim()?.takeIf { it.isNotEmpty() }?.let { "last-modified:$it" }
+        ?: connectionLastModified.takeIf { it > 0L }?.let { "connection-last-modified:$it" }
+        ?: "imported-at:$importedAtMillis"
+    return "$sourceUrl|$versionToken"
+}
+
 class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nationwide_transit.db", null, 4) {
     companion object {
         private const val PROVIDER_ID = "gtfs-de-full"
@@ -120,14 +134,10 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
 
         // Reading feed headers can also fail after HTTP 200, before the import
         // transaction begins. Disconnect instead of leaking the network socket.
-        val (responseEtag, responseLastModified, sourceVersion) = try {
-            val etag = http?.getHeaderField("ETag")?.takeIf { it.isNotBlank() }
-            val lastModified = http?.getHeaderField("Last-Modified")?.takeIf { it.isNotBlank() }
-            val version = etag
-                ?: lastModified
-                ?: connection.lastModified.takeIf { it > 0L }?.toString()
-                ?: connection.url.toString()
-            Triple(etag, lastModified, version)
+        val (responseEtag, responseLastModified, connectionLastModified) = try {
+            val etag = http?.getHeaderField("ETag")?.trim()?.takeIf { it.isNotEmpty() }
+            val lastModified = http?.getHeaderField("Last-Modified")?.trim()?.takeIf { it.isNotEmpty() }
+            Triple(etag, lastModified, connection.lastModified)
         } catch (failure: java.io.IOException) {
             http?.disconnect()
             throw failure
@@ -203,8 +213,16 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
                 null,
             ).use { it.moveToFirst() }
             if (!hasConnectedTrip) error("GTFS schedule graph bağlantısız: geçerli iki duraklı sefer yok")
+            val fetchedAtMillis = System.currentTimeMillis()
+            val sourceVersion = resolveGtfsSourceVersion(
+                sourceUrl = url,
+                etag = responseEtag,
+                lastModified = responseLastModified,
+                connectionLastModified = connectionLastModified,
+                importedAtMillis = fetchedAtMillis,
+            )
             putMetadata(db, READY_KEY, "1")
-            putMetadata(db, FETCHED_KEY, (System.currentTimeMillis() / 1000).toString())
+            putMetadata(db, FETCHED_KEY, (fetchedAtMillis / 1000).toString())
             putMetadata(db, COUNT_KEY, stops.toString())
             putMetadata(db, VERSION_KEY, sourceVersion)
             putMetadata(db, SOURCE_URL_KEY, url)
