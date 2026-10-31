@@ -49,11 +49,21 @@ def hash_archive(path: Path) -> tuple[str, int]:
     return digest.hexdigest(), before.st_size
 
 
+def reject_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict:
+    """Do not accept evidence whose meaning changes between JSON parsers."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON evidence key: {key}")
+        result[key] = value
+    return result
+
+
 def verify(archive: Path, report: Path, receipt_path: Path) -> None:
     receipt_bytes = read_bounded(receipt_path)
     report_bytes = read_bounded(report)
-    receipt = json.loads(receipt_bytes.decode("utf-8"))
-    report_data = json.loads(report_bytes.decode("utf-8"))
+    receipt = json.loads(receipt_bytes.decode("utf-8"), object_pairs_hook=reject_duplicate_json_keys)
+    report_data = json.loads(report_bytes.decode("utf-8"), object_pairs_hook=reject_duplicate_json_keys)
     if not isinstance(receipt, dict) or set(receipt) != EXPECTED_KEYS:
         raise ValueError("GTFS receipt fields do not match schema")
     if (receipt["schema"] != "GTFS_PREFLIGHT_SOURCE_BINDING_V1" or
