@@ -23,8 +23,16 @@ class VerifyGtfsFeedProvenanceTest(unittest.TestCase):
         with zipfile.ZipFile(self.archive, "w") as output:
             output.writestr("stops.txt", "stop_id,stop_name\nS,Example\n")
         self.report = self.folder / "structural.json"
+        headers = {
+            "stops.txt": ["stop_id", "stop_name", "stop_lat", "stop_lon"],
+            "routes.txt": ["route_id", "route_type"],
+            "trips.txt": ["route_id", "service_id", "trip_id"],
+            "stop_times.txt": [
+                "trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence",
+            ],
+        }
         self.report.write_text(json.dumps({
-            table: {"rows": i + 1, "header": ["id"]}
+            table: {"rows": i + 1, "header": headers[table]}
             for i, table in enumerate(TABLES)
         }), encoding="utf-8")
         self.receipt = self.folder / "source-binding.json"
@@ -144,6 +152,27 @@ class VerifyGtfsFeedProvenanceTest(unittest.TestCase):
             encoding="utf-8",
         )
         self.assert_rejected("duplicate JSON evidence key: routes.txt")
+
+    def test_missing_required_column_in_report_is_rejected(self):
+        report = json.loads(self.report.read_text(encoding="utf-8"))
+        report["stops.txt"]["header"].remove("stop_lat")
+        self.report.write_text(json.dumps(report), encoding="utf-8")
+        self.assert_rejected("invalid structural header evidence: stops.txt")
+
+    def test_invalid_header_shapes_in_report_are_rejected(self):
+        original = json.loads(self.report.read_text(encoding="utf-8"))
+        for bad_header in (
+            [],
+            ["stop_id", "stop_name", "stop_lat", "stop_lat", "stop_lon"],
+            ["stop_id", "stop_name", "stop_lat", ""],
+            ["stop_id", "stop_name", "stop_lat", 42],
+            ["stop_id", "stop_name", "stop_lat", ["stop_lon"]],
+        ):
+            with self.subTest(bad_header=bad_header):
+                report = json.loads(json.dumps(original))
+                report["stops.txt"]["header"] = bad_header
+                self.report.write_text(json.dumps(report), encoding="utf-8")
+                self.assert_rejected("invalid structural header evidence: stops.txt")
 
     def test_missing_archive_is_rejected_without_traceback(self):
         self.archive.unlink()
