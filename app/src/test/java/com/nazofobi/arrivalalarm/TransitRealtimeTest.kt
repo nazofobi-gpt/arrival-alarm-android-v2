@@ -28,8 +28,18 @@ class TransitRealtimeTest {
         assertNull(snapshot.updates.single().platform)
     }
 
+    @Test fun vbnProtoJsonMappingAcceptsLowerCamelCaseAndQuotedUint64Timestamp() {
+        val timestamp = 1_793_469_999L
+        val json = """{"header":{"gtfsRealtimeVersion":"2.0","incrementality":"FULL_DATASET","timestamp":"$timestamp"},"entity":[{"tripUpdate":{"trip":{"tripId":"434493724","scheduleRelationship":"SCHEDULED"},"stopTimeUpdate":[{"departure":{"delay":28},"stopId":"000009067975"}]}}]}"""
+        val snapshot = VbnJsonRealtimeSource(loader = { json }).fetch()
+        assertNotNull(snapshot)
+        assertEquals(timestamp, snapshot!!.fetchedAtEpochSeconds)
+        assertEquals("434493724", snapshot.updates.single().tripId)
+        assertEquals(28, snapshot.updates.single().delaySeconds)
+    }
+
     @Test fun malformedVbnHeaderTimestampDoesNotClaimFreshness() {
-        val invalid = listOf("\"2000000\"", "2000000.5", "2000000.0", "true", "null", "-1", "0")
+        val invalid = listOf("\"2000000.5\"", "\"2000000.0\"", "\"1e3\"", "\" 2000000\"", "\"2000000 \"", "true", "null", "-1", "0", "\"-1\"", "\"9223372036854775808\"", "\"\"")
         for (raw in invalid) {
             val json = """{"Header":{"Timestamp":$raw},"Entity":[]}"""
             assertNull(
