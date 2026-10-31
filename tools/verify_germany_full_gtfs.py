@@ -119,6 +119,9 @@ required_columns = {
     "calendar.txt": ("service_id", "monday", "tuesday", "wednesday", "thursday",
                      "friday", "saturday", "sunday", "start_date", "end_date"),
     "calendar_dates.txt": ("service_id", "date", "exception_type"),
+    # When supplied, GTFS metadata must carry its required identity fields.
+    "agency.txt": ("agency_name", "agency_url", "agency_timezone"),
+    "feed_info.txt": ("feed_publisher_name", "feed_publisher_url", "feed_lang"),
     # Optional GTFS files still require their core columns when present.
     "shapes.txt": ("shape_id", "shape_pt_lat", "shape_pt_lon", "shape_pt_sequence"),
     "frequencies.txt": ("trip_id", "start_time", "end_time", "headway_secs"),
