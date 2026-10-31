@@ -38,7 +38,7 @@ jobs:
         uses: gradle/actions/wrapper-validation@v4
 
       - name: Download Germany Full acceptance feed
-        if: github.head_ref == 'exec1/g175-real-feed-verify-20261004' || github.ref_name == 'exec1/g175-real-feed-verify-20261004' || github.head_ref == 'g168-search-main-reconcile-20261007' || github.ref_name == 'g168-search-main-reconcile-20261007'
+        if: github.head_ref == 'exec1/g175-real-feed-verify-20261004' || github.ref_name == 'exec1/g175-real-feed-verify-20261004' || github.head_ref == 'g168-search-main-reconcile-20261007' || github.ref_name == 'g168-search-main-reconcile-20261007' || github.head_ref == 'verify/g185-real-feed-20261031-current-chat' || github.ref_name == 'verify/g185-real-feed-20261031-current-chat'
         run: |
           curl -fL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 1200 https://download.gtfs.de/germany/free/latest.zip -o /tmp/germany-full.zip
           sha256sum /tmp/germany-full.zip | tee /tmp/germany-full.sha256
