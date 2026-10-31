@@ -903,7 +903,9 @@ fun ArrivalAlarmApp(
                     },
                     onRefreshReadiness = { refreshReadiness() },
                     onShareDiagnostics = {
-                        val report = SupportDiagnostics.render(
+                        // Sharing is strictly user-initiated; include only the bounded,
+                        // allowlisted local support bundle, never raw provider details.
+                        val report = RedactedSupportBundle.render(
                             state = readinessState,
                             nowEpochSeconds = System.currentTimeMillis() / 1_000L,
                         )
