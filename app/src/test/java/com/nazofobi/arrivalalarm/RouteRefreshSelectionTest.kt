@@ -36,7 +36,7 @@ class RouteRefreshSelectionTest {
             line = "RE updated",
             departure = "10:05",
             arrival = "11:07",
-            stops = old.stops.map { it.copy(name = "Updated " + it.name, platform = "2", arrival = "11:07") },
+            stops = old.stops.map { it.copy(name = "Updated " + it.name, platform = "2", arrival = "11:07", departure = "10:05") },
         )
         assertEquals(old.id, retainSelectedRouteAfterRefresh(old.id, listOf(old), listOf(update)))
     }
@@ -131,6 +131,23 @@ class RouteRefreshSelectionTest {
             listOf(old),
             listOf(old.copy(stops = old.stops.drop(1))),
         ))
+    }
+
+    @Test
+    fun changedPlannedStopTimesRequireReselection() {
+        val old = option()
+        val changedBoardingClock = old.copy(stops = old.stops.mapIndexed { index, stop ->
+            if (index == 0) stop.copy(plannedDeparture = "10:01") else stop
+        })
+        val changedIntermediateClock = old.copy(stops = old.stops.mapIndexed { index, stop ->
+            if (index == 1) stop.copy(plannedArrival = "10:35") else stop
+        })
+        val removedDestinationClock = old.copy(stops = old.stops.mapIndexed { index, stop ->
+            if (index == 2) stop.copy(plannedArrival = null) else stop
+        })
+        for (updated in listOf(changedBoardingClock, changedIntermediateClock, removedDestinationClock)) {
+            assertNull(retainSelectedRouteAfterRefresh(old.id, listOf(old), listOf(updated)))
+        }
     }
 
     @Test
