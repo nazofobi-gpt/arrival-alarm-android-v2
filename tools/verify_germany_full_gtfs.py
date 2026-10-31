@@ -91,6 +91,17 @@ def inspect(zf, member):
                             f"GTFS table {member} has invalid stop_sequence "
                             f"at CSV line {reader.line_num}"
                         )
+                    # A syntactically numeric value may still overflow the
+                    # signed 32-bit stop ordering field used by Android.
+                    # Compare decimal text to avoid Python's huge-int limit.
+                    significant = sequence.lstrip("0") or "0"
+                    if len(significant) > 10 or (
+                        len(significant) == 10 and significant > "2147483647"
+                    ):
+                        raise SystemExit(
+                            f"GTFS table {member} has out-of-range stop_sequence "
+                            f"at CSV line {reader.line_num}"
+                        )
                 rows += 1
             return {"rows": rows, "header": header}
     except zipfile.BadZipFile:
