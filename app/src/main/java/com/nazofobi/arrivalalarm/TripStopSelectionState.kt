@@ -145,7 +145,11 @@ internal object TripStopSelectionReducer {
         boarding: GtfsTripDetailStop,
     ): TripStopSelectionState {
         val boardingRef = ref(boarding)
-        if (state.detail.identity != detail.identity || state.boarding != boardingRef) {
+        if (
+            state.detail.identity != detail.identity ||
+            state.boarding != boardingRef ||
+            !samePhysicalLocation(state.detail, detail, boardingRef)
+        ) {
             return initial(detail, boarding)
         }
         val destinationRef = state.destination
@@ -154,6 +158,9 @@ internal object TripStopSelectionReducer {
             ?: return initial(detail, boarding).copy(
                 roleProblem = TripStopRoleProblem.DESTINATION_STOP_NOT_FOUND,
             )
+        if (!samePhysicalLocation(state.detail, detail, destinationRef)) {
+            return initial(detail, boarding)
+        }
         val alarm = if (state.alarmTarget == null) {
             destination
         } else {
@@ -161,6 +168,12 @@ internal object TripStopSelectionReducer {
                 ?: return initial(detail, boarding).copy(
                     roleProblem = TripStopRoleProblem.ALARM_STOP_NOT_FOUND,
                 )
+        }
+        if (
+            state.alarmTarget != null &&
+            !samePhysicalLocation(state.detail, detail, state.alarmTarget)
+        ) {
+            return initial(detail, boarding)
         }
         val resolvedBoarding = resolveStop(detail, boardingRef)
             ?: return initial(detail, boarding).copy(
@@ -194,6 +207,24 @@ internal object TripStopSelectionReducer {
     ): GtfsTripDetailStop? = detail.stops.singleOrNull {
         it.stopSequence == ref.sequence && it.stopId == ref.stopId
     }
+
+    /**
+     * A stable GTFS stop_id does not guarantee a stable physical stop location
+     * across feed revisions. If a selected role moves, the rider must confirm it again.
+     */
+    private fun samePhysicalLocation(
+        previous: GtfsTripDetail,
+        current: GtfsTripDetail,
+        ref: GtfsSelectedStopRef,
+    ): Boolean {
+        val previousStop = resolveStop(previous, ref) ?: return false
+        val currentStop = resolveStop(current, ref) ?: return false
+        return sameCoordinate(previousStop.latitude, currentStop.latitude) &&
+            sameCoordinate(previousStop.longitude, currentStop.longitude)
+    }
+
+    private fun sameCoordinate(previous: Double, current: Double): Boolean =
+        (previous.isNaN() && current.isNaN()) || previous == current
 
     private fun ref(stop: GtfsTripDetailStop) =
         GtfsSelectedStopRef(stop.stopSequence, stop.stopId)

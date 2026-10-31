@@ -174,6 +174,54 @@ class TripStopSelectionStateTest {
     }
 
     @Test
+    fun sameStopIdWithChangedCoordinatesRequiresFreshConsent() {
+        val selected = TripStopSelectionReducer.reduce(
+            TripStopSelectionReducer.reduce(
+                initial(),
+                TripStopSelectionAction.SelectDestination(13),
+            ),
+            TripStopSelectionAction.SelectAlarmTarget(7),
+        )
+
+        val movedDestination = detail.copy(
+            stops = detail.stops.map {
+                if (it.stopSequence == 13) it.copy(latitude = 52.70, longitude = 8.30) else it
+            },
+        )
+        val destinationReset = TripStopSelectionReducer.reduce(
+            selected,
+            TripStopSelectionAction.ReplaceTrip(movedDestination, movedDestination.stops.first()),
+        )
+        assertNull(destinationReset.destination)
+        assertNull(destinationReset.alarmTarget)
+        assertTrue(TripStopSelectionReducer.draft(destinationReset) is GtfsTripConsentDraft.Rejected)
+
+        val movedAlarmTarget = detail.copy(
+            stops = detail.stops.map {
+                if (it.stopSequence == 7) it.copy(latitude = 52.40, longitude = 8.20) else it
+            },
+        )
+        val alarmReset = TripStopSelectionReducer.reduce(
+            selected,
+            TripStopSelectionAction.ReplaceTrip(movedAlarmTarget, movedAlarmTarget.stops.first()),
+        )
+        assertNull(alarmReset.destination)
+        assertNull(alarmReset.alarmTarget)
+
+        val movedBoarding = detail.copy(
+            stops = detail.stops.map {
+                if (it.stopSequence == 2) it.copy(latitude = 52.10, longitude = 8.10) else it
+            },
+        )
+        val boardingReset = TripStopSelectionReducer.reduce(
+            selected,
+            TripStopSelectionAction.ReplaceTrip(movedBoarding, movedBoarding.stops.first()),
+        )
+        assertNull(boardingReset.destination)
+        assertNull(boardingReset.alarmTarget)
+    }
+
+    @Test
     fun changingBoardingRoleClearsDestinationAndAlarmOverride() {
         val selected = TripStopSelectionReducer.reduce(
             TripStopSelectionReducer.reduce(
