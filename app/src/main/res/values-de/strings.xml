@@ -282,4 +282,9 @@
     <string name="pin_line_at_stop">Linie an dieser Haltestelle anheften</string>
     <string name="unpin_line_at_stop">Linie hier lösen</string>
     <string name="pin_line_local_only">Für diese Haltestelle lokal gespeichert; keine Benachrichtigungen aktiviert.</string>
+<string name="map_accessible_coordinates_hint">Oder tippe Breiten- und Längengrad ein.</string>
+<string name="map_coordinate_latitude">Breitengrad</string>
+<string name="map_coordinate_longitude">Längengrad</string>
+<string name="map_coordinate_invalid">Bitte gib gültige Koordinaten ein.</string>
+<string name="map_coordinate_select">Punkt auf Karte setzen</string>
 </resources>

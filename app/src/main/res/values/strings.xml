@@ -290,4 +290,9 @@
     <string name="pin_line_at_stop">Bu durakta hattı sabitle</string>
     <string name="unpin_line_at_stop">Bu durakta sabitlemeyi kaldır</string>
     <string name="pin_line_local_only">Hat bu durakta yalnızca cihaza kaydedildi; bildirimler etkin değil.</string>
+<string name="map_accessible_coordinates_hint">Veya enlem ve boylamı elle girin.</string>
+<string name="map_coordinate_latitude">Enlem</string>
+<string name="map_coordinate_longitude">Boylam</string>
+<string name="map_coordinate_invalid">Geçerli koordinatlar girin.</string>
+<string name="map_coordinate_select">Harita noktasını seç</string>
 </resources>
