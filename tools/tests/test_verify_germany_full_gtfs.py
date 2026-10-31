@@ -386,6 +386,39 @@ class GtfsArchiveMemberTest(unittest.TestCase):
                     )
                     self.assertNotIn("Traceback", result.stderr)
 
+    def test_malformed_gtfs_stop_sequence_is_rejected_before_feed_size_gate(self):
+        cases = (b"-1", b"1.5", b"abc", "١".encode("utf-8"), b" 2", b"2 ")
+        for optimized in (False, True):
+            for sequence in cases:
+                with self.subTest(optimized=optimized, sequence=sequence):
+                    malformed = (
+                        b"trip_id,arrival_time,departure_time,stop_id,stop_sequence\\n"
+                        b"T,10:00:00,10:00:00,1," + sequence + b"\\n"
+                    ).replace(b"\\n", b"\n")
+                    result, _ = self.run_archive(
+                        REQUIRED, {"stop_times.txt": malformed}, optimized=optimized,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn(
+                        "GTFS table stop_times.txt has invalid stop_sequence at CSV line 2",
+                        result.stderr,
+                    )
+                    self.assertNotIn("Traceback", result.stderr)
+
+    def test_valid_zero_padded_gtfs_stop_sequence_reaches_size_gate(self):
+        for optimized in (False, True):
+            with self.subTest(optimized=optimized):
+                valid = (
+                    b"trip_id,arrival_time,departure_time,stop_id,stop_sequence\\n"
+                    b"T,10:00:00,10:00:00,1,0002\\n"
+                ).replace(b"\\n", b"\n")
+                result, _ = self.run_archive(
+                    REQUIRED, {"stop_times.txt": valid}, optimized=optimized,
+                )
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("stops.txt row count below minimum", result.stderr)
+                self.assertNotIn("invalid stop_sequence", result.stderr)
+
     def test_present_service_calendar_tables_require_gtfs_columns(self):
         cases = (
             ("calendar.txt", b"service_id,monday,tuesday,wednesday,thursday,friday,sunday,start_date,end_date\nS,1,1,1,1,1,1,20260101,20261231\n", "saturday"),
