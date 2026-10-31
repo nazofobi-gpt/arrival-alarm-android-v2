@@ -2,6 +2,7 @@
 import csv
 import io
 import json
+import math
 import sys
 import zipfile
 from pathlib import Path
@@ -70,6 +71,14 @@ def inspect(zf, member, table):
                 if table == "stop_times.txt" and "stop_sequence" in seen
                 else None
             )
+            # Numeric WGS84 coordinates must be finite and within geographic bounds.
+            # Blank fields are left for location_type-dependent GTFS validation:
+            # generic nodes and boarding areas may omit their coordinates.
+            coordinate_positions = (
+                [(field, header.index(field), limit) for field, limit in
+                 (("stop_lat", 90.0), ("stop_lon", 180.0)) if field in seen]
+                if table == "stops.txt" else []
+            )
             rows = 0
             for row in reader:
                 if any("\x00" in value for value in row):
@@ -87,6 +96,21 @@ def inspect(zf, member, table):
                             f"GTFS table {member} has blank required value {field} "
                             f"at CSV line {reader.line_num}"
                         )
+                for field, position, limit in coordinate_positions:
+                    raw_coordinate = row[position].strip()
+                    if raw_coordinate:
+                        try:
+                            coordinate = float(raw_coordinate)
+                        except ValueError:
+                            raise SystemExit(
+                                f"GTFS table {member} has invalid {field} "
+                                f"at CSV line {reader.line_num}"
+                            ) from None
+                        if not math.isfinite(coordinate) or not -limit <= coordinate <= limit:
+                            raise SystemExit(
+                                f"GTFS table {member} has invalid {field} "
+                                f"at CSV line {reader.line_num}"
+                            )
                 if sequence_position is not None:
                     sequence = row[sequence_position]
                     if not sequence.isascii() or not sequence.isdecimal():
