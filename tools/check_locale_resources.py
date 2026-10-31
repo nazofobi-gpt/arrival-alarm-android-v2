@@ -66,6 +66,22 @@ def placeholders(value: str) -> Counter[tuple[int, str]]:
                 width_and_precision = token_suffix[len(flags):-len(conversion)]
                 if not width_and_precision or not width_and_precision[0].isdigit():
                     raise ValueError(f"missing boolean/hash format width at offset {start}")
+        if conversion.lower() == "c":
+            # Java Formatter permits width/left alignment for characters, but
+            # rejects numeric flags and any precision for %c/%C. Matching
+            # translations can otherwise pass parity and fail at runtime.
+            if set(flags).difference("-<"):
+                raise ValueError(f"invalid character format flags at offset {start}")
+            token_suffix = match.group(0)[1:]
+            if match.group(1):
+                token_suffix = token_suffix[len(match.group(1)) + 1:]
+            width_and_precision = token_suffix[len(flags):-len(conversion)]
+            if "." in width_and_precision:
+                raise ValueError(f"invalid character format precision at offset {start}")
+            if "-" in flags and (
+                not width_and_precision or not width_and_precision[0].isdigit()
+            ):
+                raise ValueError(f"missing character format width at offset {start}")
         if conversion.lower() == "s":
             # Ordinary Android String arguments do not implement Formattable:
             # Java Formatter rejects # as well as numeric/sign/grouping flags.
