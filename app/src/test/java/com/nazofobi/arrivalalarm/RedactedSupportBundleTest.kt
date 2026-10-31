@@ -200,9 +200,9 @@ class RedactedSupportBundleTest {
             approved.replaceFirst("scope=capabilities_only", "scope=private"),
             approved.replaceFirst("location_permission=", "location_access="),
             approved.replaceFirst("location_permission=yes", "location_permission=yes=private-token"),
-            approved + "unreviewed_field=private-token\\n",
+            approved + "unreviewed_field=private-token\n",
             approved.replaceFirst(
-                "scope=capabilities_only\\n", "scope=capabilities_only\\nscope=private\\n",
+                "scope=capabilities_only\n", "scope=capabilities_only\nscope=private\n",
             ),
         )
         for ((index, candidate) in invalid.withIndex()) {
