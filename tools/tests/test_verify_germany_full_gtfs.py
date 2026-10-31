@@ -430,6 +430,8 @@ class GtfsArchiveMemberTest(unittest.TestCase):
             ("stop_lon", b"53.0", b"181"),
             ("stop_lon", b"53.0", b"-181"),
             ("stop_lon", b"53.0", b"1e999"),
+            ("stop_lat", b"1_0", b"8.0"),
+            ("stop_lon", b"53.0", "١".encode("utf-8")),
         )
         newline = bytes((10,))
         for optimized in (False, True):
