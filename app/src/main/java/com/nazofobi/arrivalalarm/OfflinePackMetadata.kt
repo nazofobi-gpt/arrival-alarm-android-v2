@@ -47,7 +47,7 @@ internal fun offlinePackMetadataText(
             DateUtils.MINUTE_IN_MILLIS,
         ).toString()
     } else {
-        context.getString(R.string.offline_pack_checked_unknown)
+        context.getString(R.string.offline_pack_updated_unknown)
     }
 
     return context.getString(R.string.offline_pack_metadata, size, version, checked)
