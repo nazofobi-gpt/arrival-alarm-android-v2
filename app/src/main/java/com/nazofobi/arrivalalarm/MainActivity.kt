@@ -1149,6 +1149,15 @@ fun ArrivalAlarmApp(
                         nearbyMessage = nearbyMessage,
                         recentSearches = recentSearches,
                         favoriteStopIds = favoriteStopIds,
+                        onToggleFavoriteStop = { stopId ->
+                            val updated = toggleFavoriteStopIds(favoriteStopIds, stopId)
+                            if (updated != favoriteStopIds) {
+                                transitExperiencePreferences.edit()
+                                    .putStringSet("favorite_stop_ids", updated)
+                                    .apply()
+                                favoriteStopIds = updated
+                            }
+                        },
                         onSelectOriginTarget = { selectingOrigin = true },
                         onSelectDestinationTarget = { selectingOrigin = false },
                         onQueryChange = {
