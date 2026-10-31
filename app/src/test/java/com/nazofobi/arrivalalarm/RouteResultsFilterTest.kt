@@ -320,4 +320,43 @@ class RouteResultsFilterTest {
         assertEquals(listOf(boundary), RouteResultsFilter().apply(listOf(boundary)))
     }
 
+
+    @Test
+    fun malformedIntermediateStopCoordinatesCannotBecomeSelectableRoutes() {
+        val invalidStops = listOf(
+            RouteStop(name = "latitude-only", latitude = 52.6),
+            RouteStop(name = "longitude-only", longitude = 8.2),
+            RouteStop(name = "nan-latitude", latitude = Double.NaN, longitude = 8.2),
+            RouteStop(name = "infinite-longitude", latitude = 52.6, longitude = Double.POSITIVE_INFINITY),
+            RouteStop(name = "latitude-out-of-range", latitude = 90.001, longitude = 8.2),
+            RouteStop(name = "longitude-out-of-range", latitude = 52.6, longitude = -180.001),
+        )
+        val candidates = invalidStops.mapIndexed { index, stop ->
+            option("invalid-stop-$index", 0).copy(stops = listOf(stop))
+        } + option("valid-route", 0)
+
+        assertEquals(
+            listOf("valid-route"),
+            RouteResultsFilter().apply(candidates).map { it.id },
+        )
+        assertEquals(
+            listOf("valid-route"),
+            RouteResultsFilter(directOnly = true).apply(candidates).map { it.id },
+        )
+        assertEquals(invalidStops.size + 1, candidates.size)
+    }
+
+    @Test
+    fun absentOrValidIntermediateCoordinatesRemainSelectable() {
+        val valid = option("known-and-unknown-stops", 0).copy(
+            stops = listOf(
+                RouteStop(name = "no-provider-coordinates"),
+                RouteStop(name = "west-south-boundary", latitude = -90.0, longitude = 180.0),
+                RouteStop(name = "east-north-boundary", latitude = 90.0, longitude = -180.0),
+            ),
+        )
+        assertEquals(listOf(valid), RouteResultsFilter().apply(listOf(valid)))
+        assertEquals(listOf(valid), RouteResultsFilter(directOnly = true).apply(listOf(valid)))
+    }
+
 }
