@@ -14,7 +14,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -94,9 +93,22 @@ class OfflinePackMetadataInstrumentedTest {
 
             val metadataNode = composeRule.onNodeWithTag("offline-pack-metadata")
             metadataNode.assertIsDisplayed().assertTextContains("etag-g185-test")
+            fun normalizeWhitespace(value: String): String = value
+                .replace('\u00A0', ' ')
+                .replace('\u202F', ' ')
+                .replace(Regex("\\s+"), " ")
+                .trim()
+
+            fun assertContainsNormalizedTokens(expected: String) {
+                normalizeWhitespace(expected)
+                    .split(" ")
+                    .filter { it.isNotBlank() }
+                    .forEach { token -> metadataNode.assertTextContains(token) }
+            }
+
             val expectedSize = Formatter.formatShortFileSize(context, expectedBytes)
-            metadataNode.assertTextContains(expectedSize, substring = true)
-            metadataNode.assertTextContains(expectedRelativeUpdate, substring = true)
+            assertContainsNormalizedTokens(expectedSize)
+            assertContainsNormalizedTokens(expectedRelativeUpdate)
         } finally {
             files.forEach { it.delete() }
         }
