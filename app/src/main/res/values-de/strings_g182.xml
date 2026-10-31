@@ -1,0 +1,37 @@
+<resources>
+    <string name="gtfs_trip_search_title">Fahrtdetails</string>
+    <string name="gtfs_trip_search_back">Zurück zur Suche</string>
+    <string name="gtfs_trip_search_source_version">Fahrplandaten: %1$s</string>
+    <string name="gtfs_trip_search_date_required">Wähle das Verkehrstagdatum, um diese Fahrt zu prüfen.</string>
+    <string name="gtfs_trip_search_choose_date">Verkehrstag auswählen</string>
+    <string name="gtfs_trip_search_change_date">Verkehrstag ändern</string>
+    <string name="gtfs_trip_search_service_date">Verkehrstag: %1$s</string>
+    <string name="gtfs_trip_search_no_alarm_start">Gespeichert werden nur die Fahrt und die Haltestellenauswahl. GPS-Tracking oder ein Alarm werden nicht gestartet.</string>
+    <string name="gtfs_trip_search_loading">Fahrt und Haltestellen werden geprüft…</string>
+    <string name="gtfs_trip_search_index_not_ready">Die Fahrplandaten sind noch nicht bereit. Versuche es später erneut.</string>
+    <string name="gtfs_trip_search_data_read_failed">Die Fahrtdaten konnten nicht gelesen werden. Bitte versuche es erneut.</string>
+    <string name="gtfs_trip_search_service_inactive">Diese Fahrt verkehrt am ausgewählten Verkehrstag nicht.</string>
+    <string name="gtfs_trip_search_frequency_unsupported">Für diese frequenzbasierte Fahrt ist keine bestätigte Abfahrtsinstanz verfügbar.</string>
+    <string name="gtfs_trip_search_unavailable">Die Fahrt konnte für diesen Verkehrstag nicht bestätigt werden.</string>
+    <string name="gtfs_trip_search_identity_missing">Das Suchergebnis enthält keine vollständige Fahrtidentität. Wähle eine andere Fahrt.</string>
+    <string name="gtfs_trip_search_identity_mismatch">Die Fahrtidentität oder Fahrplanversion hat sich geändert. Bitte suche erneut.</string>
+    <string name="gtfs_trip_search_catalog_changed">Die Fahrplandaten haben sich geändert. Bitte suche erneut.</string>
+    <string name="gtfs_trip_search_saved">Fahrt und Haltestellenauswahl gespeichert.</string>
+    <string name="gtfs_trip_search_save_failed">Die Auswahl konnte nicht gespeichert oder anhand des aktuellen Fahrplans bestätigt werden.</string>
+    <string name="gtfs_trip_search_ordered_stops">Haltestellenfolge der Fahrt</string>
+    <string name="gtfs_trip_search_role_boarding">Einstieg</string>
+    <string name="gtfs_trip_search_role_destination">Ziel</string>
+    <string name="gtfs_trip_search_role_alarm">Alarmziel</string>
+    <string name="gtfs_trip_search_stop_sequence">Haltestelle %1$d</string>
+    <string name="gtfs_trip_search_departure_time">Abfahrt %1$s</string>
+    <string name="gtfs_trip_search_arrival_time">Ankunft %1$s</string>
+    <string name="gtfs_trip_search_no_boarding_stops">Für diese Fahrt ist keine bestätigbare Einstiegshaltestelle verfügbar.</string>
+    <string name="gtfs_trip_search_boarding">Einstiegshaltestelle</string>
+    <string name="gtfs_trip_search_choose_boarding">Einstiegshaltestelle auswählen</string>
+    <string name="gtfs_trip_search_destination">Zielhaltestelle</string>
+    <string name="gtfs_trip_search_choose_destination">Zielhaltestelle auswählen</string>
+    <string name="gtfs_trip_search_alarm_target">Alarmzielhaltestelle</string>
+    <string name="gtfs_trip_search_choose_alarm_target">Alarmziel auswählen</string>
+    <string name="gtfs_trip_search_invalid_roles">Haltestellenreihenfolge oder Zeiten konnten nicht bestätigt werden. Prüfe deine Auswahl.</string>
+    <string name="gtfs_trip_search_confirm">Fahrt und Haltestellen speichern</string>
+</resources>
