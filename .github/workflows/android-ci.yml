@@ -64,6 +64,7 @@ jobs:
         run: |
           curl -fL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 600 https://download.gtfs.de/germany/free/latest.zip -o /tmp/germany-full.zip
           python3 tools/verify_germany_full_gtfs.py /tmp/germany-full.zip /tmp/g174-real-feed-report.json
+          python3 tools/gtfs_feed_provenance.py /tmp/germany-full.zip /tmp/g174-real-feed-report.json /tmp/g174-real-feed-provenance.json
 
       - name: Upload reports
         if: always()
@@ -74,6 +75,7 @@ jobs:
             app/build/reports/
             app/build/test-results/
             /tmp/g174-real-feed-report.json
+            /tmp/g174-real-feed-provenance.json
           if-no-files-found: ignore
           retention-days: 14
 
