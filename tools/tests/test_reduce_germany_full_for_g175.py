@@ -98,6 +98,66 @@ class ReducerMemberIdentityTest(unittest.TestCase):
         self.assertFalse(created_output)
 
 
+
+class ReducerCsvIntegrityTest(unittest.TestCase):
+    """Malformed GTFS rows must not produce credible real-feed fixtures."""
+
+    @classmethod
+    def setUpClass(cls):
+        import csv
+        import io
+        tree = ast.parse(SCRIPT.read_text(encoding="utf-8"))
+        fn = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "rows")
+        namespace = {"csv": csv, "io": io}
+        exec(compile(ast.Module(body=[fn], type_ignores=[]), str(SCRIPT), "exec"), namespace)
+        cls.iter_rows = staticmethod(namespace["rows"])
+
+    def parse_csv(self, content: bytes):
+        import io
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("stops.txt", content)
+        buffer.seek(0)
+        with zipfile.ZipFile(buffer) as archive:
+            return list(self.iter_rows(archive, "stops.txt"))
+
+    def test_valid_rows_and_empty_optional_field_are_preserved(self):
+        self.assertEqual(
+            [{"stop_id": "1", "stop_name": "Stop"}, {"stop_id": "2", "stop_name": ""}],
+            self.parse_csv(b"stop_id,stop_name\n1,Stop\n2,\n"),
+        )
+
+    def test_invalid_header_is_rejected(self):
+        invalid = (
+            b"", b"stop_id,stop_id\n1,2\n",
+            b"stop_id,\n1,2\n", b"stop_id,na\x00me\n1,Stop\n",
+        )
+        for content in invalid:
+            with self.subTest(content=content), self.assertRaises(SystemExit) as caught:
+                self.parse_csv(content)
+            self.assertIn("invalid GTFS CSV header", str(caught.exception))
+
+    def test_short_long_and_nul_rows_are_rejected(self):
+        invalid = (
+            b"stop_id,stop_name\n1\n",
+            b"stop_id,stop_name\n1,Stop,extra\n",
+            b"stop_id,stop_name\n1,St\x00op\n",
+        )
+        for content in invalid:
+            with self.subTest(content=content), self.assertRaises(SystemExit) as caught:
+                self.parse_csv(content)
+            self.assertIn("invalid GTFS CSV row", str(caught.exception))
+
+    def test_unclosed_quote_and_invalid_utf8_fail_closed(self):
+        for content, message in (
+            (b'stop_id,stop_name\n1,"unterminated\n', "syntax"),
+            (b"stop_id,stop_name\n1,\xff\n", "UTF-8"),
+        ):
+            with self.subTest(message=message), self.assertRaises(SystemExit) as caught:
+                self.parse_csv(content)
+            self.assertIn(message, str(caught.exception))
+
+
 class ReducerSourceZipOpenTest(unittest.TestCase):
     """Source ZIP failures are controlled, without traceback or partial output."""
 
