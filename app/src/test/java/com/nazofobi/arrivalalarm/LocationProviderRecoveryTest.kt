@@ -1,6 +1,8 @@
 package com.nazofobi.arrivalalarm
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LocationProviderRecoveryTest {
@@ -190,4 +192,11 @@ class LocationProviderRecoveryTest {
             ),
         )
     }
+    @Test fun queuedLocationCallbacksOnlyApplyToStillArmedJourneys() {
+        assertTrue(LocationProviderRecovery.acceptsLocationCallback(JourneyPhase.ARMED, arrivalHandled = false))
+        assertFalse(LocationProviderRecovery.acceptsLocationCallback(JourneyPhase.ARMED, arrivalHandled = true))
+        assertFalse(LocationProviderRecovery.acceptsLocationCallback(JourneyPhase.ARRIVED, arrivalHandled = false))
+        assertFalse(LocationProviderRecovery.acceptsLocationCallback(JourneyPhase.EMPTY, arrivalHandled = false))
+    }
+
 }
