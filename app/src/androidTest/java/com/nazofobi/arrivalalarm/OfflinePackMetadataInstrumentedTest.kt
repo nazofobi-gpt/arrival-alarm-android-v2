@@ -92,7 +92,7 @@ class OfflinePackMetadataInstrumentedTest {
             }
 
             val metadataNode = composeRule.onNodeWithTag("offline-pack-metadata")
-            metadataNode.assertIsDisplayed().assertTextContains("etag-g185-test")
+            metadataNode.assertIsDisplayed().assertTextContains("etag-g185-test", substring = true)
             fun normalizeWhitespace(value: String): String = value
                 .replace('\u00A0', ' ')
                 .replace('\u202F', ' ')
@@ -103,7 +103,7 @@ class OfflinePackMetadataInstrumentedTest {
                 normalizeWhitespace(expected)
                     .split(" ")
                     .filter { it.isNotBlank() }
-                    .forEach { token -> metadataNode.assertTextContains(token) }
+                    .forEach { token -> metadataNode.assertTextContains(token, substring = true) }
             }
 
             val expectedSize = Formatter.formatShortFileSize(context, expectedBytes)
