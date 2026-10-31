@@ -6,11 +6,14 @@ trip, route and service rows for four direct routing scenarios plus enough real
 stops to exercise the production nationwide-index threshold without pushing the
 ~300 MiB source archive into an emulator.
 """
+import atexit
 import csv
 import io
 import json
 import math
+import os
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 from collections import defaultdict
@@ -163,6 +166,12 @@ for left_name, left, right_name, right in (
 ):
     if paths_alias(left, right):
         raise SystemExit(f"{left_name} and {right_name} must be different files")
+
+# Fail before overwriting a known-good fixture if either output is invalid.
+for label, filename in (("OUTPUT", OUTPUT), ("REPORT", REPORT)):
+    destination = Path(filename)
+    if destination.is_dir() or not destination.parent.is_dir():
+        raise SystemExit(f"{label} must be a file in an existing directory")
 
 
 target_day = next_weekday()
@@ -389,7 +398,11 @@ with source_archive as source:
             if row.get("service_id") in service_ids:
                 date_rows.append(row)
 
-    with zipfile.ZipFile(OUTPUT, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as target:
+    # Stage ZIP contents; an unsuccessful export must not truncate the old fixture.
+    fd, staged_output = tempfile.mkstemp(prefix=".g175-fixture-", suffix=".zip", dir=Path(OUTPUT).parent)
+    os.close(fd)
+    atexit.register(lambda: Path(staged_output).unlink(missing_ok=True))
+    with zipfile.ZipFile(staged_output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as target:
         write_csv(target, "stops.txt", stop_fields, kept_stops.values())
         write_csv(target, "routes.txt", route_fields, route_rows)
         write_csv(target, "trips.txt", trip_fields, selected_trip_rows)
@@ -418,9 +431,9 @@ with source_archive as source:
 report = {
     "taskId": "G-175-REAL-FEED-VERIFY-001",
     "source": SOURCE,
-    "sourceBytes": __import__("os").path.getsize(SOURCE),
+    "sourceBytes": os.path.getsize(SOURCE),
     "fixture": OUTPUT,
-    "fixtureBytes": __import__("os").path.getsize(OUTPUT),
+    "fixtureBytes": os.path.getsize(staged_output),
     "serviceDate": target_day.isoformat(),
     "selectedTrips": selected,
     "acceptanceCases": acceptance_cases,
@@ -428,6 +441,11 @@ report = {
     "selectedStopCount": len(kept_stops),
     "providerMode": "OFF_LOCAL_STATIC_ONLY",
 }
-with open(REPORT, "w", encoding="utf-8") as output:
+fd, staged_report = tempfile.mkstemp(prefix=".g175-report-", suffix=".json", dir=Path(REPORT).parent)
+os.close(fd)
+atexit.register(lambda: Path(staged_report).unlink(missing_ok=True))
+with open(staged_report, "w", encoding="utf-8") as output:
     json.dump(report, output, ensure_ascii=False, indent=2)
+os.replace(staged_output, OUTPUT)
+os.replace(staged_report, REPORT)
 print(json.dumps(report, ensure_ascii=False))
