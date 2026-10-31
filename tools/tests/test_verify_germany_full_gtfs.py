@@ -817,6 +817,22 @@ class GtfsArchiveMemberTest(unittest.TestCase):
                     self.assertFalse(report.exists())
 
 
+    def test_invalid_cli_argument_counts_fail_closed_in_normal_and_optimized_python(self):
+        # Missing archive paths and extra arguments must never be silently ignored.
+        for optimized in (False, True):
+            for args in ((), ("missing.zip", "report.json", "unexpected")):
+                with self.subTest(optimized=optimized, args=args):
+                    result = subprocess.run(
+                        [sys.executable, *(["-O"] if optimized else []), str(SCRIPT), *args],
+                        capture_output=True, text=True, timeout=10, check=False,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn(
+                        "usage: verify_germany_full_gtfs.py GTFS_ZIP [REPORT_JSON]",
+                        result.stderr,
+                    )
+                    self.assertNotIn("Traceback", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
