@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      verify_germany_full:
+        description: "Run real Germany Full GTFS preflight (large download)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -51,7 +56,11 @@ jobs:
         run: ./gradlew --no-daemon lint testDebugUnitTest assembleDebug
 
       - name: G-174 real Germany Full feed acceptance
-        if: github.head_ref == 'exec2/g174-full-gtfs-schema' || github.ref_name == 'exec2/g174-full-gtfs-schema'
+        if: >-
+          github.head_ref == 'exec2/g174-full-gtfs-schema' ||
+          github.ref_name == 'exec2/g174-full-gtfs-schema' ||
+          github.head_ref == 'verify/g185-real-feed-20261031-chat' ||
+          (github.event_name == 'workflow_dispatch' && inputs.verify_germany_full)
         run: |
           curl -fL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 600 https://download.gtfs.de/germany/free/latest.zip -o /tmp/germany-full.zip
           python3 tools/verify_germany_full_gtfs.py /tmp/germany-full.zip /tmp/g174-real-feed-report.json
@@ -64,6 +73,7 @@ jobs:
           path: |
             app/build/reports/
             app/build/test-results/
+            /tmp/g174-real-feed-report.json
           if-no-files-found: ignore
           retention-days: 14
 
