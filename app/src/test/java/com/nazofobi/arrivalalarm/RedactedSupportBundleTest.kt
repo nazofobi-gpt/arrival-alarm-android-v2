@@ -150,4 +150,38 @@ class RedactedSupportBundleTest {
         assertFalse(report.contains(privateDetail))
         assertFalse(report.contains("private-token"))
     }
+
+    @Test fun providerProjectionRejectsMalformedOrExpandedSerializerOutput() {
+        val approved = listOf(
+            "schema=VARIS_PROVIDER_PROBE_V1",
+            "scope=provider_health_only",
+            "provider_role=realtime",
+            "provider_state=ready",
+            "latency_bucket=under_250ms",
+        )
+        fun project(lines: List<String>): Pair<String, String> =
+            RedactedSupportBundle.reviewedProviderFields(
+                lines.joinToString("\n", postfix = "\n"), "realtime",
+            )
+        val fallback = "not_measured" to "not_measured"
+        assertEquals("ready" to "under_250ms", project(approved))
+        assertEquals(fallback, project(approved + "endpoint=private-token"))
+        assertEquals(fallback, project(approved + "provider_state=ready"))
+        assertEquals(fallback, project(approved.reversed()))
+        assertEquals(fallback, project(approved.map {
+            if (it == "provider_state=ready") "provider_state=private-token" else it
+        }))
+        assertEquals(fallback, project(approved.map {
+            if (it == "latency_bucket=under_250ms") "latency_bucket=52.123,8.456" else it
+        }))
+        assertEquals(fallback, project(approved.map {
+            if (it == "provider_role=realtime") "provider_role=enrichment" else it
+        }))
+        assertEquals(fallback, project(approved.map {
+            if (it == "scope=provider_health_only") "scope=private" else it
+        }))
+        assertEquals(fallback, project(approved.map {
+            if (it == "provider_state=ready") "provider_state=ready=private" else it
+        }))
+    }
 }
