@@ -67,6 +67,9 @@ class NationwideTransitSearchInstrumentedTest {
             tripResults.any {
                 it.kind == TransitLocationKind.TRIP &&
                     it.tripId == "trip-1" &&
+                    it.routeId == "route-1" &&
+                    it.serviceId == "service-1" &&
+                    it.directionId == 0 &&
                     it.label.contains("Known Good Bahnhof")
             }
         )
@@ -131,7 +134,7 @@ class NationwideTransitSearchInstrumentedTest {
                 append(extraStops)
             })
             put(zip, "routes.txt", "route_id,route_short_name,route_long_name,route_type\nroute-1,R1,Fixture Route,3\n")
-            put(zip, "trips.txt", "route_id,service_id,trip_id,trip_headsign\nroute-1,service-1,trip-1,Known Good Bahnhof\n")
+            put(zip, "trips.txt", "route_id,service_id,trip_id,trip_headsign,direction_id\nroute-1,service-1,trip-1,Known Good Bahnhof,0\n")
             put(zip, "stop_times.txt", "trip_id,arrival_time,departure_time,stop_id,stop_sequence\ntrip-1,08:00:00,08:00:00,known-good,1\ntrip-1,08:05:00,08:05:00,fixture-1,2\n")
             put(zip, "calendar.txt", "service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\nservice-1,1,1,1,1,1,1,1,20260101,20261231\n")
         }
