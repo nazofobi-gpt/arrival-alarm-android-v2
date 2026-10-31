@@ -61,10 +61,8 @@ internal fun GtfsTripSearchConsentPanel(
     val detail = (inspection as? GtfsTripDetailResult.Available)?.detail
     val identityMatches = selection != null && detail?.identity == selection.identity
     val validCoordinate: (GtfsTripDetailStop) -> Boolean = { stop ->
-        val lat = stop.latitude
-        val lon = stop.longitude
-        lat != null && lon != null && lat.isFinite() && lon.isFinite() &&
-            lat in -90.0..90.0 && lon in -180.0..180.0
+        stop.latitude.isFinite() && stop.longitude.isFinite() &&
+            stop.latitude in -90.0..90.0 && stop.longitude in -180.0..180.0
     }
     val boardingOptions = detail?.stops.orEmpty().filter { stop ->
         (stop.pickupType == null || stop.pickupType == 0) &&
@@ -253,7 +251,7 @@ internal fun GtfsTripSearchConsentPanel(
                                 stringResource(
                                     R.string.gtfs_trip_search_stop_sequence,
                                     stop.stopSequence,
-                                ) + " • " + stop.stopName,
+                                ) + " • " + stop.name,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                             val time = listOfNotNull(
