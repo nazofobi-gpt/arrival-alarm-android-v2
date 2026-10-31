@@ -75,3 +75,41 @@ class GtfsTripSearchSelectionTest {
         directionId = 0,
     )
 }
+
+class TransitLocationResultMergeTest {
+    @Test
+    fun sameDisplayLabelDoesNotCollapseDifferentTrips() {
+        val merged = mergeTransitLocationResults(
+            local = listOf(tripResult("trip-1"), tripResult("trip-2")),
+            live = emptyList(),
+            limit = 10,
+        )
+        assertEquals(listOf("trip-1", "trip-2"), merged.mapNotNull { it.tripId })
+    }
+
+    @Test
+    fun repeatedStableTripKeyIsCollapsed() {
+        val first = tripResult("trip-1")
+        val duplicate = first.copy(label = "A refreshed display label")
+        val merged = mergeTransitLocationResults(
+            local = listOf(first),
+            live = listOf(duplicate),
+            limit = 10,
+        )
+        assertEquals(1, merged.size)
+        assertEquals("trip-1", merged.single().tripId)
+    }
+
+    private fun tripResult(tripId: String) = TransitLocationResult(
+        key = "trip:$tripId",
+        kind = TransitLocationKind.TRIP,
+        label = "RE 9 → Achim",
+        latitude = 0.0,
+        longitude = 0.0,
+        routeId = "route-1",
+        tripId = tripId,
+        autocompleteText = "Achim",
+        serviceId = "service-1",
+        directionId = 0,
+    )
+}
