@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import android.Manifest
+import android.app.DatePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -9,6 +10,7 @@ import java.text.DateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -232,6 +234,14 @@ fun ArrivalAlarmApp(
     // A departure preview has no side effects. Only a separate, explicit user
     // confirmation may write the service-day/stop-role snapshot; it never arms GPS.
     val gtfsConsentGate = remember { LatestRequestGate() }
+    val tripSearchGate = remember { LatestRequestGate() }
+    var tripSearchTemplate by remember { mutableStateOf<GtfsTripSearchIdentityTemplate?>(null) }
+    var tripSearchSelection by remember { mutableStateOf<GtfsTripSearchSelection?>(null) }
+    var tripSearchInspection by remember { mutableStateOf<GtfsTripDetailResult?>(null) }
+    var tripSearchBusy by remember { mutableStateOf(false) }
+    var tripSearchStatus by remember { mutableStateOf<String?>(null) }
+    var tripSearchConfirmed by remember { mutableStateOf<GtfsSelectionRestore.Verified?>(null) }
+    var tripSearchCompletionRevision by remember { mutableStateOf(0L) }
     var gtfsPreview by remember { mutableStateOf<GtfsDepartureInspection.Ready?>(null) }
     var gtfsConfirmed by remember { mutableStateOf<GtfsSelectionRestore.Verified?>(null) }
     var gtfsConsentBusy by remember { mutableStateOf(false) }
@@ -998,103 +1008,251 @@ fun ArrivalAlarmApp(
                     )
                 }
 
-                if (activeScreen == ArrivalAppScreen.SEARCH) {
-                HomeSearchPanel(
-                    selectingOrigin = selectingOrigin,
-                    query = query,
-                    searchBusy = searchBusy,
-                    searchResults = searchResults,
-                    searchSource = searchSource,
-                    searchMessage = searchMessage,
-                    locationMessage = locationMessage,
-                    origin = origin,
-                    destination = destination,
-                    mapMessage = mapMessage,
-                    nearby = nearby,
-                    nearbySource = nearbySource,
-                    nearbyMessage = nearbyMessage,
-                    recentSearches = recentSearches,
-                    favoriteStopIds = favoriteStopIds,
-                    onSelectOriginTarget = { selectingOrigin = true },
-                    onSelectDestinationTarget = { selectingOrigin = false },
-                    onQueryChange = {
-                        query = it
-                        searchRequestId += 1
-                    },
-                    onSearch = { runSearch(recordRecent = true) },
-                    onSearchResultSelected = { result ->
-                        if (
-                            result.kind == TransitLocationKind.LINE ||
-                            result.kind == TransitLocationKind.TRIP
-                        ) {
-                            val completion = result.autocompleteText?.trim().orEmpty()
-                            if (completion.length >= 2) {
-                                query = completion
-                                searchRequestId += 1
-                                runSearch(completion, recordRecent = true)
-                            }
-                        } else if (selectingOrigin) {
-                            setOrigin(result.point)
-                        } else if (result.stop != null) {
-                            setDestination(result.stop)
-                        } else {
-                            setDestinationPoint(result.point)
-                        }
-                    },
-                    onRecentSearchSelected = { recent ->
-                        query = recent
-                        runSearch(recent, recordRecent = true)
-                    },
-                    onClearRecentSearches = {
-                        recentSearches = emptyList()
-                        searchRecentsPreferences.edit().remove("queries").apply()
-                    },
-                    onUseCurrentLocation = {
-                        if (currentLocation.hasPermission()) {
-                            useCurrentLocation()
-                        } else {
-                            locationPermissionLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION,
-                                )
-                            )
-                        }
-                    },
-                    onMapStopSelected = { stop ->
-                        if (selectingOrigin) {
-                            setOrigin(MapPoint(stop.latitude, stop.longitude, stop.name))
-                        } else {
-                            setDestination(stop)
-                        }
-                    },
-                    onMapPointSelected = { point ->
-                        if (selectingOrigin) {
-                            setOrigin(point)
-                        } else {
-                            setDestinationPoint(point)
-                        }
-                    },
-                    onMapError = {
-                        mapMessage = context.getString(R.string.map_load_failed)
-                    },
-                    onNearbyStopSelected = { candidate ->
-                        val point = MapPoint(
-                            candidate.stop.latitude,
-                            candidate.stop.longitude,
-                            candidate.stop.name,
-                        )
-                        if (selectingOrigin) {
-                            setOrigin(point)
-                        } else {
-                            setDestination(candidate.stop)
-                        }
-                    },
-                    mode = HomeSearchMode.SEARCH,
-                )
+                fun tripSearchFailureMessage(reason: GtfsTripDetailFailure): String = when (reason) {
+                    GtfsTripDetailFailure.INDEX_NOT_READY ->
+                        context.getString(R.string.gtfs_trip_search_index_not_ready)
+                    GtfsTripDetailFailure.SESSION_CLOSED,
+                    GtfsTripDetailFailure.DATA_READ_FAILED ->
+                        context.getString(R.string.gtfs_trip_search_data_read_failed)
+                    GtfsTripDetailFailure.SERVICE_INACTIVE ->
+                        context.getString(R.string.gtfs_trip_search_service_inactive)
+                    GtfsTripDetailFailure.FREQUENCY_INSTANCE_UNSUPPORTED ->
+                        context.getString(R.string.gtfs_trip_search_frequency_unsupported)
+                    else -> context.getString(R.string.gtfs_trip_search_unavailable)
                 }
 
-                if (
+                fun chooseTripServiceDate() {
+                    val template = tripSearchTemplate ?: return
+                    val currentVersion = (dataState as? NationwideDataState.Ready)?.sourceVersion
+                    if (currentVersion != template.sourceVersion) {
+                        tripSearchGate.invalidate()
+                        tripSearchStatus = context.getString(R.string.gtfs_trip_search_catalog_changed)
+                        tripSearchSelection = null
+                        tripSearchInspection = null
+                        tripSearchConfirmed = null
+                        tripSearchBusy = false
+                        return
+                    }
+                    val priorDate = tripSearchSelection?.identity?.serviceDate
+                    val calendar = Calendar.getInstance(TimeZone.getTimeZone("Europe/Berlin")).apply {
+                        if (priorDate != null) set(priorDate.year, priorDate.month - 1, priorDate.day)
+                    }
+                    DatePickerDialog(
+                        context,
+                        { _, year, month, day ->
+                            val currentTemplate = tripSearchTemplate ?: return@DatePickerDialog
+                            val versionAtSelection = (dataState as? NationwideDataState.Ready)?.sourceVersion
+                            if (versionAtSelection != currentTemplate.sourceVersion) {
+                                tripSearchStatus = context.getString(R.string.gtfs_trip_search_catalog_changed)
+                                tripSearchSelection = null
+                                tripSearchInspection = null
+                                tripSearchConfirmed = null
+                                tripSearchBusy = false
+                                return@DatePickerDialog
+                            }
+                            val selection = currentTemplate.forServiceDate(GtfsServiceDate(year, month + 1, day))
+                            val token = tripSearchGate.begin()
+                            tripSearchSelection = selection
+                            tripSearchInspection = null
+                            tripSearchConfirmed = null
+                            tripSearchBusy = true
+                            tripSearchStatus = context.getString(R.string.gtfs_trip_search_loading)
+                            coroutineScope.launch {
+                                val result = selectedGtfsSession.inspect(selection.identity)
+                                tripSearchGate.commitIfCurrent(token) {
+                                    tripSearchBusy = false
+                                    tripSearchInspection = result
+                                    tripSearchStatus = when (result) {
+                                        is GtfsTripDetailResult.Available -> null
+                                        is GtfsTripDetailResult.Unavailable -> tripSearchFailureMessage(result.reason)
+                                    }
+                                }
+                            }
+                        },
+                        calendar.get(Calendar.YEAR),
+                        calendar.get(Calendar.MONTH),
+                        calendar.get(Calendar.DAY_OF_MONTH),
+                    ).show()
+                }
+
+                fun confirmTripSearchSelection(selected: GtfsSelectedTrip) {
+                    val selection = tripSearchSelection
+                    val currentVersion = (dataState as? NationwideDataState.Ready)?.sourceVersion
+                    if (selection == null || selection.identity != selected.identity ||
+                        currentVersion != selection.sourceVersion
+                    ) {
+                        tripSearchStatus = context.getString(R.string.gtfs_trip_search_identity_mismatch)
+                        return
+                    }
+                    val token = tripSearchGate.begin()
+                    tripSearchBusy = true
+                    coroutineScope.launch {
+                        val saved = selectedGtfsSession.confirmIfCurrent(selected, tripSearchGate, token)
+                        val restored = if (saved) selectedGtfsSession.restore() else null
+                        tripSearchGate.commitIfCurrent(token) {
+                            tripSearchBusy = false
+                            tripSearchCompletionRevision += 1L
+                            if (restored is GtfsSelectionRestore.Verified &&
+                                restored.selection == selected &&
+                                restored.detail.identity == selection.identity
+                            ) {
+                                tripSearchConfirmed = restored
+                                tripSearchStatus = context.getString(R.string.gtfs_trip_search_saved)
+                            } else {
+                                tripSearchConfirmed = null
+                                tripSearchStatus = context.getString(R.string.gtfs_trip_search_save_failed)
+                            }
+                        }
+                    }
+                }
+
+                if (activeScreen == ArrivalAppScreen.SEARCH) {
+                    val selectedTemplate = tripSearchTemplate
+                    if (selectedTemplate != null) {
+                        GtfsTripSearchConsentPanel(
+                            template = selectedTemplate,
+                            selection = tripSearchSelection,
+                            inspection = tripSearchInspection,
+                            confirmed = tripSearchConfirmed,
+                            busy = tripSearchBusy,
+                            statusMessage = tripSearchStatus,
+                            completionRevision = tripSearchCompletionRevision,
+                            onChooseServiceDate = { chooseTripServiceDate() },
+                            onChangeServiceDate = { chooseTripServiceDate() },
+                            onConfirm = { selected -> confirmTripSearchSelection(selected) },
+                            onDismiss = {
+                                tripSearchGate.invalidate()
+                                tripSearchTemplate = null
+                                tripSearchSelection = null
+                                tripSearchInspection = null
+                                tripSearchConfirmed = null
+                                tripSearchBusy = false
+                                tripSearchStatus = null
+                                tripSearchCompletionRevision += 1L
+                            },
+                        )
+                    } else {
+                    HomeSearchPanel(
+                        selectingOrigin = selectingOrigin,
+                        query = query,
+                        searchBusy = searchBusy,
+                        searchResults = searchResults,
+                        searchSource = searchSource,
+                        searchMessage = searchMessage,
+                        locationMessage = locationMessage,
+                        origin = origin,
+                        destination = destination,
+                        mapMessage = mapMessage,
+                        nearby = nearby,
+                        nearbySource = nearbySource,
+                        nearbyMessage = nearbyMessage,
+                        recentSearches = recentSearches,
+                        favoriteStopIds = favoriteStopIds,
+                        onSelectOriginTarget = { selectingOrigin = true },
+                        onSelectDestinationTarget = { selectingOrigin = false },
+                        onQueryChange = {
+                            query = it
+                            searchRequestId += 1
+                        },
+                        onSearch = { runSearch(recordRecent = true) },
+                        onSearchResultSelected = { result ->
+                            when (result.kind) {
+                                TransitLocationKind.LINE -> {
+                                    val completion = result.autocompleteText?.trim().orEmpty()
+                                    if (completion.length >= 2) {
+                                        query = completion
+                                        searchRequestId += 1
+                                        runSearch(completion, recordRecent = true)
+                                    }
+                                }
+                                TransitLocationKind.TRIP -> {
+                                    val sourceVersion = (dataState as? NationwideDataState.Ready)?.sourceVersion
+                                    val template = sourceVersion?.let {
+                                        GtfsTripSearchIdentityTemplate.from(result, it)
+                                    }
+                                    if (template == null) {
+                                        searchMessage = context.getString(
+                                            R.string.gtfs_trip_search_identity_missing,
+                                        )
+                                    } else {
+                                        searchMessage = null
+                                        tripSearchGate.invalidate()
+                                        tripSearchTemplate = template
+                                        tripSearchSelection = null
+                                        tripSearchInspection = null
+                                        tripSearchConfirmed = null
+                                        tripSearchBusy = false
+                                        tripSearchStatus = context.getString(
+                                            R.string.gtfs_trip_search_choose_date,
+                                        )
+                                        tripSearchCompletionRevision += 1L
+                                    }
+                                }
+                                else -> {
+                                    if (selectingOrigin) {
+                                        setOrigin(result.point)
+                                    } else if (result.stop != null) {
+                                        setDestination(result.stop)
+                                    } else {
+                                        setDestinationPoint(result.point)
+                                    }
+                                }
+                            }
+                        },
+                        onRecentSearchSelected = { recent ->
+                            query = recent
+                            runSearch(recent, recordRecent = true)
+                        },
+                        onClearRecentSearches = {
+                            recentSearches = emptyList()
+                            searchRecentsPreferences.edit().remove("queries").apply()
+                        },
+                        onUseCurrentLocation = {
+                            if (currentLocation.hasPermission()) {
+                                useCurrentLocation()
+                            } else {
+                                locationPermissionLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                                    )
+                                )
+                            }
+                        },
+                        onMapStopSelected = { stop ->
+                            if (selectingOrigin) {
+                                setOrigin(MapPoint(stop.latitude, stop.longitude, stop.name))
+                            } else {
+                                setDestination(stop)
+                            }
+                        },
+                        onMapPointSelected = { point ->
+                            if (selectingOrigin) {
+                                setOrigin(point)
+                            } else {
+                                setDestinationPoint(point)
+                            }
+                        },
+                        onMapError = {
+                            mapMessage = context.getString(R.string.map_load_failed)
+                        },
+                        onNearbyStopSelected = { candidate ->
+                            val point = MapPoint(
+                                candidate.stop.latitude,
+                                candidate.stop.longitude,
+                                candidate.stop.name,
+                            )
+                            if (selectingOrigin) {
+                                setOrigin(point)
+                            } else {
+                                setDestination(candidate.stop)
+                            }
+                        },
+                        mode = HomeSearchMode.SEARCH,
+                    )
+                    }
+                }
+
                     activeScreen == ArrivalAppScreen.ROUTES ||
                     activeScreen == ArrivalAppScreen.JOURNEY ||
                     activeScreen == ArrivalAppScreen.LIVE
