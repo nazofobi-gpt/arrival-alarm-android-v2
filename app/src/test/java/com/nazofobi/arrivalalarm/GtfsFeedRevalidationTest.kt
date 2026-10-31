@@ -73,6 +73,28 @@ class GtfsFeedRevalidationTest {
     }
 
     @Test
+    fun nonLatin1ValidatorsAreNotReplayedAsInvalidHttpFields() {
+        val safeEtag = "\"germany-feed-42\""
+        val safeDate = "Sun, 11 Oct 2026 12:00:00 GMT"
+        for (unsafe in listOf("\"bad\\u2028line\"", "\"euro\\u20ac\"", "\"train\\ud83d\\ude86\"")) {
+            assertEquals(
+                mapOf("If-Modified-Since" to safeDate),
+                gtfsConditionalHeaders(true, true, unsafe, safeDate),
+            )
+            assertEquals(
+                mapOf("If-None-Match" to safeEtag),
+                gtfsConditionalHeaders(true, true, safeEtag, unsafe),
+            )
+            assertTrue(gtfsConditionalHeaders(true, true, unsafe, unsafe).isEmpty())
+        }
+        // RFC-compatible one-byte obs-text remains eligible for provider ETags.
+        assertEquals(
+            mapOf("If-None-Match" to "\"München\""),
+            gtfsConditionalHeaders(true, true, "\"München\"", null),
+        )
+    }
+
+    @Test
     fun lastModifiedOnlyFeedCanRevalidateWithoutEtag() {
         val headers = gtfsConditionalHeaders(
             ready = true,
