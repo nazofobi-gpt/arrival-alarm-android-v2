@@ -119,4 +119,154 @@ class SavedRoutePresetsTest {
         assertTrue(decoded.presets.isEmpty())
         assertTrue(decoded.isSourceSafeToReplace)
     }
+    private class MemorySavedRoutePresetStringStorage(
+        var value: String? = null,
+        var failRead: Boolean = false,
+        var failWrite: Boolean = false,
+    ) : SavedRoutePresetStringStorage {
+        var writeCount: Int = 0
+        var lastKey: String? = null
+
+        override fun read(key: String): String? {
+            if (failRead) error("read failed")
+            lastKey = key
+            return value
+        }
+
+        override fun write(key: String, value: String) {
+            if (failWrite) error("write failed")
+            lastKey = key
+            this.value = value
+            writeCount += 1
+        }
+    }
+
+    @Test
+    fun storePersistsAndLoadsValidPresetUsingVersionedKey() {
+        val storage = MemorySavedRoutePresetStringStorage()
+        val store = SavedRoutePresetsStore(storage)
+        val expected = preset()
+
+        assertEquals(
+            SavedRoutePresetStoreResult.Success(listOf(expected)),
+            store.save(expected),
+        )
+        assertEquals(SavedRoutePresetsStore.PREFERENCE_KEY, storage.lastKey)
+        assertEquals(listOf(expected), store.load().presets)
+        assertTrue(store.load().isSourceSafeToReplace)
+        assertEquals(1, storage.writeCount)
+    }
+
+    @Test
+    fun savingSameEndpointsUpdatesExistingPresetWithoutDuplicatingIt() {
+        val storage = MemorySavedRoutePresetStringStorage()
+        val store = SavedRoutePresetsStore(storage)
+        val original = preset()
+        val updated = original.copy(
+            id = "replacement-id",
+            name = "Updated home to work",
+            savedAtEpochMillis = original.savedAtEpochMillis + 60_000L,
+        )
+
+        assertTrue(store.save(original) is SavedRoutePresetStoreResult.Success)
+        val result = store.save(updated) as SavedRoutePresetStoreResult.Success
+
+        assertEquals(1, result.presets.size)
+        assertEquals(original.id, result.presets.single().id)
+        assertEquals(updated.name, result.presets.single().name)
+        assertEquals(updated.savedAtEpochMillis, result.presets.single().savedAtEpochMillis)
+        assertEquals(2, storage.writeCount)
+    }
+
+    @Test
+    fun storeRejectsThirteenthDistinctPresetWithoutEvictingExistingRoutes() {
+        val twelve = (0 until SavedRoutePresetsCodec.MAX_PRESETS).map { index ->
+            preset(
+                id = "route-$index",
+                name = "Route $index",
+            ).copy(
+                originLatitude = 50.0 + index * 0.01,
+                destinationLatitude = 53.0 + index * 0.01,
+            )
+        }
+        val encoded = SavedRoutePresetsCodec.encode(twelve)!!
+        val storage = MemorySavedRoutePresetStringStorage(value = encoded)
+        val store = SavedRoutePresetsStore(storage)
+        val extra = preset(id = "route-new", name = "New route").copy(
+            originLatitude = 49.0,
+            destinationLatitude = 52.0,
+        )
+
+        assertEquals(
+            SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.LIMIT_REACHED),
+            store.save(extra),
+        )
+        assertEquals(encoded, storage.value)
+        assertEquals(0, storage.writeCount)
+    }
+
+    @Test
+    fun storeNeverOverwritesPartiallyDecodedOrCorruptSource() {
+        val valid = preset()
+        val corruptSource = SavedRoutePresetsCodec.encode(listOf(valid))!! + "\nnot-a-valid-record"
+        val storage = MemorySavedRoutePresetStringStorage(value = corruptSource)
+        val store = SavedRoutePresetsStore(storage)
+
+        assertEquals(
+            SavedRoutePresetStoreResult.Rejected(
+                SavedRoutePresetStoreRejection.SOURCE_UNSAFE,
+                setOf("corrupt-record"),
+            ),
+            store.save(preset(id = "new-route", name = "New route")),
+        )
+        assertEquals(
+            SavedRoutePresetStoreResult.Rejected(
+                SavedRoutePresetStoreRejection.SOURCE_UNSAFE,
+                setOf("corrupt-record"),
+            ),
+            store.remove(valid.id),
+        )
+        assertEquals(corruptSource, storage.value)
+        assertEquals(0, storage.writeCount)
+    }
+
+    @Test
+    fun removingLastPresetWritesAnExplicitEmptySnapshot() {
+        val storage = MemorySavedRoutePresetStringStorage()
+        val store = SavedRoutePresetsStore(storage)
+        val original = preset()
+
+        assertTrue(store.save(original) is SavedRoutePresetStoreResult.Success)
+        assertEquals(
+            SavedRoutePresetStoreResult.Success(emptyList()),
+            store.remove(original.id),
+        )
+        assertEquals("", storage.value)
+        assertTrue(store.load().isSourceSafeToReplace)
+        assertTrue(store.load().presets.isEmpty())
+    }
+
+    @Test
+    fun storageReadAndWriteFailuresAreReportedWithoutPretendingSuccess() {
+        val readFailureStorage = MemorySavedRoutePresetStringStorage(failRead = true)
+        val readFailureStore = SavedRoutePresetsStore(readFailureStorage)
+        assertFalse(readFailureStore.load().isSourceSafeToReplace)
+        assertEquals(
+            SavedRoutePresetStoreResult.Rejected(
+                SavedRoutePresetStoreRejection.SOURCE_UNSAFE,
+                setOf("storage-read-failed"),
+            ),
+            readFailureStore.save(preset()),
+        )
+        assertEquals(0, readFailureStorage.writeCount)
+
+        val writeFailureStorage = MemorySavedRoutePresetStringStorage(failWrite = true)
+        val writeFailureStore = SavedRoutePresetsStore(writeFailureStorage)
+        assertEquals(
+            SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.STORAGE_FAILURE),
+            writeFailureStore.save(preset()),
+        )
+        assertEquals(0, writeFailureStorage.writeCount)
+    }
+
 }
