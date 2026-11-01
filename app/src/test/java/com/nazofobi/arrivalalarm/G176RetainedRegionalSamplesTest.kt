@@ -75,7 +75,7 @@ class G176RetainedRegionalSamplesTest {
                     routeId = "r-hb-6",
                     routeType = 3,
                     directionId = null,
-                    stopId = "de:hb:hbf",
+                    stopId = "de:hb:hbf:platform:1",
                     trip = null,
                     validity = GermanyRealtimeAlertSelectorValidity.VALID,
                 ),
