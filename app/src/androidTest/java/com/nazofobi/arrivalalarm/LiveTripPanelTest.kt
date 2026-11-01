@@ -256,4 +256,45 @@ class LiveTripPanelTest {
             .assertTextContains("09:30", substring = true)
     }
 
+    @Test
+    fun plannedBoardingCountdownUpdatesAndDisappearsAfterDeparture() {
+        val now = mutableLongStateOf(
+            "2026-09-26T07:55:00+02:00".toTransitEpochSecondsOrNull()!!
+        )
+        val route = RouteOption(
+            id = "boarding-route",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
+            line = "RE 9",
+            direction = "Bremen Hbf",
+            departure = "08:00",
+            arrival = "08:45",
+            walkingMinutes = 0,
+            transfers = 0,
+            stops = listOf(
+                RouteStop(id = "a", name = "Lohne",
+                    plannedDeparture = "2026-09-26T08:00:00+02:00"),
+                RouteStop(id = "b", name = "Bremen Hbf",
+                    plannedArrival = "2026-09-26T08:45:00+02:00"),
+            ),
+        )
+        rule.setContent {
+            MaterialTheme {
+                LiveTripPanel(
+                    selectedRoute = route,
+                    journey = JourneyUiState(phase = JourneyPhase.ARMED),
+                    guidanceState = GuidanceReliabilityState(),
+                    routeOffline = false,
+                    nowEpochSeconds = now.longValue,
+                )
+            }
+        }
+        rule.onNodeWithTag("live-trip-planned-boarding").assertTextContains("5", substring = true)
+        rule.runOnUiThread {
+            now.longValue = "2026-09-26T08:01:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-planned-boarding").assertDoesNotExist()
+    }
+
 }

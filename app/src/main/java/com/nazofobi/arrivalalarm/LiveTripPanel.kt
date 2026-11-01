@@ -117,6 +117,19 @@ fun LiveTripPanel(
                 )
             }
 
+            if (journey.phase == JourneyPhase.ARMED) {
+                scheduledBoardingMinutesRemaining(
+                    selectedRoute.stops.firstOrNull()?.plannedDeparture,
+                    nowEpochSeconds,
+                )?.let { minutes ->
+                    LiveTripFact(
+                        label = stringResource(R.string.live_trip_planned_boarding),
+                        value = stringResource(R.string.live_trip_planned_boarding_minutes, minutes),
+                        tag = "live-trip-planned-boarding",
+                    )
+                }
+            }
+
             HorizontalDivider()
 
             progress.previous?.let {
@@ -244,6 +257,21 @@ private fun guidanceUiStatus(state: GuidanceReliabilityState): String = stringRe
         else -> R.string.guidance_device
     }
 )
+
+/**
+ * Display an advisory departure countdown only from a full, validated provider
+ * instant. This is scheduled guidance, not a realtime vehicle or leave-now alert.
+ */
+internal fun scheduledBoardingMinutesRemaining(
+    plannedDeparture: String?,
+    nowEpochSeconds: Long,
+): Long? {
+    val departure = plannedDeparture.toTransitEpochSecondsOrNull() ?: return null
+    if (nowEpochSeconds !in 946_684_800L..253_402_300_799L) return null
+    val seconds = departure - nowEpochSeconds
+    if (seconds <= 0L || seconds > 86_400L) return null
+    return (seconds + 59L) / 60L
+}
 
 /**
  * Show a destination clock only after validating the complete provider value.
