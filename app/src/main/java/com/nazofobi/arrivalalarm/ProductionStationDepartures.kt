@@ -2,6 +2,7 @@ package com.nazofobi.arrivalalarm
 
 import java.util.Calendar
 import java.util.GregorianCalendar
+import java.util.Locale
 import java.util.TimeZone
 
 enum class StationRealtimeState {
@@ -18,6 +19,40 @@ data class ProductionStationDeparturesResult(
     val realtimeSourceLabel: String? = null,
     val updatedAtEpochSeconds: Long? = null,
 )
+
+/**
+ * Frequency start/headway arithmetic must not wrap signed Int and revisit past times.
+ * GTFS headway_secs is provider data, so compute the next eligible board on Long.
+ */
+internal fun firstFrequencyBoardAtOrAfter(
+    startSeconds: Long,
+    earliestSeconds: Long,
+    headwaySeconds: Int,
+): Long {
+    require(headwaySeconds > 0)
+    if (startSeconds >= earliestSeconds) return startSeconds
+    val headway = headwaySeconds.toLong()
+    val intervals = (earliestSeconds - startSeconds + headway - 1L) / headway
+    return startSeconds + intervals * headway
+}
+
+/**
+ * Nationwide feeds can reuse a trip ID at the same departure time on different
+ * routes. Distinguish visible service identity before limiting board results.
+ * Repeated updates to the same service still collapse to its first occurrence.
+ */
+internal fun distinctStationDepartures(departures: List<Departure>): List<Departure> =
+    departures.distinctBy { departure ->
+        listOf(
+            departure.tripId,
+            departure.scheduledEpochSeconds,
+            departure.routeId,
+            departure.line,
+            departure.direction,
+            departure.gtfsInstance,
+            departure.boardingStopSequence,
+        )
+    }
 
 internal class ProductionStationDeparturesPlanner(
     private val index: NationwideTransitIndex,
@@ -55,7 +90,7 @@ internal class ProductionStationDeparturesPlanner(
                     )
                 }
             }
-            .distinctBy { it.tripId to it.scheduledEpochSeconds }
+            .let(::distinctStationDepartures)
             .sortedWith(
                 compareBy<Departure> { it.scheduledEpochSeconds }
                     .thenBy { it.tripId }
@@ -103,6 +138,7 @@ internal class ProductionStationDeparturesPlanner(
                     direction = direction,
                     scheduledEpochSeconds = scheduled,
                     plannedPlatform = plannedPlatform,
+                    serviceDate = serviceDate,
                 ),
             )
         }
@@ -132,23 +168,20 @@ internal class ProductionStationDeparturesPlanner(
         return buildList {
             for (frequency in parsed) {
                 if (size >= MAX_FREQUENCY_DEPARTURES_PER_CANDIDATE) break
-                val windowStart = frequency.startSeconds + boardOffset
-                val windowEnd = frequency.endSeconds + boardOffset
-                if (earliestBoardSeconds >= windowEnd) continue
+                val windowStart = frequency.startSeconds.toLong() + boardOffset
+                val windowEnd = frequency.endSeconds.toLong() + boardOffset
+                if (earliestBoardSeconds.toLong() >= windowEnd) continue
 
-                var board = windowStart
-                if (board < earliestBoardSeconds) {
-                    val delta = earliestBoardSeconds - board
-                    board += (
-                        (delta + frequency.headwaySeconds - 1) /
-                            frequency.headwaySeconds
-                        ) * frequency.headwaySeconds
-                }
+                var board = firstFrequencyBoardAtOrAfter(
+                    windowStart, earliestBoardSeconds.toLong(), frequency.headwaySeconds,
+                )
                 while (
                     board < windowEnd &&
                     size < MAX_FREQUENCY_DEPARTURES_PER_CANDIDATE
                 ) {
-                    val scheduled = serviceEpochSeconds(serviceDate, board)
+                    val scheduled = if (board <= Int.MAX_VALUE) {
+                        serviceEpochSeconds(serviceDate, board.toInt())
+                    } else null
                     if (scheduled != null && scheduled >= nowEpochSeconds) {
                         add(
                             departure(
@@ -158,11 +191,11 @@ internal class ProductionStationDeparturesPlanner(
                                 scheduledEpochSeconds = scheduled,
                                 plannedPlatform = plannedPlatform,
                                 realtimeTripStartDate = formatServiceDate(serviceDate),
-                                realtimeTripStartTime = formatServiceTime(board - boardOffset),
+                                realtimeTripStartTime = formatServiceTime((board - boardOffset).toInt()),
                             ),
                         )
                     }
-                    board += frequency.headwaySeconds
+                    board += frequency.headwaySeconds.toLong()
                 }
             }
         }
@@ -174,9 +207,12 @@ internal class ProductionStationDeparturesPlanner(
         direction: String,
         scheduledEpochSeconds: Long,
         plannedPlatform: String?,
+        serviceDate: GtfsServiceDate? = null,
         realtimeTripStartDate: String? = null,
         realtimeTripStartTime: String? = null,
-    ) = Departure(
+    ): Departure {
+        val evidence = stationDepartureEvidence(candidate.trip, candidate.stopSequence, serviceDate)
+        return Departure(
         tripId = candidate.trip.id,
         line = line,
         direction = direction,
@@ -185,31 +221,26 @@ internal class ProductionStationDeparturesPlanner(
         routeId = candidate.trip.routeId,
         realtimeTripStartDate = realtimeTripStartDate,
         realtimeTripStartTime = realtimeTripStartTime,
-    )
+        gtfsInstance = evidence?.identity,
+        boardingStopSequence = evidence?.boardingStopSequence,
+        )
+    }
 
     private fun parseServiceSeconds(raw: String): Int? =
         runCatching { GtfsServiceTime.parse(raw).secondsFromServiceDayStart }.getOrNull()
 
     private fun formatServiceDate(date: GtfsServiceDate): String =
-        "%04d%02d%02d".format(date.year, date.month, date.day)
+        GtfsRealtimeServiceKeyFormat.date(date)
 
     private fun formatServiceTime(seconds: Int): String =
-        "%02d:%02d:%02d".format(
-            seconds / 3_600,
-            (seconds % 3_600) / 60,
-            seconds % 60,
-        )
+        GtfsRealtimeServiceKeyFormat.time(seconds)
 
     private fun serviceEpochSeconds(
         serviceDate: GtfsServiceDate,
         serviceSeconds: Int,
     ): Long? = runCatching {
         GtfsServiceTime.parse(
-            "%02d:%02d:%02d".format(
-                serviceSeconds / 3_600,
-                (serviceSeconds % 3_600) / 60,
-                serviceSeconds % 60,
-            ),
+            GtfsRealtimeServiceKeyFormat.time(serviceSeconds),
         ).resolve(serviceDate, agencyTimeZone).epochMillis / 1_000L
     }.getOrNull()
 
@@ -217,6 +248,7 @@ internal class ProductionStationDeparturesPlanner(
         listOf(
             serviceDate(epochMillis, dayOffset = -1),
             serviceDate(epochMillis),
+            serviceDate(epochMillis, dayOffset = 1),
         )
 
     private fun serviceDate(epochMillis: Long, dayOffset: Int = 0): GtfsServiceDate {
@@ -239,7 +271,8 @@ internal class ProductionStationDeparturesPlanner(
             .resolve(serviceDate, agencyTimeZone)
             .epochMillis
         val delta = epochMillis - anchor
-        if (delta < 0L) return null
+        // Tomorrow's GTFS service day has not started yet: search it from 00:00.
+        if (delta < 0L) return 0
         val seconds = delta / 1_000L + if (delta % 1_000L == 0L) 0L else 1L
         return seconds.takeIf { it <= Int.MAX_VALUE }?.toInt()
     }
@@ -248,6 +281,24 @@ internal class ProductionStationDeparturesPlanner(
         const val MAX_FREQUENCY_ROWS_PER_TRIP = 64
         const val MAX_FREQUENCY_DEPARTURES_PER_CANDIDATE = 64
     }
+}
+
+/**
+ * GTFS / GTFS-RT service-day keys are protocol fields, not localized UI text.
+ * Locale.ROOT keeps their decimal digits ASCII on phones using other numeral systems.
+ */
+internal object GtfsRealtimeServiceKeyFormat {
+    fun date(date: GtfsServiceDate): String =
+        String.format(Locale.ROOT, "%04d%02d%02d", date.year, date.month, date.day)
+
+    fun time(seconds: Int): String =
+        String.format(
+            Locale.ROOT,
+            "%02d:%02d:%02d",
+            seconds / 3_600,
+            (seconds % 3_600) / 60,
+            seconds % 60,
+        )
 }
 
 internal class ProductionRealtimeStationOverlay(
@@ -260,13 +311,34 @@ internal class ProductionRealtimeStationOverlay(
         stopId: String,
         planned: List<Departure>,
     ): ProductionStationDeparturesResult {
-        if (planned.isEmpty()) return ProductionStationDeparturesResult(emptyList())
-        val overlay = runCatching {
-            match(fetch(), nowEpochSeconds())
-        }.getOrElse { error ->
+        // Even with no scheduled departures, an exact stop-only fresh service alert
+        // can still be relevant. Route/trip-scoped alerts remain gated by the board.
+        if (stopId.isBlank()) return ProductionStationDeparturesResult(planned)
+        val overlay = try {
+            // A cancelled lookup must never begin provider I/O or run matching.
+            if (Thread.currentThread().isInterrupted) {
+                throw InterruptedException("Station realtime lookup cancelled before fetch")
+            }
+            val response = fetch()
+            // Cancellation may occur while the provider call is completing.
+            if (Thread.currentThread().isInterrupted) {
+                throw InterruptedException("Station realtime lookup cancelled after fetch")
+            }
+            val matched = match(response, nowEpochSeconds())
+            // The matcher itself may be cancelled; do not return a stale result.
+            if (Thread.currentThread().isInterrupted) {
+                throw InterruptedException("Station realtime lookup cancelled during match")
+            }
+            matched
+        } catch (interrupted: InterruptedException) {
+            // Cancellation is not an upstream outage; preserve the interrupt signal.
+            Thread.currentThread().interrupt()
+            throw interrupted
+        } catch (_: Exception) {
+            // Do not swallow fatal JVM Errors or expose provider exception text.
             GermanyRealtimeOverlayResult.Unavailable(
                 GermanyRealtimeUnavailableReason.NETWORK,
-                error.message,
+                "realtime_station_overlay_error",
             )
         }
         return when (overlay) {
@@ -315,14 +387,26 @@ internal class ProductionRealtimeStationOverlay(
                     overlayMatchesDeparture(candidate, departure)
                 }
                 ?: return@map departure
-            val update = trip.stopUpdates.firstOrNull { it.scheduledStopId == stopId }
-            matchedAny = true
+            // A loop trip can visit the same stop_id more than once with different
+            // stop_sequence values. The board lacks that sequence, so choosing the
+            // first matching update can display a false skipped stop or platform.
+            // Keep only unambiguous stop-specific evidence; trip cancellation is global.
+            val update = trip.stopUpdates.singleOrNull { it.scheduledStopId == stopId }
+            matchedAny = matchedAny || trip.cancelled || update != null
+            // SKIPPED is stop-specific; do not offer boarding here or project
+            // a predicted departure. Other stops of this trip remain available.
+            val skippedAtStop = update?.scheduleRelationship == "SKIPPED"
             departure.copy(
-                realtimeEpochSeconds = update?.departureTimeEpochSeconds
-                    ?: update?.departureDelaySeconds?.let {
-                        departure.scheduledEpochSeconds + it
-                    },
-                cancelled = trip.cancelled,
+                realtimeEpochSeconds = if (skippedAtStop) null else {
+                    // An invalid provider timestamp must not turn a 2026 board into
+                    // a 1970/overflowed departure. Valid early-running delays remain usable.
+                    val predicted = update?.departureTimeEpochSeconds
+                        ?: update?.departureDelaySeconds?.let {
+                            departure.scheduledEpochSeconds + it.toLong()
+                        }
+                    predicted?.takeIf { it > 0L && it <= Long.MAX_VALUE / 1_000L }
+                },
+                cancelled = trip.cancelled || skippedAtStop,
                 platform = update?.platformCode ?: departure.platform,
             )
         }
@@ -371,9 +455,20 @@ internal class ProductionRealtimeStationOverlay(
         val tripSelector = selector.trip
         if (tripSelector != null) {
             val tripId = tripSelector.tripId ?: return false
+            // The board has no numeric direction ID; never broaden directed alerts.
+            if (selector.directionId != null || tripSelector.directionId != null ||
+                tripSelector.validity == GermanyRealtimeTripSelectorValidity.UNMATCHABLE_INCOMPLETE
+            ) return false
+            val startSeconds = tripSelector.startTime?.let(::serviceTimeSeconds)
+            if (tripSelector.startTime != null && startSeconds == null) return false
             return planned.any { departure ->
                 departure.tripId == tripId &&
-                    (selector.routeId == null || departure.routeId == selector.routeId)
+                    (selector.routeId == null || departure.routeId == selector.routeId) &&
+                    (tripSelector.routeId == null || departure.routeId == tripSelector.routeId) &&
+                    (tripSelector.startDate == null ||
+                        departure.realtimeTripStartDate == tripSelector.startDate) &&
+                    (startSeconds == null ||
+                        departure.realtimeTripStartTime?.let(::serviceTimeSeconds) == startSeconds)
             }
         }
 
@@ -397,6 +492,11 @@ internal class ProductionRealtimeStationOverlay(
         overlay: GermanyRealtimeTripOverlay,
         departure: Departure,
     ): Boolean {
+        // Static feeds may reuse trip IDs across different routes. Do not let
+        // a matched overlay cancel or delay an unrelated station-board service.
+        if (departure.routeId.isNullOrBlank() || overlay.staticTrip.routeId != departure.routeId) {
+            return false
+        }
         if (!frequencyTrip(departure.tripId)) return true
 
         val expectedDate = departure.realtimeTripStartDate ?: return false

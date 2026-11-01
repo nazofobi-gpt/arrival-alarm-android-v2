@@ -20,6 +20,17 @@ class G176ProviderDerivedRegionalInstrumentedTest {
         assumeTrue("providerSamplesPath instrumentation argument is required", samplePath.isNotBlank())
         val root = JSONObject(File(samplePath).readText())
         assertEquals("G176_PROVIDER_DERIVED_REGIONAL_SAMPLES_V1", root.getString("schema"))
+        val evidenceCounts = root.getJSONObject("platformEvidenceCounts")
+        println("G176_PROVIDER_EVIDENCE_COUNTS=$evidenceCounts")
+        assertEquals("PROVEN", root.getString("platformEvidenceState"))
+        assertTrue(
+            "provider has no protocol-valid assigned-stop trip",
+            evidenceCounts.getInt("globalProtocolValidAssignedTripCount") > 0,
+        )
+        assertTrue(
+            "provider has no static-matchable assigned-stop trip",
+            evidenceCounts.getInt("globalStaticMatchableAssignedTripCount") > 0,
+        )
 
         val realtime = root.getJSONObject("realtime")
         val header = GtfsRealtime.FeedHeader.parseFrom(decode(realtime.getString("headerPbBase64")))
@@ -80,18 +91,44 @@ class G176ProviderDerivedRegionalInstrumentedTest {
                 }
                 assertEquals("$region raw assignment count drifted from protobuf",
                     summary.getInt("assigned_count"), assigned.size)
-                val matchable = assigned.filter { stop ->
+                val protocolValidAssigned = assigned.filter { stop ->
                     stop.hasStopSequence() &&
-                        staticSequenceCounts[stop.stopSequence] == 1 &&
                         (stop.stopId.isBlank() ||
                             stop.stopId == stop.stopTimeProperties.assignedStopId)
                 }
+                val providerSequenceCounts =
+                    protocolValidAssigned.groupingBy { it.stopSequence }.eachCount()
+                assertEquals(
+                    "$region protocol-valid assignment count drifted",
+                    summary.getInt("protocol_valid_assigned_count"),
+                    protocolValidAssigned.size,
+                )
+                val matchable = protocolValidAssigned.filter { stop ->
+                    staticSequenceCounts[stop.stopSequence] == 1 &&
+                        providerSequenceCounts[stop.stopSequence] == 1
+                }
+                assertEquals(
+                    "$region static-matchable assignment count drifted",
+                    summary.getInt("static_matchable_assigned_count"),
+                    matchable.size,
+                )
                 matchable.forEach { stop ->
-                    assertTrue("$region valid assigned stop was not retained at sequence ${stop.stopSequence}",
-                        matched.tripOverlays.single().stopUpdates.any {
-                            it.stopSequence == stop.stopSequence &&
-                                it.assignedStopId == stop.stopTimeProperties.assignedStopId
-                        })
+                    val assignedStopId = stop.stopTimeProperties.assignedStopId
+                    val matchedStop = matched.tripOverlays.single().stopUpdates.singleOrNull {
+                        it.stopSequence == stop.stopSequence && it.assignedStopId == assignedStopId
+                    }
+                    assertTrue(
+                        "$region valid assigned stop was not retained at sequence ${stop.stopSequence}",
+                        matchedStop != null,
+                    )
+                    val expectedPlatformCode = data.stop(assignedStopId)?.platformCode
+                    if (expectedPlatformCode != null) {
+                        assertEquals(
+                            "$region assigned platform code drifted",
+                            expectedPlatformCode,
+                            matchedStop?.platformCode,
+                        )
+                    }
                 }
                 validAssignedStopEvidenceCount += matchable.size
             }
@@ -123,7 +160,8 @@ class G176ProviderDerivedRegionalInstrumentedTest {
                 parsed is GermanyRealtimeFetchResult.Available,
             )
 
-            val matcher = GermanyRealtimeMatcher(JsonStaticData(sample), freshWindowSeconds = 120)
+            val data = JsonStaticData(sample)
+            val matcher = GermanyRealtimeMatcher(data, freshWindowSeconds = 120)
             val fresh = matcher.match(parsed, feedTimestamp)
             assertTrue(
                 "nationwide platform evidence did not match static IDs",
@@ -147,24 +185,48 @@ class G176ProviderDerivedRegionalInstrumentedTest {
                 stop.hasStopTimeProperties() &&
                     stop.stopTimeProperties.assignedStopId.isNotBlank()
             }
-            val matchable = assigned.filter { stop ->
+            val protocolValidAssigned = assigned.filter { stop ->
                 stop.hasStopSequence() &&
-                    staticSequenceCounts[stop.stopSequence] == 1 &&
                     (stop.stopId.isBlank() ||
                         stop.stopId == stop.stopTimeProperties.assignedStopId)
             }
+            val providerSequenceCounts =
+                protocolValidAssigned.groupingBy { it.stopSequence }.eachCount()
+            assertEquals(
+                "nationwide protocol-valid assignment count drifted",
+                summary.getInt("protocol_valid_assigned_count"),
+                protocolValidAssigned.size,
+            )
+            val matchable = protocolValidAssigned.filter { stop ->
+                staticSequenceCounts[stop.stopSequence] == 1 &&
+                    providerSequenceCounts[stop.stopSequence] == 1
+            }
+            assertEquals(
+                "nationwide static-matchable assignment count drifted",
+                summary.getInt("static_matchable_assigned_count"),
+                matchable.size,
+            )
             assertTrue(
                 "nationwide platform evidence contained no protocol-valid static-matchable assignment",
                 matchable.isNotEmpty(),
             )
             matchable.forEach { stop ->
+                val assignedStopId = stop.stopTimeProperties.assignedStopId
+                val matchedStop = matched.tripOverlays.single().stopUpdates.singleOrNull {
+                    it.stopSequence == stop.stopSequence && it.assignedStopId == assignedStopId
+                }
                 assertTrue(
                     "nationwide valid assigned stop was not retained at sequence ${stop.stopSequence}",
-                    matched.tripOverlays.single().stopUpdates.any {
-                        it.stopSequence == stop.stopSequence &&
-                            it.assignedStopId == stop.stopTimeProperties.assignedStopId
-                    },
+                    matchedStop != null,
                 )
+                val expectedPlatformCode = data.stop(assignedStopId)?.platformCode
+                if (expectedPlatformCode != null) {
+                    assertEquals(
+                        "nationwide assigned platform code drifted",
+                        expectedPlatformCode,
+                        matchedStop?.platformCode,
+                    )
+                }
             }
             validAssignedStopEvidenceCount += matchable.size
         }

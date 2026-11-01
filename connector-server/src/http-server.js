@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { bearerToken, createJwtAccessVerifier } from "./auth.js";
+import { classifyHttpError } from "./http-error-status.js";
 import { createGatewayStoreFromEnv } from "./gateway-store.js";
 import { GatewayService } from "./gateway-service.js";
 import { createArrivalAlarmMcpServer } from "./mcp-server.js";
@@ -125,23 +126,19 @@ function sendJson(res, status, value) {
 }
 
 function sendAuthError(req, res, error) {
-  const message = error instanceof Error ? error.message : "unauthorized";
-  const authFailure = message === "unauthorized";
-  const scopeFailure = message === "insufficient_scope";
-  const status = authFailure ? 401 : scopeFailure ? 403 : 503;
-  if (authFailure || scopeFailure) {
+  const { status, code, challenge } = classifyHttpError(error);
+  if (challenge) {
     try {
-      const oauthError = scopeFailure ? "insufficient_scope" : "invalid_token";
       res.setHeader(
         "WWW-Authenticate",
         'Bearer resource_metadata="' + resourceMetadataUrl(req) +
-          '", error="' + oauthError + '"'
+          '", error="' + challenge + '"'
       );
     } catch {
       // Preserve the original authentication error if metadata cannot be built.
     }
   }
-  sendJson(res, status, { error: message });
+  sendJson(res, status, { error: code });
 }
 
 const httpServer = createServer(async (req, res) => {

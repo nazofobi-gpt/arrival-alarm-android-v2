@@ -118,3 +118,38 @@ test("production rejects device binding parameter names that shadow OAuth state"
     /device_oauth_parameter_reserved/
   );
 });
+
+test("production rejects embedded URL credentials across public and device OAuth configuration", () => {
+  for (const [key, value] of [
+    ["MCP_PUBLIC_BASE_URL", "https://alice:secret@connector.example"],
+    ["OAUTH_AUTHORIZATION_SERVER", "https://alice@auth.example"],
+    ["DEVICE_OAUTH_TOKEN_ENDPOINT", "https://bob:secret@auth.example/token"],
+    ["DEVICE_OAUTH_RESOURCE", "https://user@connector.example/device"],
+  ]) {
+    assert.throws(
+      () => validateProductionEnvironment(valid({ [key]: value })),
+      /production_config_invalid_/
+    );
+  }
+});
+
+test("production rejects URL fragments but preserves safe HTTPS query parameters", () => {
+  for (const [key, value] of [
+    ["OAUTH_JWKS_URL", "https://auth.example/jwks.json#private"],
+    ["DEVICE_OAUTH_REVOCATION_ENDPOINT", "https://auth.example/revoke#token"],
+    ["DEVICE_OAUTH_RESOURCE", "https://connector.example/device#private"],
+    ["OAUTH_ISSUER", "https://auth.example/#"],
+    ["DEVICE_OAUTH_TOKEN_ENDPOINT", "https://auth.example/token#"],
+  ]) {
+    assert.throws(
+      () => validateProductionEnvironment(valid({ [key]: value })),
+      /production_config_invalid_/
+    );
+  }
+  const result = validateProductionEnvironment(valid({
+    DEVICE_OAUTH_AUTHORIZATION_ENDPOINT: "https://auth.example/authorize?prompt=login",
+    DEVICE_OAUTH_RESOURCE: "https://connector.example/device?mode=read",
+  }));
+  assert.equal(result.deviceOAuth.authorization_endpoint, "https://auth.example/authorize?prompt=login");
+  assert.equal(result.deviceOAuth.resource, "https://connector.example/device?mode=read");
+});

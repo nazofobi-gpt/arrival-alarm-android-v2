@@ -9,6 +9,7 @@ FeedHeader / FeedEntity protobuf bytes as base64 plus matching static GTFS rows.
 import argparse
 import base64
 import csv
+from collections import Counter
 import hashlib
 import io
 import json
@@ -185,6 +186,7 @@ def parse_trip_update(raw, full=False):
     assigned_count = 0
     protocol_valid_assigned_count = 0
     protocol_valid_assigned_sequences = []
+    protocol_valid_assigned_stops = []
     for field, wire, value in iter_fields(raw):
         if wire == 2 and field == 1:
             trip = parse_trip_descriptor(value)
@@ -201,6 +203,11 @@ def parse_trip_update(raw, full=False):
                 if stop_sequence is not None and (not stop_id or stop_id == assigned_stop_id):
                     protocol_valid_assigned_count += 1
                     protocol_valid_assigned_sequences.append(stop_sequence)
+                    protocol_valid_assigned_stops.append({
+                        "stop_sequence": stop_sequence,
+                        "stop_id": stop_id,
+                        "assigned_stop_id": assigned_stop_id,
+                    })
             if full:
                 stops.append(stop)
         elif wire == 0 and field == 4:
@@ -216,6 +223,7 @@ def parse_trip_update(raw, full=False):
         "assigned_count": assigned_count,
         "protocol_valid_assigned_count": protocol_valid_assigned_count,
         "protocol_valid_assigned_sequences": protocol_valid_assigned_sequences,
+        "protocol_valid_assigned_stops": protocol_valid_assigned_stops,
     }
 
 
@@ -248,6 +256,7 @@ def parse_entity_summary(raw):
         "assigned_count": update["assigned_count"],
         "protocol_valid_assigned_count": update["protocol_valid_assigned_count"],
         "protocol_valid_assigned_sequences": update["protocol_valid_assigned_sequences"],
+        "protocol_valid_assigned_stops": update["protocol_valid_assigned_stops"],
         "has_alert": has_alert,
     }
 
@@ -332,6 +341,20 @@ def haversine_km(lat1, lon1, lat2, lon2):
     dlon = math.radians(lon2 - lon1)
     h = math.sin(dlat / 2) ** 2 + math.cos(a1) * math.cos(a2) * math.sin(dlon / 2) ** 2
     return 2 * radius * math.asin(math.sqrt(h))
+
+
+def select_static_matchable_assigned_stops(summary, static_sequence_counts):
+    """Return only unambiguous protocol-valid assignments present in static stop_times."""
+    assignments = summary.get("protocol_valid_assigned_stops", [])
+    provider_sequence_counts = Counter(
+        assignment["stop_sequence"] for assignment in assignments
+    )
+    return [
+        assignment
+        for assignment in assignments
+        if provider_sequence_counts[assignment["stop_sequence"]] == 1
+        and static_sequence_counts.get(assignment["stop_sequence"]) == 1
+    ]
 
 
 def choose_sample(candidates, summaries):
@@ -466,11 +489,9 @@ def main():
 
         for trip_id, summary in summaries.items():
             sequence_counts = static_assigned_sequence_counts.get(trip_id, {})
-            summary["static_matchable_assigned_count"] = sum(
-                1
-                for sequence in summary["protocol_valid_assigned_sequences"]
-                if sequence_counts.get(sequence) == 1
-            )
+            matchable = select_static_matchable_assigned_stops(summary, sequence_counts)
+            summary["static_matchable_assigned_stops"] = matchable
+            summary["static_matchable_assigned_count"] = len(matchable)
 
         chosen = {name: choose_sample(candidate_ids[name], summaries) for name in REGIONS}
         platform_trip_id = choose_platform_evidence(summaries)
@@ -524,6 +545,12 @@ def main():
                 stop_id = row.get("stop_id") or ""
                 if stop_id:
                     selected_stop_ids.add(stop_id)
+
+        for trip_id in chosen_ids:
+            for assignment in summaries[trip_id].get("static_matchable_assigned_stops", []):
+                assigned_stop_id = assignment.get("assigned_stop_id") or ""
+                if assigned_stop_id:
+                    selected_stop_ids.add(assigned_stop_id)
 
         selected_stop_rows = {}
         for row in csv_rows(zf, "stops.txt"):

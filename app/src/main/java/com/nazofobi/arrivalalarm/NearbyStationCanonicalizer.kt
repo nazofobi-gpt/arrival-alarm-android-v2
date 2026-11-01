@@ -9,23 +9,29 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 internal object NearbyStationCanonicalizer {
+    private data class GroupKey(val kind: String, val providerId: String?, val value: String)
+
     fun canonicalize(
         latitude: Double,
         longitude: Double,
         candidates: List<NearbyStop>,
         limit: Int,
     ): List<NearbyStop> {
-        val parentIds = candidates.mapNotNull {
-            it.stop.parentStationId?.trim()?.takeIf(String::isNotEmpty)
+        if (limit <= 0) return emptyList()
+        // GTFS stop IDs are scoped to the feed/provider, not globally unique.
+        val parentIds = candidates.mapNotNull { candidate ->
+            val stop = candidate.stop
+            stop.parentStationId?.trim()?.takeIf(String::isNotEmpty)?.let { stop.providerId to it }
         }.toSet()
 
         return candidates
             .groupBy { candidate ->
                 val stop = candidate.stop
+                val parentId = stop.parentStationId?.trim()?.takeIf(String::isNotEmpty)
                 when {
-                    stop.parentStationId?.isNotBlank() == true -> "parent:" + stop.parentStationId
-                    stop.id in parentIds -> "parent:" + stop.id
-                    else -> fallbackKey(stop)
+                    parentId != null -> GroupKey("parent", stop.providerId, parentId)
+                    (stop.providerId to stop.id) in parentIds -> GroupKey("parent", stop.providerId, stop.id)
+                    else -> GroupKey("fallback", stop.providerId, fallbackKey(stop))
                 }
             }
             .values
@@ -68,6 +74,8 @@ internal object NearbyStationCanonicalizer {
                     { it.distanceMeters },
                     { it.stop.name.lowercase(Locale.GERMANY) },
                     { it.stop.id },
+                    // Break equal-distance/name/ID ties across GTFS providers deterministically.
+                    { it.stop.providerId ?: "" },
                 ),
             )
             .take(limit)
@@ -107,7 +115,10 @@ internal object NearbyStationCanonicalizer {
         val p2 = Math.toRadians(lat2)
         val dp = Math.toRadians(lat2 - lat1)
         val dl = Math.toRadians(lon2 - lon1)
-        val a = sin(dp / 2).pow(2) + cos(p1) * cos(p2) * sin(dl / 2).pow(2)
+        // Clamp spherical floating-point roundoff before square-rooting 1-a.
+        // This is the second distance calculation, after catalog candidate mapping.
+        val a = (sin(dp / 2).pow(2) + cos(p1) * cos(p2) * sin(dl / 2).pow(2))
+            .coerceIn(0.0, 1.0)
         return 2 * radius * atan2(sqrt(a), sqrt(1 - a))
     }
 }

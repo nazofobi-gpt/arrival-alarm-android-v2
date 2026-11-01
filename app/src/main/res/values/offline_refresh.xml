@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="offline_feed_refresh_notification_channel">Çevrimdışı ulaşım verisi</string>
+    <string name="offline_feed_refresh_notification_title">Ulaşım verisi güncelleniyor</string>
+    <string name="offline_feed_refresh_notification_checking">Almanya sefer verisi kontrol ediliyor</string>
+    <string name="offline_feed_refresh_notification_progress">İçe aktarılan durak: %1$d</string>
+</resources>

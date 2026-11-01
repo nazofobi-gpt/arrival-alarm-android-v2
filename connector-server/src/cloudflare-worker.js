@@ -2,6 +2,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { bearerToken, createJwtAccessVerifier } from "./auth.js";
 import { AsyncGatewayService } from "./async-gateway-service.js";
 import { D1GatewayStore } from "./d1-gateway-store.js";
+import { classifyHttpError } from "./http-error-status.js";
 import { createArrivalAlarmMcpServer } from "./mcp-server.js";
 import { deviceOAuthMetadataFromEnv } from "./production-config.js";
 
@@ -21,6 +22,11 @@ function normalizedHttps(value, name, { preserveTrailingSlash = false } = {}) {
   }
   if (parsed.protocol !== "https:" || !parsed.hostname) {
     throw new Error("worker_https_required_" + name);
+  }
+  // OAuth metadata and JWKS locations must not embed credentials or fragments.
+  // Include an empty trailing #, which URL.hash normalizes to an empty string.\n  // Match the production configuration validator while preserving valid query strings.
+  if (parsed.username || parsed.password || parsed.href.includes("#")) {
+    throw new Error("worker_invalid_" + name);
   }
   const canonical = parsed.toString();
   return preserveTrailingSlash ? canonical : canonical.replace(/\/$/, "");
@@ -89,10 +95,49 @@ async function resolveDeviceAuth(request, env) {
   });
 }
 
-async function readJson(request) {
-  const bytes = new Uint8Array(await request.arrayBuffer());
-  if (bytes.byteLength > MAX_BODY_BYTES) throw new Error("request_too_large");
-  if (bytes.byteLength === 0) return {};
+export async function readJson(request) {
+  // Content-Length can reject an oversized body early, but is not trustworthy:
+  // absent or understated lengths must still be bounded while streaming.
+  const advertisedLength = request.headers.get("content-length");
+  if (
+    advertisedLength !== null &&
+    /^\d+$/.test(advertisedLength) &&
+    Number(advertisedLength) > MAX_BODY_BYTES
+  ) {
+    throw new Error("request_too_large");
+  }
+  if (!request.body) return {};
+
+  const reader = request.body.getReader();
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_BODY_BYTES) throw new Error("request_too_large");
+      chunks.push(value);
+    }
+  } catch (error) {
+    // Stop consuming a potentially unbounded request as soon as it exceeds
+    // the limit; a failed cancellation must not obscure the original error.
+    try {
+      await reader.cancel();
+    } catch {
+      // Stream may already be closed or errored.
+    }
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+  if (totalBytes === 0) return {};
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
   return JSON.parse(new TextDecoder().decode(bytes));
 }
 
@@ -107,26 +152,24 @@ function json(value, status = 200, extraHeaders = {}) {
 }
 
 function authError(request, env, error) {
-  const message = error instanceof Error ? error.message : "unauthorized";
-  const authFailure = message === "unauthorized";
-  const scopeFailure = message === "insufficient_scope";
-  const status = authFailure ? 401 : scopeFailure ? 403 : 503;
+  // Reuse the Node HTTP error contract: only allowlisted public error codes
+  // leave this endpoint. Internal OAuth/D1 failures must not expose details.
+  const { status, code, challenge } = classifyHttpError(error);
   const headers = {};
 
-  if (authFailure || scopeFailure) {
-    const oauthError = scopeFailure ? "insufficient_scope" : "invalid_token";
+  if (challenge) {
     try {
       headers["WWW-Authenticate"] =
         'Bearer resource_metadata="' +
         resourceMetadataUrl(request, env) +
         '", error="' +
-        oauthError +
+        challenge +
         '"';
     } catch {
       // Keep original auth error when public metadata is misconfigured.
     }
   }
-  return json({ error: message }, status, headers);
+  return json({ error: code }, status, headers);
 }
 
 function withMcpCors(response) {
@@ -202,10 +245,10 @@ export function createCloudflareWorker() {
       ) {
         try {
           return json(deviceOAuthMetadataFromEnv(env));
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "device_oauth_not_configured";
-          return json({ error: message }, 503);
+        } catch {
+          // Public discovery must not expose internal configuration details.
+          // Keep the exact HTTP shape stable for Android clients.
+          return json({ error: "device_oauth_not_configured" }, 503);
         }
       }
 

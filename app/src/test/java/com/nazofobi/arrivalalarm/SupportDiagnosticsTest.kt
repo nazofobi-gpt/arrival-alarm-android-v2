@@ -1,0 +1,253 @@
+package com.nazofobi.arrivalalarm
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class SupportDiagnosticsTest {
+    private fun state(data: NationwideDataState) = SettingsReadinessState(
+        themeMode = ArrivalThemeMode.SYSTEM,
+        locationPermission = true,
+        notificationPermission = false,
+        locationServicesAvailable = true,
+        bluetoothPermission = false,
+        guidancePermissionState = GuidancePermissionState.PARTIAL,
+        audioRoute = GuidanceAudioRoute.DEVICE,
+        dataState = data,
+        backgroundJourneyActive = true,
+        connectorConfigured = true,
+        connectorConnected = false,
+    )
+
+    @Test fun untrustedProviderErrorIsNeverIncluded() {
+        val sensitive = "precise_location_value_and_private_credential"
+        val report = SupportDiagnostics.render(
+            state(NationwideDataState.Error("network failed: $sensitive")),
+            nowEpochSeconds = 1_700_000_000L,
+        )
+        assertTrue(report.startsWith("schema=VARIS_SUPPORT_DIAGNOSTICS_V1\n"))
+        assertTrue(report.contains("transit_index=error\n"))
+        assertTrue(report.contains("routing_probe=not_measured\n"))
+        assertFalse(report.contains(sensitive))
+    }
+
+    @Test fun feedVersionAndSourceDetailsAreNeverIncluded() {
+        val sensitive = "raw_feed_source_version_value"
+        val report = SupportDiagnostics.render(
+            state(NationwideDataState.Ready(120_000, 1_700_000_000L, sensitive)),
+            nowEpochSeconds = 1_700_000_100L,
+        )
+        assertTrue(report.contains("transit_index=index_present_unverified\n"))
+        assertTrue(report.contains("installed_stop_count=120000\n"))
+        assertTrue(report.contains("feed_age_bucket=under_24h\n"))
+        assertFalse(report.contains(sensitive))
+    }
+
+    @Test fun emptyOrInvalidReadyIndexCannotClaimInstalledStops() {
+        val timestamp = 1_700_000_000L
+        for (count in listOf(0, -3)) {
+            val report = SupportDiagnostics.render(
+                state(NationwideDataState.Ready(count, timestamp, "private-feed-source")),
+                nowEpochSeconds = timestamp + 20L,
+            )
+            assertTrue(report.contains("transit_index=index_empty\n"))
+            assertTrue(report.contains("installed_stop_count=0\n"))
+            assertTrue(report.contains("feed_age_bucket=unknown\n"))
+            assertFalse(report.contains("transit_index=index_present_unverified\n"))
+            assertFalse(report.contains("private-feed-source"))
+        }
+    }
+
+    @Test fun feedFreshnessUsesCoarseBucketsOnly() {
+        val fetchedAt = 1_700_000_000L
+        val saved = state(NationwideDataState.Ready(10, fetchedAt, "test"))
+        assertTrue(SupportDiagnostics.render(saved, fetchedAt + 604_800L).contains("feed_age_bucket=over_7d"))
+        assertTrue(SupportDiagnostics.render(saved, fetchedAt - 1L).contains("feed_age_bucket=clock_mismatch"))
+        assertTrue(SupportDiagnostics.render(
+            state(NationwideDataState.Loading("unknown provider details")), fetchedAt,
+        ).contains("feed_age_bucket=unknown"))
+    }
+
+
+    @Test fun unsetAndPre2000ClocksCannotClaimFreshFeedAge() {
+        val validNow = 1_700_000_100L
+        val privateSource = "private-feed-source"
+        for (resetEpoch in listOf(0L, 90L, 946_684_799L)) {
+            val badFeed = state(NationwideDataState.Ready(10, resetEpoch, privateSource))
+            val sameResetClock = SupportDiagnostics.render(badFeed, resetEpoch)
+            assertTrue(sameResetClock.contains("transit_index=index_present_unverified\n"))
+            assertTrue(sameResetClock.contains("feed_age_bucket=unknown\n"))
+            assertFalse(sameResetClock.contains("feed_age_bucket=under_24h\n"))
+            assertFalse(sameResetClock.contains(privateSource))
+
+            val validClock = SupportDiagnostics.render(badFeed, validNow)
+            assertTrue(validClock.contains("feed_age_bucket=unknown\n"))
+            val validFeed = state(NationwideDataState.Ready(10, validNow, privateSource))
+            val resetDeviceClock = SupportDiagnostics.render(validFeed, resetEpoch)
+            assertTrue(resetDeviceClock.contains("feed_age_bucket=unknown\n"))
+        }
+
+        val trustworthyBoundary = 946_684_800L
+        val boundaryFeed = state(NationwideDataState.Ready(10, trustworthyBoundary, privateSource))
+        val report = SupportDiagnostics.render(boundaryFeed, trustworthyBoundary)
+        assertTrue(report.contains("feed_age_bucket=under_24h\n"))
+    }
+
+    @Test fun impossibleUtcClocksNeverClaimFeedAge() {
+        val validFetchedAt = 1_700_000_000L
+        val validNow = validFetchedAt + 100L
+        val validFeed = state(NationwideDataState.Ready(10, validFetchedAt, "private-source"))
+
+        // Impossible positive device times must not be misreported as over_7d.
+        for (invalidNow in listOf(253_402_300_800L, Long.MAX_VALUE)) {
+            val report = SupportDiagnostics.render(validFeed, invalidNow)
+            assertTrue(report.contains("feed_age_bucket=unknown\n"))
+            assertFalse(report.contains("feed_age_bucket=over_7d\n"))
+        }
+
+        // Impossible positive feed times must not look like ordinary clock skew.
+        for (invalidFetchedAt in listOf(253_402_300_800L, Long.MAX_VALUE)) {
+            val report = SupportDiagnostics.render(
+                state(NationwideDataState.Ready(10, invalidFetchedAt, "private-source")),
+                validNow,
+            )
+            assertTrue(report.contains("feed_age_bucket=unknown\n"))
+            assertFalse(report.contains("feed_age_bucket=clock_mismatch\n"))
+        }
+
+        assertTrue(SupportDiagnostics.render(validFeed, validNow).contains(
+            "feed_age_bucket=under_24h\n"
+        ))
+    }
+
+    @Test fun unconfiguredConnectorNeverReportsConnectedFromStaleSessionFlag() {
+        val inconsistent = state(NationwideDataState.Idle).copy(
+            connectorConfigured = false,
+            connectorConnected = true,
+        )
+        val redacted = SupportDiagnostics.render(inconsistent, 1_700_000_000L)
+        assertTrue(redacted.contains("connector_configured=no\n"))
+        assertTrue(redacted.contains("connector_connected=no\n"))
+
+        val genuinelyConnected = inconsistent.copy(connectorConfigured = true)
+        val current = SupportDiagnostics.render(genuinelyConnected, 1_700_000_000L)
+        assertTrue(current.contains("connector_configured=yes\n"))
+        assertTrue(current.contains("connector_connected=yes\n"))
+
+        val disconnected = genuinelyConnected.copy(connectorConnected = false)
+        val absent = SupportDiagnostics.render(disconnected, 1_700_000_000L)
+        assertTrue(absent.contains("connector_connected=no\n"))
+    }
+
+    @Test fun measuredSearchAndRoutingHealthUsesOnlyReviewedCoarseStates() {
+        val data = state(NationwideDataState.Idle)
+        val states = listOf(
+            TransitFunctionHealth.UNVERIFIED to "not_measured",
+            TransitFunctionHealth.WORKING to "working",
+            TransitFunctionHealth.DEGRADED to "degraded",
+            TransitFunctionHealth.FAILED to "failed",
+        )
+        for ((health, expected) in states) {
+            val report = SupportDiagnostics.render(
+                data.copy(searchHealth = health, routingHealth = health),
+                1_700_000_000L,
+            )
+            assertTrue(report.contains("search_probe=${expected}\\n".replace("\\n", "\n")))
+            assertTrue(report.contains("routing_probe=${expected}\\n".replace("\\n", "\n")))
+        }
+
+        // A healthy route probe must not mask a failed search (or vice versa).
+        val divergent = SupportDiagnostics.render(
+            data.copy(
+                searchHealth = TransitFunctionHealth.FAILED,
+                routingHealth = TransitFunctionHealth.WORKING,
+            ),
+            1_700_000_000L,
+        )
+        assertTrue(divergent.contains("search_probe=failed\\n".replace("\\n", "\n")))
+        assertTrue(divergent.contains("routing_probe=working\\n".replace("\\n", "\n")))
+        assertFalse(divergent.contains("provider_error_detail"))
+    }
+
+    @Test fun independentSearchAndRoutingProbeMatrixNeverConflatesResults() {
+        val expected = mapOf(
+            TransitFunctionHealth.UNVERIFIED to "not_measured",
+            TransitFunctionHealth.WORKING to "working",
+            TransitFunctionHealth.DEGRADED to "degraded",
+            TransitFunctionHealth.FAILED to "failed",
+        )
+        for ((search, searchValue) in expected) {
+            for ((routing, routingValue) in expected) {
+                val report = SupportDiagnostics.render(
+                    state(NationwideDataState.Error("private-provider-error")).copy(
+                        searchHealth = search,
+                        routingHealth = routing,
+                    ),
+                    nowEpochSeconds = 1_700_000_000L,
+                )
+                val fields = report.trimEnd('\n').lines().associate {
+                    it.substringBefore('=') to it.substringAfter('=')
+                }
+                assertEquals("search=$search routing=$routing", searchValue, fields["search_probe"])
+                assertEquals("search=$search routing=$routing", routingValue, fields["routing_probe"])
+                assertEquals("not_measured", fields["realtime_probe"])
+                assertFalse(report.contains("private-provider-error"))
+            }
+        }
+    }
+
+    @Test fun feedBucketBoundariesAreExactAndNonLeaking() {
+        val fetchedAt = 1_700_000_000L
+        val sensitiveSource = "private-origin-and-auth-secret"
+        val snapshot = state(NationwideDataState.Ready(17, fetchedAt, sensitiveSource))
+        val samples = listOf(
+            0L to "under_24h",
+            86_399L to "under_24h",
+            86_400L to "1_to_7d",
+            604_799L to "1_to_7d",
+            604_800L to "over_7d",
+        )
+        for ((age, expected) in samples) {
+            val report = SupportDiagnostics.render(snapshot, fetchedAt + age)
+            assertTrue("Incorrect bucket at age=$age", report.contains("feed_age_bucket=$expected\n"))
+            assertFalse(report.contains(sensitiveSource))
+            assertFalse(report.contains(fetchedAt.toString()))
+        }
+    }
+
+    @Test fun redactedOutputHasExactlyOneValuePerReviewedKey() {
+        val rawError = "raw-user-coordinates-51.123-8.123?token=private"
+        val candidateStates = listOf(
+            state(NationwideDataState.Error(rawError)),
+            state(NationwideDataState.Ready(31, 1_700_000_000L, rawError)),
+            state(NationwideDataState.Idle),
+        )
+        for (candidate in candidateStates) {
+            val report = SupportDiagnostics.render(candidate, 1_700_000_500L)
+            val lines = report.trimEnd('\n').lines()
+            val pairs = lines.map { line ->
+                assertTrue("Malformed support field", line.count { it == '=' } == 1)
+                val separator = line.indexOf('=')
+                assertTrue("Missing support key", separator > 0)
+                line.substring(0, separator) to line.substring(separator + 1)
+            }
+            assertEquals("Support schema must not add duplicate fields", 17, pairs.size)
+            assertEquals("Each key must appear once", pairs.size, pairs.map { it.first }.toSet().size)
+            assertTrue(report.endsWith("\n"))
+            assertFalse(report.contains(rawError))
+        }
+    }
+
+    @Test fun outputHasOnlyFixedReviewedKeys() {
+        val report = SupportDiagnostics.render(state(NationwideDataState.Idle), 100L)
+        val keys = report.trim().lines().map { it.substringBefore('=') }.toSet()
+        assertEquals(setOf(
+            "schema", "scope", "location_permission", "location_services_enabled",
+            "notification_permission", "bluetooth_permission", "guidance_permission",
+            "audio_route", "tracking_armed", "connector_configured", "connector_connected",
+            "transit_index", "installed_stop_count", "feed_age_bucket",
+            "search_probe", "routing_probe", "realtime_probe",
+        ), keys)
+    }
+}
