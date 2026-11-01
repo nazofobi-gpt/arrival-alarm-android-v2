@@ -9,10 +9,16 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -44,6 +50,19 @@ fun RouteJourneyPanel(
     mode: RouteJourneyMode = RouteJourneyMode.RESULTS,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val preferences = remember(context) { ArrivalUiPreferences(context) }
+    var directOnly by rememberSaveable { mutableStateOf(preferences.loadDirectOnlyRoutes()) }
+    var fewerTransfersFirst by rememberSaveable {
+        mutableStateOf(preferences.loadFewerTransfersFirst())
+    }
+    var shorterWalkingFirst by rememberSaveable {
+        mutableStateOf(preferences.loadShorterWalkingFirst())
+    }
+    var atMostOneTransfer by rememberSaveable {
+        mutableStateOf(preferences.loadAtMostOneTransfer())
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -118,19 +137,78 @@ fun RouteJourneyPanel(
                     }
                 }
 
-                routeOptions.take(3).forEachIndexed { index, option ->
+                val visibleOptions = RouteResultsFilter(
+                    directOnly = directOnly,
+                    fewerTransfersFirst = fewerTransfersFirst,
+                    shorterWalkingFirst = shorterWalkingFirst,
+                    maxTransfers = if (atMostOneTransfer) 1 else null,
+                ).apply(routeOptions)
+                FilterChip(
+                    selected = directOnly,
+                    onClick = {
+                        directOnly = !directOnly
+                        preferences.saveDirectOnlyRoutes(directOnly)
+                    },
+                    label = { Text(stringResource(R.string.route_direct_only_filter)) },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("route-direct-only-filter"),
+                )
+                FilterChip(
+                    selected = fewerTransfersFirst,
+                    onClick = {
+                        fewerTransfersFirst = !fewerTransfersFirst
+                        preferences.saveFewerTransfersFirst(fewerTransfersFirst)
+                    },
+                    label = { Text(stringResource(R.string.route_fewer_transfers_filter)) },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("route-fewer-transfers-filter"),
+                )
+                FilterChip(
+                    selected = shorterWalkingFirst,
+                    onClick = {
+                        shorterWalkingFirst = !shorterWalkingFirst
+                        preferences.saveShorterWalkingFirst(shorterWalkingFirst)
+                    },
+                    label = { Text(stringResource(R.string.route_shorter_walking_filter)) },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("route-shorter-walking-filter"),
+                )
+
+                FilterChip(
+                    selected = atMostOneTransfer,
+                    onClick = {
+                        atMostOneTransfer = !atMostOneTransfer
+                        preferences.saveAtMostOneTransfer(atMostOneTransfer)
+                    },
+                    label = { Text(stringResource(R.string.route_at_most_one_transfer_filter)) },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("route-at-most-one-transfer-filter"),
+                )
+
+                visibleOptions.take(6).forEachIndexed { index, option ->
                     RouteOptionCard(
                         option = option,
                         selected = selectedRouteId == option.id,
+                        routeOffline = routeOffline,
                         onSelect = { onSelectRoute(option) },
                         selectTestTag = "route-option-select-" + index,
                         modifier = Modifier.testTag("route-option-" + index),
                     )
                 }
 
-                if (!routeBusy && routeOptions.isEmpty()) {
+                if (!routeBusy && visibleOptions.isEmpty()) {
                     Text(
-                        text = routeStatus ?: stringResource(R.string.route_not_found),
+                        text = when {
+                            directOnly && routeOptions.isNotEmpty() ->
+                                stringResource(R.string.route_direct_only_empty)
+                            atMostOneTransfer && routeOptions.isNotEmpty() ->
+                                stringResource(R.string.route_at_most_one_transfer_empty)
+                            else -> routeStatus ?: stringResource(R.string.route_not_found)
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.testTag("route-results-empty"),
@@ -154,7 +232,7 @@ fun RouteJourneyPanel(
                     modifier = Modifier.testTag("journey-detail-empty"),
                 )
             } else {
-                JourneyDetailCard(selected)
+                JourneyDetailCard(selected, routeOffline = routeOffline)
             }
 
             JourneyAlarmControls(
@@ -170,15 +248,30 @@ fun RouteJourneyPanel(
 private fun RouteOptionCard(
     option: RouteOption,
     selected: Boolean,
+    routeOffline: Boolean,
     onSelect: () -> Unit,
     selectTestTag: String,
     modifier: Modifier = Modifier,
 ) {
-    val duration = routeDurationMinutes(option.departure, option.arrival)
-    val hasRealtime = option.stops.any(::hasRealtimeDelta)
+    val displayDeparture = routeOptionEvidenceClock(option, departure = true, routeOffline = routeOffline)
+        ?: stringResource(R.string.unknown_time)
+    val displayArrival = routeOptionEvidenceClock(option, departure = false, routeOffline = routeOffline)
+        ?: stringResource(R.string.unknown_time)
+    val duration = if (routeOffline) routeDurationMinutes(displayDeparture, displayArrival)
+        else routeDurationMinutes(option)
+    val hasRealtime = routeHasVerifiedRealtimeDelta(
+        routeOffline = routeOffline,
+        state = option.realtime?.state,
+        suppliedDelta = option.stops.any(::hasRealtimeDelta),
+    )
+    val hasVerifiedCancellation = routeHasVerifiedRealtimeCancellation(
+        routeOffline = routeOffline,
+        state = option.realtime?.state,
+        suppliedCancellation = option.realtime?.cancelledTripIds?.isNotEmpty() == true,
+    )
     val realtimeLabel = when {
-        option.realtime?.cancelledTripIds?.isNotEmpty() == true ->
-            R.string.route_realtime_cancelled_badge
+        routeOffline -> R.string.route_offline_badge
+        hasVerifiedCancellation -> R.string.route_realtime_cancelled_badge
         hasRealtime -> R.string.route_realtime_badge
         option.realtime?.state == RouteRealtimeState.STALE ->
             R.string.route_realtime_stale_badge
@@ -207,12 +300,12 @@ private fun RouteOptionCard(
             Text(
                 text = duration?.let {
                     stringResource(R.string.route_duration_minutes, it)
-                } ?: (option.departure + " → " + option.arrival),
+                } ?: (displayDeparture + " → " + displayArrival),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = option.departure + " → " + option.arrival,
+                text = displayDeparture + " → " + displayArrival,
                 style = MaterialTheme.typography.bodyLarge,
             )
             Text(
@@ -238,16 +331,15 @@ private fun RouteOptionCard(
                 text = stringResource(realtimeLabel),
                 style = MaterialTheme.typography.labelMedium,
                 color = when {
-                    option.realtime?.cancelledTripIds?.isNotEmpty() == true ->
-                        MaterialTheme.colorScheme.error
+                    routeOffline -> MaterialTheme.colorScheme.tertiary
+                    hasVerifiedCancellation -> MaterialTheme.colorScheme.error
                     hasRealtime -> MaterialTheme.colorScheme.secondary
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 },
             )
             OutlinedButton(
                 onClick = onSelect,
-                enabled = !selected &&
-                    option.realtime?.cancelledTripIds?.isNotEmpty() != true,
+                enabled = !selected && !hasVerifiedCancellation,
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
@@ -266,8 +358,13 @@ private fun RouteOptionCard(
 }
 
 @Composable
-private fun JourneyDetailCard(option: RouteOption) {
-    val duration = routeDurationMinutes(option.departure, option.arrival)
+private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
+    val displayDeparture = routeOptionEvidenceClock(option, departure = true, routeOffline = routeOffline)
+        ?: stringResource(R.string.unknown_time)
+    val displayArrival = routeOptionEvidenceClock(option, departure = false, routeOffline = routeOffline)
+        ?: stringResource(R.string.unknown_time)
+    val duration = if (routeOffline) routeDurationMinutes(displayDeparture, displayArrival)
+        else routeDurationMinutes(option)
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface,
@@ -299,29 +396,41 @@ private fun JourneyDetailCard(option: RouteOption) {
                 style = MaterialTheme.typography.bodyLarge,
             )
             Text(
-                text = option.departure + " → " + option.arrival,
+                text = displayDeparture + " → " + displayArrival,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            // Map failure never blocks the fully functional text-only journey.
-            // Show only GTFS shape segments, never synthetic walking geometry.
-            if (option.shapePolylines.isNotEmpty()) {
+            // Only local planning provides separate distance-based access/egress estimates.
+            // These are stop contexts, never inferred pedestrian map polylines.
+            option.accessWalking?.takeIf { it.walkSeconds > 0 }?.let { leg ->
+                val roundedMinutes = ((leg.walkSeconds.toLong() + 59L) / 60L).toInt()
                 Text(
-                    text = stringResource(R.string.map_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    text = stringResource(
+                        R.string.route_walk_access_detail, leg.stopName, roundedMinutes,
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("route-walk-access"),
                 )
-                JourneyRouteShapeMap(option.shapePolylines)
+            }
+            option.egressWalking?.takeIf { it.walkSeconds > 0 }?.let { leg ->
+                val roundedMinutes = ((leg.walkSeconds.toLong() + 59L) / 60L).toInt()
                 Text(
-                    text = stringResource(R.string.source_gtfs_local),
+                    text = stringResource(
+                        R.string.route_walk_egress_detail, leg.stopName, roundedMinutes,
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("route-walk-egress"),
+                )
+            }
+            if (option.accessWalking != null || option.egressWalking != null) {
+                Text(
+                    text = stringResource(R.string.route_walk_source_note),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = stringResource(R.string.map_provider_note),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("route-walk-source"),
                 )
             }
 
@@ -329,23 +438,42 @@ private fun JourneyDetailCard(option: RouteOption) {
 
             if (option.stops.isEmpty()) {
                 JourneyEndpoint(
-                    time = option.departure,
+                    time = displayDeparture,
                     label = option.origin.label,
                     testTag = "journey-stop-origin",
                 )
                 JourneyEndpoint(
-                    time = option.arrival,
+                    time = displayArrival,
                     label = option.destination.label,
                     testTag = "journey-stop-destination",
                 )
             } else {
-                val visibleStops = option.stops.take(16)
-                visibleStops.forEachIndexed { index, stop ->
+                val expandedStops = remember(option.id) { mutableStateOf(false) }
+                val visibleStopIndices = journeyStopPreviewIndices(option.stops.size, expandedStops.value)
+                visibleStopIndices.forEachIndexed { visibleIndex, stopIndex ->
+                    if (visibleIndex > 0) {
+                        val hiddenCount = stopIndex - visibleStopIndices[visibleIndex - 1] - 1
+                        if (hiddenCount > 0) {
+                            Text(
+                                text = stringResource(R.string.journey_stops_hidden_count, hiddenCount),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.testTag("journey-stops-hidden"),
+                            )
+                            HorizontalDivider()
+                        }
+                    }
+                    val index = stopIndex
+                    val stop = option.stops[stopIndex]
                     val actual = stop.departure ?: stop.arrival
                     val planned = stop.plannedDeparture ?: stop.plannedArrival
-                    val displayTime = routeClock(actual ?: planned)
+                    val displayTime = routeClock(routeEvidenceTime(actual, planned, routeOffline))
                         ?: stringResource(R.string.unknown_time)
-                    val realtime = hasRealtimeDelta(stop)
+                    val realtime = routeHasVerifiedRealtimeDelta(
+                        routeOffline = routeOffline,
+                        state = option.realtime?.state,
+                        suppliedDelta = hasRealtimeDelta(stop),
+                    )
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -366,10 +494,16 @@ private fun JourneyDetailCard(option: RouteOption) {
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Medium,
                         )
-                        (stop.platform ?: stop.plannedPlatform)?.let { platform ->
+                        routeEvidencePlatform(stop.platform, stop.plannedPlatform, routeOffline)
+                            ?.let { platform ->
+                            val realtimePlatform = routeHasVerifiedRealtimePlatform(
+                                routeOffline = routeOffline,
+                                state = option.realtime?.state,
+                                actualPlatform = stop.platform,
+                            )
                             Text(
                                 text = stringResource(
-                                    if (stop.platform != null) {
+                                    if (realtimePlatform) {
                                         R.string.route_realtime_platform_format
                                     } else {
                                         R.string.route_planned_platform_format
@@ -377,7 +511,7 @@ private fun JourneyDetailCard(option: RouteOption) {
                                     platform,
                                 ),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (stop.platform != null) {
+                                color = if (realtimePlatform) {
                                     MaterialTheme.colorScheme.secondary
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
@@ -392,13 +526,46 @@ private fun JourneyDetailCard(option: RouteOption) {
                             )
                         }
                     }
-                    if (index != visibleStops.lastIndex) {
+                    if (visibleIndex != visibleStopIndices.lastIndex) {
                         HorizontalDivider()
+                    }
+                }
+                if (option.stops.size > COLLAPSED_JOURNEY_STOP_LIMIT) {
+                    OutlinedButton(
+                        onClick = { expandedStops.value = !expandedStops.value },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("journey-stops-toggle"),
+                    ) {
+                        Text(
+                            if (expandedStops.value) {
+                                stringResource(R.string.journey_show_fewer_stops)
+                            } else {
+                                stringResource(R.string.journey_show_all_stops_count, option.stops.size)
+                            },
+                        )
                     }
                 }
             }
         }
     }
+}
+
+/**
+ * Route-level clocks may already contain old realtime overlays. In offline mode,
+ * derive endpoints only from scheduled stops. Online provider clocks must be validated
+ * and fall back to the scheduled endpoint if malformed; missing proof stays unknown.
+ */
+private fun routeOptionEvidenceClock(option: RouteOption, departure: Boolean, routeOffline: Boolean): String? {
+    val stop = if (departure) option.stops.firstOrNull() else option.stops.lastOrNull()
+    val scheduled = if (departure) {
+        stop?.plannedDeparture ?: stop?.plannedArrival
+    } else {
+        stop?.plannedArrival ?: stop?.plannedDeparture
+    }
+    val actual = if (departure) option.departure else option.arrival
+    return routeSummaryEvidenceClock(actual, scheduled, routeOffline)
 }
 
 @Composable
@@ -486,11 +653,36 @@ internal fun JourneyAlarmControls(
     }
 }
 
+/** Calendar-day-safe duration for scheduled trips; unknown dates fail closed. */
+internal fun routeDurationMinutes(option: RouteOption): Int? {
+    val departure = option.departureEpochMillis
+    val arrival = option.arrivalEpochMillis
+    if (departure != null || arrival != null) {
+        if (departure == null || arrival == null || arrival < departure) return null
+        val elapsedMillis = try {
+            Math.subtractExact(arrival, departure)
+        } catch (_: ArithmeticException) {
+            return null
+        }
+        val minutes = elapsedMillis / 60_000L
+        return minutes.takeIf { it <= Int.MAX_VALUE.toLong() }?.toInt()
+    }
+    return routeDurationMinutes(option.departure, option.arrival)
+}
+
 private fun routeDurationMinutes(departure: String, arrival: String): Int? {
     fun minutes(clock: String): Int? {
         val raw = clock.substringAfter('T', clock)
-        val hour = raw.take(2).toIntOrNull() ?: return null
-        val minute = raw.drop(3).take(2).toIntOrNull() ?: return null
+        // Undated labels must never masquerade as a multi-day schedule.
+        if (raw.length != 5 && raw.length != 8) return null
+        if (raw[2] != ':' || (raw.length == 8 && raw[5] != ':')) return null
+        val hour = raw.substring(0, 2).toIntOrNull() ?: return null
+        val minute = raw.substring(3, 5).toIntOrNull() ?: return null
+        if (hour !in 0..23 || minute !in 0..59) return null
+        if (raw.length == 8) {
+            val seconds = raw.substring(6, 8).toIntOrNull() ?: return null
+            if (seconds !in 0..59) return null
+        }
         return hour * 60 + minute
     }
     val start = minutes(departure) ?: return null
@@ -498,11 +690,23 @@ private fun routeDurationMinutes(departure: String, arrival: String): Int? {
     return if (end >= start) end - start else end + 24 * 60 - start
 }
 
-private fun routeClock(value: String?): String? {
+/** Invalid provider labels must not be displayed as a scheduled stop clock. */
+internal fun routeClock(value: String?): String? {
     val raw = value?.substringAfter('T', value)?.takeIf { it.isNotBlank() } ?: return null
-    return raw.take(5).takeIf { it.length >= 4 }
+    if (raw.length != 5 && raw.length != 8) return null
+    if (raw[2] != ':' || (raw.length == 8 && raw[5] != ':')) return null
+    if (!raw.substring(0, 2).all { it in '0'..'9' } ||
+        !raw.substring(3, 5).all { it in '0'..'9' }) return null
+    val minute = raw.substring(3, 5).toInt()
+    if (minute !in 0..59) return null
+    if (raw.length == 8) {
+        if (!raw.substring(6, 8).all { it in '0'..'9' }) return null
+        if (raw.substring(6, 8).toInt() !in 0..59) return null
+    }
+    // GTFS extended service-day hours (24+) are valid; do not silently wrap them.
+    return raw.substring(0, 5)
 }
 
 private fun hasRealtimeDelta(stop: RouteStop): Boolean =
-    (stop.arrival != null && stop.plannedArrival != null && stop.arrival != stop.plannedArrival) ||
-        (stop.departure != null && stop.plannedDeparture != null && stop.departure != stop.plannedDeparture)
+    routeHasUsableRealtimeDelta(stop.arrival, stop.plannedArrival) ||
+        routeHasUsableRealtimeDelta(stop.departure, stop.plannedDeparture)

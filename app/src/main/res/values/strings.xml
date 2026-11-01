@@ -56,6 +56,7 @@
     <string name="select_destination">Varış seç</string>
     <string name="search_stops_label">Durak, adres, hat veya sefer ara</string>
     <string name="search_supporting_text">Durak adı, adres, POI, hat veya sefer yazın.</string>
+    <string name="search_query_too_long">Arama metni çok uzun. Lütfen daha kısa yazın.</string>
     <string name="search_autocomplete_action">Tamamla</string>
     <string name="journey_points_title">Yolculuk noktaları</string>
     <string name="journey_points_empty">Önce başlangıç noktasını seçin.</string>
@@ -87,11 +88,20 @@
     <string name="nearby_child_stop_format">%1$d. %2$s</string>
 
     <string name="route_calculating">Rota hesaplanıyor…</string>
+    <string name="route_direct_only_filter">Yalnız aktarmasız rotalar</string>
+    <string name="route_at_most_one_transfer_filter">En fazla 1 aktarma</string>
+    <string name="route_at_most_one_transfer_empty">En fazla bir aktarmalı rota bulunamadı. Alternatifler için filtreyi kapatın.</string>
+    <string name="route_fewer_transfers_filter">Önce az aktarmalı rotalar</string>
+    <string name="route_shorter_walking_filter">Önce az yürüyüşlü rotalar</string>
+    <string name="route_direct_only_empty">Aktarmasız rota bulunamadı. Diğer seçenekleri görmek için filtreyi kapatın.</string>
     <string name="route_results_title">Rota Sonuçları</string>
     <string name="route_points_format">%1$s → %2$s</string>
     <string name="route_offline_badge">Çevrimdışı önbellek</string>
     <string name="route_duration_minutes">%1$d dk</string>
     <string name="route_walk_transfer_format">%1$d dk yürüme • %2$d aktarma</string>
+    <string name="route_walk_access_detail">Başlangıç → %1$s durağı: yaklaşık %2$d dk yürüme</string>
+    <string name="route_walk_egress_detail">%1$s durağı → varış: yaklaşık %2$d dk yürüme</string>
+    <string name="route_walk_source_note">Durağa kuş uçuşu mesafe ve tahmini yürüyüş hızı kullanılır; yaya rotası değildir.</string>
     <string name="route_realtime_badge">Canlı güncelleme</string>
     <string name="route_realtime_cancelled_badge">Canlı veri: sefer iptal bilgisi</string>
     <string name="route_realtime_cancelled_action_blocked">Sefer iptal edildi • farklı bir rota seç</string>
@@ -170,6 +180,10 @@
     <string name="departure_source_planned">planlı</string>
     <string name="alternate_departures">Alternatif kalkışlar: %1$d</string>
     <string name="recent_trips">Son yolculuklar: %1$d</string>
+    <string name="recent_trips_clear">Son yolculuk geçmişini sil</string>
+    <string name="recent_trips_enable">Son yolculuk geçmişini kaydetmeyi aç</string>
+    <string name="recent_trips_disable">Son yolculuk geçmişini kapat ve sil</string>
+    <string name="recent_trips_privacy_note">Yolculuk geçmişi yalnızca bu cihazda, siz izin verirseniz saklanır.</string>
 
     <string name="source_gtfs_local">GTFS Deutschland yerel indeks</string>
     <string name="source_live_germany">Canlı Almanya araması</string>
@@ -205,6 +219,7 @@
     <string name="live_trip_current">Saat verisine göre mevcut durak</string>
     <string name="live_trip_between_stops">Duraklar arasında • fiziksel durak konumu doğrulanmadı</string>
     <string name="live_trip_progress_unavailable">Durak ilerlemesi için sağlayıcı zamanı yok</string>
+    <string name="live_trip_remaining_stops">Kalan durak (sağlayıcı zamanına göre)</string>
     <string name="live_trip_next">Sıradaki durak</string>
     <string name="live_trip_target">Hedef durak</string>
     <string name="live_trip_target_time">Hedef zamanı</string>
@@ -245,4 +260,34 @@
     <string name="departures_empty_action">Rota planla</string>
     <string name="lookup_stale_results">Önbellekteki eski sağlayıcı sonuçları gösteriliyor • güncellik doğrulanamadı</string>
     <string name="lookup_provider_unavailable">Canlı arama sağlayıcısına ulaşılamıyor • yerel veri sonuç vermedi</string>
+    <string name="journey_stops_hidden_count">%1$d ara durak gizlendi</string>
+    <string name="journey_show_all_stops_count">Tüm %1$d durağı göster</string>
+    <string name="journey_show_fewer_stops">Daha az durak göster</string>
+    <string name="readiness_share_diagnostics">Tanı özetini paylaş</string>
+    <string name="readiness_share_diagnostics_note">Yalnız durum bilgileri paylaşılır. Konum, yolculuk geçmişi ve erişim anahtarları eklenmez.</string>
+    <string name="gtfs_consent_title">Sefer duraklarını onayla</string>
+    <string name="gtfs_consent_boarding">Biniş: %1$s</string>
+    <string name="gtfs_consent_choose_destination">İniş durağını seç</string>
+    <string name="gtfs_consent_alarm_target">Alarm hedefi (varsayılan: iniş durağı)</string>
+    <string name="gtfs_consent_invalid">Bu sefer için geçerli durak seçimi yapılamıyor.</string>
+    <string name="gtfs_consent_no_automatic_alarm">Seçim kaydedilir; varış alarmı kendiliğinden kurulmaz.</string>
+    <string name="gtfs_consent_save">Seçimi onayla ve kaydet</string>
+    <string name="gtfs_consent_cancel">Seçimden vazgeç</string>
+    <string name="gtfs_consent_loading">Sefer ve durak bilgileri doğrulanıyor…</string>
+    <string name="gtfs_consent_inspect_failed">Seferin güncel kaynağı doğrulanamadı. Başka bir kalkış seçin.</string>
+    <string name="gtfs_consent_save_failed">Seçim güvenle kaydedilemedi; alarm kurulmadı.</string>
+    <string name="gtfs_consent_saved">Seçim kaydedildi. Alarmı ayrıca etkinleştirin.</string>
+    <string name="gtfs_consent_restored">Kaydedilen sefer ve duraklar güncel veriyle doğrulandı.</string>
+    <string name="gtfs_consent_restore_invalid">Kaydedilen sefer değişmiş veya kullanılamıyor. Lütfen yeniden seçin.</string>
+    <string name="active_tracking_channel_name">Aktif varış takibi</string>
+    <string name="arrival_alerts_channel_name">Varış uyarıları</string>
+    <string name="active_tracking_title">Varış alarmı etkin</string>
+    <string name="active_tracking_degraded">Konum doğruluğu yetersiz; alarm etkin, yeni GPS bekleniyor</string>
+    <string name="active_tracking_in_progress">Konum takip ediliyor</string>
+    <string name="active_tracking_distance">Hedefe yaklaşık %1$d m kaldı</string>
+    <string name="arrival_notification_title">Varış noktasına ulaşıldı</string>
+    <string name="arrival_notification_body">Varış alarmı tamamlandı.</string>
+    <string name="pin_line_at_stop">Bu durakta hattı sabitle</string>
+    <string name="unpin_line_at_stop">Bu durakta sabitlemeyi kaldır</string>
+    <string name="pin_line_local_only">Hat bu durakta yalnızca cihaza kaydedildi; bildirimler etkin değil.</string>
 </resources>

@@ -7,6 +7,59 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class OfflineTransitCacheTest {
+    @Test fun legacyActualOnlyStopsAreSanitizedWithoutScheduledBaselines() {
+        val origin = MapPoint(52.665, 8.237, "Lohne")
+        val destination = MapPoint(53.083, 8.813, "Bremen")
+        val legacyRoute = RouteOption(
+            id = "legacy-actual-only",
+            origin = origin,
+            destination = destination,
+            line = "RE 9",
+            direction = "Bremen",
+            departure = "10:00",
+            arrival = "10:45",
+            walkingMinutes = 0,
+            transfers = 0,
+            stops = listOf(RouteStop(
+                id = "S1",
+                name = "Lohne",
+                arrival = "2026-10-17T10:04:00+02:00",
+                departure = "2026-10-17T10:05:00+02:00",
+                platform = "7",
+            )),
+        )
+        val store = object : TransitCacheBackingStore {
+            override fun load() = listOf(
+                CachedTransitPlan("legacy", listOf(legacyRoute), emptyList(), 900L),
+            )
+            override fun save(plans: List<CachedTransitPlan>) = Unit
+        }
+        val restored = OfflineTransitCache(backingStore = store)
+            .routeOptions("legacy").single().stops.single()
+
+        // No trusted scheduled fields exist: never replay stale observed data.
+        assertNull(restored.arrival)
+        assertNull(restored.departure)
+        assertNull(restored.platform)
+    }
+
+    @Test fun scheduledOnlyStopsRemainAvailableOffline() {
+        val origin = MapPoint(52.665, 8.237, "Lohne")
+        val destination = MapPoint(53.083, 8.813, "Bremen")
+        val planned = RouteStop(
+            id = "S1", name = "Lohne",
+            plannedDeparture = "2026-10-17T10:00:00+02:00",
+            plannedPlatform = "2",
+        )
+        val route = RouteOption(
+            "scheduled", origin, destination, "RE 9", "Bremen", "10:00", "10:45",
+            0, 0, stops = listOf(planned),
+        )
+        val cache = OfflineTransitCache()
+        cache.put(CachedTransitPlan("scheduled", listOf(route), emptyList(), 900L))
+        assertEquals(planned, cache.routeOptions("scheduled").single().stops.single())
+    }
+
     @Test fun offlineSnapshotStripsRealtimeAndKeepsRoute() {
         val origin = MapPoint(53.08, 8.81, "Bremen")
         val destination = MapPoint(53.10, 8.85, "Ziel")
@@ -78,6 +131,91 @@ class OfflineTransitCacheTest {
         assertEquals("2", restored.stops.last().plannedPlatform)
     }
 
+    @Test fun restoredLegacyCacheCannotExposeRealtimeCancellationOrPlatform() {
+        val origin = MapPoint(52.665, 8.237, "Lohne")
+        val destination = MapPoint(53.083, 8.813, "Bremen")
+        val route = RouteOption(
+            id = "legacy-route",
+            origin = origin,
+            destination = destination,
+            line = "RE 9",
+            direction = "Bremen",
+            departure = "10:00",
+            arrival = "10:45",
+            walkingMinutes = 0,
+            transfers = 0,
+            stops = listOf(
+                RouteStop(
+                    id = "S1",
+                    name = "Lohne",
+                    departure = "2026-10-11T10:09:00+02:00",
+                    plannedDeparture = "2026-10-11T10:00:00+02:00",
+                    platform = "7",
+                    plannedPlatform = "2",
+                ),
+            ),
+            // SharedPreferences JSON historically omitted RouteRealtimeInfo
+            // while retaining stop-level actual values and planned baselines.
+            realtime = null,
+        )
+        val departure = Departure(
+            tripId = "T1",
+            line = "RE 9",
+            direction = "Bremen",
+            scheduledEpochSeconds = 1000L,
+            realtimeEpochSeconds = 1500L,
+            cancelled = true,
+            platform = "7",
+            realtimeTripStartDate = "20261011",
+            realtimeTripStartTime = "10:00:00",
+        )
+        val legacyPlan = CachedTransitPlan("legacy", listOf(route), listOf(departure), 800L)
+        val backing = object : TransitCacheBackingStore {
+            override fun load() = listOf(legacyPlan)
+            override fun save(plans: List<CachedTransitPlan>) = Unit
+        }
+
+        val cache = OfflineTransitCache(backingStore = backing)
+        val stored = cache.get("legacy")!!
+        val restoredRoute = stored.routeOptions.single()
+        val restoredStop = restoredRoute.stops.single()
+        val restoredDeparture = stored.departures.single()
+
+        assertNull(restoredRoute.realtime)
+        assertNull(restoredStop.departure)
+        assertNull(restoredStop.platform)
+        assertEquals("2026-10-11T10:00:00+02:00", restoredStop.plannedDeparture)
+        assertEquals("2", restoredStop.plannedPlatform)
+        assertNull(restoredDeparture.realtimeEpochSeconds)
+        assertFalse(restoredDeparture.cancelled)
+        assertNull(restoredDeparture.platform)
+        assertNull(restoredDeparture.realtimeTripStartDate)
+        assertNull(restoredDeparture.realtimeTripStartTime)
+        assertEquals(1000L, restoredDeparture.effectiveEpochSeconds)
+        assertTrue(cache.snapshot("legacy")!!.isOfflineCache)
+        assertFalse(cache.snapshot("legacy")!!.departures.single().cancelled)
+    }
+
+    @Test fun duplicateRestoredKeysRetainLatestVersionAndOtherValidJourney() {
+        val first = CachedTransitPlan("first", emptyList(), emptyList(), 10L)
+        val duplicateOld = CachedTransitPlan("same", emptyList(), emptyList(), 20L)
+        val duplicateNew = CachedTransitPlan("same", emptyList(), emptyList(), 30L)
+        val backing = object : TransitCacheBackingStore {
+            override fun load() = listOf(first, duplicateOld, duplicateNew)
+            override fun save(plans: List<CachedTransitPlan>) = Unit
+        }
+
+        val cache = OfflineTransitCache(maxEntries = 2, backingStore = backing)
+        assertEquals(10L, cache.get("first")?.savedAtEpochSeconds)
+        assertEquals(30L, cache.get("same")?.savedAtEpochSeconds)
+
+        // The restored sequence must retain the original eviction order.
+        cache.put(CachedTransitPlan("new", emptyList(), emptyList(), 40L))
+        assertNull(cache.get("first"))
+        assertEquals(30L, cache.get("same")?.savedAtEpochSeconds)
+        assertEquals(40L, cache.get("new")?.savedAtEpochSeconds)
+    }
+
     @Test fun backingStoreIsLoadedAndPublishedOnMutation() {
         val origin = MapPoint(52.665, 8.237, "Lohne")
         val destination = MapPoint(53.083, 8.813, "Bremen")
@@ -96,6 +234,66 @@ class OfflineTransitCacheTest {
 
         cache.put(CachedTransitPlan("next", listOf(route.copy(id = "r2")), emptyList(), 20L))
         assertEquals(listOf("seed", "next"), saved.map { it.key })
+    }
+
+    @Test fun unreadableBackingStoreFailsClosedAndAllowsNewSessionCache() {
+        val backing = object : TransitCacheBackingStore {
+            override fun load(): List<CachedTransitPlan> = error("corrupt JSON")
+            override fun save(plans: List<CachedTransitPlan>) = Unit
+        }
+        val cache = OfflineTransitCache(backingStore = backing)
+        assertNull(cache.get("unverified"))
+
+        cache.put(CachedTransitPlan(
+            "fresh", emptyList(),
+            listOf(Departure("T1", "RE 9", "Bremen", 1_000L,
+                realtimeEpochSeconds = 1_200L, cancelled = true, platform = "4")),
+            900L,
+        ))
+        val fallback = cache.snapshot("fresh")!!
+        assertTrue(fallback.isOfflineCache)
+        assertEquals(1_000L, fallback.departures.single().effectiveEpochSeconds)
+        assertFalse(fallback.departures.single().cancelled)
+        assertNull(fallback.departures.single().platform)
+    }
+
+    @Test fun diskWriteFailureLeavesSafeScheduledTripAvailableInMemory() {
+        val backing = object : TransitCacheBackingStore {
+            override fun load(): List<CachedTransitPlan> = emptyList()
+            override fun save(plans: List<CachedTransitPlan>): Unit = error("disk full")
+        }
+        val cache = OfflineTransitCache(backingStore = backing)
+        cache.put(CachedTransitPlan(
+            "session", emptyList(),
+            listOf(Departure("T1", "RE 9", "Bremen", 1_000L,
+                realtimeEpochSeconds = 1_100L, cancelled = true, platform = "3")),
+            950L,
+        ))
+        assertEquals(1_000L, cache.snapshot("session")!!.departures.single().effectiveEpochSeconds)
+        assertFalse(cache.snapshot("session")!!.departures.single().isRealtime)
+        assertNull(cache.snapshot("session")!!.departures.single().platform)
+        assertFalse(cache.snapshot("session")!!.departures.single().cancelled)
+    }
+
+    @Test fun disabledCapacityCannotRestoreOrRetainOfflineTrips() {
+        val existing = CachedTransitPlan("previous", emptyList(), emptyList(), 1L)
+        val incoming = existing.copy(key = "next", savedAtEpochSeconds = 2L)
+        for (capacity in listOf(0, -3)) {
+            var persisted: List<CachedTransitPlan>? = null
+            val backing = object : TransitCacheBackingStore {
+                override fun load(): List<CachedTransitPlan> = listOf(existing)
+                override fun save(plans: List<CachedTransitPlan>) {
+                    persisted = plans
+                }
+            }
+            val cache = OfflineTransitCache(maxEntries = capacity, backingStore = backing)
+            assertNull(cache.get("previous"))
+            assertNull(cache.snapshot("previous"))
+            cache.put(incoming)
+            assertNull(cache.get("next"))
+            assertNull(cache.snapshot("next"))
+            assertEquals(emptyList<CachedTransitPlan>(), persisted)
+        }
     }
 
     @Test fun boundedCacheEvictsOldest() {

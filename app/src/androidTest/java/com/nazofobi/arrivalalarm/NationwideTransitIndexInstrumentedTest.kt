@@ -198,4 +198,54 @@ class NationwideTransitIndexInstrumentedTest {
         assertEquals(4, db.version)
         helper.close()
     }
+
+    @Test
+    fun nearestSearchRejectsNonFiniteAndOutOfRangeCoordinates() {
+        context.deleteDatabase("nationwide_transit.db")
+        val helper = NationwideTransitIndex(context)
+        try {
+            // A real database row is needed to prove invalid coordinates do not
+            // produce false nearby matches through SQLite's numeric coercions.
+            helper.writableDatabase.execSQL(
+                "INSERT INTO stops(id,name,lat,lon,parent_station) " +
+                    "VALUES('lohne-stop','Lohne',52.665,8.237,NULL)"
+            )
+
+            val badCoordinates = listOf(
+                Double.NaN to 8.237,
+                Double.POSITIVE_INFINITY to 8.237,
+                Double.NEGATIVE_INFINITY to 8.237,
+                91.0 to 8.237,
+                -91.0 to 8.237,
+                52.665 to Double.NaN,
+                52.665 to Double.POSITIVE_INFINITY,
+                52.665 to Double.NEGATIVE_INFINITY,
+                52.665 to 181.0,
+                52.665 to -181.0,
+            )
+            for ((latitude, longitude) in badCoordinates) {
+                assertTrue(
+                    "Invalid position $latitude,$longitude returned nearby stops",
+                    helper.nearest(latitude, longitude, 1).isEmpty(),
+                )
+                assertTrue(
+                    "Invalid position $latitude,$longitude returned canonical stations",
+                    helper.nearestCanonicalStations(latitude, longitude, 1).isEmpty(),
+                )
+            }
+
+            // Bounds and a valid local hit remain supported, not just rejected.
+            assertEquals(
+                "lohne-stop",
+                helper.nearest(52.665, 8.237, 1).single().stop.id,
+            )
+            assertEquals(
+                "lohne-stop",
+                helper.nearestCanonicalStations(52.665, 8.237, 1).single().stop.id,
+            )
+            assertTrue(helper.nearest(52.665, 8.237, 0).isEmpty())
+        } finally {
+            helper.close()
+        }
+    }
 }

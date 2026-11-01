@@ -44,6 +44,8 @@ data class TransitLocationResult(
     val routeId: String? = null,
     val tripId: String? = null,
     val autocompleteText: String? = null,
+    val serviceId: String? = null,
+    val directionId: Int? = null,
 ) {
     val point: MapPoint
         get() {
@@ -54,6 +56,31 @@ data class TransitLocationResult(
             ) { "Only location results have selectable coordinates" }
             return MapPoint(latitude, longitude, label)
         }
+}
+
+/** GTFS identifiers are scoped to their provider; identical stop IDs are not the same station. */
+internal fun providerScopedStopLocationKey(stop: CatalogStop): String =
+    "stop:${stop.providerId}:${stop.id}"
+
+/** Preserve different providers and genuine stations, while collapsing repeated source rows. */
+internal fun mergeTransitLocationResults(
+    local: List<TransitLocationResult>,
+    live: List<TransitLocationResult>,
+    limit: Int,
+): List<TransitLocationResult> {
+    if (limit <= 0) return emptyList()
+    return (local + live).distinctBy { result ->
+        when {
+            result.kind == TransitLocationKind.STOP && result.stop != null ->
+                providerScopedStopLocationKey(result.stop)
+            result.kind == TransitLocationKind.LINE || result.kind == TransitLocationKind.TRIP ->
+                result.key
+            else ->
+                "${result.kind}:${result.label.lowercase(Locale.ROOT)}:" +
+                    "${"%.5f".format(Locale.ROOT, result.latitude)}:" +
+                    "${"%.5f".format(Locale.ROOT, result.longitude)}"
+        }
+    }.take(limit)
 }
 
 data class StationDeparturesSnapshot(
@@ -118,7 +145,7 @@ class NationwideTransitGateway(
     private val nowMillis: () -> Long = { System.currentTimeMillis() },
     private val liveJourneyLoader: ((MapPoint, MapPoint, Int) -> List<RouteOption>)? = null,
     private val realtimeFetch: (() -> GermanyRealtimeFetchResult)? = null,
-) {
+) : ArrivalTransitClient {
     private val appContext = context.applicationContext
     private val store = NationwideTransitIndex(appContext)
     private val staticJourneyPlanner = ProductionStaticJourneyPlanner(
@@ -155,10 +182,10 @@ class NationwideTransitGateway(
     private val io = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
 
-    fun currentState(): NationwideDataState =
+    override fun currentState(): NationwideDataState =
         if (store.isReady()) NationwideDataState.Ready(store.stopCount(), store.fetchedAt(), store.sourceVersion()) else NationwideDataState.Idle
 
-    fun ensureNationwideIndex(callback: (NationwideDataState) -> Unit) {
+    override fun ensureNationwideIndex(callback: (NationwideDataState) -> Unit) {
         if (store.isReady()) {
             callback(NationwideDataState.Ready(store.stopCount(), store.fetchedAt(), store.sourceVersion()))
             return
@@ -241,9 +268,9 @@ class NationwideTransitGateway(
         }
     }
 
-    fun searchLocationsResolved(
+    override fun searchLocationsResolved(
         query: String,
-        limit: Int = 20,
+        limit: Int,
         callback: (NationwideLookupResolution<TransitLocationResult>) -> Unit,
     ) {
         val q = query.trim()
@@ -305,10 +332,10 @@ class NationwideTransitGateway(
         }
     }
 
-    fun nearbyStopsResolved(
+    override fun nearbyStopsResolved(
         latitude: Double,
         longitude: Double,
-        limit: Int = 8,
+        limit: Int,
         callback: (NationwideLookupResolution<NearbyStop>) -> Unit,
     ) {
         io.execute {
@@ -322,6 +349,10 @@ class NationwideTransitGateway(
         longitude: Double,
         limit: Int = 8,
     ): NationwideLookupResolution<NearbyStop> {
+        // Invalid coordinates must not be sent to an external nearby provider.
+        if (!validTransitJourneyCoordinates(latitude, longitude)) {
+            return NationwideLookupResolution.NoResult()
+        }
         val local = if (store.isReady()) store.nearestCanonicalStations(latitude, longitude, limit) else emptyList()
         if (local.isNotEmpty()) {
             return NationwideLookupResolution.Results(
@@ -351,7 +382,7 @@ class NationwideTransitGateway(
     }
 
     private fun localLocation(stop: CatalogStop) = TransitLocationResult(
-        key = "stop:${stop.id}",
+        key = providerScopedStopLocationKey(stop),
         kind = TransitLocationKind.STOP,
         label = stop.name,
         latitude = stop.latitude,
@@ -363,18 +394,7 @@ class NationwideTransitGateway(
         local: List<TransitLocationResult>,
         live: List<TransitLocationResult>,
         limit: Int,
-    ): List<TransitLocationResult> =
-        (local + live)
-            .distinctBy { result ->
-                if (result.kind == TransitLocationKind.STOP && result.stop != null) {
-                    "stop:${result.stop.id}"
-                } else {
-                    "${result.kind}:${result.label.lowercase(Locale.ROOT)}:" +
-                        "${"%.5f".format(Locale.ROOT, result.latitude)}:" +
-                        "${"%.5f".format(Locale.ROOT, result.longitude)}"
-                }
-            }
-            .take(limit)
+    ): List<TransitLocationResult> = mergeTransitLocationResults(local, live, limit)
 
     private fun <T> liveLookup(
         outcome: TransitProviderOutcome<List<T>>,
@@ -401,9 +421,31 @@ class NationwideTransitGateway(
         )
     }
 
-    fun stationDepartures(
+    /**
+     * Resolve the exact scheduled service date/trip/route/direction from the installed GTFS
+     * graph. Missing data never falls back to a different route or a live API guess.
+     */
+    internal fun tripInstanceDetails(
+        identity: GtfsTripInstanceIdentity,
+        callback: (GtfsTripDetailResult) -> Unit,
+    ) {
+        io.execute {
+            val result = if (!store.isReady()) {
+                GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.INDEX_NOT_READY)
+            } else {
+                runCatching {
+                    GtfsTripDetailResolver(GtfsScheduleRepository(store)).resolve(identity)
+                }.getOrElse {
+                    GtfsTripDetailResult.Unavailable(GtfsTripDetailFailure.DATA_READ_FAILED)
+                }
+            }
+            main.post { callback(result) }
+        }
+    }
+
+    override fun stationDepartures(
         stop: CatalogStop,
-        limit: Int = 8,
+        limit: Int,
         callback: (StationDeparturesSnapshot) -> Unit,
     ) {
         io.execute {
@@ -465,14 +507,21 @@ class NationwideTransitGateway(
         }
     }
 
-    fun journeyOptions(
+    override fun journeyOptions(
         origin: MapPoint,
         destination: MapPoint,
-        limit: Int = 3,
+        limit: Int,
         callback: (List<RouteOption>, String) -> Unit,
     ) {
         io.execute {
-            val resolution = resolveJourneyOptions(origin, destination, limit)
+            // A cancelled realtime lookup must end this worker without crashing the app
+            // or dispatching a stale journey result to the UI.
+            val resolution = try {
+                resolveJourneyOptions(origin, destination, limit)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return@execute
+            }
             val options = when (resolution) {
                 is NationwideJourneyResolution.Results -> resolution.options
                 is NationwideJourneyResolution.NoRoute,
@@ -499,6 +548,10 @@ class NationwideTransitGateway(
         destination: MapPoint,
         limit: Int = 3,
     ): NationwideJourneyResolution {
+        // Fail closed before both the local SQLite lookup and live HTTP fallback.
+        if (!validTransitJourneyCoordinates(origin.latitude, origin.longitude) ||
+            !validTransitJourneyCoordinates(destination.latitude, destination.longitude)
+        ) return NationwideJourneyResolution.NoRoute(LocalStaticJourneyOutcome.NoPath)
         val localOutcome = runCatching {
             staticJourneyPlanner.plan(origin, destination, limit)
         }.getOrDefault(LocalStaticJourneyOutcome.Unavailable)
@@ -561,7 +614,7 @@ class NationwideTransitGateway(
             null -> appContext.getString(R.string.source_gtfs_local)
         }
 
-    fun close() {
+    override fun close() {
         io.shutdownNow()
         store.close()
     }

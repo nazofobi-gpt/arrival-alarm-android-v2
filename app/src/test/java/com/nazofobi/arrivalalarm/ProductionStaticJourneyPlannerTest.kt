@@ -7,6 +7,50 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ProductionStaticJourneyPlannerTest {
+    @Test
+    fun nonpositiveStaticJourneyLimitNeverSynthesizesARequestedOption() {
+        for (invalid in listOf(0, -1, Int.MIN_VALUE)) {
+            assertEquals(0, boundedStaticJourneyOptionLimit(invalid))
+        }
+        assertEquals(1, boundedStaticJourneyOptionLimit(1))
+        assertEquals(3, boundedStaticJourneyOptionLimit(3))
+        assertEquals(6, boundedStaticJourneyOptionLimit(6))
+        assertEquals(6, boundedStaticJourneyOptionLimit(Int.MAX_VALUE))
+    }
+
+    @Test
+    fun accessAndEgressWalkingRemainDistinctAndTotalDoesNotOverflow() {
+        val data = FakeRouteOptionData(
+            routes = emptyMap(), trips = emptyMap(), stops = emptyMap(), stopTimes = emptyMap(),
+        )
+        val huge = StaticTransitJourney(
+            id = "bounded-walk",
+            access = StaticRouterAccess("origin-stop", Int.MAX_VALUE),
+            egress = StaticRouterAccess("destination-stop", Int.MAX_VALUE),
+            legs = emptyList(),
+            arrivalEpochMillis = at("08:00:00"),
+        )
+        val mapped = StaticRouteOptionMapper(data, zone).map(
+            huge, MapPoint(0.0, 0.0, "Start"), MapPoint(0.0, 0.0, "Ziel"), date, 4L,
+        )
+        assertEquals(71_582_789, mapped.walkingMinutes)
+        assertEquals("origin-stop", mapped.accessWalking?.stopName)
+        assertEquals("destination-stop", mapped.egressWalking?.stopName)
+        assertEquals(Int.MAX_VALUE, mapped.accessWalking?.walkSeconds)
+        assertEquals(Int.MAX_VALUE, mapped.egressWalking?.walkSeconds)
+
+        val none = huge.copy(
+            access = StaticRouterAccess("origin-stop"),
+            egress = StaticRouterAccess("destination-stop"),
+        )
+        val withoutWalk = StaticRouteOptionMapper(data, zone).map(
+            none, MapPoint(0.0, 0.0, "Start"), MapPoint(0.0, 0.0, "Ziel"), date, 4L,
+        )
+        assertEquals(0, withoutWalk.walkingMinutes)
+        assertNull(withoutWalk.accessWalking)
+        assertNull(withoutWalk.egressWalking)
+    }
+
     private val zone = TimeZone.getTimeZone("Europe/Berlin")
     private val date = GtfsServiceDate(2026, 10, 4)
 
@@ -61,7 +105,15 @@ class ProductionStaticJourneyPlannerTest {
         assertEquals("Berlin", option.direction)
         assertEquals("08:00", option.departure)
         assertEquals("08:47", option.arrival)
+        assertEquals(journey.legs.first().departureEpochMillis, option.departureEpochMillis)
+        assertEquals(journey.arrivalEpochMillis, option.arrivalEpochMillis)
         assertEquals(3, option.walkingMinutes)
+        assertEquals("A", option.accessWalking?.stopId)
+        assertEquals("Lohne", option.accessWalking?.stopName)
+        assertEquals(60, option.accessWalking?.walkSeconds)
+        assertEquals("B", option.egressWalking?.stopId)
+        assertEquals("Berlin Hbf", option.egressWalking?.stopName)
+        assertEquals(120, option.egressWalking?.walkSeconds)
         assertEquals(1, option.transfers)
         assertEquals(listOf("T1", "T2"), option.tripIds)
         assertEquals(listOf("A", "X", "B"), option.stops.map { it.id })
@@ -217,6 +269,27 @@ class ProductionStaticJourneyPlannerTest {
         assertEquals(times.map { it.stopId }, option.stops.map { it.id })
         assertEquals("B", option.stops.last().name)
         assertEquals(mapOf("A" to 1, "B" to 1), data.stopLookupCounts)
+    }
+
+    @Test
+    fun routingDateCandidatesIncludeTomorrowAcrossDaylightSavingChange() {
+        val saturday = GtfsServiceDate(2026, 10, 24)
+        val beforeDst = GtfsServiceTime.parse("23:50:00").resolve(saturday, zone).epochMillis
+        assertEquals(
+            listOf(
+                GtfsServiceDate(2026, 10, 23),
+                saturday,
+                GtfsServiceDate(2026, 10, 25),
+            ),
+            staticRoutingServiceDates(beforeDst, zone),
+        )
+
+        val sunday = GtfsServiceDate(2026, 10, 25)
+        val afterDst = GtfsServiceTime.parse("23:50:00").resolve(sunday, zone).epochMillis
+        assertEquals(
+            listOf(saturday, sunday, GtfsServiceDate(2026, 10, 26)),
+            staticRoutingServiceDates(afterDst, zone),
+        )
     }
 
     private fun at(raw: String): Long =

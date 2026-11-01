@@ -15,6 +15,14 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ActiveJourneyServiceInstrumentedTest {
+    @Test fun cancellationActionTargetsTheNonExportedTrackingService() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val intent = ActiveJourneyService.cancellationIntent(context)
+
+        assertEquals(ActiveJourneyService.ACTION_CANCEL, intent.action)
+        assertEquals(ComponentName(context, ActiveJourneyService::class.java), intent.component)
+    }
+
     @Test fun manifestDeclaresNonExportedLocationForegroundService() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val component = ComponentName(context, ActiveJourneyService::class.java)

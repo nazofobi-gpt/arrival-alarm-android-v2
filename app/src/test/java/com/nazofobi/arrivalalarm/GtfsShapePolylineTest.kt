@@ -37,4 +37,25 @@ class GtfsShapePolylineTest {
         val points = listOf(p(1, 8.0, 0.0), p(2, 8.5, 7.0), p(3, 9.0, 4.0))
         assertTrue(clipGtfsShapePolyline(points, 1.0, 3.0).isEmpty())
     }
+    @Test fun antimeridianJumpInsideSelectedSegmentProducesNoLine() {
+        val points = listOf(p(1, 179.0, 0.0), p(2, -179.0, 5.0), p(3, -178.0, 10.0))
+        assertTrue(clipGtfsShapePolyline(points, 0.0, 10.0).isEmpty())
+    }
+
+    @Test fun mixedShapeIdsProduceNoLine() {
+        val points = listOf(p(1, 8.0, 0.0), p(2, 8.5, 5.0).copy(shapeId = "other"), p(3, 9.0, 10.0))
+        assertTrue(clipGtfsShapePolyline(points, 1.0, 9.0).isEmpty())
+    }
+
+    @Test fun invalidVertexBudgetProducesNoLine() {
+        val points = listOf(p(1, 8.0, 0.0), p(2, 9.0, 10.0))
+        assertTrue(clipGtfsShapePolyline(points, 1.0, 9.0, 1).isEmpty())
+        assertTrue(clipGtfsShapePolyline(points, 1.0, 9.0, 513).isEmpty())
+    }
+
+    @Test fun oversizedInputShapeProducesNoLine() {
+        val points = (0..2_048).map { p(it + 1, 8.0 + it / 10_000.0, it.toDouble()) }
+        assertTrue(clipGtfsShapePolyline(points, 1.0, 2_000.0).isEmpty())
+    }
+
 }

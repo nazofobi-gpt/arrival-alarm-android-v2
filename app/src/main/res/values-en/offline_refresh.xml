@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="offline_feed_refresh_notification_channel">Offline transit data</string>
+    <string name="offline_feed_refresh_notification_title">Updating offline transit data</string>
+    <string name="offline_feed_refresh_notification_checking">Checking Germany timetable data</string>
+    <string name="offline_feed_refresh_notification_progress">Imported stops: %1$d</string>
+</resources>

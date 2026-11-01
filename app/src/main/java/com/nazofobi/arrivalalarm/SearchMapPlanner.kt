@@ -27,6 +27,16 @@ data class RouteStop(
     val plannedPlatform: String? = null,
 )
 
+/**
+ * GTFS stop-backed walking access/egress estimates derived from straight-line
+ * stop distance and nominal walking speed, not pedestrian path geometry.
+ */
+data class RouteWalkingLegEvidence(
+    val stopId: String,
+    val stopName: String,
+    val walkSeconds: Int,
+)
+
 data class RouteOption(
     val id: String,
     val origin: MapPoint,
@@ -42,8 +52,12 @@ data class RouteOption(
     val refreshToken: String? = null,
     val sourceUpdatedAtEpochSeconds: Long? = null,
     val realtime: RouteRealtimeInfo? = null,
-    // GTFS feed-backed, distance-clipped geometry for transit legs only.
-    // Empty means no supported geometry; it is not a straight-line fallback.
+    val departureEpochMillis: Long? = null,
+    val arrivalEpochMillis: Long? = null,
+    // Null means this provider did not supply separately verified walking legs.
+    val accessWalking: RouteWalkingLegEvidence? = null,
+    val egressWalking: RouteWalkingLegEvidence? = null,
+    // Feed-backed geometry for selected transit legs; empty means no safe line.
     val shapePolylines: List<List<MapPoint>> = emptyList(),
 )
 
@@ -54,17 +68,39 @@ class SearchMapPlanner(
     private val catalog: GermanyTransitCatalog,
     private val geocoder: GeocodeProvider = EmptyGeocodeProvider(),
 ) {
+    private companion object {
+        // This direct-stop helper does not calculate arbitrary long walking access legs.
+        const val MAX_DIRECT_STOP_SNAP_METERS = 2_000
+    }
+
     fun search(query: String, limit: Int = 20): List<SearchResult> {
         val q = query.trim()
-        if (q.isEmpty()) return emptyList()
+        if (q.isEmpty() || q.length > MAX_SEARCH_QUERY_LENGTH || limit <= 0) return emptyList()
         val stops = catalog.searchStops(q, limit).map(SearchResult::Stop)
         val routes = catalog.searchRoutes(q, limit).map(SearchResult::Route)
         val trips = catalog.searchTrips(q, limit).map { (trip, route) -> SearchResult.Trip(trip, route) }
-        return (stops + routes + trips).distinctBy { it.label }.take(limit)
+        // Display labels are not identities: different providers (and distinct stops
+        // or trips within one provider) can legitimately share the same label.
+        val distinct = (stops + routes + trips).distinctBy { result ->
+            when (result) {
+                is SearchResult.Stop -> Triple("stop", result.value.providerId, result.value.id)
+                is SearchResult.Route -> Triple("route", result.value.providerId, result.value.id)
+                is SearchResult.Trip -> Triple("trip", result.value.providerId, result.value.id)
+            }
+        }
+        // Stop-heavy queries must not hide matching lines and departures.
+        // Preserve the result cap and original ranking when it already fits.
+        val firstPerKind = listOfNotNull(
+            distinct.firstOrNull { it is SearchResult.Stop },
+            distinct.firstOrNull { it is SearchResult.Route },
+            distinct.firstOrNull { it is SearchResult.Trip },
+        )
+        if (distinct.size <= limit || firstPerKind.size > limit) return distinct.take(limit)
+        return (firstPerKind + distinct.filterNot { it in firstPerKind }).take(limit)
     }
 
     fun nearby(point: MapPoint, limit: Int = 5): List<NearbyCandidate> =
-        catalog.nearestStops(point.latitude, point.longitude, limit).map {
+        if (limit <= 0 || !hasValidCoordinates(point)) emptyList() else catalog.nearestStops(point.latitude, point.longitude, limit).map {
             NearbyCandidate(it.stop, it.distanceMeters, bearing(point.latitude, point.longitude, it.stop.latitude, it.stop.longitude))
         }
 
@@ -72,16 +108,28 @@ class SearchMapPlanner(
         MapPoint(it.stop.latitude, it.stop.longitude, it.stop.name)
     }
 
-    fun addressOrPoi(query: String): List<MapPoint> = geocoder.search(query.trim())
+    fun addressOrPoi(query: String): List<MapPoint> {
+        val q = query.trim()
+        if (q.isEmpty() || q.length > MAX_SEARCH_QUERY_LENGTH) return emptyList()
+        // External geocoders must not inject invalid map coordinates into selection.
+        return geocoder.search(q).filter(::hasValidCoordinates)
+    }
 
     fun pointFor(stop: CatalogStop) = MapPoint(stop.latitude, stop.longitude, stop.name)
     fun arbitraryPoint(latitude: Double, longitude: Double, label: String = "Harita noktası") = MapPoint(latitude, longitude, label)
 
     fun routeOptions(origin: MapPoint, destination: MapPoint): List<RouteOption> {
-        val originStop = catalog.nearestStops(origin.latitude, origin.longitude, 1).firstOrNull()?.stop ?: return emptyList()
-        val destinationStop = catalog.nearestStops(destination.latitude, destination.longitude, 1).firstOrNull()?.stop ?: return emptyList()
-        return catalog.routesServing(originStop.id, destinationStop.id).flatMap { route ->
-            val trips = catalog.tripsForRoute(route.id).ifEmpty { listOf(CatalogTrip("static-${route.id}", route.providerId, route.id, "Planlı")) }
+        // NaN comparisons can bypass distance bounds and fabricate a nearby stop.
+        if (!hasValidCoordinates(origin) || !hasValidCoordinates(destination)) return emptyList()
+        val originNearby = catalog.nearestStops(origin.latitude, origin.longitude, 1).firstOrNull() ?: return emptyList()
+        val destinationNearby = catalog.nearestStops(destination.latitude, destination.longitude, 1).firstOrNull() ?: return emptyList()
+        // A nationwide nearest stop can be hundreds of kilometres away from a map pin.
+        if (originNearby.distanceMeters > MAX_DIRECT_STOP_SNAP_METERS ||
+            destinationNearby.distanceMeters > MAX_DIRECT_STOP_SNAP_METERS
+        ) return emptyList()
+        return catalog.routesServing(originNearby.stop, destinationNearby.stop).flatMap { route ->
+            // A route shape is not a scheduled journey: never synthesize trip IDs or departures.
+            val trips = catalog.tripsForRoute(route.providerId, route.id)
             trips.take(3).mapIndexed { index, trip ->
                 RouteOption(
                     id = "${route.id}:${trip.id}", origin = origin, destination = destination,
@@ -92,6 +140,10 @@ class SearchMapPlanner(
             }
         }
     }
+
+    private fun hasValidCoordinates(point: MapPoint): Boolean =
+        point.latitude.isFinite() && point.longitude.isFinite() &&
+            point.latitude in -90.0..90.0 && point.longitude in -180.0..180.0
 
     private fun bearing(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Int {
         val p1 = Math.toRadians(lat1); val p2 = Math.toRadians(lat2); val dl = Math.toRadians(lon2 - lon1)

@@ -68,6 +68,33 @@ test("device policy accepts a configured namespaced provider claim", () => {
   assert.equal(auth.deviceId, "phone-auth0");
 });
 
+test("configured device claim cannot fall back to a generic signed device ID", () => {
+  const policy = {
+    requiredScopes: ["arrival.device"],
+    requireDeviceId: true,
+    deviceIdClaim: "https://arrival-alarm.app/device_id",
+  };
+  const basic = { sub: "user-1", scope: "arrival.device", device_id: "other-phone" };
+
+  assert.throws(() => authContextFromPayload(basic, policy), /unauthorized/);
+  assert.throws(
+    () => authContextFromPayload({ ...basic, [policy.deviceIdClaim]: "" }, policy),
+    /unauthorized/
+  );
+  assert.throws(
+    () => authContextFromPayload({ ...basic, [policy.deviceIdClaim]: 123 }, policy),
+    /unauthorized/
+  );
+  assert.equal(
+    authContextFromPayload(
+      { ...basic, [policy.deviceIdClaim]: "bound-phone" },
+      policy
+    ).deviceId,
+    "bound-phone"
+  );
+  assert.equal(authContextFromPayload(basic, { requireDeviceId: true }).deviceId, "other-phone");
+});
+
 test("jwt verifier validates issuer audience before returning scoped context", async () => {
   const calls = [];
   const verifier = createJwtAccessVerifier({

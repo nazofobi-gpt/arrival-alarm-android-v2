@@ -102,6 +102,95 @@ class GtfsServiceDayTest {
     }
 
     @Test
+    fun dateIndexedExceptionsPreserveOverridesAcrossManyServiceDays() {
+        val first = GtfsServiceDate.parse("20261012")
+        val second = GtfsServiceDate.parse("20261013")
+        val regular = GtfsCalendarService(
+            serviceId = "regular",
+            startDate = first,
+            endDate = second,
+            activeDays = GtfsWeekday.entries.toSet(),
+        )
+        val unrelatedDates = (1..500).map { day ->
+            GtfsCalendarException(
+                serviceId = "unrelated-$day",
+                date = GtfsServiceDate(
+                    2024 + (day - 1) / (12 * 28),
+                    1 + ((day - 1) / 28) % 12,
+                    1 + (day - 1) % 28,
+                ),
+                type = GtfsCalendarExceptionType.ADDED,
+            )
+        }
+        val calendar = GtfsServiceCalendar(
+            calendars = listOf(regular),
+            exceptions = unrelatedDates + listOf(
+                GtfsCalendarException("regular", first, GtfsCalendarExceptionType.REMOVED),
+                GtfsCalendarException("extra-first", first, GtfsCalendarExceptionType.ADDED),
+                GtfsCalendarException("extra-second", second, GtfsCalendarExceptionType.ADDED),
+            ),
+        )
+
+        assertEquals(setOf("extra-first"), calendar.activeServices(first))
+        assertEquals(setOf("regular", "extra-second"), calendar.activeServices(second))
+        assertFalse(calendar.isActive("extra-first", second))
+        assertTrue(calendar.isActive("regular", second))
+    }
+
+    @Test
+    fun bulkActiveServicesMatchesIndividualLookupAcrossWeekdaysExceptionsAndRange() {
+        val monday = GtfsServiceDate.parse("20261012")
+        val tuesday = GtfsServiceDate.parse("20261013")
+        val outside = GtfsServiceDate.parse("20270104")
+        val calendars = (0 until 1_500).map { index ->
+            GtfsCalendarService(
+                serviceId = "service-$index",
+                startDate = GtfsServiceDate.parse("20260101"),
+                endDate = GtfsServiceDate.parse("20261231"),
+                activeDays = when (index % 3) {
+                    0 -> setOf(GtfsWeekday.MONDAY)
+                    1 -> setOf(GtfsWeekday.TUESDAY)
+                    else -> emptySet()
+                },
+            )
+        }
+        val resolver = GtfsServiceCalendar(
+            calendars = calendars,
+            exceptions = listOf(
+                GtfsCalendarException("service-0", monday, GtfsCalendarExceptionType.REMOVED),
+                GtfsCalendarException("service-2", monday, GtfsCalendarExceptionType.ADDED),
+                GtfsCalendarException("one-off", monday, GtfsCalendarExceptionType.ADDED),
+                GtfsCalendarException("service-1", tuesday, GtfsCalendarExceptionType.REMOVED),
+                GtfsCalendarException("service-3", outside, GtfsCalendarExceptionType.ADDED),
+            ),
+        )
+        val ids = calendars.map { it.serviceId } + "one-off"
+        for (date in listOf(monday, tuesday, outside)) {
+            assertEquals(
+                ids.filterTo(sortedSetOf()) { resolver.isActive(it, date) },
+                resolver.activeServices(date),
+            )
+        }
+    }
+
+    @Test
+    fun duplicateCalendarDateRowsRemainRejected() {
+        val date = GtfsServiceDate.parse("20261012")
+        try {
+            GtfsServiceCalendar(
+                calendars = emptyList(),
+                exceptions = listOf(
+                    GtfsCalendarException("duplicate", date, GtfsCalendarExceptionType.ADDED),
+                    GtfsCalendarException("duplicate", date, GtfsCalendarExceptionType.REMOVED),
+                ),
+            )
+            fail("Duplicate calendar_dates rows must fail closed")
+        } catch (_: IllegalArgumentException) {
+            // expected
+        }
+    }
+
+    @Test
     fun emptyCalendarHasNoActiveService() {
         val calendar = GtfsServiceCalendar(emptyList(), emptyList())
         assertEquals(emptySet<String>(), calendar.activeServices(GtfsServiceDate.parse("20261002")))
@@ -150,6 +239,43 @@ class GtfsServiceDayTest {
         assertEquals(listOf(2026, 10, 25, 1, 0, 0), start.localFields().toList())
         assertEquals(listOf(2026, 10, 25, 4, 0, 0), end.localFields().toList())
         assertEquals(4L * 60L * 60L * 1_000L, end.epochMillis - start.epochMillis)
+    }
+
+    @Test
+    fun untrustedOversizedGtfsDateFailsClosedBeforeTrimming() {
+        // Accept padded but bounded civil dates just like padded GTFS clocks.
+        val padded = " ".repeat(12) + "20261025" + " ".repeat(12)
+        assertEquals(32, padded.length)
+        assertEquals(GtfsServiceDate(2026, 10, 25), GtfsServiceDate.parse(padded))
+
+        // Reject unbounded provider date scalars before trim/regex processing.
+        for (invalid in listOf(
+            " ".repeat(100_000) + "20261025",
+            "2".repeat(100_000),
+        )) {
+            val failure = runCatching { GtfsServiceDate.parse(invalid) }.exceptionOrNull()
+            assertTrue("Oversized GTFS date should fail closed", failure is IllegalArgumentException)
+            assertTrue(failure?.message?.contains("size limit") == true)
+        }
+    }
+
+    @Test
+    fun untrustedOversizedGtfsClockFailsClosedBeforeTrimming() {
+        // Valid padded GTFS clock at the documented scalar bound remains legal.
+        val padded = " ".repeat(12) + "25:05:09" + " ".repeat(12)
+        assertEquals(32, padded.length)
+        assertEquals("25:05:09", GtfsServiceTime.parse(padded).toString())
+
+        // Provider data can contain very long malformed time fields. Neither
+        // whitespace nor digits may be accepted after an unbounded trim.
+        for (invalid in listOf(
+            " ".repeat(100_000) + "25:05:09",
+            "9".repeat(100_000),
+        )) {
+            val failure = runCatching { GtfsServiceTime.parse(invalid) }.exceptionOrNull()
+            assertTrue("Oversized GTFS time should fail closed", failure is IllegalArgumentException)
+            assertTrue(failure?.message?.contains("size limit") == true)
+        }
     }
 
     @Test

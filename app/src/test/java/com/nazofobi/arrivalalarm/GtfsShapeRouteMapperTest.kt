@@ -12,6 +12,8 @@ class GtfsShapeRouteMapperTest {
         val arrival = GtfsServiceTime.parse("08:10:00").resolve(date, zone).epochMillis
 
         val data = object : StaticRouteOptionData {
+            var requestedShapeId: String? = null
+            var requestedShapeLimit: Int = 0
             override fun route(routeId: String) =
                 GtfsScheduleRoute("R", null, "RE", null, 2)
             override fun trip(tripId: String) =
@@ -22,11 +24,15 @@ class GtfsShapeRouteMapperTest {
                 GtfsScheduleStopTime("T", 1, "A", "08:00:00", "08:00:00", null, null, 2.0, 1),
                 GtfsScheduleStopTime("T", 2, "B", "08:10:00", "08:10:00", null, null, 8.0, 1),
             )
-            override fun shapePoints(shapeId: String, limit: Int) = listOf(
-                GtfsScheduleShapePoint("shape", 1, 52.0, 8.0, 0.0),
-                GtfsScheduleShapePoint("shape", 2, 52.0, 8.5, 5.0),
-                GtfsScheduleShapePoint("shape", 3, 52.0, 9.0, 10.0),
-            )
+            override fun shapePoints(shapeId: String, limit: Int): List<GtfsScheduleShapePoint> {
+                requestedShapeId = shapeId
+                requestedShapeLimit = limit
+                return listOf(
+                    GtfsScheduleShapePoint("shape", 1, 52.0, 8.0, 0.0),
+                    GtfsScheduleShapePoint("shape", 2, 52.0, 8.5, 5.0),
+                    GtfsScheduleShapePoint("shape", 3, 52.0, 9.0, 10.0),
+                )
+            }
         }
         val journey = StaticTransitJourney(
             id = "trip-segment",
@@ -42,5 +48,7 @@ class GtfsShapeRouteMapperTest {
         assertEquals(1, option.shapePolylines.size)
         assertEquals(8.2, option.shapePolylines.single().first().longitude, 1e-9)
         assertEquals(8.8, option.shapePolylines.single().last().longitude, 1e-9)
+        assertEquals("shape", data.requestedShapeId)
+        assertEquals(2_048, data.requestedShapeLimit)
     }
 }

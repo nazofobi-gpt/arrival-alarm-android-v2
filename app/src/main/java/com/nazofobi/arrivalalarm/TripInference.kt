@@ -2,6 +2,13 @@ package com.nazofobi.arrivalalarm
 
 import kotlin.math.*
 
+// A conservative rail/transit GPS sanity limit: 120 m/s = 432 km/h.
+// Corrupt yet finite speed measurements must never identify a specific trip.
+private const val MAX_PLAUSIBLE_INFERENCE_SPEED_MPS = 120.0
+// A corrupted preference must not expand a small suggestion UI into an
+// unbounded scored-candidate result list. The default remains topK=3.
+private const val MAX_VISIBLE_INFERENCE_CANDIDATES = 10
+
 data class TripInferenceSettings(
     val enabled: Boolean = false,
     val minimumConfidence: Double = 0.72,
@@ -47,14 +54,52 @@ data class TripInferenceResult(
 class TripInferenceEngine(private val settings: TripInferenceSettings) {
     fun infer(observation: MovementObservation, candidates: List<TripCandidate>): TripInferenceResult {
         if (!settings.enabled) return TripInferenceResult(emptyList(), null, "Sefer algılama kullanıcı tarafından kapalı")
-        val scored = candidates
+        // Display size must not weaken the ambiguity gate: even topK=1 needs
+        // the runner-up to decide whether the leading trip is distinguishable.
+        if (settings.topK !in 1..MAX_VISIBLE_INFERENCE_CANDIDATES) {
+            return TripInferenceResult(emptyList(), null, "Gösterilecek sefer adayı sınırı geçersiz")
+        }
+        // Never let invalid persisted or injected calibration settings disable
+        // the confidence and runner-up ambiguity gates (NaN comparisons are false).
+        if (!settings.minimumConfidence.isFinite() ||
+            settings.minimumConfidence !in 0.0..1.0 ||
+            !settings.ambiguityMargin.isFinite() ||
+            settings.ambiguityMargin !in 0.0..1.0
+        ) {
+            return TripInferenceResult(emptyList(), null, "Sefer algılama güven ayarları geçersiz")
+        }
+        // Reject corrupt location/movement samples before scoring a trip.
+        if (!validCoordinates(observation.point) ||
+            !observation.speedMps.isFinite() || observation.speedMps < 0.0 ||
+            observation.speedMps > MAX_PLAUSIBLE_INFERENCE_SPEED_MPS ||
+            !validBearing(observation.bearingDegrees) ||
+            observation.epochSeconds <= 0L
+        ) {
+            return TripInferenceResult(emptyList(), null, "Konum veya hareket kanıtı geçersiz")
+        }
+        val ranked = candidates
             .asSequence()
-            .filter { it.serviceActive }
+            .filter {
+                it.serviceActive &&
+                    // A suggested journey must display a route, line and direction
+                    // the user can distinguish before explicitly confirming it.
+                    it.routeId.isNotBlank() &&
+                    it.line.isNotBlank() &&
+                    it.direction.isNotBlank() &&
+                    validCoordinates(it.anchor) &&
+                    validBearing(it.expectedBearingDegrees) &&
+                    it.scheduledEpochSeconds > 0L
+            }
+            // Exact duplicate upstream rows are not separate trip choices:
+            // counting them as runner-up candidates falsely triggers ambiguity.
+            // Distinct service times, directions and provider evidence remain separate.
+            .distinct()
             .map { score(observation, it) }
             .filter { it.confidence > 0.0 }
             .sortedByDescending { it.confidence }
-            .take(settings.topK)
+            .take(maxOf(settings.topK, 2))
             .toList()
+        val scored = ranked.take(settings.topK)
 
         val best = scored.firstOrNull()
             ?: return TripInferenceResult(emptyList(), null, "Uygun aktif sefer adayı yok")
@@ -62,12 +107,26 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
         if (best.confidence < settings.minimumConfidence) {
             return TripInferenceResult(scored, null, "Güven eşiği altında")
         }
-        val runnerUp = scored.getOrNull(1)
-        if (runnerUp != null && best.confidence - runnerUp.confidence < settings.ambiguityMargin) {
+        // Distance, bearing and motion alone can contribute 0.75 confidence.
+        // Never accept a trip when its timetable provides zero time evidence.
+        if (best.timeScore <= 0.0) {
+            return TripInferenceResult(scored, null, "Sefer zamanı hareket kanıtıyla uyumsuz")
+        }
+        val runnerUp = ranked.getOrNull(1)
+        if (runnerUp != null && best.confidence - runnerUp.confidence <= settings.ambiguityMargin) {
             return TripInferenceResult(scored, null, "Adaylar belirsiz; kullanıcıya otomatik öneri yok")
         }
         return TripInferenceResult(scored, best, "Aday bulundu; hedef/alarm yalnız kullanıcı onayıyla kurulabilir")
     }
+
+    // Null denotes unknown heading; numeric headings must be in the sensor/GTFS domain.
+    // Modulo-normalizing a corrupt 540-degree reading would otherwise look like 180 degrees.
+    private fun validBearing(bearing: Double?): Boolean =
+        bearing == null || (bearing.isFinite() && bearing >= 0.0 && bearing < 360.0)
+
+    private fun validCoordinates(point: GeoPoint): Boolean =
+        point.latitude.isFinite() && point.latitude in -90.0..90.0 &&
+            point.longitude.isFinite() && point.longitude in -180.0..180.0
 
     private fun score(observation: MovementObservation, candidate: TripCandidate): TripCandidateScore {
         val distanceMeters = haversineMeters(observation.point, candidate.anchor)
@@ -82,8 +141,11 @@ class TripInferenceEngine(private val settings: TripInferenceSettings) {
             }
         }
 
-        val expectedEpoch = candidate.scheduledEpochSeconds + (candidate.realtimeDelaySeconds ?: 0)
-        val timeDelta = abs(observation.epochSeconds - expectedEpoch).toDouble()
+        // Calculate in floating-point seconds to avoid signed Long overflow when
+        // malformed provider epochs or realtime delays cross the Long boundary.
+        val expectedEpoch = candidate.scheduledEpochSeconds.toDouble() +
+            (candidate.realtimeDelaySeconds ?: 0).toDouble()
+        val timeDelta = abs(observation.epochSeconds.toDouble() - expectedEpoch)
         val timeScore = linearScore(timeDelta, good = 90.0, bad = 900.0)
 
         val movementScore = when {
@@ -140,6 +202,10 @@ data class LabeledInferenceFixture(
     val observation: MovementObservation,
     val candidates: List<TripCandidate>,
     val expectedRouteId: String?,
+    // Optional frozen-label detail: a route alone does not uniquely identify
+    // its direction or a particular scheduled departure.
+    val expectedDirection: String? = null,
+    val expectedScheduledEpochSeconds: Long? = null,
 )
 
 data class TripInferenceMetrics(
@@ -161,17 +227,30 @@ object TripInferenceEvaluator {
         var truePositive = 0
 
         fixtures.forEach { fixture ->
-            val predicted = engine.infer(fixture.observation, fixture.candidates).accepted?.candidate?.routeId
-            if (predicted != null) suggestions++
-            if (predicted == fixture.expectedRouteId) {
-                correct++
-                if (predicted != null) truePositive++
+            val accepted = engine.infer(fixture.observation, fixture.candidates).accepted?.candidate
+            if (accepted != null) suggestions++
+            // A correct route with the wrong direction or departure must not
+            // count as an accurate trip-identification result in frozen QA.
+            val matchesLabel = if (accepted == null) {
+                fixture.expectedRouteId == null
             } else {
-                if (predicted != null) falsePositive++
+                fixture.expectedRouteId != null &&
+                    accepted.routeId == fixture.expectedRouteId &&
+                    (fixture.expectedDirection == null || accepted.direction == fixture.expectedDirection) &&
+                    (fixture.expectedScheduledEpochSeconds == null ||
+                        accepted.scheduledEpochSeconds == fixture.expectedScheduledEpochSeconds)
+            }
+            if (matchesLabel) {
+                correct++
+                if (accepted != null) truePositive++
+            } else {
+                if (accepted != null) falsePositive++
                 if (fixture.expectedRouteId != null) falseNegative++
             }
         }
-        val precision = if (suggestions == 0) 1.0 else truePositive.toDouble() / suggestions
+        // With no accepted predictions precision is undefined, not perfect.
+        // Report zero to avoid false-positive evaluation and readiness claims.
+        val precision = if (suggestions == 0) 0.0 else truePositive.toDouble() / suggestions
         return TripInferenceMetrics(
             total = fixtures.size,
             correct = correct,

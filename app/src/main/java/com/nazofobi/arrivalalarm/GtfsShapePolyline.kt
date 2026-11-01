@@ -16,8 +16,11 @@ internal fun clipGtfsShapePolyline(
     val from = boardingDistance ?: return emptyList()
     val to = alightingDistance ?: return emptyList()
     if (!from.isFinite() || !to.isFinite() || from < 0.0 || to <= from ||
-        maxVertices !in 2..512 || shape.size < 2
+        maxVertices !in 2..512 || shape.size !in 2..2_048
     ) return emptyList()
+
+    val selectedShapeId = shape.first().shapeId
+    if (selectedShapeId.isBlank() || shape.any { it.shapeId != selectedShapeId }) return emptyList()
 
     var previousSequence = Int.MIN_VALUE
     var previousDistance = Double.NEGATIVE_INFINITY
@@ -25,10 +28,23 @@ internal fun clipGtfsShapePolyline(
         val distance = point.distanceTraveled ?: return emptyList()
         if (point.sequence <= previousSequence || !distance.isFinite() ||
             distance < previousDistance || distance < 0.0 ||
-            !isRenderableMapPoint(MapPoint(point.latitude, point.longitude, ""))
+            !point.latitude.isFinite() || point.latitude !in -90.0..90.0 ||
+            !point.longitude.isFinite() || point.longitude !in -180.0..180.0
         ) return emptyList()
         previousSequence = point.sequence
         previousDistance = distance
+    }
+
+    // Reject an antimeridian jump anywhere inside the selected segment, not
+    // only when an interpolated endpoint happens to land on that edge.
+    for (index in 1 until shape.size) {
+        val previous = shape[index - 1]
+        val current = shape[index]
+        val segmentStart = previous.distanceTraveled!!
+        val segmentEnd = current.distanceTraveled!!
+        if (segmentEnd > from && segmentStart < to &&
+            kotlin.math.abs(current.longitude - previous.longitude) > 180.0
+        ) return emptyList()
     }
 
     val firstDistance = shape.first().distanceTraveled!!
