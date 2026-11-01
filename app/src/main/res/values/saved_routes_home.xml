@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="saved_routes_home_title">Kayıtlı rotalar</string>
+    <string name="saved_routes_home_note">Yalnız başlangıç, varış ve rota tercihleri cihazda tutulur. Açıldığında rota güncel verilerle yeniden hesaplanır; alarm otomatik başlamaz.</string>
+    <string name="saved_routes_home_save">Mevcut rotayı kaydet</string>
+    <string name="saved_routes_home_open">Rotayı aç ve yeniden hesapla</string>
+    <string name="saved_routes_home_delete">Kaydı sil</string>
+    <string name="saved_routes_home_empty">Henüz kayıtlı rota yok.</string>
+    <string name="saved_routes_home_unsafe">Kayıtlı rota verisi bozuk veya okunamıyor. Veri korunuyor; üzerine yazılmıyor.</string>
+    <string name="saved_routes_home_saved">Rota bu cihaza kaydedildi.</string>
+    <string name="saved_routes_home_deleted">Kayıt silindi.</string>
+    <string name="saved_routes_home_failed">Kayıt işlemi başarısız; mevcut veriler değiştirilmedi.</string>
+    <string name="saved_routes_home_active_trip">Aktif yolculuk sırasında kayıtlı başka bir rota açılamaz.</string>
+    <string name="saved_routes_home_delete_confirm_title">Kayıtlı rota silinsin mi?</string>
+    <string name="saved_routes_home_delete_confirm_message">%1$s adlı rota yalnız bu cihazdan kalıcı olarak silinecek. Devam edilsin mi?</string>
+    <string name="saved_routes_home_delete_cancel">Vazgeç</string>
+</resources>

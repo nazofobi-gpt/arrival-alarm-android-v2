@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="saved_routes_home_title">Gespeicherte Routen</string>
+    <string name="saved_routes_home_note">Nur Start, Ziel und Routenoptionen werden lokal gespeichert. Beim Öffnen wird die Route neu berechnet; ein Alarm startet nicht automatisch.</string>
+    <string name="saved_routes_home_save">Aktuelle Route speichern</string>
+    <string name="saved_routes_home_open">Route öffnen und neu berechnen</string>
+    <string name="saved_routes_home_delete">Eintrag löschen</string>
+    <string name="saved_routes_home_empty">Noch keine gespeicherten Routen.</string>
+    <string name="saved_routes_home_unsafe">Gespeicherte Routendaten sind beschädigt oder nicht lesbar. Die Daten bleiben erhalten und werden nicht überschrieben.</string>
+    <string name="saved_routes_home_saved">Route auf diesem Gerät gespeichert.</string>
+    <string name="saved_routes_home_deleted">Eintrag gelöscht.</string>
+    <string name="saved_routes_home_failed">Aktion fehlgeschlagen. Vorhandene Daten bleiben unverändert.</string>
+    <string name="saved_routes_home_active_trip">Während einer aktiven Fahrt kann keine andere Route geöffnet werden.</string>
+    <string name="saved_routes_home_delete_confirm_title">Gespeicherte Route löschen?</string>
+    <string name="saved_routes_home_delete_confirm_message">Die Route %1$s wird dauerhaft von diesem Gerät gelöscht. Fortfahren?</string>
+    <string name="saved_routes_home_delete_cancel">Abbrechen</string>
+</resources>

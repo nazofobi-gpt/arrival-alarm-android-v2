@@ -153,6 +153,14 @@ fun ArrivalAlarmApp(
     val transitExperiencePreferences = remember(context) {
         context.getSharedPreferences("transit_experience", Context.MODE_PRIVATE)
     }
+    val savedRouteStore = remember(context) {
+        SavedRoutePresetsStore(
+            SharedPreferencesSavedRoutePresetStringStorage(
+                context.getSharedPreferences("app_preferences", Context.MODE_PRIVATE),
+            ),
+        )
+    }
+    val savedRouteUiPreferences = remember(context) { ArrivalUiPreferences(context) }
     val guidanceSpeaker = remember { AndroidTextToSpeechSpeaker(context) }
     val guidancePreferences = remember(context) {
         context.getSharedPreferences("guidance_state", Context.MODE_PRIVATE)
@@ -185,6 +193,10 @@ fun ArrivalAlarmApp(
                 .toSet()
         )
     }
+    var savedRouteSnapshot by remember(savedRouteStore) {
+        mutableStateOf(savedRouteStore.load())
+    }
+    var savedRouteStatus by remember { mutableStateOf<String?>(null) }
     var searchBusy by remember { mutableStateOf(false) }
     var searchResults by remember { mutableStateOf(emptyList<TransitLocationResult>()) }
     var searchSource by remember { mutableStateOf<String?>(null) }
@@ -1080,6 +1092,93 @@ fun ArrivalAlarmApp(
                         },
                         onNearbyDeparturesSelected = { candidate ->
                             openDepartureBoard(candidate.stop)
+                        },
+                    )
+                    SavedRoutesHomePanel(
+                        presets = savedRouteSnapshot.presets,
+                        canSave = origin != null && destination != null,
+                        canRestore = journey.phase != JourneyPhase.ARMED,
+                        sourceSafe = savedRouteSnapshot.isSourceSafeToReplace,
+                        status = savedRouteStatus,
+                        onSave = {
+                            val from = origin
+                            val to = destination
+                            if (from != null && to != null) {
+                                val label = "${from.label.trim()} → ${to.label.trim()}".take(80)
+                                val preset = SavedRoutePreset(
+                                    id = java.util.UUID.randomUUID().toString(),
+                                    name = label,
+                                    originLatitude = from.latitude,
+                                    originLongitude = from.longitude,
+                                    originLabel = from.label,
+                                    destinationLatitude = to.latitude,
+                                    destinationLongitude = to.longitude,
+                                    destinationLabel = to.label,
+                                    directOnlyRoutes = savedRouteUiPreferences.loadDirectOnlyRoutes(),
+                                    fewerTransfersFirst = savedRouteUiPreferences.loadFewerTransfersFirst(),
+                                    shorterWalkingFirst = savedRouteUiPreferences.loadShorterWalkingFirst(),
+                                    atMostOneTransfer = savedRouteUiPreferences.loadAtMostOneTransfer(),
+                                    savedAtEpochMillis = System.currentTimeMillis(),
+                                )
+                                val outcome = savedRouteStore.save(preset)
+                                savedRouteSnapshot = savedRouteStore.load()
+                                savedRouteStatus = context.getString(
+                                    if (outcome is SavedRoutePresetStoreResult.Success) {
+                                        R.string.saved_routes_home_saved
+                                    } else {
+                                        R.string.saved_routes_home_failed
+                                    }
+                                )
+                            }
+                        },
+                        onRestore = { preset ->
+                            // Never arm a saved route or replace a currently active journey.
+                            val latest = savedRouteStore.load()
+                            when {
+                                journey.phase == JourneyPhase.ARMED -> {
+                                    savedRouteStatus = context.getString(R.string.saved_routes_home_active_trip)
+                                }
+                                !latest.isSourceSafeToReplace || latest.presets.none { it == preset } -> {
+                                    savedRouteSnapshot = latest
+                                    savedRouteStatus = context.getString(R.string.saved_routes_home_failed)
+                                }
+                                else -> {
+                                    savedRouteUiPreferences.saveDirectOnlyRoutes(preset.directOnlyRoutes)
+                                    savedRouteUiPreferences.saveFewerTransfersFirst(preset.fewerTransfersFirst)
+                                    savedRouteUiPreferences.saveShorterWalkingFirst(preset.shorterWalkingFirst)
+                                    savedRouteUiPreferences.saveAtMostOneTransfer(preset.atMostOneTransfer)
+                                    setOrigin(
+                                        MapPoint(
+                                            preset.originLatitude,
+                                            preset.originLongitude,
+                                            preset.originLabel,
+                                        )
+                                    )
+                                    if (setDestinationPoint(
+                                            MapPoint(
+                                                preset.destinationLatitude,
+                                                preset.destinationLongitude,
+                                                preset.destinationLabel,
+                                            )
+                                        )
+                                    ) {
+                                        savedRouteStatus = null
+                                    } else {
+                                        savedRouteStatus = context.getString(R.string.saved_routes_home_failed)
+                                    }
+                                }
+                            }
+                        },
+                        onRemove = { id ->
+                            val outcome = savedRouteStore.remove(id)
+                            savedRouteSnapshot = savedRouteStore.load()
+                            savedRouteStatus = context.getString(
+                                if (outcome is SavedRoutePresetStoreResult.Success) {
+                                    R.string.saved_routes_home_deleted
+                                } else {
+                                    R.string.saved_routes_home_failed
+                                }
+                            )
                         },
                     )
                 }
