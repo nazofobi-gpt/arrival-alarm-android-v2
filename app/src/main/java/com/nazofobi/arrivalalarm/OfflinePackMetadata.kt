@@ -33,8 +33,17 @@ internal fun offlinePackMetadataText(
     }
 
     val rawVersion = state.sourceVersion.trim().trim('"')
+    // Provider-controlled feed tags must not inject line breaks, bidi overrides or
+    // invisible formatting into the Settings metadata label. Fail closed.
+    val unsafeVersion = rawVersion.any { char ->
+        val category = Character.getType(char)
+        Character.isISOControl(char) ||
+            category == Character.FORMAT.toInt() ||
+            category == Character.LINE_SEPARATOR.toInt() ||
+            category == Character.PARAGRAPH_SEPARATOR.toInt()
+    }
     val version = when {
-        rawVersion.isBlank() || rawVersion.equals("unknown", ignoreCase = true) ->
+        rawVersion.isBlank() || unsafeVersion || rawVersion.equals("unknown", ignoreCase = true) ->
             context.getString(R.string.offline_pack_version_unknown)
         rawVersion.length > 28 -> rawVersion.take(27) + "…"
         else -> rawVersion
