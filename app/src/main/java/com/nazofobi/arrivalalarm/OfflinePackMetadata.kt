@@ -40,9 +40,14 @@ internal fun offlinePackMetadataText(
         else -> rawVersion
     }
 
-    val checked = if (state.fetchedAtEpochSeconds > 0L) {
+    // A corrupt/future persisted timestamp must not appear as a valid last update.
+    // Bound before multiplying seconds to milliseconds to avoid Long overflow.
+    val fetchedAtMillis = state.fetchedAtEpochSeconds
+        .takeIf { it > 0L && nowMillis >= 0L && it <= nowMillis / 1_000L }
+        ?.times(1_000L)
+    val checked = if (fetchedAtMillis != null) {
         DateUtils.getRelativeTimeSpanString(
-            state.fetchedAtEpochSeconds * 1_000L,
+            fetchedAtMillis,
             nowMillis,
             DateUtils.MINUTE_IN_MILLIS,
         ).toString()
