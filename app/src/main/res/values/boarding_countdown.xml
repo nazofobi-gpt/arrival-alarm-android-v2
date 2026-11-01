@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_trip_planned_boarding">Planlı kalkışa kalan süre</string>
+    <string name="live_trip_planned_boarding_minutes">%1$d dk</string>
+</resources>
