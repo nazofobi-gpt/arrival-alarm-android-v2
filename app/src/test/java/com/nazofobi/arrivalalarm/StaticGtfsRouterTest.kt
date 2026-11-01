@@ -9,6 +9,50 @@ class StaticGtfsRouterTest {
     private val date = GtfsServiceDate(2026, 10, 2)
     private val zone = TimeZone.getTimeZone("Europe/Berlin")
 
+    @Test fun walkingBudgetFindsLaterUsableTripBeyondSixEarlierLongWalkTrips() {
+        val early = (1..7).map { number ->
+            candidate("LONG-$number", "R", "S", 1, "10:00:00")
+        }
+        val times = (1..7).associate { number ->
+            "LONG-$number" to listOf(
+                st("LONG-$number", 1, "A", "10:00:00"),
+                st("LONG-$number", 2, "FAR", "10:03:00"),
+            )
+        } + mapOf(
+            "SHORT" to listOf(
+                st("SHORT", 1, "A", "10:02:00"),
+                st("SHORT", 2, "NEAR", "10:30:00"),
+            ),
+        )
+        val router = StaticGtfsRouter(
+            FakeData(candidates = mapOf("A" to early + candidate("SHORT", "R", "S", 1, "10:02:00")), times = times),
+            zone,
+        )
+        val origins = listOf(StaticRouterAccess("A", 60))
+        val destinations = listOf(
+            StaticRouterAccess("FAR", 1_000),
+            StaticRouterAccess("NEAR", 60),
+        )
+        val unfiltered = router.route(origins, destinations, date, at("09:55:00"))
+        assertEquals(6, (unfiltered as StaticRouterResult.Journeys).journeys.size)
+        assertTrue(unfiltered.journeys.all { it.egress.stopId == "FAR" })
+
+        val bounded = router.route(
+            origins, destinations, date, at("09:55:00"), maxWalkingSeconds = 15 * 60,
+        )
+        val chosen = (bounded as StaticRouterResult.Journeys).journeys.single()
+        assertEquals("SHORT", chosen.legs.single().tripId)
+        assertEquals("NEAR", chosen.egress.stopId)
+        assertTrue(
+            router.route(origins, destinations, date, at("09:55:00"), maxWalkingSeconds = 100)
+                is StaticRouterResult.NoPath,
+        )
+        assertTrue(
+            router.route(origins, destinations, date, at("09:55:00"), maxWalkingSeconds = -1)
+                is StaticRouterResult.NoPath,
+        )
+    }
+
     @Test fun directAndMidnightJourneyIsDeterministic() {
         val data = FakeData(
             candidates = mapOf("A" to listOf(candidate("T1", "R1", "S", 1, "23:55:00"))),

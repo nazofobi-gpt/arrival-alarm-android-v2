@@ -147,6 +147,7 @@ class NationwideTransitGateway(
     private val realtimeFetch: (() -> GermanyRealtimeFetchResult)? = null,
 ) : ArrivalTransitClient {
     private val appContext = context.applicationContext
+    private val routePreferences = ArrivalUiPreferences(appContext)
     private val store = NationwideTransitIndex(appContext)
     private val staticJourneyPlanner = ProductionStaticJourneyPlanner(
         index = store,
@@ -553,7 +554,10 @@ class NationwideTransitGateway(
             !validTransitJourneyCoordinates(destination.latitude, destination.longitude)
         ) return NationwideJourneyResolution.NoRoute(LocalStaticJourneyOutcome.NoPath)
         val localOutcome = runCatching {
-            staticJourneyPlanner.plan(origin, destination, limit)
+            staticJourneyPlanner.plan(
+                origin, destination, limit,
+                maxWalkingMinutes = if (routePreferences.loadMaxWalking15Minutes()) 15 else null,
+            )
         }.getOrDefault(LocalStaticJourneyOutcome.Unavailable)
 
         if (localOutcome is LocalStaticJourneyOutcome.Results) {

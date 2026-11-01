@@ -198,6 +198,8 @@ fun RouteJourneyPanel(
                     onClick = {
                         maxWalking15Minutes = !maxWalking15Minutes
                         preferences.saveMaxWalking15Minutes(maxWalking15Minutes)
+                        // Fetch new candidates: the old three cards may all exceed the budget.
+                        onRefreshRoutes()
                     },
                     label = { Text(stringResource(R.string.route_max_walking_15_filter)) },
                     modifier = Modifier
