@@ -186,6 +186,9 @@ fun RouteJourneyPanel(
                     onClick = {
                         atMostOneTransfer = !atMostOneTransfer
                         preferences.saveAtMostOneTransfer(atMostOneTransfer)
+                        // Requery the bounded GTFS router: local card filtering alone
+                        // can discard the only available one-transfer candidate.
+                        onRefreshRoutes()
                     },
                     label = { Text(stringResource(R.string.route_at_most_one_transfer_filter)) },
                     modifier = Modifier

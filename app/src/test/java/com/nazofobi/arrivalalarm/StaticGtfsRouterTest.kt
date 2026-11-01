@@ -160,6 +160,44 @@ class StaticGtfsRouterTest {
         assertTrue(data.candidateQueryCount > 0)
     }
 
+    @Test fun oneTransferPreferenceFiltersDuringGtfsSearchBeforeResultCap() {
+        val data = FakeData(
+            candidates = mapOf(
+                "A" to listOf(candidate("T1", "R1", "S", 1, "10:00:00")),
+                "X" to listOf(
+                    candidate("T2", "R2", "S", 1, "10:08:00"),
+                    candidate("T4", "R4", "S", 1, "10:17:00"),
+                ),
+                "Y" to listOf(candidate("T3", "R3", "S", 1, "10:15:00")),
+            ),
+            times = mapOf(
+                "T1" to listOf(st("T1", 1, "A", "10:00:00"), st("T1", 2, "X", "10:05:00")),
+                "T2" to listOf(st("T2", 1, "X", "10:08:00"), st("T2", 2, "Y", "10:12:00")),
+                "T3" to listOf(st("T3", 1, "Y", "10:15:00"), st("T3", 2, "B", "10:20:00")),
+                "T4" to listOf(st("T4", 1, "X", "10:17:00"), st("T4", 2, "B", "10:25:00")),
+            ),
+        )
+        val router = StaticGtfsRouter(data, zone, maxJourneys = 1)
+        val origins = listOf(StaticRouterAccess("A"))
+        val destinations = listOf(StaticRouterAccess("B"))
+        val regular = router.route(origins, destinations, date, at("09:55:00"))
+        assertEquals(
+            listOf("T1", "T2", "T3"),
+            (regular as StaticRouterResult.Journeys).journeys.single().legs.map { it.tripId },
+        )
+        val filtered = router.route(
+            origins, destinations, date, at("09:55:00"), maxAllowedTransfers = 1,
+        )
+        assertEquals(
+            listOf("T1", "T4"),
+            (filtered as StaticRouterResult.Journeys).journeys.single().legs.map { it.tripId },
+        )
+        assertTrue(
+            router.route(origins, destinations, date, at("09:55:00"), maxAllowedTransfers = -1)
+                is StaticRouterResult.NoPath,
+        )
+    }
+
     @Test fun implicitSameStopTransferWorksWithoutTransfersFile() {
         val data = baseTransferData()
         val result = StaticGtfsRouter(data, zone, implicitTransferSeconds = 120).route(
