@@ -376,6 +376,18 @@ class JourneyConnectorActionPortTest {
         assertEquals(JourneyPhase.ARMED, controller.state.phase)
         assertEquals(GeoPoint(52.002, 8.002), controller.state.start)
         assertEquals(GeoPoint(52.007, 8.007), controller.state.destination)
+        // A real, explicitly armed GTFS instance must be visible to the connector
+        // with its service day and the selected in-segment stop, not a guessed ETA.
+        val snapshot = port.readSnapshot()
+        assertTrue(snapshot.alarmArmed)
+        assertEquals("trip-7", snapshot.activeTrip?.tripId)
+        assertEquals("trip-7@2026-10-20", snapshot.activeTrip?.journeyId)
+        assertEquals("route-2", snapshot.activeTrip?.routeId)
+        assertEquals("Achim", snapshot.activeTrip?.direction)
+        assertEquals("Lohne", snapshot.activeTrip?.boardingStop?.name)
+        assertEquals("Transfer", snapshot.activeTrip?.destination?.name)
+        assertEquals(null, snapshot.activeTrip?.currentStop)
+        assertEquals(null, snapshot.activeTrip?.nextStop)
         assertFalse(port.armConfirmedSelectedTrip(restore).applied)
         assertFalse(port.armArrivalAlarm().applied)
     }
