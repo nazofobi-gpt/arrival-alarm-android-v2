@@ -304,4 +304,44 @@ class JourneyConnectorActionPortTest {
         assertEquals(GeoPoint(route.origin.latitude, route.origin.longitude), controller.state.start)
         assertEquals(GeoPoint(route.destination.latitude, route.destination.longitude), controller.state.destination)
     }
+    @Test
+    fun selectedTripArmRequiresFreshOneShotAuthorizationAtConnectorBoundary() {
+        val controller = JourneyController()
+        val port = JourneyConnectorActionPort(
+            controller = controller,
+            selectedTripArmValidationRequired = true,
+        )
+        port.setOrigin(MapPoint(52.66, 8.23, "Lohne"))
+        port.setDestination(MapPoint(52.67, 8.24, "Transfer"))
+
+        val directCommand = port.armArrivalAlarm()
+        assertFalse(directCommand.applied)
+        assertEquals(JourneyPhase.DESTINATION_SELECTED, controller.state.phase)
+
+        assertTrue(port.authorizeSelectedTripArmOnce())
+        assertTrue(port.armArrivalAlarm().applied)
+        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+
+        // The authorization is consumed by the first arm attempt and cannot be replayed.
+        assertFalse(port.armArrivalAlarm().applied)
+        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+    }
+
+    @Test
+    fun clearingSelectedTripArmRequirementRestoresManualArmPath() {
+        val controller = JourneyController()
+        val port = JourneyConnectorActionPort(
+            controller = controller,
+            selectedTripArmValidationRequired = true,
+        )
+        port.setOrigin(MapPoint(52.66, 8.23, "Lohne"))
+        port.setDestination(MapPoint(53.08, 8.81, "Bremen Hbf"))
+
+        assertFalse(port.armArrivalAlarm().applied)
+        port.setSelectedTripArmValidationRequired(false)
+
+        assertTrue(port.armArrivalAlarm().applied)
+        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+    }
+
 }
