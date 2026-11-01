@@ -98,6 +98,7 @@ class ActiveJourneyService : Service(), LocationListener {
                         return
                     }
                     LocationProviderRecovery.Decision.RETRY -> {
+                        graph.connectorPort.resetArrivalConfirmation()
                         removeLocationUpdates()
                         registerLocationUpdates()
                         updateTrackingNotification(null, accuracyDegraded = true)
@@ -115,6 +116,7 @@ class ActiveJourneyService : Service(), LocationListener {
     override fun onCreate() {
         super.onCreate()
         graph = ArrivalAlarmRuntimeGraph.get(applicationContext)
+        graph.connectorPort.resetArrivalConfirmation()
         locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         graph.connectorRuntimeCoordinator.acquire(SERVICE_RUNTIME_OWNER)
         createNotificationChannels()
@@ -205,8 +207,14 @@ class ActiveJourneyService : Service(), LocationListener {
         // LocationManager can deliver a queued fix after cancellation or arrival.
         // Never update terminal journey state or publish a stale tracking notification.
         if (!LocationProviderRecovery.acceptsLocationCallback(graph.controller.state.phase, arrivalHandled)) return
-        if (!ArrivalLocationQuality.hasValidCoordinates(location.latitude, location.longitude)) return
-        val destination = graph.controller.state.destination ?: return
+        if (!ArrivalLocationQuality.hasValidCoordinates(location.latitude, location.longitude)) {
+            graph.connectorPort.resetArrivalConfirmation()
+            return
+        }
+        val destination = graph.controller.state.destination ?: run {
+            graph.connectorPort.resetArrivalConfirmation()
+            return
+        }
         val distanceMeters = ArrivalProgressController.distanceMeters(
             GeoPoint(location.latitude, location.longitude),
             destination,
@@ -218,6 +226,7 @@ class ActiveJourneyService : Service(), LocationListener {
             ageMillis = (nowNanos - location.elapsedRealtimeNanos) / 1_000_000L,
         )
         if (!ArrivalLocationQuality.isUsableForTracking(evidence)) {
+            graph.connectorPort.resetArrivalConfirmation()
             updateTrackingNotification(null, accuracyDegraded = true)
             return
         }
@@ -245,6 +254,7 @@ class ActiveJourneyService : Service(), LocationListener {
 
     override fun onProviderDisabled(provider: String) {
         if (provider != registeredProvider) return
+        graph.connectorPort.resetArrivalConfirmation()
         // Enforce the same fail-closed permission/system-location policy as the
         // broadcast receiver and the periodic monitor before re-registering.
         retryProviderRegistration()
@@ -253,6 +263,7 @@ class ActiveJourneyService : Service(), LocationListener {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        graph.connectorPort.resetArrivalConfirmation()
         mainHandler.removeCallbacks(stateMonitor)
         if (providerReceiverRegistered) {
             runCatching { unregisterReceiver(providerChangeReceiver) }
@@ -274,6 +285,7 @@ class ActiveJourneyService : Service(), LocationListener {
 
     private fun retryProviderRegistration() {
         if (arrivalHandled) return
+        graph.connectorPort.resetArrivalConfirmation()
         val registeredProviderEnabled = registeredProvider?.let { provider ->
             runCatching { locationManager.isProviderEnabled(provider) }.getOrDefault(false)
         } == true
