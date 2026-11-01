@@ -11,9 +11,11 @@ class JourneyControllerTest {
         c.selectStart(GeoPoint(1.0, 1.0))
         c.selectDestination(GeoPoint(2.0, 2.0))
         c.arm()
-        c.onDistanceChanged(500.0)
+        c.onDistanceChanged(500.0, fixElapsedRealtimeNanos = 1_000_000_000L)
         assertEquals(JourneyPhase.ARMED, c.state.phase)
-        c.onDistanceChanged(200.0)
+        c.onDistanceChanged(200.0, fixElapsedRealtimeNanos = 2_000_000_000L)
+        assertEquals(JourneyPhase.ARMED, c.state.phase)
+        c.onDistanceChanged(200.0, fixElapsedRealtimeNanos = 3_000_000_000L)
         assertEquals(JourneyPhase.ARRIVED, c.state.phase)
     }
 
@@ -83,7 +85,9 @@ class JourneyControllerTest {
 
         c.arm()
         assertNull(c.state.distanceMeters)
-        c.onDistanceChanged(120.0)
+        c.onDistanceChanged(120.0, fixElapsedRealtimeNanos = 1_000_000_000L)
+        assertEquals(JourneyPhase.ARMED, c.state.phase)
+        c.onDistanceChanged(120.0, fixElapsedRealtimeNanos = 2_000_000_000L)
         assertEquals(JourneyPhase.ARRIVED, c.state.phase)
         assertEquals(120.0, c.state.distanceMeters)
     }
@@ -93,7 +97,9 @@ class JourneyControllerTest {
         c.selectStart(GeoPoint(53.5, 8.1))
         c.selectDestination(GeoPoint(53.6, 8.2))
         c.arm()
-        c.onDistanceChanged(100.0)
+        c.onDistanceChanged(100.0, fixElapsedRealtimeNanos = 1_000_000_000L)
+        assertEquals(JourneyPhase.ARMED, c.state.phase)
+        c.onDistanceChanged(100.0, fixElapsedRealtimeNanos = 2_000_000_000L)
         assertEquals(JourneyPhase.ARRIVED, c.state.phase)
 
         c.selectDestination(GeoPoint(53.8, 8.4))
@@ -264,7 +270,9 @@ class JourneyControllerTest {
         controller.selectStart(GeoPoint(53.083, 8.813))
         controller.selectDestination(GeoPoint(53.1, 8.9))
         controller.arm()
-        controller.onDistanceChanged(100.0)
+        controller.onDistanceChanged(100.0, fixElapsedRealtimeNanos = 1_000_000_000L)
+        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+        controller.onDistanceChanged(100.0, fixElapsedRealtimeNanos = 2_000_000_000L)
         assertEquals(JourneyPhase.ARRIVED, controller.state.phase)
         assertNull(persisted)
 
@@ -308,7 +316,9 @@ class JourneyControllerTest {
         controller.selectStart(GeoPoint(53.083, 8.813))
         controller.selectDestination(GeoPoint(53.1, 8.9))
         controller.arm()
-        controller.onDistanceChanged(100.0)
+        controller.onDistanceChanged(100.0, fixElapsedRealtimeNanos = 1_000_000_000L)
+        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+        controller.onDistanceChanged(100.0, fixElapsedRealtimeNanos = 2_000_000_000L)
         assertEquals(JourneyPhase.ARRIVED, controller.state.phase)
         assertEquals(100.0, persisted?.distanceMeters)
 
@@ -331,6 +341,56 @@ class JourneyControllerTest {
         controller.arm()
         assertEquals(JourneyPhase.ARMED, controller.state.phase)
         assertEquals(500.0, controller.state.distanceMeters)
+    }
+
+    @Test fun duplicateAndOutOfOrderFixesCannotCompleteArrival() {
+        val controller = JourneyController(arrivalRadiusMeters = 250.0)
+        controller.selectStart(GeoPoint(53.5, 8.1))
+        controller.selectDestination(GeoPoint(53.6, 8.2))
+        controller.arm()
+
+        controller.onDistanceChanged(120.0, fixElapsedRealtimeNanos = 10_000_000_000L)
+        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+        controller.onDistanceChanged(120.0, fixElapsedRealtimeNanos = 10_000_000_000L)
+        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+        controller.onDistanceChanged(120.0, fixElapsedRealtimeNanos = 9_000_000_000L)
+        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+        controller.onDistanceChanged(120.0, fixElapsedRealtimeNanos = 11_000_000_000L)
+        assertEquals(JourneyPhase.ARRIVED, controller.state.phase)
+    }
+
+    @Test fun nonArrivalCandidateResetsTheConfirmationStreak() {
+        val controller = JourneyController(arrivalRadiusMeters = 250.0)
+        controller.selectStart(GeoPoint(53.5, 8.1))
+        controller.selectDestination(GeoPoint(53.6, 8.2))
+        controller.arm()
+
+        controller.onDistanceChanged(120.0, allowArrival = true, fixElapsedRealtimeNanos = 1_000_000_000L)
+        controller.onDistanceChanged(120.0, allowArrival = false, fixElapsedRealtimeNanos = 2_000_000_000L)
+        controller.onDistanceChanged(120.0, allowArrival = true, fixElapsedRealtimeNanos = 3_000_000_000L)
+        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+        controller.onDistanceChanged(120.0, allowArrival = true, fixElapsedRealtimeNanos = 4_000_000_000L)
+        assertEquals(JourneyPhase.ARRIVED, controller.state.phase)
+    }
+
+    @Test fun processRecreationRequiresTwoFreshArrivalFixes() {
+        var persisted: JourneyUiState? = null
+        val store = object : JourneyStateStore {
+            override fun load(): JourneyUiState? = persisted
+            override fun save(state: JourneyUiState) { persisted = state }
+        }
+        val firstProcess = JourneyController(arrivalRadiusMeters = 250.0, stateStore = store)
+        firstProcess.selectStart(GeoPoint(53.5, 8.1))
+        firstProcess.selectDestination(GeoPoint(53.6, 8.2))
+        firstProcess.arm()
+        firstProcess.onDistanceChanged(120.0, fixElapsedRealtimeNanos = 1_000_000_000L)
+        assertEquals(JourneyPhase.ARMED, firstProcess.state.phase)
+
+        val restoredProcess = JourneyController(arrivalRadiusMeters = 250.0, stateStore = store)
+        restoredProcess.onDistanceChanged(110.0, fixElapsedRealtimeNanos = 2_000_000_000L)
+        assertEquals(JourneyPhase.ARMED, restoredProcess.state.phase)
+        restoredProcess.onDistanceChanged(110.0, fixElapsedRealtimeNanos = 3_000_000_000L)
+        assertEquals(JourneyPhase.ARRIVED, restoredProcess.state.phase)
     }
 
     @Test(expected = IllegalArgumentException::class)
