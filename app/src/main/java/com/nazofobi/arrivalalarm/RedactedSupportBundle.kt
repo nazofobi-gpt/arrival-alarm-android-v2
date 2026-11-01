@@ -17,6 +17,34 @@ internal data class ProviderProbeSample(
 internal object RedactedSupportBundle {
     private const val MAX_PROVIDER_SAMPLES = 16
     private val safeValue = Regex("[A-Za-z0-9_]+")
+    private val binaryValues = setOf("yes", "no")
+    // A character-only regex also accepts ASCII secrets such as "private_token".
+    // The export boundary must independently review the *value of each key*.
+    private val capabilityValues = mapOf(
+        "location_permission" to binaryValues,
+        "location_services_enabled" to binaryValues,
+        "notification_permission" to binaryValues,
+        "bluetooth_permission" to binaryValues,
+        "guidance_permission" to setOf("denied", "partial", "granted"),
+        "audio_route" to setOf("device", "bluetooth_connected", "bluetooth_disconnected"),
+        "tracking_armed" to binaryValues,
+        "connector_configured" to binaryValues,
+        "connector_connected" to binaryValues,
+        "transit_index" to setOf(
+            "not_installed", "loading", "index_present_unverified", "index_empty", "error",
+        ),
+        "feed_age_bucket" to setOf("unknown", "clock_mismatch", "under_24h", "1_to_7d", "over_7d"),
+        "search_probe" to setOf("not_measured", "working", "degraded", "failed"),
+        "routing_probe" to setOf("not_measured", "working", "degraded", "failed"),
+        "realtime_probe" to setOf("not_measured"),
+    )
+    private fun reviewedCapabilityValue(key: String, value: String): Boolean = when (key) {
+        "schema" -> value == "VARIS_SUPPORT_DIAGNOSTICS_V1"
+        "scope" -> value == "capabilities_only"
+        "installed_stop_count" ->
+            value == "unknown" || (value.toIntOrNull()?.let { it >= 0 && it.toString() == value } == true)
+        else -> capabilityValues[key]?.contains(value) == true
+    }
     private val capabilityKeys = listOf(
         "schema", "scope", "location_permission", "location_services_enabled",
         "notification_permission", "bluetooth_permission", "guidance_permission",
@@ -72,7 +100,10 @@ internal object RedactedSupportBundle {
                 else line.substringBefore('=') to line.substringAfter('=')
             }
         val validCapabilities = pairs.size == capabilityKeys.size &&
-            pairs.all { it != null && safeValue.matches(it.second) } &&
+            pairs.all {
+                it != null && safeValue.matches(it.second) &&
+                    reviewedCapabilityValue(it.first, it.second)
+            } &&
             pairs.mapNotNull { it?.first } == capabilityKeys &&
             pairs[0]?.second == "VARIS_SUPPORT_DIAGNOSTICS_V1" &&
             pairs[1]?.second == "capabilities_only"
