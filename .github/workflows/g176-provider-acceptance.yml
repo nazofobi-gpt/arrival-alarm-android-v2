@@ -30,6 +30,26 @@ jobs:
           mkdir -p app/build/g176-provider-samples
           python3 tools/extract_g176_provider_samples.py --realtime /tmp/g176-live.pb --static /tmp/germany-full.zip --output app/build/g176-provider-samples/g176-provider-regional-samples.json
           test -s app/build/g176-provider-samples/g176-provider-regional-samples.json
+          curl -fL --compressed --retry 5 --retry-all-errors --connect-timeout 30 --max-time 600 \
+            -H 'User-Agent: ArrivalAlarm-G176-ProviderAcceptance/1.0 (+https://github.com/nazofobi-gpt/arrival-alarm-android-v2)' \
+            https://production.gtfsrt.vbb.de/data -o /tmp/vbb-live.pb
+          vbb_bytes="$(stat -c%s /tmp/vbb-live.pb)"
+          test "$vbb_bytes" -gt 0
+          test "$vbb_bytes" -le 67108864
+          sha256sum /tmp/vbb-live.pb | tee /tmp/vbb-live.sha256
+          curl -fL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 1200 \
+            https://unternehmen.vbb.de/gtfs -o /tmp/vbb-static.zip
+          vbb_static_bytes="$(stat -c%s /tmp/vbb-static.zip)"
+          test "$vbb_static_bytes" -gt 0
+          test "$vbb_static_bytes" -le 536870912
+          sha256sum /tmp/vbb-static.zip | tee /tmp/vbb-static.sha256
+          python3 tools/extract_g176_provider_samples.py \
+            --regions berlin --allow-missing-regions \
+            --endpoint https://production.gtfsrt.vbb.de/data \
+            --static-source https://unternehmen.vbb.de/gtfs \
+            --realtime /tmp/vbb-live.pb --static /tmp/vbb-static.zip \
+            --output app/build/g176-provider-samples/g176-vbb-platform-samples.json
+          test -s app/build/g176-provider-samples/g176-vbb-platform-samples.json
       - name: Enable KVM access
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -51,7 +71,8 @@ jobs:
             ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.GermanyRealtimeMatcherInstrumentedTest
             echo "G176_SYNTHETIC_API36_MATCHER=PASS"
             adb push app/build/g176-provider-samples/g176-provider-regional-samples.json /data/local/tmp/g176-provider-regional-samples.json
-            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.G176ProviderDerivedRegionalInstrumentedTest -Pandroid.testInstrumentationRunnerArguments.providerSamplesPath=/data/local/tmp/g176-provider-regional-samples.json
+            adb push app/build/g176-provider-samples/g176-vbb-platform-samples.json /data/local/tmp/g176-vbb-platform-samples.json
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.G176ProviderDerivedRegionalInstrumentedTest -Pandroid.testInstrumentationRunnerArguments.providerSamplesPath=/data/local/tmp/g176-provider-regional-samples.json -Pandroid.testInstrumentationRunnerArguments.alternatePlatformSamplesPath=/data/local/tmp/g176-vbb-platform-samples.json
 
       - name: Upload G176 provider instrumentation diagnostics
         if: always()

@@ -24,17 +24,22 @@ class G176ProviderDerivedRegionalInstrumentedTest {
         }
         val root = JSONObject(File(samplePath).readText())
         assertEquals("G176_PROVIDER_DERIVED_REGIONAL_SAMPLES_V1", root.getString("schema"))
-        val evidenceCounts = root.getJSONObject("platformEvidenceCounts")
-        println("G176_PROVIDER_EVIDENCE_COUNTS=$evidenceCounts")
-        assertEquals("PROVEN", root.getString("platformEvidenceState"))
-        assertTrue(
-            "provider has no protocol-valid platform reassignment trip",
-            evidenceCounts.getInt("globalProtocolValidPlatformTripCount") > 0,
-        )
-        assertTrue(
-            "provider has no static-matchable platform reassignment trip",
-            evidenceCounts.getInt("globalStaticMatchablePlatformTripCount") > 0,
-        )
+        val alternatePlatformSamplesPath = InstrumentationRegistry.getArguments()
+            .getString("alternatePlatformSamplesPath").orEmpty()
+        val platformEvidenceRoots = mutableListOf("Germany GTFS-RT" to root)
+        if (alternatePlatformSamplesPath.isNotBlank()) {
+            val alternateRoot = JSONObject(File(alternatePlatformSamplesPath).readText())
+            assertEquals("G176_PROVIDER_DERIVED_REGIONAL_SAMPLES_V1", alternateRoot.getString("schema"))
+            assertEquals(
+                "https://production.gtfsrt.vbb.de/data",
+                alternateRoot.getJSONObject("realtime").getString("endpoint"),
+            )
+            assertEquals(
+                "https://unternehmen.vbb.de/gtfs",
+                alternateRoot.getJSONObject("static").getString("source"),
+            )
+            platformEvidenceRoots += ("VBB GTFS-RT" to alternateRoot)
+        }
 
         val realtime = root.getJSONObject("realtime")
         val header = GtfsRealtime.FeedHeader.parseFrom(decode(realtime.getString("headerPbBase64")))
@@ -95,29 +100,58 @@ class G176ProviderDerivedRegionalInstrumentedTest {
             assertTrue("$region unavailable state was not preserved", unavailable is GermanyRealtimeOverlayResult.Unavailable)
         }
 
-        val platformSample = root.optJSONObject("platformEvidence")
-        assertTrue("PROVEN state must retain a platform evidence sample", platformSample != null)
-        if (platformSample != null) {
-            val entity = GtfsRealtime.FeedEntity.parseFrom(decode(platformSample.getString("entityPbBase64")))
-            val builder = GtfsRealtime.FeedMessage.newBuilder().setHeader(header).addEntity(entity)
-            val parsed = GermanyGtfsRealtimeClient(
-                clock = EpochClock { feedTimestamp },
-                streamLoader = { builder.build().toByteArray().inputStream() },
-            ).fetch()
-            assertTrue("nationwide platform evidence protobuf did not parse", parsed is GermanyRealtimeFetchResult.Available)
+        platformEvidenceRoots.forEach { (sourceLabel, sourceRoot) ->
+            val evidenceCounts = sourceRoot.getJSONObject("platformEvidenceCounts")
+            println("G176_PROVIDER_EVIDENCE_COUNTS[$sourceLabel]=$evidenceCounts")
+            val state = sourceRoot.getString("platformEvidenceState")
+            val platformSample = sourceRoot.optJSONObject("platformEvidence")
+            if (state == "PROVEN") {
+                assertTrue("$sourceLabel PROVEN state must retain a platform evidence sample", platformSample != null)
+                assertTrue(
+                    "$sourceLabel has no protocol-valid platform reassignment trip",
+                    evidenceCounts.getInt("globalProtocolValidPlatformTripCount") > 0,
+                )
+                assertTrue(
+                    "$sourceLabel has no static-matchable platform reassignment trip",
+                    evidenceCounts.getInt("globalStaticMatchablePlatformTripCount") > 0,
+                )
+            } else {
+                assertEquals("$sourceLabel unavailable state must remain explicit", "PROVIDER_SAMPLE_UNAVAILABLE", state)
+                assertTrue("$sourceLabel unavailable state must not retain a sample", platformSample == null)
+                assertEquals(
+                    "$sourceLabel unavailable state must not claim static-matchable platform trips",
+                    0,
+                    evidenceCounts.getInt("globalStaticMatchablePlatformTripCount"),
+                )
+            }
 
-            val data = JsonStaticData(platformSample)
-            val matcher = GermanyRealtimeMatcher(data, freshWindowSeconds = 120)
-            val fresh = matcher.match(parsed, feedTimestamp)
-            assertTrue("nationwide platform evidence did not match static IDs", fresh is GermanyRealtimeOverlayResult.Matched)
-            val matched = fresh as GermanyRealtimeOverlayResult.Matched
-            val platformCount = validatePlatformEvidence("nationwide", platformSample, entity, data, matched)
-            assertTrue("nationwide platform evidence was not static-matchable", platformCount > 0)
-            validPlatformEvidenceCount += platformCount
+            if (platformSample != null) {
+                val sourceRealtime = sourceRoot.getJSONObject("realtime")
+                val sourceHeader = GtfsRealtime.FeedHeader.parseFrom(
+                    decode(sourceRealtime.getString("headerPbBase64")),
+                )
+                val sourceFeedTimestamp = sourceHeader.timestamp
+                val entity = GtfsRealtime.FeedEntity.parseFrom(decode(platformSample.getString("entityPbBase64")))
+                val builder = GtfsRealtime.FeedMessage.newBuilder().setHeader(sourceHeader).addEntity(entity)
+                val parsed = GermanyGtfsRealtimeClient(
+                    clock = EpochClock { sourceFeedTimestamp },
+                    streamLoader = { builder.build().toByteArray().inputStream() },
+                ).fetch()
+                assertTrue("$sourceLabel platform evidence protobuf did not parse", parsed is GermanyRealtimeFetchResult.Available)
+
+                val data = JsonStaticData(platformSample)
+                val matcher = GermanyRealtimeMatcher(data, freshWindowSeconds = 120)
+                val fresh = matcher.match(parsed, sourceFeedTimestamp)
+                assertTrue("$sourceLabel platform evidence did not match static IDs", fresh is GermanyRealtimeOverlayResult.Matched)
+                val matched = fresh as GermanyRealtimeOverlayResult.Matched
+                val platformCount = validatePlatformEvidence(sourceLabel, platformSample, entity, data, matched)
+                assertTrue("$sourceLabel platform evidence was not static-matchable", platformCount > 0)
+                validPlatformEvidenceCount += platformCount
+            }
         }
 
         assertTrue(
-            "No protocol-valid, static-matchable provider platform reassignment in regional or Germany-wide evidence; platform acceptance is not proven",
+            "No protocol-valid, static-matchable provider platform reassignment in any configured source; platform acceptance is not proven",
             validPlatformEvidenceCount > 0,
         )
 

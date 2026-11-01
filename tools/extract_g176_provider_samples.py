@@ -26,6 +26,18 @@ REGIONS = {
 }
 
 
+def resolve_regions(names):
+    selected = list(names or REGIONS.keys())
+    if not selected:
+        raise ValueError("at least one region must be selected")
+    if len(set(selected)) != len(selected):
+        raise ValueError("duplicate region selection")
+    unknown = [name for name in selected if name not in REGIONS]
+    if unknown:
+        raise ValueError(f"unknown region(s): {unknown}")
+    return {name: REGIONS[name] for name in selected}
+
+
 def read_varint(buf, pos):
     value = 0
     shift = 0
@@ -511,7 +523,11 @@ def main():
     parser.add_argument("--static", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--endpoint", default="https://realtime.gtfs.de/realtime-free.pb")
+    parser.add_argument("--static-source", default="https://download.gtfs.de/germany/free/latest.zip")
+    parser.add_argument("--regions", nargs="+", choices=tuple(REGIONS), default=list(REGIONS))
+    parser.add_argument("--allow-missing-regions", action="store_true")
     args = parser.parse_args()
+    regions = resolve_regions(args.regions)
 
     with open(args.realtime, "rb") as handle:
         payload = handle.read()
@@ -535,9 +551,9 @@ def main():
     header = parse_header(header_raw)
     live_trip_ids = set(summaries)
 
-    candidate_ids = {name: set() for name in REGIONS}
-    candidate_match_stop = {name: {} for name in REGIONS}
-    region_stop_rows = {name: {} for name in REGIONS}
+    candidate_ids = {name: set() for name in regions}
+    candidate_match_stop = {name: {} for name in regions}
+    region_stop_rows = {name: {} for name in regions}
     assigned_sequences_by_trip = {
         trip_id: set(summary["protocol_valid_assigned_sequences"])
         for trip_id, summary in summaries.items()
@@ -565,7 +581,7 @@ def main():
         if missing:
             raise SystemExit(f"static GTFS missing {sorted(missing)}")
 
-        region_stop_ids = {name: set() for name in REGIONS}
+        region_stop_ids = {name: set() for name in regions}
         static_stop_ids = set()
         parent_station_by_stop = {}
         for row in csv_rows(zf, "stops.txt"):
@@ -578,7 +594,7 @@ def main():
                 lon = float(row.get("stop_lon") or "")
             except ValueError:
                 continue
-            for region_name, region in REGIONS.items():
+            for region_name, region in regions.items():
                 distance = haversine_km(lat, lon, region["lat"], region["lon"])
                 if distance <= region["radius_km"]:
                     sid = row.get("stop_id") or ""
@@ -599,7 +615,7 @@ def main():
                 stop_sequence = None
             if stop_sequence is not None and stop_sequence in candidate_sequences_by_trip.get(trip_id, set()):
                 static_sequence_rows_by_trip.setdefault(trip_id, {}).setdefault(stop_sequence, []).append(stop_id)
-            for region_name in REGIONS:
+            for region_name in regions:
                 if stop_id in region_stop_ids[region_name]:
                     candidate_ids[region_name].add(trip_id)
                     candidate_match_stop[region_name].setdefault(trip_id, stop_id)
@@ -636,10 +652,10 @@ def main():
                 + summary["static_matchable_stop_id_reassignment_count"]
             )
 
-        chosen = {name: choose_sample(candidate_ids[name], summaries) for name in REGIONS}
+        chosen = {name: choose_sample(candidate_ids[name], summaries) for name in regions}
         platform_trip_id = choose_platform_evidence(summaries)
         missing_regions = [name for name, trip_id in chosen.items() if not trip_id]
-        if missing_regions:
+        if missing_regions and not args.allow_missing_regions:
             raise SystemExit(
                 "no provider-derived static/live candidate for "
                 + ", ".join(missing_regions)
@@ -647,7 +663,7 @@ def main():
                 + json.dumps({k: len(v) for k, v in candidate_ids.items()})
             )
 
-        chosen_ids = set(chosen.values())
+        chosen_ids = {trip_id for trip_id in chosen.values() if trip_id}
         if platform_trip_id:
             chosen_ids.add(platform_trip_id)
         trip_rows = {}
@@ -728,12 +744,14 @@ def main():
 
     samples = {}
     for region_name, trip_id in chosen.items():
+        if not trip_id:
+            continue
         trip_row = trip_rows[trip_id]
         route_id = trip_row.get("route_id") or ""
         match_stop = candidate_match_stop[region_name][trip_id]
         sample = {
             "region": region_name,
-            "regionAnchor": REGIONS[region_name],
+            "regionAnchor": regions[region_name],
             "matchingRegionalStop": region_stop_rows[region_name].get(match_stop),
             "realtimeSummary": summaries[trip_id],
             "realtimeEntity": selected_full[trip_id],
@@ -754,7 +772,7 @@ def main():
         trip_row = trip_rows[platform_trip_id]
         route_id = trip_row.get("route_id") or ""
         platform_evidence = {
-            "scope": "germany_wide",
+            "scope": args.endpoint,
             "realtimeSummary": summaries[platform_trip_id],
             "realtimeEntity": selected_full[platform_trip_id],
             "entityPbBase64": base64.b64encode(selected_raw[platform_trip_id]).decode("ascii"),
@@ -772,9 +790,10 @@ def main():
     chosen_stops = {
         stop_id
         for trip_id in chosen.values()
+        if trip_id
         for stop_id in selected_stop_ids_by_trip[trip_id]
     }
-    chosen_trip_ids = set(chosen.values())
+    chosen_trip_ids = {trip_id for trip_id in chosen.values() if trip_id}
 
     associated_alerts = []
     for kind, raw in iter_feed_entities(payload):
@@ -845,6 +864,8 @@ def main():
     output = {
         "schema": "G176_PROVIDER_DERIVED_REGIONAL_SAMPLES_V1",
         "capturedAtUtc": datetime.now(timezone.utc).isoformat(),
+        "regions": list(regions),
+        "allowMissingRegions": args.allow_missing_regions,
         "realtime": {
             "endpoint": args.endpoint,
             "sha256": file_sha256(args.realtime),
@@ -855,7 +876,7 @@ def main():
             "tripEntityCount": trip_entity_count,
         },
         "static": {
-            "source": "https://download.gtfs.de/germany/free/latest.zip",
+            "source": args.static_source,
             "sha256": file_sha256(args.static),
             "bytes": os.path.getsize(args.static),
             "feedInfo": feed_info,
@@ -867,10 +888,11 @@ def main():
         "platformEvidenceCounts": platform_evidence_counts,
         "associatedAlerts": associated_alerts,
         "notes": [
-            "Samples are selected from the exact provider GTFS-RT payload by matching live trip_id to the matching Germany static GTFS.",
+            "Samples are selected from the exact provider GTFS-RT payload by matching live trip_id to the supplied provider static GTFS.",
             "Regional identity is evidenced by a static stop within the recorded geographic anchor radius.",
             "Platform evidence accepts either assigned_stop_id plus stop_sequence or stop_id plus stop_sequence when both static stops share the same non-empty parent_station.",
             "Assigned-stop and stop_id reassignment counters remain separate; duplicate provider/static sequences and cross-station IDs fail closed.",
+            "When allowMissingRegions is true, the regional sample map may be empty while global platform-evidence extraction still runs.",
             "No provider or agency completeness is inferred from this sample.",
         ],
     }

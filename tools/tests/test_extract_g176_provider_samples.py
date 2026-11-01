@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from extract_g176_provider_samples import (  # noqa: E402
     choose_platform_evidence,
     parse_trip_update,
+    resolve_regions,
     select_protocol_valid_stop_id_reassignments,
     select_static_matchable_assigned_stops,
     select_static_matchable_stop_id_reassignments,
@@ -236,6 +237,18 @@ class G176PlatformReassignmentEvidenceTest(unittest.TestCase):
         summaries["assigned"]["static_matchable_platform_evidence_count"] = 0
         summaries["stop-id"]["static_matchable_platform_evidence_count"] = 0
         self.assertIsNone(choose_platform_evidence(summaries))
+
+
+    def test_region_selection_can_target_vbb_berlin_only(self):
+        selected = resolve_regions(["berlin"])
+        self.assertEqual(["berlin"], list(selected))
+        self.assertEqual(52.5251, selected["berlin"]["lat"])
+
+    def test_region_selection_rejects_duplicates_and_unknown_names(self):
+        with self.assertRaises(ValueError):
+            resolve_regions(["berlin", "berlin"])
+        with self.assertRaises(ValueError):
+            resolve_regions(["hamburg"])
 
 
 if __name__ == "__main__":
