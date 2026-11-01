@@ -510,4 +510,35 @@ class TransitExperienceTest {
                 .departureBoard(listOf(delayedPast), 1_000L).map { it.tripId },
         )
     }
+
+    @Test fun verifiedDepartureDeltaShowsOnlyMeaningfulProviderEvidence() {
+        val planned = Departure("re9", "RE9", "Bremen", 1_500L)
+        assertEquals(5, visibleDepartureDelayMinutes(planned.copy(realtimeEpochSeconds = 1_800L)))
+        assertEquals(-3, visibleDepartureDelayMinutes(planned.copy(realtimeEpochSeconds = 1_320L)))
+        assertEquals(null, visibleDepartureDelayMinutes(planned.copy(realtimeEpochSeconds = 1_559L)))
+        assertEquals(null, visibleDepartureDelayMinutes(planned.copy(realtimeEpochSeconds = 1_441L)))
+        assertEquals(null, visibleDepartureDelayMinutes(planned))
+        assertEquals(null, visibleDepartureDelayMinutes(planned.copy(realtimeEpochSeconds = -1L)))
+        assertEquals(null, visibleDepartureDelayMinutes(planned.copy(realtimeEpochSeconds = 90_000L)))
+        assertEquals(null, visibleDepartureDelayMinutes(planned.copy(scheduledEpochSeconds = Long.MAX_VALUE)))
+    }
+
+    @Test fun offlineAndUnsupportedBoardsNeverClaimRealtimeDepartureDelay() {
+        val withFreshEstimate = Departure(
+            "re9", "RE9", "Bremen", 1_500L, realtimeEpochSeconds = 1_800L,
+        )
+        val fresh = TransitExperienceEngine(
+            TransitProviderCapabilities(realtimeDepartures = true),
+        ).departureBoard(listOf(withFreshEstimate), 1_000L).single()
+        assertEquals(5, visibleDepartureDelayMinutes(fresh))
+        for (engine in listOf(
+            TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures = false)),
+            TransitExperienceEngine(TransitProviderCapabilities(realtimeDepartures = true), isOfflineCache = true),
+        )) {
+            val board = engine.departureBoard(listOf(withFreshEstimate), 1_000L)
+            assertEquals(null, visibleDepartureDelayMinutes(board.single()))
+            assertEquals(1_500L, board.single().effectiveEpochSeconds)
+        }
+    }
+
 }
