@@ -16,12 +16,12 @@ class StaticGtfsRouterTest {
         val times = (1..7).associate { number ->
             "LONG-$number" to listOf(
                 st("LONG-$number", 1, "A", "10:00:00"),
-                st("LONG-$number", 2, "FAR", "10:10:00"),
+                st("LONG-$number", 2, "FAR", "10:03:00"),
             )
         } + mapOf(
             "SHORT" to listOf(
                 st("SHORT", 1, "A", "10:02:00"),
-                st("SHORT", 2, "NEAR", "10:15:00"),
+                st("SHORT", 2, "NEAR", "10:30:00"),
             ),
         )
         val router = StaticGtfsRouter(
