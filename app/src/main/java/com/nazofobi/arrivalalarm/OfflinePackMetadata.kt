@@ -42,10 +42,23 @@ internal fun offlinePackMetadataText(
             category == Character.LINE_SEPARATOR.toInt() ||
             category == Character.PARAGRAPH_SEPARATOR.toInt()
     }
+    // Kotlin String indexes UTF-16 code units. Reject incomplete surrogate pairs
+    // before display and avoid truncating a valid pair into an invalid glyph.
+    val malformedSurrogate = rawVersion.indices.any { index ->
+        val char = rawVersion[index]
+        (Character.isHighSurrogate(char) &&
+            (index + 1 == rawVersion.length || !Character.isLowSurrogate(rawVersion[index + 1]))) ||
+            (Character.isLowSurrogate(char) &&
+                (index == 0 || !Character.isHighSurrogate(rawVersion[index - 1])))
+    }
     val version = when {
-        rawVersion.isBlank() || unsafeVersion || rawVersion.equals("unknown", ignoreCase = true) ->
+        rawVersion.isBlank() || unsafeVersion || malformedSurrogate ||
+            rawVersion.equals("unknown", ignoreCase = true) ->
             context.getString(R.string.offline_pack_version_unknown)
-        rawVersion.length > 28 -> rawVersion.take(27) + "…"
+        rawVersion.length > 28 -> {
+            val cutoff = if (Character.isHighSurrogate(rawVersion[26])) 26 else 27
+            rawVersion.take(cutoff) + "…"
+        }
         else -> rawVersion
     }
 
