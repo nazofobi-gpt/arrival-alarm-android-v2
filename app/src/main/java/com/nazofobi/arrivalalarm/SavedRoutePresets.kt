@@ -224,6 +224,7 @@ internal class SharedPreferencesSavedRoutePresetStringStorage(
 internal enum class SavedRoutePresetStoreRejection {
     SOURCE_UNSAFE,
     INVALID_PRESET,
+    ID_CONFLICT,
     LIMIT_REACHED,
     NOT_FOUND,
     STORAGE_FAILURE,
@@ -268,8 +269,13 @@ internal class SavedRoutePresetsStore(
             )
         }
 
-        val existing = current.presets.firstOrNull { it.hasSameEndpoints(preset) }
-        val candidate = if (existing == null) preset else preset.copy(id = existing.id)
+        val existingById = current.presets.firstOrNull { it.id == preset.id }
+        if (existingById != null && !existingById.hasSameEndpoints(preset)) {
+            return SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.ID_CONFLICT)
+        }
+
+        val existingByEndpoints = current.presets.firstOrNull { it.hasSameEndpoints(preset) }
+        val candidate = if (existingByEndpoints == null) preset else preset.copy(id = existingByEndpoints.id)
         if (SavedRoutePresetsCodec.encode(listOf(candidate)) == null) {
             return SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.INVALID_PRESET)
         }
