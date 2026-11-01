@@ -71,6 +71,7 @@ private fun RouteOption.toJson(): JSONObject = JSONObject()
     .put("walkingMinutes", walkingMinutes)
     .put("transfers", transfers)
     .put("tripIds", JSONArray(tripIds))
+    .putNullable("selectedTripConstraint", selectedTripConstraint?.toJson())
     .put("stops", JSONArray().apply { stops.forEach { put(it.toJson()) } })
     .putNullable("refreshToken", refreshToken)
     .putNullable("sourceUpdatedAtEpochSeconds", sourceUpdatedAtEpochSeconds)
@@ -98,6 +99,10 @@ private fun JSONObject.toRouteOption(): RouteOption? {
         !has("tripIds") || isNull("tripIds") -> emptyList()
         else -> optJSONArray("tripIds")?.toStrictTripIdsOrNull() ?: return null
     }
+    val selectedTripConstraint = when {
+        !has("selectedTripConstraint") || isNull("selectedTripConstraint") -> null
+        else -> optJSONObject("selectedTripConstraint")?.toSelectedTripConstraintOrNull() ?: return null
+    }
     // A malformed source timestamp must not impersonate verified live data.
     val sourceUpdatedAt = when {
         !has("sourceUpdatedAtEpochSeconds") || isNull("sourceUpdatedAtEpochSeconds") -> null
@@ -116,7 +121,7 @@ private fun JSONObject.toRouteOption(): RouteOption? {
     if (departureEpochMillis != null && arrivalEpochMillis != null &&
         arrivalEpochMillis < departureEpochMillis
     ) return null
-    return RouteOption(
+    val routeOption = RouteOption(
         id = id,
         origin = origin,
         destination = destination,
@@ -127,12 +132,14 @@ private fun JSONObject.toRouteOption(): RouteOption? {
         walkingMinutes = walkingMinutes,
         transfers = transfers,
         tripIds = tripIds,
+        selectedTripConstraint = selectedTripConstraint,
         stops = stops,
         refreshToken = optNullableString("refreshToken"),
         sourceUpdatedAtEpochSeconds = sourceUpdatedAt,
         departureEpochMillis = departureEpochMillis,
         arrivalEpochMillis = arrivalEpochMillis,
     )
+    return routeOption.takeIf(::routeOptionCarriesSelectedTripConstraint)
 }
 
 private fun MapPoint.toJson(): JSONObject = JSONObject()
@@ -164,6 +171,7 @@ private fun RouteStop.toJson(): JSONObject = JSONObject()
     .putNullable("plannedDeparture", plannedDeparture)
     .putNullable("platform", platform)
     .putNullable("plannedPlatform", plannedPlatform)
+    .putNullable("stopSequence", stopSequence)
 
 private fun JSONObject.toRouteStop(): RouteStop? {
     // A number, boolean or JSON container cannot be treated as an actual stop name.
@@ -184,6 +192,10 @@ private fun JSONObject.toRouteStop(): RouteStop? {
     val latitude = optNullableDouble("latitude")
     val longitude = optNullableDouble("longitude")
     if ((latitude == null) != (longitude == null)) return null
+    val stopSequence = when {
+        !has("stopSequence") || isNull("stopSequence") -> null
+        else -> strictNonNegativeStoredIntOrNull("stopSequence") ?: return null
+    }
     return RouteStop(
         id = optNullableString("id"),
         name = name,
@@ -195,8 +207,70 @@ private fun JSONObject.toRouteStop(): RouteStop? {
         plannedDeparture = optNullableString("plannedDeparture"),
         platform = optNullableString("platform"),
         plannedPlatform = optNullableString("plannedPlatform"),
+        stopSequence = stopSequence,
     )
 }
+
+private fun SelectedTripConstraint.toJson(): JSONObject = JSONObject()
+    .put("identity", JSONObject()
+        .put("tripId", identity.tripId)
+        .put("serviceDate", identity.serviceDate.toString())
+        .put("serviceId", identity.serviceId)
+        .put("routeId", identity.routeId)
+        .putNullable("directionId", identity.directionId)
+        .putNullable("frequencyStartSeconds", identity.frequencyStartSeconds))
+    .put("boarding", boarding.toJson())
+    .put("destination", destination.toJson())
+
+private fun GtfsSelectedStopRef.toJson(): JSONObject = JSONObject()
+    .put("sequence", sequence)
+    .put("stopId", stopId)
+
+private fun JSONObject.toSelectedTripConstraintOrNull(): SelectedTripConstraint? {
+    val identityJson = optJSONObject("identity") ?: return null
+    val tripId = (identityJson.opt("tripId") as? String)
+        ?.takeIf(::isUsableSelectedTripIdentityComponent) ?: return null
+    val serviceDateText = identityJson.opt("serviceDate") as? String ?: return null
+    val serviceDate = runCatching { GtfsServiceDate.parse(serviceDateText) }.getOrNull()
+        ?.takeIf { it.toString() == serviceDateText } ?: return null
+    val serviceId = (identityJson.opt("serviceId") as? String)
+        ?.takeIf(::isUsableSelectedTripIdentityComponent) ?: return null
+    val routeId = (identityJson.opt("routeId") as? String)
+        ?.takeIf(::isUsableSelectedTripIdentityComponent) ?: return null
+    val directionId = when {
+        !identityJson.has("directionId") || identityJson.isNull("directionId") -> null
+        else -> identityJson.strictOptionalStoredIntOrNull("directionId") ?: return null
+    }
+    val frequencyStartSeconds = when {
+        !identityJson.has("frequencyStartSeconds") ||
+            identityJson.isNull("frequencyStartSeconds") -> null
+        else -> identityJson.strictOptionalStoredIntOrNull("frequencyStartSeconds") ?: return null
+    }
+    val identity = runCatching {
+        GtfsTripInstanceIdentity(
+            tripId = tripId,
+            serviceDate = serviceDate,
+            serviceId = serviceId,
+            routeId = routeId,
+            directionId = directionId,
+            frequencyStartSeconds = frequencyStartSeconds,
+        )
+    }.getOrNull() ?: return null
+    val boarding = optJSONObject("boarding")?.toSelectedStopRefOrNull() ?: return null
+    val destination = optJSONObject("destination")?.toSelectedStopRefOrNull() ?: return null
+    val constraint = SelectedTripConstraint(identity, boarding, destination)
+    return constraint.takeIf(::isWellFormedSelectedTripConstraint)
+}
+
+private fun JSONObject.toSelectedStopRefOrNull(): GtfsSelectedStopRef? {
+    val sequence = strictNonNegativeStoredIntOrNull("sequence") ?: return null
+    val stopId = (opt("stopId") as? String)
+        ?.takeIf(::isUsableSelectedTripIdentityComponent) ?: return null
+    return GtfsSelectedStopRef(sequence, stopId)
+}
+
+private fun JSONObject.strictOptionalStoredIntOrNull(key: String): Int? =
+    (opt(key) as? Number)?.toString()?.toIntOrNull()
 
 private fun Departure.toJson(): JSONObject = JSONObject()
     .put("tripId", tripId)
@@ -262,6 +336,9 @@ private fun JSONObject.putNullable(key: String, value: Any?): JSONObject =
     put(key, value ?: JSONObject.NULL)
 
 /** Missing legacy counts default to zero; supplied counts must be finite, whole and >= 0. */
+private fun JSONObject.strictNonNegativeStoredIntOrNull(key: String): Int? =
+    (opt(key) as? Number)?.toString()?.toIntOrNull()?.takeIf { it >= 0 }
+
 private fun JSONObject.nonNegativeStoredIntOrNull(key: String): Int? {
     if (!has(key)) return 0
     return (opt(key) as? Number)?.toString()?.toIntOrNull()?.takeIf { it >= 0 }

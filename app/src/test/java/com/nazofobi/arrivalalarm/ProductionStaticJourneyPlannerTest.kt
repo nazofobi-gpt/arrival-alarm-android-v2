@@ -4,6 +4,7 @@ import java.util.Locale
 import java.util.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProductionStaticJourneyPlannerTest {
@@ -289,6 +290,229 @@ class ProductionStaticJourneyPlannerTest {
         assertEquals(
             listOf(saturday, sunday, GtfsServiceDate(2026, 10, 26)),
             staticRoutingServiceDates(afterDst, zone),
+        )
+    }
+
+    @Test
+    fun selectedTripConstraintMapsTheExactRepeatedStopOccurrence() {
+        val identity = selectedTripIdentity()
+        val constraint = SelectedTripConstraint(
+            identity = identity,
+            boarding = GtfsSelectedStopRef(30, "A"),
+            destination = GtfsSelectedStopRef(40, "C"),
+        )
+        val outcome = planSelectedTripFromDetail(
+            detail = selectedTripDetail(identity),
+            constraint = constraint,
+            mapper = selectedTripMapper(),
+            sourceUpdatedAtEpochSeconds = 1234L,
+        )
+
+        assertTrue(outcome is SelectedTripPlanningOutcome.Planned)
+        val option = (outcome as SelectedTripPlanningOutcome.Planned).option
+        assertEquals(selectedTripRouteOptionId(constraint), option.id)
+        assertEquals(constraint, option.selectedTripConstraint)
+        assertEquals(listOf("LOOP"), option.tripIds)
+        assertEquals(listOf(30, 40), option.stops.map { it.stopSequence })
+        assertEquals(listOf("A", "C"), option.stops.map { it.id })
+        assertEquals("Return", option.origin.label)
+        assertEquals("Destination", option.destination.label)
+        assertEquals(at("08:00:00"), option.departureEpochMillis)
+        assertEquals(at("08:30:00"), option.arrivalEpochMillis)
+        assertEquals(0, option.transfers)
+        assertEquals(0, option.walkingMinutes)
+        assertTrue(routeOptionCarriesSelectedTripConstraint(option))
+    }
+
+    @Test
+    fun selectedTripIdentityDriftAndStopReferenceDriftReturnTypedConflicts() {
+        val identity = selectedTripIdentity()
+        val constraint = SelectedTripConstraint(
+            identity, GtfsSelectedStopRef(30, "A"), GtfsSelectedStopRef(40, "C"),
+        )
+        val mapper = selectedTripMapper()
+
+        val drifted = planSelectedTripFromDetail(
+            selectedTripDetail(identity.copy(routeId = "different-route")),
+            constraint, mapper, 1234L,
+        ) as SelectedTripPlanningOutcome.Conflict
+        assertEquals(SelectedTripConflictReason.IDENTITY_DRIFT, drifted.conflict.reason)
+        assertEquals(
+            SelectedTripAlternativeAction.SELECT_ANOTHER_TRIP,
+            drifted.conflict.alternativeAction,
+        )
+
+        val wrongStopRef = planSelectedTripFromDetail(
+            selectedTripDetail(identity),
+            constraint.copy(boarding = GtfsSelectedStopRef(30, "B")),
+            mapper, 1234L,
+        ) as SelectedTripPlanningOutcome.Conflict
+        assertEquals(
+            SelectedTripConflictReason.STOP_REFERENCE_MISMATCH,
+            wrongStopRef.conflict.reason,
+        )
+    }
+
+    @Test
+    fun infeasibleOrUntimedSelectedStopRolesReturnTypedConflicts() {
+        val identity = selectedTripIdentity()
+        val constraint = SelectedTripConstraint(
+            identity, GtfsSelectedStopRef(30, "A"), GtfsSelectedStopRef(40, "C"),
+        )
+        val detail = selectedTripDetail(identity)
+        val forbiddenBoarding = detail.copy(stops = detail.stops.map { stop ->
+            if (stop.stopSequence == 30) stop.copy(pickupType = 1) else stop
+        })
+        val rejectedBoarding = planSelectedTripFromDetail(
+            forbiddenBoarding, constraint, selectedTripMapper(), 1234L,
+        ) as SelectedTripPlanningOutcome.Conflict
+        assertEquals(SelectedTripConflictReason.INVALID_STOP_ROLES, rejectedBoarding.conflict.reason)
+        assertEquals(TripStopRoleProblem.BOARDING_NOT_ALLOWED, rejectedBoarding.conflict.roleProblem)
+
+        val untimedDestination = detail.copy(stops = detail.stops.map { stop ->
+            if (stop.stopSequence == 40) stop.copy(scheduledArrival = null) else stop
+        })
+        val missingTime = planSelectedTripFromDetail(
+            untimedDestination, constraint, selectedTripMapper(), 1234L,
+        ) as SelectedTripPlanningOutcome.Conflict
+        assertEquals(SelectedTripConflictReason.INVALID_STOP_ROLES, missingTime.conflict.reason)
+        assertEquals(
+            TripStopRoleProblem.MISSING_ACTIONABLE_STOP_TIME,
+            missingTime.conflict.roleProblem,
+        )
+
+        val reversed = planSelectedTripFromDetail(
+            detail,
+            constraint.copy(
+                boarding = GtfsSelectedStopRef(40, "C"),
+                destination = GtfsSelectedStopRef(30, "A"),
+            ),
+            selectedTripMapper(),
+            1234L,
+        ) as SelectedTripPlanningOutcome.Conflict
+        assertEquals(SelectedTripConflictReason.INVALID_STOP_ROLES, reversed.conflict.reason)
+    }
+
+    @Test
+    fun missingSelectedTripRouteEvidenceAndFrequencyTemplatesFailClosed() {
+        val identity = selectedTripIdentity()
+        val constraint = SelectedTripConstraint(
+            identity, GtfsSelectedStopRef(30, "A"), GtfsSelectedStopRef(40, "C"),
+        )
+        val missingRoute = planSelectedTripFromDetail(
+            selectedTripDetail(identity), constraint, selectedTripMapper(routePresent = false), 1234L,
+        ) as SelectedTripPlanningOutcome.Conflict
+        assertEquals(
+            SelectedTripConflictReason.MISSING_SCHEDULE_EVIDENCE,
+            missingRoute.conflict.reason,
+        )
+
+        val frequencyConstraint = constraint.copy(
+            identity = identity.copy(frequencyStartSeconds = 28_800),
+        )
+        val unsupportedFrequency = planSelectedTripFromDetail(
+            selectedTripDetail(identity.copy(frequencyStartSeconds = 28_800)),
+            frequencyConstraint,
+            selectedTripMapper(),
+            1234L,
+        ) as SelectedTripPlanningOutcome.Conflict
+        assertEquals(
+            SelectedTripConflictReason.FREQUENCY_INSTANCE_UNSUPPORTED,
+            unsupportedFrequency.conflict.reason,
+        )
+    }
+
+    @Test
+    fun freshMatchedCancellationRequiresAnExplicitAlternative() {
+        val constraint = SelectedTripConstraint(
+            selectedTripIdentity(), GtfsSelectedStopRef(30, "A"), GtfsSelectedStopRef(40, "C"),
+        )
+        val cancelled = RouteRealtimeInfo(
+            state = RouteRealtimeState.FRESH_MATCHED,
+            matchedTripIds = listOf("LOOP"),
+            cancelledTripIds = listOf("LOOP"),
+        )
+        val conflict = requireNotNull(selectedTripCancellationConflict(constraint, cancelled))
+        assertEquals(SelectedTripConflictReason.CANCELLED, conflict.reason)
+        assertEquals(SelectedTripAlternativeAction.SELECT_ANOTHER_TRIP, conflict.alternativeAction)
+
+        for (state in listOf(
+            RouteRealtimeState.FRESH_NO_MATCH,
+            RouteRealtimeState.STALE,
+            RouteRealtimeState.UNAVAILABLE,
+        )) {
+            assertNull(selectedTripCancellationConflict(constraint, cancelled.copy(state = state)))
+        }
+        assertNull(selectedTripCancellationConflict(
+            constraint, cancelled.copy(matchedTripIds = emptyList()),
+        ))
+    }
+
+    @Test
+    fun resolverFailuresMapToTypedSelectedTripConflicts() {
+        assertEquals(
+            SelectedTripConflictReason.IDENTITY_DRIFT,
+            selectedTripConflictReason(GtfsTripDetailFailure.TRIP_CHANGED),
+        )
+        assertEquals(
+            SelectedTripConflictReason.SERVICE_INACTIVE,
+            selectedTripConflictReason(GtfsTripDetailFailure.SERVICE_INACTIVE),
+        )
+        assertEquals(
+            SelectedTripConflictReason.FREQUENCY_INSTANCE_UNSUPPORTED,
+            selectedTripConflictReason(GtfsTripDetailFailure.FREQUENCY_INSTANCE_UNSUPPORTED),
+        )
+        assertEquals(
+            SelectedTripConflictReason.MISSING_SCHEDULE_EVIDENCE,
+            selectedTripConflictReason(GtfsTripDetailFailure.INVALID_STOP_TIME),
+        )
+        assertEquals(
+            SelectedTripConflictReason.DATA_UNAVAILABLE,
+            selectedTripConflictReason(GtfsTripDetailFailure.DATA_READ_FAILED),
+        )
+    }
+
+    private fun selectedTripIdentity() = GtfsTripInstanceIdentity(
+        tripId = "LOOP",
+        serviceDate = date,
+        serviceId = "S",
+        routeId = "R",
+        directionId = 0,
+    )
+
+    private fun selectedTripDetail(identity: GtfsTripInstanceIdentity) = GtfsTripDetail(
+        identity = identity,
+        headsign = "Central",
+        stops = listOf(
+            GtfsTripDetailStop(
+                10, "A", "Start", null, null, null,
+                "07:00:00", "07:00:00", 52.0, 8.0, 0, 0,
+            ),
+            GtfsTripDetailStop(
+                20, "B", "Intermediate", null, null, null,
+                "07:10:00", "07:10:00", 52.1, 8.1, 0, 0,
+            ),
+            GtfsTripDetailStop(
+                30, "A", "Return", null, null, null,
+                "08:00:00", "08:00:00", 52.0, 8.0, 0, 0,
+            ),
+            GtfsTripDetailStop(
+                40, "C", "Destination", null, null, null,
+                "08:30:00", "08:30:00", 52.2, 8.2, 0, 0,
+            ),
+        ),
+    )
+
+    private fun selectedTripMapper(routePresent: Boolean = true): StaticRouteOptionMapper {
+        val routes = if (routePresent) {
+            mapOf("R" to GtfsScheduleRoute("R", "A1", "RE 9", "Regional", 2))
+        } else {
+            emptyMap()
+        }
+        val trips = mapOf("LOOP" to trip("LOOP", "R", "Central"))
+        return StaticRouteOptionMapper(
+            FakeRouteOptionData(routes, trips, emptyMap(), emptyMap()),
+            zone,
         )
     }
 

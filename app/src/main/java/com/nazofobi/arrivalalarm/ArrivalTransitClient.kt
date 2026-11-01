@@ -26,5 +26,20 @@ interface ArrivalTransitClient {
         limit: Int = 3,
         callback: (List<RouteOption>, String) -> Unit,
     )
+    /**
+     * Resolve one explicitly selected GTFS trip. The default fails closed for
+     * providers that do not implement this contract; it never falls back to
+     * general journey search and silently chooses a different departure.
+     */
+    fun selectedJourneyOptions(
+        constraint: SelectedTripConstraint,
+        callback: (SelectedTripPlanningOutcome) -> Unit,
+    ) {
+        callback(
+            SelectedTripPlanningOutcome.Conflict(
+                SelectedTripConflict(SelectedTripConflictReason.UNSUPPORTED)
+            )
+        )
+    }
     fun close()
 }

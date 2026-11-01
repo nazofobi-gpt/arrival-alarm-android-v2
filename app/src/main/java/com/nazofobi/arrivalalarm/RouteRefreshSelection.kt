@@ -38,6 +38,13 @@ internal fun retainSelectedRouteAfterRefresh(
         previous.tripIds != updated.tripIds
     ) return null
 
+    // A confirmed TripInstance and both ordered stop occurrences are part of consent.
+    // A provider refresh that drops or changes the constraint must require reselection.
+    if (previous.selectedTripConstraint != updated.selectedTripConstraint ||
+        !routeOptionCarriesSelectedTripConstraint(previous) ||
+        !routeOptionCarriesSelectedTripConstraint(updated)
+    ) return null
+
     // GTFS trip_id may recur each service day; trip_id alone is not a trip instance.
     val boardingInstant = previous.departureEpochMillis ?: return null
     if (

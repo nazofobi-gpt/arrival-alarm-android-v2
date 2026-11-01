@@ -543,6 +543,48 @@ class NationwideTransitGateway(
         }
     }
 
+    override fun selectedJourneyOptions(
+        constraint: SelectedTripConstraint,
+        callback: (SelectedTripPlanningOutcome) -> Unit,
+    ) {
+        io.execute {
+            val resolution = try {
+                resolveSelectedJourneyOptions(constraint)
+            } catch (interrupted: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return@execute
+            } catch (_: Exception) {
+                SelectedTripPlanningOutcome.Conflict(
+                    SelectedTripConflict(SelectedTripConflictReason.DATA_UNAVAILABLE)
+                )
+            }
+            main.post { callback(resolution) }
+        }
+    }
+
+    /**
+     * Resolve only the user-confirmed trip. A fresh matched cancellation becomes
+     * a typed conflict; no generic static/live fallback is allowed on this path.
+     */
+    internal fun resolveSelectedJourneyOptions(
+        constraint: SelectedTripConstraint,
+    ): SelectedTripPlanningOutcome {
+        val planned = staticJourneyPlanner.planSelectedTrip(constraint)
+        if (planned is SelectedTripPlanningOutcome.Conflict) return planned
+
+        val option = (planned as SelectedTripPlanningOutcome.Planned).option
+        val enriched = realtimeJourneyOverlay.enrich(listOf(option)).singleOrNull()
+            ?: return SelectedTripPlanningOutcome.Conflict(
+                SelectedTripConflict(SelectedTripConflictReason.MISSING_SCHEDULE_EVIDENCE)
+            )
+        val cancellation = selectedTripCancellationConflict(constraint, enriched.realtime)
+        return if (cancellation != null) {
+            SelectedTripPlanningOutcome.Conflict(cancellation)
+        } else {
+            SelectedTripPlanningOutcome.Planned(enriched)
+        }
+    }
+
     internal fun resolveJourneyOptions(
         origin: MapPoint,
         destination: MapPoint,

@@ -25,6 +25,8 @@ data class RouteStop(
     val plannedDeparture: String? = null,
     val platform: String? = null,
     val plannedPlatform: String? = null,
+    // Exact GTFS occurrence key; null for providers without verified sequence evidence.
+    val stopSequence: Int? = null,
 )
 
 /**
@@ -48,6 +50,8 @@ data class RouteOption(
     val walkingMinutes: Int,
     val transfers: Int,
     val tripIds: List<String> = emptyList(),
+    // Non-null only when this itinerary is bound to a user-confirmed scheduled TripInstance.
+    val selectedTripConstraint: SelectedTripConstraint? = null,
     val stops: List<RouteStop> = emptyList(),
     val refreshToken: String? = null,
     val sourceUpdatedAtEpochSeconds: Long? = null,

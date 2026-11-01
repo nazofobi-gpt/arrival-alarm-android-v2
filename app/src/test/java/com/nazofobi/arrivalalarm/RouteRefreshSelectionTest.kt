@@ -335,4 +335,69 @@ class RouteRefreshSelectionTest {
         assertNull(retainSelectedRouteAfterRefresh(old.id, listOf(old, old), listOf(old)))
         assertNull(retainSelectedRouteAfterRefresh(old.id, listOf(old), listOf(old.copy(id = "replacement"))))
     }
+    @Test
+    fun selectedTripInstanceAndExactStopOccurrencesMustMatchAcrossRefresh() {
+        val old = selectedOption()
+        assertEquals(old.id, retainSelectedRouteAfterRefresh(old.id, listOf(old), listOf(old)))
+
+        val constraint = requireNotNull(old.selectedTripConstraint)
+        val changedServiceDay = old.copy(
+            selectedTripConstraint = constraint.copy(
+                identity = constraint.identity.copy(serviceDate = GtfsServiceDate(2026, 10, 5)),
+            ),
+        )
+        assertNull(retainSelectedRouteAfterRefresh(
+            old.id, listOf(old), listOf(changedServiceDay),
+        ))
+
+        val changedBoardingOccurrence = old.copy(
+            selectedTripConstraint = constraint.copy(
+                boarding = GtfsSelectedStopRef(2, "ve"),
+            ),
+        )
+        assertNull(retainSelectedRouteAfterRefresh(
+            old.id, listOf(old), listOf(changedBoardingOccurrence),
+        ))
+
+        val changedDestinationOccurrence = old.copy(
+            selectedTripConstraint = constraint.copy(
+                destination = GtfsSelectedStopRef(2, "ve"),
+            ),
+        )
+        assertNull(retainSelectedRouteAfterRefresh(
+            old.id, listOf(old), listOf(changedDestinationOccurrence),
+        ))
+
+        val missingOccurrenceEvidence = old.copy(
+            stops = old.stops.mapIndexed { index, stop ->
+                if (index == 1) stop.copy(stopSequence = null) else stop
+            },
+        )
+        assertNull(retainSelectedRouteAfterRefresh(
+            old.id, listOf(old), listOf(missingOccurrenceEvidence),
+        ))
+    }
+
+    private fun selectedOption(): RouteOption {
+        val identity = GtfsTripInstanceIdentity(
+            tripId = "trip-42",
+            serviceDate = GtfsServiceDate(2026, 10, 4),
+            serviceId = "service-42",
+            routeId = "route-42",
+            directionId = 0,
+        )
+        val constraint = SelectedTripConstraint(
+            identity = identity,
+            boarding = GtfsSelectedStopRef(1, "lo"),
+            destination = GtfsSelectedStopRef(3, "br"),
+        )
+        return option().copy(
+            id = selectedTripRouteOptionId(constraint),
+            tripIds = listOf(identity.tripId),
+            stops = stops.mapIndexed { index, stop ->
+                stop.copy(stopSequence = index + 1)
+            },
+            selectedTripConstraint = constraint,
+        )
+    }
 }

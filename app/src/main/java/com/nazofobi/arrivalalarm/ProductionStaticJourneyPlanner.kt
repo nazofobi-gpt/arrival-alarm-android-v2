@@ -222,6 +222,72 @@ internal class StaticRouteOptionMapper(
         return best
     }
 
+    /** Map the exact selected service-day trip segment without searching or substituting. */
+    internal fun mapSelectedTrip(
+        detail: GtfsTripDetail,
+        constraint: SelectedTripConstraint,
+        sourceUpdatedAtEpochSeconds: Long,
+    ): RouteOption? {
+        if (detail.identity != constraint.identity) return null
+        val boardingIndex = detail.stops.indexOfFirst {
+            it.stopSequence == constraint.boarding.sequence &&
+                it.stopId == constraint.boarding.stopId
+        }
+        val destinationIndex = detail.stops.indexOfFirst {
+            it.stopSequence == constraint.destination.sequence &&
+                it.stopId == constraint.destination.stopId
+        }
+        if (boardingIndex < 0 || destinationIndex <= boardingIndex) return null
+
+        val identity = detail.identity
+        val route = data.route(identity.routeId) ?: return null
+        val trip = data.trip(identity.tripId) ?: return null
+        if (trip.id != identity.tripId ||
+            trip.routeId != identity.routeId ||
+            trip.serviceId != identity.serviceId ||
+            trip.directionId != identity.directionId
+        ) return null
+
+        val boarding = detail.stops[boardingIndex]
+        val destination = detail.stops[destinationIndex]
+        val departureMillis = epoch(boarding.scheduledDeparture, identity.serviceDate) ?: return null
+        val arrivalMillis = epoch(destination.scheduledArrival, identity.serviceDate) ?: return null
+        if (arrivalMillis < departureMillis) return null
+
+        val routeStops = detail.stops.subList(boardingIndex, destinationIndex + 1).map { stop ->
+            RouteStop(
+                id = stop.stopId,
+                name = stop.name,
+                latitude = stop.latitude,
+                longitude = stop.longitude,
+                plannedArrival = shiftedIso(stop.scheduledArrival, identity.serviceDate, 0L),
+                plannedDeparture = shiftedIso(stop.scheduledDeparture, identity.serviceDate, 0L),
+                plannedPlatform = stop.platformCode,
+                stopSequence = stop.stopSequence,
+            )
+        }
+
+        return RouteOption(
+            id = selectedTripRouteOptionId(constraint),
+            origin = MapPoint(boarding.latitude, boarding.longitude, boarding.name),
+            destination = MapPoint(destination.latitude, destination.longitude, destination.name),
+            line = route.shortName?.takeIf { it.isNotBlank() }
+                ?: route.longName?.takeIf { it.isNotBlank() }
+                ?: route.id,
+            direction = trip.headsign?.takeIf { it.isNotBlank() } ?: destination.name,
+            departure = clock(departureMillis),
+            arrival = clock(arrivalMillis),
+            walkingMinutes = 0,
+            transfers = 0,
+            tripIds = listOf(identity.tripId),
+            selectedTripConstraint = constraint,
+            stops = routeStops,
+            sourceUpdatedAtEpochSeconds = sourceUpdatedAtEpochSeconds,
+            departureEpochMillis = departureMillis,
+            arrivalEpochMillis = arrivalMillis,
+        )
+    }
+
     private fun endpoint(
         stopId: String,
         arrivalMillis: Long? = null,
@@ -399,6 +465,46 @@ class ProductionStaticJourneyPlanner(
             sawSameOrigin -> LocalStaticJourneyOutcome.SameOrigin
             else -> LocalStaticJourneyOutcome.NoPath
         }
+    }
+
+    /**
+     * A selected trip is a hard constraint. Unlike plan(), this path never tries
+     * another service date, trip, live provider or nearby stop when evidence fails.
+     */
+    fun planSelectedTrip(
+        constraint: SelectedTripConstraint,
+    ): SelectedTripPlanningOutcome {
+        selectedTripConstraintInputConflict(constraint)?.let {
+            return SelectedTripPlanningOutcome.Conflict(it)
+        }
+        if (!index.isReady()) {
+            return SelectedTripPlanningOutcome.Conflict(
+                SelectedTripConflict(SelectedTripConflictReason.INDEX_NOT_READY)
+            )
+        }
+        val resolved = try {
+            GtfsTripDetailResolver(repository).resolve(constraint.identity)
+        } catch (interrupted: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw interrupted
+        } catch (_: Exception) {
+            return SelectedTripPlanningOutcome.Conflict(
+                SelectedTripConflict(SelectedTripConflictReason.DATA_UNAVAILABLE)
+            )
+        }
+        val detail = when (resolved) {
+            is GtfsTripDetailResult.Available -> resolved.detail
+            is GtfsTripDetailResult.Unavailable ->
+                return SelectedTripPlanningOutcome.Conflict(
+                    SelectedTripConflict(selectedTripConflictReason(resolved.reason))
+                )
+        }
+        return planSelectedTripFromDetail(
+            detail = detail,
+            constraint = constraint,
+            mapper = mapper,
+            sourceUpdatedAtEpochSeconds = index.fetchedAt(),
+        )
     }
 
     private fun walkSeconds(distanceMeters: Int): Int =

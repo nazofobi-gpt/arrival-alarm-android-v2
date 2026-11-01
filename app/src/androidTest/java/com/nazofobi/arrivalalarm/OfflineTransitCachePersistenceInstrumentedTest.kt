@@ -1048,4 +1048,100 @@ class OfflineTransitCachePersistenceInstrumentedTest {
             prefs.edit().clear().commit()
         }
     }
+    @Test
+    fun selectedTripConstraintAndStopSequencesSurviveOfflineCacheRestore() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("offline_transit_cache", Context.MODE_PRIVATE)
+        val store = SharedPreferencesTransitCacheStore(context)
+        val identity = GtfsTripInstanceIdentity(
+            tripId = "trip-selected-42",
+            serviceDate = GtfsServiceDate(2026, 10, 4),
+            serviceId = "service-selected",
+            routeId = "route-selected",
+            directionId = 0,
+        )
+        val constraint = SelectedTripConstraint(
+            identity = identity,
+            boarding = GtfsSelectedStopRef(10, "lo"),
+            destination = GtfsSelectedStopRef(30, "br"),
+        )
+        val route = RouteOption(
+            id = selectedTripRouteOptionId(constraint),
+            origin = MapPoint(52.663, 8.233, "Lohne"),
+            destination = MapPoint(53.079, 8.801, "Bremen"),
+            line = "RE 9",
+            direction = "Bremen",
+            departure = "10:00",
+            arrival = "11:00",
+            walkingMinutes = 0,
+            transfers = 0,
+            tripIds = listOf(identity.tripId),
+            selectedTripConstraint = constraint,
+            stops = listOf(
+                RouteStop(
+                    id = "lo", name = "Lohne", latitude = 52.663, longitude = 8.233,
+                    plannedDeparture = "10:00", stopSequence = 10,
+                ),
+                RouteStop(
+                    id = "ve", name = "Vechta", latitude = 52.73, longitude = 8.29,
+                    stopSequence = 20,
+                ),
+                RouteStop(
+                    id = "br", name = "Bremen", latitude = 53.079, longitude = 8.801,
+                    plannedArrival = "11:00", stopSequence = 30,
+                ),
+            ),
+            departureEpochMillis = 1_792_400_400_000L,
+            arrivalEpochMillis = 1_792_404_000_000L,
+        )
+        val key = "selected-trip-offline"
+        try {
+            prefs.edit().clear().commit()
+            OfflineTransitCache(backingStore = store).put(
+                CachedTransitPlan(key, listOf(route), emptyList(), 100L),
+            )
+            val restored = OfflineTransitCache(backingStore = store).routeOptions(key).single()
+            assertEquals(constraint, restored.selectedTripConstraint)
+            assertEquals(listOf(10, 20, 30), restored.stops.map { it.stopSequence })
+
+            val baseline = requireNotNull(prefs.getString("plans_json", null))
+            fun restoreModified(change: (org.json.JSONObject) -> Unit): List<RouteOption> {
+                val plans = org.json.JSONArray(baseline)
+                change(plans.getJSONObject(0).getJSONArray("routeOptions").getJSONObject(0))
+                assertTrue(prefs.edit().putString("plans_json", plans.toString()).commit())
+                return store.load().single().routeOptions
+            }
+
+            assertTrue(restoreModified {
+                it.put("selectedTripConstraint", "not-an-object")
+            }.isEmpty())
+            assertTrue(restoreModified {
+                it.getJSONObject("selectedTripConstraint")
+                    .getJSONObject("identity").put("serviceDate", "2026-02-30")
+            }.isEmpty())
+            assertTrue(restoreModified {
+                it.getJSONObject("selectedTripConstraint")
+                    .getJSONObject("boarding").put("sequence", "10")
+            }.isEmpty())
+            assertTrue(restoreModified {
+                it.getJSONArray("stops").getJSONObject(0).put("stopSequence", "10")
+            }.isEmpty())
+
+            // Pre-constraint cache records remain readable, but they cannot prove a
+            // selected trip after refresh and therefore require explicit reselection.
+            val legacy = org.json.JSONArray(baseline)
+            val legacyRoute = legacy.getJSONObject(0).getJSONArray("routeOptions").getJSONObject(0)
+            legacyRoute.remove("selectedTripConstraint")
+            val legacyStops = legacyRoute.getJSONArray("stops")
+            for (index in 0 until legacyStops.length()) {
+                legacyStops.getJSONObject(index).remove("stopSequence")
+            }
+            assertTrue(prefs.edit().putString("plans_json", legacy.toString()).commit())
+            val legacyRestored = store.load().single().routeOptions.single()
+            assertEquals(null, legacyRestored.selectedTripConstraint)
+            assertEquals(listOf(null, null, null), legacyRestored.stops.map { it.stopSequence })
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
 }
