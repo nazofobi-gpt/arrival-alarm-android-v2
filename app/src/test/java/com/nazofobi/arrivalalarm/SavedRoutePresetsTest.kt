@@ -179,6 +179,28 @@ class SavedRoutePresetsTest {
     }
 
     @Test
+    fun savingNewEndpointsWithAnExistingIdRejectsWithoutRemovingUnrelatedPreset() {
+        val storage = MemorySavedRoutePresetStringStorage()
+        val store = SavedRoutePresetsStore(storage)
+        val existing = preset(id = "stable-route", name = "Existing route")
+
+        assertTrue(store.save(existing) is SavedRoutePresetStoreResult.Success)
+        val originalSnapshot = storage.value
+        val conflicting = preset(id = existing.id, name = "Different route").copy(
+            originLatitude = 49.0,
+            destinationLatitude = 52.0,
+        )
+
+        assertEquals(
+            SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.ID_CONFLICT),
+            store.save(conflicting),
+        )
+        assertEquals(originalSnapshot, storage.value)
+        assertEquals(listOf(existing), store.load().presets)
+        assertEquals(1, storage.writeCount)
+    }
+
+    @Test
     fun storeRejectsThirteenthDistinctPresetWithoutEvictingExistingRoutes() {
         val twelve = (0 until SavedRoutePresetsCodec.MAX_PRESETS).map { index ->
             preset(
