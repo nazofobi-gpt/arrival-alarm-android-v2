@@ -45,9 +45,9 @@ class G176ProviderDerivedRegionalInstrumentedTest {
                     "VBB GTFS-RT"
                 }
                 "https://germany.motis-project.org/gtfsrt" -> {
-                    assertEquals("https://gtfs-source-feeds.transit.land/delfi-germany.zip", alternateStatic.getString("source"))
+                    assertEquals("https://download.gtfs.de/germany/free/latest.zip", alternateStatic.getString("source"))
                     assertEquals("CC-BY-SA-4.0", alternateRealtime.getString("license"))
-                    assertEquals("CC-BY-4.0", alternateStatic.getString("license"))
+                    assertEquals("CC-4.0", alternateStatic.getString("license"))
                     "DELFI/MOTIS GTFS-RT"
                 }
                 "https://gtfs-datenstroeme.tech.deutschebahn.com/db-fernverkehr/gtfsrt_trip_updates.proto" -> {

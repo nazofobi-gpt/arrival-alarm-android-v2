@@ -61,18 +61,12 @@ jobs:
           test "$delfi_bytes" -gt 0
           test "$delfi_bytes" -le 134217728
           sha256sum /tmp/delfi-live.pb | tee /tmp/delfi-live.sha256
-          curl -fL --retry 3 --retry-all-errors --connect-timeout 30 --max-time 1200 \
-            https://gtfs-source-feeds.transit.land/delfi-germany.zip -o /tmp/delfi-static.zip
-          delfi_static_bytes="$(stat -c%s /tmp/delfi-static.zip)"
-          test "$delfi_static_bytes" -gt 0
-          test "$delfi_static_bytes" -le 1073741824
-          sha256sum /tmp/delfi-static.zip | tee /tmp/delfi-static.sha256
           python3 tools/extract_g176_provider_samples.py \
             --regions berlin --allow-missing-regions \
             --endpoint https://germany.motis-project.org/gtfsrt \
-            --static-source https://gtfs-source-feeds.transit.land/delfi-germany.zip \
-            --realtime-license CC-BY-SA-4.0 --static-license CC-BY-4.0 \
-            --realtime /tmp/delfi-live.pb --static /tmp/delfi-static.zip \
+            --static-source https://download.gtfs.de/germany/free/latest.zip \
+            --realtime-license CC-BY-SA-4.0 --static-license CC-4.0 \
+            --realtime /tmp/delfi-live.pb --static /tmp/germany-full.zip \
             --output app/build/g176-provider-samples/g176-delfi-platform-samples.json
           test -s app/build/g176-provider-samples/g176-delfi-platform-samples.json
       - name: Capture DB Fernverkehr GTFS-RT when API key is configured
