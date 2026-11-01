@@ -113,6 +113,21 @@ class LocaleResourceContractTest(unittest.TestCase):
             any("invalid format for arrival" in error for error in validate(self.root))
         )
 
+    def test_integral_conversions_reject_precision_but_keep_valid_width(self):
+        # Independently confirmed with Java 21 String.format(Locale.ROOT).
+        for token in ("%.2d", "%1$.2d", "%5.2d", "%1$.2o", "%1$5.2x", "%1$5.2X"):
+            with self.subTest(token=token):
+                with self.assertRaisesRegex(ValueError, "invalid integer format precision"):
+                    placeholders(token)
+        for token in ("%05d", "%1$-5d", "%#8x", "%1$08X"):
+            with self.subTest(token=token):
+                self.assertEqual(1, sum(placeholders(token).values()))
+
+    def test_matching_invalid_integer_precision_fails_locale_gate(self):
+        for locale in ("values", "values-de", "values-en"):
+            self.write(locale, '<string name="arrival">Stop %1$.2d</string>')
+        self.assertTrue(any("invalid format for arrival" in e for e in validate(self.root)))
+
     def test_java_formatter_rejects_invalid_decimal_flags(self):
         # Reproduced with Java 21 String.format(Locale.ROOT, token, 123).
         for token in ("%#d", "%1$#8d", "%+ d", "%-05d"):
