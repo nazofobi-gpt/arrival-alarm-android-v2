@@ -215,6 +215,8 @@ fun ArrivalAlarmApp(
     var locationMessage by remember { mutableStateOf<String?>(null) }
     var mapMessage by remember { mutableStateOf<String?>(null) }
     var routeOptions by remember { mutableStateOf(emptyList<RouteOption>()) }
+    // The selected GTFS alarm has no matching ad-hoc route-search card.
+    var confirmedTripLiveRoute by remember { mutableStateOf<RouteOption?>(null) }
     var selectedRouteId by remember { mutableStateOf<String?>(null) }
     var routeStatus by remember { mutableStateOf<String?>(null) }
     var routeOffline by remember { mutableStateOf(false) }
@@ -649,6 +651,7 @@ fun ArrivalAlarmApp(
             routeStatus = localizedDomainMessage(context, outcome.message)
             return
         }
+        confirmedTripLiveRoute = null
         routeStatus = context.getString(R.string.alarm_active)
         activeScreen = ArrivalAppScreen.LIVE
     }
@@ -678,6 +681,13 @@ fun ArrivalAlarmApp(
                     gtfsConsentStatus = message
                     return@commitIfCurrent
                 }
+                val liveOption = verifiedSelectedTripLiveOption(fresh)
+                if (liveOption == null) {
+                    val message = context.getString(R.string.gtfs_selected_alarm_changed)
+                    tripSearchStatus = message
+                    gtfsConsentStatus = message
+                    return@commitIfCurrent
+                }
                 val outcome = connectorPort.armConfirmedSelectedTrip(fresh)
                 journey = controller.state
                 if (outcome.applied) {
@@ -695,6 +705,7 @@ fun ArrivalAlarmApp(
                     destination = MapPoint(target.latitude, target.longitude, alarmStop.name)
                     destinationStopId = alarmStop.stopId
                     selectedRouteId = null
+                    confirmedTripLiveRoute = liveOption
                     routeStatus = context.getString(R.string.alarm_active)
                     activeScreen = ArrivalAppScreen.LIVE
                 } else {
@@ -1350,7 +1361,9 @@ fun ArrivalAlarmApp(
                             testTag = "journey-empty-state",
                         )
                     } else if (activeScreen == ArrivalAppScreen.LIVE) {
-                        val selectedRoute = routeOptions.firstOrNull { it.id == selectedRouteId }
+                        val selectedRoute = liveAlarmDisplayRoute(
+                            routeOptions, selectedRouteId, confirmedTripLiveRoute, journey,
+                        )
                         if (selectedRoute == null) {
                             ScreenEmptyState(
                                 title = stringResource(R.string.journey_detail_title),
