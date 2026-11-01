@@ -89,7 +89,8 @@ internal object RedactedSupportBundle {
         if (fields["schema"] != "VARIS_PROVIDER_PROBE_V1" ||
             fields["scope"] != "provider_health_only" ||
             fields["provider_role"] != expectedRole ||
-            state !in allowedStates || latency !in allowedLatencies
+            state !in allowedStates || latency !in allowedLatencies ||
+            (state == "not_measured" && latency != "not_measured")
         ) return fallback
         return state to latency
     }
