@@ -90,8 +90,14 @@ class SelectedTripItineraryPlannerTest {
         assertEquals("08:20", planned.routeOption.arrival)
         assertEquals(0, planned.routeOption.transfers)
         assertEquals(0, planned.routeOption.walkingMinutes)
-        assertEquals(1_792_482_060_000L, planned.routeOption.departureEpochMillis)
-        assertEquals(1_792_483_200_000L, planned.routeOption.arrivalEpochMillis)
+        assertEquals(
+            GtfsServiceTime.parse("08:01:00").resolve(date, zone).epochMillis,
+            planned.routeOption.departureEpochMillis,
+        )
+        assertEquals(
+            GtfsServiceTime.parse("08:20:00").resolve(date, zone).epochMillis,
+            planned.routeOption.arrivalEpochMillis,
+        )
         assertEquals(1_793_507_777L, planned.routeOption.sourceUpdatedAtEpochSeconds)
         assertTrue(planned.routeOption.stops.first().plannedDeparture!!.contains("T08:01:00"))
         assertTrue(planned.routeOption.stops.last().plannedArrival!!.contains("T08:20:00"))
