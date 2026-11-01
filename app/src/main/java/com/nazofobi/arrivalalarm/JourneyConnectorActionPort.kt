@@ -13,6 +13,7 @@ class JourneyConnectorActionPort(
     private val progressTracker: RouteStopProgressTracker = RouteStopProgressTracker(),
     private val onAlarmArmed: () -> Boolean = { true },
     private val onAlarmCancelled: () -> Unit = {},
+    selectedTripArmValidationRequired: Boolean = false,
 ) : ConnectorActionPort {
     private var stateVersion = 1L
     private var sourceUpdatedAtEpochSeconds = nowEpochSeconds()
@@ -24,6 +25,8 @@ class JourneyConnectorActionPort(
     }
     private var selectedRoute: RouteOption? = null
     private var activeTrip: ConnectorTripState? = null
+    private var selectedTripArmValidationRequired = selectedTripArmValidationRequired
+    private var selectedTripArmAuthorizationAvailable = false
 
     @Synchronized
     override fun readSnapshot(): ArrivalAlarmConnectorSnapshot {
@@ -142,7 +145,30 @@ class JourneyConnectorActionPort(
     }
 
     @Synchronized
+    fun setSelectedTripArmValidationRequired(required: Boolean) {
+        selectedTripArmValidationRequired = required
+        selectedTripArmAuthorizationAvailable = false
+    }
+
+    /** Grants one command-boundary authorization after the selected trip was freshly restored. */
+    @Synchronized
+    fun authorizeSelectedTripArmOnce(): Boolean {
+        if (!selectedTripArmValidationRequired) return false
+        selectedTripArmAuthorizationAvailable = true
+        return true
+    }
+
+    @Synchronized
     override fun armArrivalAlarm(): ConnectorActionOutcome {
+        if (selectedTripArmValidationRequired && !selectedTripArmAuthorizationAvailable) {
+            return ConnectorActionOutcome(
+                false,
+                "Seçilen sefer ve alarm hedefi yeniden doğrulanmadan alarm kurulamaz",
+            )
+        }
+        // A selected-trip authorization is single-use and cannot be replayed by a
+        // second local or connector command after the validated arm attempt.
+        selectedTripArmAuthorizationAvailable = false
         controller.arm()
         if (controller.state.phase != JourneyPhase.ARMED) {
             return ConnectorActionOutcome(false, controller.state.error ?: "Alarm kurulamadı")
@@ -160,6 +186,7 @@ class JourneyConnectorActionPort(
 
     @Synchronized
     override fun cancelArrivalAlarm(): ConnectorActionOutcome {
+        selectedTripArmAuthorizationAvailable = false
         if (controller.state.phase != JourneyPhase.ARMED && controller.state.phase != JourneyPhase.ARRIVED) {
             return ConnectorActionOutcome(false, "Kurulu varış alarmı yok")
         }
