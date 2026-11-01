@@ -205,7 +205,10 @@ class JourneyConnectorActionPortTest {
         val before = port.readSnapshot()
 
         now += 5
-        val tracking = port.updateDistanceToDestination(900.0)
+        val tracking = port.updateDistanceToDestination(
+            900.0,
+            fixElapsedRealtimeNanos = 1_000_000_000L,
+        )
         val during = port.readSnapshot()
 
         assertTrue(tracking.applied)
@@ -214,15 +217,51 @@ class JourneyConnectorActionPortTest {
         assertTrue(during.stateVersion > before.stateVersion)
 
         now += 5
-        val arrived = port.updateDistanceToDestination(120.0)
+        val firstArrivalFix = port.updateDistanceToDestination(
+            120.0,
+            fixElapsedRealtimeNanos = 2_000_000_000L,
+        )
+        val confirming = port.readSnapshot()
+        assertTrue(firstArrivalFix.applied)
+        assertEquals(JourneyPhase.ARMED, confirming.journeyPhase)
+        assertEquals(120.0, confirming.distanceToDestinationMeters ?: -1.0, 0.001)
+
+        now += 5
+        val arrived = port.updateDistanceToDestination(
+            120.0,
+            fixElapsedRealtimeNanos = 3_000_000_000L,
+        )
         val final = port.readSnapshot()
 
         assertTrue(arrived.applied)
         assertEquals(JourneyPhase.ARRIVED, final.journeyPhase)
         assertEquals(120.0, final.distanceToDestinationMeters ?: -1.0, 0.001)
-        assertTrue(final.stateVersion > during.stateVersion)
+        assertTrue(final.stateVersion > confirming.stateVersion)
     }
 
+
+    @Test fun missingTimestampAndDuplicateFixCannotCompleteArrival() {
+        val port = JourneyConnectorActionPort(
+            controller = JourneyController(arrivalRadiusMeters = 250.0),
+            nowEpochSeconds = { 55_000L },
+        )
+        port.setOrigin(MapPoint(52.66, 8.23, "Lohne"))
+        port.setDestination(MapPoint(52.67, 8.24, "Hedef"))
+        port.armArrivalAlarm()
+
+        port.updateDistanceToDestination(120.0)
+        assertEquals(JourneyPhase.ARMED, port.readSnapshot().journeyPhase)
+
+        port.updateDistanceToDestination(120.0, fixElapsedRealtimeNanos = 1_000_000_000L)
+        assertEquals(JourneyPhase.ARMED, port.readSnapshot().journeyPhase)
+        val duplicate = port.updateDistanceToDestination(120.0, fixElapsedRealtimeNanos = 1_000_000_000L)
+        assertFalse(duplicate.applied)
+        assertEquals(JourneyPhase.ARMED, port.readSnapshot().journeyPhase)
+
+        val arrived = port.updateDistanceToDestination(120.0, fixElapsedRealtimeNanos = 2_000_000_000L)
+        assertTrue(arrived.applied)
+        assertEquals(JourneyPhase.ARRIVED, port.readSnapshot().journeyPhase)
+    }
 
     @Test fun failedForegroundLifecycleRollsBackRemoteArm() {
         val controller = JourneyController()
