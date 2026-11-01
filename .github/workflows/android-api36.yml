@@ -130,7 +130,7 @@ jobs:
             adb shell pm clear com.nazofobi.arrivalalarm || true
             # The provider-backed G-176 smoke runs separately above only when a real GTFS-RT payload exists.
             # Exclude only that input-dependent method from the generic API 36 regression suite.
-            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notClass=com.nazofobi.arrivalalarm.G176LiveRealtimeInstrumentedTest#currentGermanyRealtimePayloadParsesWithProductionDefaults
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notClass=com.nazofobi.arrivalalarm.G176LiveRealtimeInstrumentedTest#currentGermanyRealtimePayloadParsesWithProductionDefaults,com.nazofobi.arrivalalarm.G176ProviderDerivedRegionalInstrumentedTest
             # Each emulator-runner script line executes in a fresh shell; snapshot in one process.
             python3 tools/snapshot_api36_instrumentation_reports.py app/build/outputs/androidTest-results/connected app/build/reports/androidTests/connected app/build/outputs/androidTest-results/full-regression-suite
             mkdir -p app/build/outputs/androidTest-results/ui-qa
