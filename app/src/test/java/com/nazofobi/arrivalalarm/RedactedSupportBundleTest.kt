@@ -185,6 +185,23 @@ class RedactedSupportBundleTest {
         }))
     }
 
+    @Test fun unmeasuredProviderHealthCannotCarryMeasuredLatency() {
+        // A syntactically valid serializer field must not imply a real measurement
+        // when the provider itself has no verified health evidence.
+        val malformed = listOf(
+            "schema=VARIS_PROVIDER_PROBE_V1",
+            "scope=provider_health_only",
+            "provider_role=realtime",
+            "provider_state=not_measured",
+            "latency_bucket=under_250ms",
+        ).joinToString("\n", postfix = "\n")
+
+        assertEquals(
+            "not_measured" to "not_measured",
+            RedactedSupportBundle.reviewedProviderFields(malformed, "realtime"),
+        )
+    }
+
     @Test fun oversizedSerializerInputsFailClosedBeforeFieldProjection() {
         val approvedProvider = listOf(
             "schema=VARIS_PROVIDER_PROBE_V1",
