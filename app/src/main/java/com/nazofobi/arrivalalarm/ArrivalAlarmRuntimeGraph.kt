@@ -51,6 +51,14 @@ class ConnectorRuntimeCoordinator(
     }
 }
 
+private fun hasPersistedSelectedTripSnapshot(context: Context): Boolean = try {
+    context.getSharedPreferences("selected_gtfs_trip_state", Context.MODE_PRIVATE)
+        .contains(SelectedGtfsTripStore.KEY)
+} catch (_: RuntimeException) {
+    // An unreadable selection must not silently permit unverified remote arming.
+    true
+}
+
 class ArrivalAlarmProcessGraph private constructor(context: Context) {
     private val appContext = context.applicationContext
 
@@ -63,6 +71,7 @@ class ArrivalAlarmProcessGraph private constructor(context: Context) {
         routeResolver = routeRegistry::resolve,
         onAlarmArmed = { ActiveJourneyService.tryStart(appContext) },
         onAlarmCancelled = { ActiveJourneyService.stop(appContext) },
+        selectedTripArmValidationRequired = hasPersistedSelectedTripSnapshot(appContext),
     )
     val connectorSessionStore = AndroidConnectorSessionStore(appContext)
     private val connectorOAuthTransport = HttpConnectorOAuthTransport()

@@ -343,4 +343,91 @@ class JourneyConnectorActionPortTest {
         assertEquals(GeoPoint(route.origin.latitude, route.origin.longitude), controller.state.start)
         assertEquals(GeoPoint(route.destination.latitude, route.destination.longitude), controller.state.destination)
     }
+    @Test fun confirmedTripStartsAtBoardingAndArmsSelectedIntermediateTarget() {
+        val identity = GtfsTripInstanceIdentity(
+            tripId = "trip-7", serviceDate = GtfsServiceDate(2026, 10, 20),
+            serviceId = "service-1", routeId = "route-2", directionId = 1,
+        )
+        fun stop(sequence: Int, id: String, arrival: String, departure: String) =
+            GtfsTripDetailStop(
+                stopSequence = sequence, stopId = id, name = id,
+                parentStationId = null, platformCode = null, wheelchairBoarding = null,
+                scheduledArrival = arrival, scheduledDeparture = departure,
+                latitude = 52.0 + sequence * 0.001, longitude = 8.0 + sequence * 0.001,
+            )
+        val detail = GtfsTripDetail(identity = identity, headsign = "Achim", stops = listOf(
+            stop(2, "Lohne", "08:00:00", "08:01:00"),
+            stop(7, "Transfer", "08:10:00", "08:11:00"),
+            stop(13, "Achim", "08:20:00", "08:21:00"),
+        ))
+        val selected = GtfsSelectedTrip(
+            identity = identity,
+            boarding = GtfsSelectedStopRef(2, "Lohne"),
+            destination = GtfsSelectedStopRef(13, "Achim"),
+            alarmTarget = GtfsSelectedStopRef(7, "Transfer"),
+        )
+        val controller = JourneyController()
+        val port = JourneyConnectorActionPort(controller = controller)
+        val restore = GtfsSelectionRestore.Verified(selected, detail)
+        port.requireSelectedTripValidation()
+        assertFalse(port.armArrivalAlarm().applied)
+
+        assertTrue(port.armConfirmedSelectedTrip(restore).applied)
+        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+        assertEquals(GeoPoint(52.002, 8.002), controller.state.start)
+        assertEquals(GeoPoint(52.007, 8.007), controller.state.destination)
+        // A real, explicitly armed GTFS instance must be visible to the connector
+        // with its service day and the selected in-segment stop, not a guessed ETA.
+        val snapshot = port.readSnapshot()
+        assertTrue(snapshot.alarmArmed)
+        assertEquals("trip-7", snapshot.activeTrip?.tripId)
+        assertEquals("trip-7@2026-10-20", snapshot.activeTrip?.journeyId)
+        assertEquals("route-2", snapshot.activeTrip?.routeId)
+        assertEquals("Achim", snapshot.activeTrip?.direction)
+        assertEquals("Lohne", snapshot.activeTrip?.boardingStop?.name)
+        assertEquals("Transfer", snapshot.activeTrip?.destination?.name)
+        assertEquals(null, snapshot.activeTrip?.currentStop)
+        assertEquals(null, snapshot.activeTrip?.nextStop)
+        assertFalse(port.armConfirmedSelectedTrip(restore).applied)
+        assertFalse(port.armArrivalAlarm().applied)
+    }
+    @Test fun manualAlarmStillWorksAfterSavingUnrelatedVerifiedTrip() {
+        val controller = JourneyController()
+        val port = JourneyConnectorActionPort(controller = controller)
+        port.setOrigin(MapPoint(52.0, 8.0, "A"))
+        port.setDestination(MapPoint(53.0, 9.0, "B"))
+        port.requireSelectedTripValidation()
+        assertFalse(port.armArrivalAlarm().applied)
+        assertTrue(port.armExplicitManualAlarm().applied)
+        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+        assertFalse(port.armExplicitManualAlarm().applied)
+    }
+
+    @Test fun invalidTripCannotReplaceExistingManualJourneyOrArm() {
+        val identity = GtfsTripInstanceIdentity(
+            tripId = "trip-7", serviceDate = GtfsServiceDate(2026, 10, 20),
+            serviceId = "service-1", routeId = "route-2", directionId = 1,
+        )
+        val boarding = GtfsTripDetailStop(
+            stopSequence = 1, stopId = "B", name = "B",
+            parentStationId = null, platformCode = null, wheelchairBoarding = null,
+            scheduledArrival = "08:00:00", scheduledDeparture = "08:01:00",
+            latitude = 52.0, longitude = 8.0,
+        )
+        val detail = GtfsTripDetail(identity = identity, headsign = "Achim", stops = listOf(boarding))
+        val invalid = GtfsSelectedTrip(
+            identity = identity,
+            boarding = GtfsSelectedStopRef(1, "B"),
+            destination = GtfsSelectedStopRef(10, "missing"),
+            alarmTarget = GtfsSelectedStopRef(10, "missing"),
+        )
+        val controller = JourneyController()
+        val port = JourneyConnectorActionPort(controller = controller)
+        assertTrue(port.setOrigin(MapPoint(52.5, 8.5, "Other start")).applied)
+        assertTrue(port.setDestination(MapPoint(52.6, 8.6, "Other target")).applied)
+        val original = controller.state
+        assertFalse(port.armConfirmedSelectedTrip(GtfsSelectionRestore.Verified(invalid, detail)).applied)
+        assertEquals(original, controller.state)
+    }
+
 }

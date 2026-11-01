@@ -111,6 +111,40 @@ class MainActivityTest {
         rule.onNodeWithTag("journey-empty-state").performScrollTo().assertIsDisplayed()
     }
 
+    @Test fun restoredArmedJourneyWithoutRoutePreviewStillAllowsCancellation() {
+        // Route previews are Compose-only. A persisted alarm must remain cancellable
+        // even when recreation leaves the LIVE screen without a route card.
+        rule.activityRule.scenario.onActivity { activity ->
+            SharedPreferencesJourneyStateStore(activity).save(
+                JourneyUiState(
+                    phase = JourneyPhase.ARMED,
+                    start = GeoPoint(52.665, 8.237),
+                    destination = GeoPoint(53.083, 8.813),
+                )
+            )
+            ArrivalAlarmRuntimeGraph.resetForTests()
+        }
+
+        rule.activityRule.scenario.recreate()
+        rule.waitForIdle()
+
+        navigateTo("nav-journey")
+        rule.onNodeWithTag("live-trip-empty-state")
+            .performScrollTo()
+            .assertIsDisplayed()
+        rule.onNodeWithTag("cancel-alarm")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+
+        rule.activityRule.scenario.onActivity { activity ->
+            assertEquals(
+                JourneyPhase.DESTINATION_SELECTED,
+                ArrivalAlarmRuntimeGraph.get(activity).controller.state.phase,
+            )
+        }
+    }
+
     @Test fun journeyCoordinatesRestoreIntoProductionUiAfterRecreation() {
         rule.activityRule.scenario.onActivity { activity ->
             SharedPreferencesJourneyStateStore(activity).save(

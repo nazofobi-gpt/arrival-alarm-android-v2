@@ -50,6 +50,8 @@ internal fun GtfsTripSearchConsentPanel(
     onConfirm: (GtfsSelectedTrip) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    onArmConfirmedTrip: (GtfsSelectionRestore.Verified) -> Unit = {},
+    alarmBusy: Boolean = false,
 ) {
     var boardingSequence by remember(selection?.identity, selection?.sourceVersion, (inspection as? GtfsTripDetailResult.Available)?.detail?.stops) { mutableStateOf<Int?>(null) }
     var destinationSequence by remember(selection?.identity, selection?.sourceVersion, (inspection as? GtfsTripDetailResult.Available)?.detail?.stops) { mutableStateOf<Int?>(null) }
@@ -193,6 +195,14 @@ internal fun GtfsTripSearchConsentPanel(
 
         if (confirmed != null) {
             GtfsConfirmedTripSummary(confirmed)
+            Button(
+                onClick = { onArmConfirmedTrip(confirmed) },
+                enabled = !busy && !alarmBusy,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    .testTag("gtfs-trip-search-arm-confirmed-alarm"),
+            ) {
+                Text(stringResource(R.string.gtfs_selected_arm_alarm))
+            }
             Button(
                 onClick = onDismiss,
                 enabled = !busy,

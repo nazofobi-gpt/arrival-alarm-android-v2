@@ -39,4 +39,7 @@
     <string name="gtfs_trip_search_wheelchair_accessible">Rollstuhlzugang: barrierefrei</string>
     <string name="gtfs_trip_search_wheelchair_not_accessible">Rollstuhlzugang: nicht barrierefrei</string>
     <string name="gtfs_trip_search_wheelchair_unknown">Rollstuhlzugang: unbekannt</string>
+    <string name="gtfs_selected_arm_alarm">Ankunftsalarm für bestätigte Fahrt starten</string>
+    <string name="gtfs_selected_alarm_changed">Fahrt oder Fahrplan haben sich geändert. Bitte erneut bestätigen.</string>
+    <string name="gtfs_selected_alarm_blocked">Der Alarm für diese Fahrt konnte nicht gestartet werden. Aktiven Alarm und Berechtigungen prüfen.</string>
 </resources>

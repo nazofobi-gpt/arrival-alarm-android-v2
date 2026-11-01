@@ -215,6 +215,8 @@ fun ArrivalAlarmApp(
     var locationMessage by remember { mutableStateOf<String?>(null) }
     var mapMessage by remember { mutableStateOf<String?>(null) }
     var routeOptions by remember { mutableStateOf(emptyList<RouteOption>()) }
+    // The selected GTFS alarm has no matching ad-hoc route-search card.
+    var confirmedTripLiveRoute by remember { mutableStateOf<RouteOption?>(null) }
     var selectedRouteId by remember { mutableStateOf<String?>(null) }
     var routeStatus by remember { mutableStateOf<String?>(null) }
     var routeOffline by remember { mutableStateOf(false) }
@@ -236,6 +238,17 @@ fun ArrivalAlarmApp(
     // confirmation may write the service-day/stop-role snapshot; it never arms GPS.
     val gtfsConsentGate = remember { LatestRequestGate() }
     val tripSearchGate = remember { LatestRequestGate() }
+    val selectedTripAlarmGate = remember { LatestRequestGate() }
+    var selectedTripAlarmBusy by remember { mutableStateOf(false) }
+    LaunchedEffect(activeScreen) {
+        // A no-longer-visible selected trip must not start tracking later.
+        if (activeScreen != ArrivalAppScreen.SEARCH &&
+            activeScreen != ArrivalAppScreen.DEPARTURES
+        ) {
+            selectedTripAlarmGate.invalidate()
+            selectedTripAlarmBusy = false
+        }
+    }
     var tripSearchTemplate by remember { mutableStateOf<GtfsTripSearchIdentityTemplate?>(null) }
     var tripSearchSelection by remember { mutableStateOf<GtfsTripSearchSelection?>(null) }
     var tripSearchInspection by remember { mutableStateOf<GtfsTripDetailResult?>(null) }
@@ -632,14 +645,76 @@ fun ArrivalAlarmApp(
             routeStatus = context.getString(R.string.route_realtime_cancelled_action_blocked)
             return
         }
-        val outcome = connectorPort.armArrivalAlarm()
+        val outcome = connectorPort.armExplicitManualAlarm()
         journey = controller.state
         if (!outcome.applied) {
             routeStatus = localizedDomainMessage(context, outcome.message)
             return
         }
+        confirmedTripLiveRoute = null
         routeStatus = context.getString(R.string.alarm_active)
         activeScreen = ArrivalAppScreen.LIVE
+    }
+
+    fun activateConfirmedTripAlarm(expected: GtfsSelectionRestore.Verified) {
+        if (selectedTripAlarmBusy) return
+        val initialJourney = controller.state
+        val token = selectedTripAlarmGate.begin()
+        selectedTripAlarmBusy = true
+        coroutineScope.launch {
+            val fresh = try {
+                selectedGtfsSession.restore()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: RuntimeException) {
+                GtfsSelectionRestore.Rejected(GtfsSelectionRestoreProblem.TRIP_UNAVAILABLE)
+            }
+            selectedTripAlarmGate.commitIfCurrent(token) {
+                selectedTripAlarmBusy = false
+                if (fresh !is GtfsSelectionRestore.Verified ||
+                    fresh.selection != expected.selection ||
+                    fresh.detail != expected.detail ||
+                    controller.state != initialJourney
+                ) {
+                    val message = context.getString(R.string.gtfs_selected_alarm_changed)
+                    tripSearchStatus = message
+                    gtfsConsentStatus = message
+                    return@commitIfCurrent
+                }
+                val liveOption = verifiedSelectedTripLiveOption(fresh)
+                if (liveOption == null) {
+                    val message = context.getString(R.string.gtfs_selected_alarm_changed)
+                    tripSearchStatus = message
+                    gtfsConsentStatus = message
+                    return@commitIfCurrent
+                }
+                val outcome = connectorPort.armConfirmedSelectedTrip(fresh)
+                journey = controller.state
+                if (outcome.applied) {
+                    val start = journey.start!!
+                    val target = journey.destination!!
+                    val boardingStop = fresh.detail.stops.single {
+                        it.stopSequence == fresh.selection.boarding.sequence &&
+                            it.stopId == fresh.selection.boarding.stopId
+                    }
+                    val alarmStop = fresh.detail.stops.single {
+                        it.stopSequence == fresh.selection.alarmTarget.sequence &&
+                            it.stopId == fresh.selection.alarmTarget.stopId
+                    }
+                    origin = MapPoint(start.latitude, start.longitude, boardingStop.name)
+                    destination = MapPoint(target.latitude, target.longitude, alarmStop.name)
+                    destinationStopId = alarmStop.stopId
+                    selectedRouteId = null
+                    confirmedTripLiveRoute = liveOption
+                    routeStatus = context.getString(R.string.alarm_active)
+                    activeScreen = ArrivalAppScreen.LIVE
+                } else {
+                    val message = context.getString(R.string.gtfs_selected_alarm_blocked)
+                    tripSearchStatus = message
+                    gtfsConsentStatus = message
+                }
+            }
+        }
     }
 
     fun selectRouteOption(option: RouteOption) {
@@ -1052,6 +1127,8 @@ fun ArrivalAlarmApp(
                                 return@DatePickerDialog
                             }
                             val selection = currentTemplate.forServiceDate(GtfsServiceDate(year, month + 1, day))
+                            selectedTripAlarmGate.invalidate()
+                            selectedTripAlarmBusy = false
                             val token = tripSearchGate.begin()
                             tripSearchSelection = selection
                             tripSearchInspection = null
@@ -1085,6 +1162,8 @@ fun ArrivalAlarmApp(
                         tripSearchStatus = context.getString(R.string.gtfs_trip_search_identity_mismatch)
                         return
                     }
+                    selectedTripAlarmGate.invalidate()
+                    selectedTripAlarmBusy = false
                     val token = tripSearchGate.begin()
                     tripSearchBusy = true
                     coroutineScope.launch {
@@ -1098,6 +1177,7 @@ fun ArrivalAlarmApp(
                                 restored.detail.identity == selection.identity
                             ) {
                                 tripSearchConfirmed = restored
+                                connectorPort.requireSelectedTripValidation()
                                 tripSearchStatus = context.getString(R.string.gtfs_trip_search_saved)
                             } else {
                                 tripSearchConfirmed = null
@@ -1121,7 +1201,11 @@ fun ArrivalAlarmApp(
                             onChooseServiceDate = { chooseTripServiceDate() },
                             onChangeServiceDate = { chooseTripServiceDate() },
                             onConfirm = { selected -> confirmTripSearchSelection(selected) },
+                            onArmConfirmedTrip = { verified -> activateConfirmedTripAlarm(verified) },
+                            alarmBusy = selectedTripAlarmBusy,
                             onDismiss = {
+                                selectedTripAlarmGate.invalidate()
+                                selectedTripAlarmBusy = false
                                 tripSearchGate.invalidate()
                                 tripSearchTemplate = null
                                 tripSearchSelection = null
@@ -1277,7 +1361,9 @@ fun ArrivalAlarmApp(
                             testTag = "journey-empty-state",
                         )
                     } else if (activeScreen == ArrivalAppScreen.LIVE) {
-                        val selectedRoute = routeOptions.firstOrNull { it.id == selectedRouteId }
+                        val selectedRoute = liveAlarmDisplayRoute(
+                            routeOptions, selectedRouteId, confirmedTripLiveRoute, journey,
+                        )
                         if (selectedRoute == null) {
                             ScreenEmptyState(
                                 title = stringResource(R.string.journey_detail_title),
@@ -1295,6 +1381,14 @@ fun ArrivalAlarmApp(
                                 nowEpochSeconds = liveNowEpochSeconds,
                                 modifier = Modifier.fillMaxWidth(),
                             )
+                        }
+                        // A real, persisted alarm can survive Activity recreation while the
+                        // Compose-only selected GTFS route preview cannot. Keep cancellation
+                        // reachable without inventing a route or a live vehicle position.
+                        if (selectedRoute != null ||
+                            journey.phase == JourneyPhase.ARMED ||
+                            journey.phase == JourneyPhase.ARRIVED
+                        ) {
                             JourneyAlarmControls(
                                 journey = journey,
                                 onArmAlarm = {
@@ -1391,6 +1485,8 @@ fun ArrivalAlarmApp(
                     val boardDepartures = if (boardStopId != null) stationDepartures else departures
                     val boardAlerts = if (stationResolved) stationAlerts else emptyList()
                     LaunchedEffect(boardStopId, stationResolved) {
+                        selectedTripAlarmGate.invalidate()
+                        selectedTripAlarmBusy = false
                         gtfsConsentGate.invalidate()
                         gtfsPreview = null
                         gtfsConfirmed = null
@@ -1449,6 +1545,8 @@ fun ArrivalAlarmApp(
                         },
                         onSelectDeparture = if (boardStopId != null && stationResolved) {
                             departure: Departure ->
+                                selectedTripAlarmGate.invalidate()
+                                selectedTripAlarmBusy = false
                                 val token = gtfsConsentGate.begin()
                                 gtfsPreview = null
                                 gtfsConfirmed = null
@@ -1492,6 +1590,14 @@ fun ArrivalAlarmApp(
                     }
                     gtfsConfirmed?.let { verified ->
                         GtfsConfirmedTripSummary(verified)
+                        Button(
+                            onClick = { activateConfirmedTripAlarm(verified) },
+                            enabled = !selectedTripAlarmBusy && !gtfsConsentBusy,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                .testTag("gtfs-departure-arm-confirmed-alarm"),
+                        ) {
+                            Text(stringResource(R.string.gtfs_selected_arm_alarm))
+                        }
                     }
                     gtfsPreview?.let { preview ->
                         GtfsTripConsentPanel(
@@ -1505,6 +1611,8 @@ fun ArrivalAlarmApp(
                                 gtfsConsentStatus = null
                             },
                             onConfirm = { selection ->
+                                selectedTripAlarmGate.invalidate()
+                                selectedTripAlarmBusy = false
                                 val token = gtfsConsentGate.begin()
                                 gtfsConsentBusy = true
                                 coroutineScope.launch {
@@ -1527,6 +1635,7 @@ fun ArrivalAlarmApp(
                                             verified.selection == selection
                                         ) {
                                             gtfsConfirmed = verified
+                                            connectorPort.requireSelectedTripValidation()
                                             gtfsPreview = null
                                             gtfsConsentStatus = context.getString(
                                                 R.string.gtfs_consent_saved,

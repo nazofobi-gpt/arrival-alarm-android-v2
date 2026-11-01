@@ -13,6 +13,7 @@ class JourneyConnectorActionPort(
     private val progressTracker: RouteStopProgressTracker = RouteStopProgressTracker(),
     private val onAlarmArmed: () -> Boolean = { true },
     private val onAlarmCancelled: () -> Unit = {},
+    selectedTripArmValidationRequired: Boolean = false,
 ) : ConnectorActionPort {
     private var stateVersion = 1L
     private var sourceUpdatedAtEpochSeconds = nowEpochSeconds()
@@ -24,6 +25,7 @@ class JourneyConnectorActionPort(
     }
     private var selectedRoute: RouteOption? = null
     private var activeTrip: ConnectorTripState? = null
+    private var selectedTripArmValidationRequired = selectedTripArmValidationRequired
 
     @Synchronized
     override fun readSnapshot(): ArrivalAlarmConnectorSnapshot {
@@ -141,8 +143,91 @@ class JourneyConnectorActionPort(
         return ConnectorActionOutcome(true, "Biniş durağı güncellendi")
     }
 
+    /** A newly saved GTFS selection must block unverified connector alarm commands. */
+    @Synchronized
+    fun requireSelectedTripValidation() {
+        selectedTripArmValidationRequired = true
+    }
+
+    /**
+     * User-initiated transition from a freshly restored, static-verified trip to
+     * an alarm. Validate before replacing a manual journey; do not arm in two
+     * independent steps that a connector command could interleave.
+     */
+    @Synchronized
+    fun armConfirmedSelectedTrip(restore: GtfsSelectionRestore.Verified): ConnectorActionOutcome {
+        if (controller.state.phase == JourneyPhase.ARMED ||
+            controller.state.phase == JourneyPhase.ARRIVED
+        ) {
+            return ConnectorActionOutcome(false, "Önce mevcut varış alarmını sonlandırın")
+        }
+        val confirmed = SelectedTripAlarmArmGate.resolve(restore)
+            as? SelectedTripAlarmArmDecision.Ready
+            ?: return ConnectorActionOutcome(false, "Seçilen sefer güncel tarife ile doğrulanamadı")
+        // A saved trip cannot subsequently fall back to the unverified connector path.
+        selectedTripArmValidationRequired = true
+        val boarding = confirmed.roles.boarding
+        val alarmTarget = confirmed.roles.alarmTarget
+        val startOutcome = setOrigin(MapPoint(boarding.latitude, boarding.longitude, boarding.name))
+        if (!startOutcome.applied) return startOutcome
+        val targetOutcome = setDestination(
+            MapPoint(alarmTarget.latitude, alarmTarget.longitude, alarmTarget.name)
+        )
+        if (!targetOutcome.applied) return targetOutcome
+        if (SelectedTripAlarmArmGate.evaluate(restore, controller.state)
+            !is SelectedTripAlarmArmDecision.Ready
+        ) {
+            return ConnectorActionOutcome(false, "Sefer alarm hedefi yeniden doğrulanamadı")
+        }
+        val armed = armInternal()
+        if (!armed.applied) return armed
+        // Preserve the real GTFS trip identity in the connector snapshot; the GPS
+        // alarm target is the selected intermediate stop, not a guessed final stop.
+        // No timetable-derived current/next stop or realtime position is asserted.
+        val identity = confirmed.selection.identity
+        val day = identity.serviceDate
+        activeTrip = ConnectorTripState(
+            journeyId = "${identity.tripId}@${day.year}-${day.month.toString().padStart(2, '0')}-${day.day.toString().padStart(2, '0')}",
+            tripId = identity.tripId,
+            routeId = identity.routeId,
+            direction = restore.detail.headsign,
+            origin = origin,
+            destination = destination,
+            boardingStop = ConnectorStopState(
+                id = confirmed.roles.boarding.stopId,
+                name = confirmed.roles.boarding.name,
+                latitude = confirmed.roles.boarding.latitude,
+                longitude = confirmed.roles.boarding.longitude,
+            ),
+        )
+        return armed
+    }
+
     @Synchronized
     override fun armArrivalAlarm(): ConnectorActionOutcome {
+        if (selectedTripArmValidationRequired) {
+            return ConnectorActionOutcome(
+                false,
+                "Seçilen sefer ve alarm hedefi yeniden doğrulanmadan alarm kurulamaz",
+            )
+        }
+        return armInternal()
+    }
+
+    /** A deliberate on-device manual alarm remains usable after a different GTFS trip was saved.
+     * Remote connector calls cannot invoke this UI-only operation.
+     */
+    @Synchronized
+    fun armExplicitManualAlarm(): ConnectorActionOutcome {
+        if (controller.state.phase == JourneyPhase.ARMED ||
+            controller.state.phase == JourneyPhase.ARRIVED
+        ) {
+            return ConnectorActionOutcome(false, "Kurulu varış alarmı zaten mevcut")
+        }
+        return armInternal()
+    }
+
+    private fun armInternal(): ConnectorActionOutcome {
         controller.arm()
         if (controller.state.phase != JourneyPhase.ARMED) {
             return ConnectorActionOutcome(false, controller.state.error ?: "Alarm kurulamadı")
