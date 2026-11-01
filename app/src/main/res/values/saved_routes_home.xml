@@ -11,4 +11,7 @@
     <string name="saved_routes_home_deleted">Kayıt silindi.</string>
     <string name="saved_routes_home_failed">Kayıt işlemi başarısız; mevcut veriler değiştirilmedi.</string>
     <string name="saved_routes_home_active_trip">Aktif yolculuk sırasında kayıtlı başka bir rota açılamaz.</string>
+    <string name="saved_routes_home_delete_confirm_title">Kayıtlı rota silinsin mi?</string>
+    <string name="saved_routes_home_delete_confirm_message">%1$s adlı rota yalnız bu cihazdan kalıcı olarak silinecek. Devam edilsin mi?</string>
+    <string name="saved_routes_home_delete_cancel">Vazgeç</string>
 </resources>

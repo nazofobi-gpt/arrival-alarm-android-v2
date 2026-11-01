@@ -5,12 +5,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -33,6 +39,42 @@ internal fun SavedRoutesHomePanel(
     onRestore: (SavedRoutePreset) -> Unit,
     onRemove: (String) -> Unit,
 ) {
+    var pendingDeleteId by rememberSaveable { mutableStateOf<String?>(null) }
+    val pendingDelete = presets.firstOrNull { it.id == pendingDeleteId }
+    if (pendingDeleteId != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDeleteId = null },
+            title = { Text(stringResource(R.string.saved_routes_home_delete_confirm_title)) },
+            text = {
+                Text(stringResource(
+                    R.string.saved_routes_home_delete_confirm_message,
+                    pendingDelete?.name ?: "",
+                ))
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val id = pendingDelete?.id
+                        pendingDeleteId = null
+                        if (id != null && sourceSafe && canRestore) onRemove(id)
+                    },
+                    enabled = pendingDelete != null && sourceSafe && canRestore,
+                    modifier = Modifier.testTag("saved-route-confirm-delete"),
+                ) {
+                    Text(stringResource(R.string.saved_routes_home_delete))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { pendingDeleteId = null },
+                    modifier = Modifier.testTag("saved-route-cancel-delete"),
+                ) {
+                    Text(stringResource(R.string.saved_routes_home_delete_cancel))
+                }
+            },
+        )
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth().testTag("saved-routes-home"),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -92,7 +134,7 @@ internal fun SavedRoutesHomePanel(
                         Text(stringResource(R.string.saved_routes_home_open))
                     }
                     OutlinedButton(
-                        onClick = { onRemove(preset.id) },
+                        onClick = { pendingDeleteId = preset.id },
                         enabled = canRestore,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                             .testTag("saved-route-delete-$index"),

@@ -11,4 +11,7 @@
     <string name="saved_routes_home_deleted">Saved route deleted.</string>
     <string name="saved_routes_home_failed">Action failed; existing saved data was not changed.</string>
     <string name="saved_routes_home_active_trip">A different saved route cannot be opened during an active trip.</string>
+    <string name="saved_routes_home_delete_confirm_title">Delete saved route?</string>
+    <string name="saved_routes_home_delete_confirm_message">The route %1$s will be permanently removed from this device. Continue?</string>
+    <string name="saved_routes_home_delete_cancel">Cancel</string>
 </resources>

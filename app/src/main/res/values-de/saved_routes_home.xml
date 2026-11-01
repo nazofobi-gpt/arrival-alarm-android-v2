@@ -11,4 +11,7 @@
     <string name="saved_routes_home_deleted">Eintrag gelöscht.</string>
     <string name="saved_routes_home_failed">Aktion fehlgeschlagen. Vorhandene Daten bleiben unverändert.</string>
     <string name="saved_routes_home_active_trip">Während einer aktiven Fahrt kann keine andere Route geöffnet werden.</string>
+    <string name="saved_routes_home_delete_confirm_title">Gespeicherte Route löschen?</string>
+    <string name="saved_routes_home_delete_confirm_message">Die Route %1$s wird dauerhaft von diesem Gerät gelöscht. Fortfahren?</string>
+    <string name="saved_routes_home_delete_cancel">Abbrechen</string>
 </resources>
