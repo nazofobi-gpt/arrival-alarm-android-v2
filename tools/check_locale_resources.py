@@ -88,10 +88,6 @@ def placeholders(value: str) -> Counter[tuple[int, str]]:
             # Allow width, left alignment and reuse as normal for %s/%S.
             if set(flags).intersection("#+0 ,("):
                 raise ValueError(f"invalid string format flags for %{conversion} at offset {start}")
-        # Java Formatter forbids precision on every integral conversion;
-        # translation parity alone would miss matching invalid %1$.2d/%x tokens.
-        if conversion in ("d", "o", "x", "X") and "." in match.group(0):
-            raise ValueError(f"invalid integer format precision at offset {start}")
         if conversion == "d":
             # Java Formatter rejects '#' with decimal integers, conflicting
             # sign flags, and alignment/zero-padding without a field width.
@@ -105,6 +101,10 @@ def placeholders(value: str) -> Counter[tuple[int, str]]:
                 width_and_precision = token_suffix[len(flags):-len(conversion)]
                 if not width_and_precision or not width_and_precision[0].isdigit():
                     raise ValueError(f"missing decimal format width at offset {start}")
+        # Java Formatter forbids precision on every integral conversion;
+        # translation parity alone would miss matching invalid %1$.2d/%x tokens.
+        if conversion in ("d", "o", "x", "X") and "." in match.group(0):
+            raise ValueError(f"invalid integer format precision at offset {start}")
         cursor = match.end()
         if conversion in ("%", "n"):
             # Java Formatter accepts no reused argument for %% or %n.
