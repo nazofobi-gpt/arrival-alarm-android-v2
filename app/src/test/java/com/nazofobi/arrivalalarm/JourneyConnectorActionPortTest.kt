@@ -205,7 +205,10 @@ class JourneyConnectorActionPortTest {
         val before = port.readSnapshot()
 
         now += 5
-        val tracking = port.updateDistanceToDestination(900.0)
+        val tracking = port.updateDistanceToDestination(
+            900.0,
+            fixElapsedRealtimeNanos = 1_000_000_000L,
+        )
         val during = port.readSnapshot()
 
         assertTrue(tracking.applied)
@@ -214,15 +217,51 @@ class JourneyConnectorActionPortTest {
         assertTrue(during.stateVersion > before.stateVersion)
 
         now += 5
-        val arrived = port.updateDistanceToDestination(120.0)
+        val firstArrivalFix = port.updateDistanceToDestination(
+            120.0,
+            fixElapsedRealtimeNanos = 2_000_000_000L,
+        )
+        val confirming = port.readSnapshot()
+        assertTrue(firstArrivalFix.applied)
+        assertEquals(JourneyPhase.ARMED, confirming.journeyPhase)
+        assertEquals(120.0, confirming.distanceToDestinationMeters ?: -1.0, 0.001)
+
+        now += 5
+        val arrived = port.updateDistanceToDestination(
+            120.0,
+            fixElapsedRealtimeNanos = 3_000_000_000L,
+        )
         val final = port.readSnapshot()
 
         assertTrue(arrived.applied)
         assertEquals(JourneyPhase.ARRIVED, final.journeyPhase)
         assertEquals(120.0, final.distanceToDestinationMeters ?: -1.0, 0.001)
-        assertTrue(final.stateVersion > during.stateVersion)
+        assertTrue(final.stateVersion > confirming.stateVersion)
     }
 
+
+    @Test fun missingTimestampAndDuplicateFixCannotCompleteArrival() {
+        val port = JourneyConnectorActionPort(
+            controller = JourneyController(arrivalRadiusMeters = 250.0),
+            nowEpochSeconds = { 55_000L },
+        )
+        port.setOrigin(MapPoint(52.66, 8.23, "Lohne"))
+        port.setDestination(MapPoint(52.67, 8.24, "Hedef"))
+        port.armArrivalAlarm()
+
+        port.updateDistanceToDestination(120.0)
+        assertEquals(JourneyPhase.ARMED, port.readSnapshot().journeyPhase)
+
+        port.updateDistanceToDestination(120.0, fixElapsedRealtimeNanos = 1_000_000_000L)
+        assertEquals(JourneyPhase.ARMED, port.readSnapshot().journeyPhase)
+        val duplicate = port.updateDistanceToDestination(120.0, fixElapsedRealtimeNanos = 1_000_000_000L)
+        assertFalse(duplicate.applied)
+        assertEquals(JourneyPhase.ARMED, port.readSnapshot().journeyPhase)
+
+        val arrived = port.updateDistanceToDestination(120.0, fixElapsedRealtimeNanos = 2_000_000_000L)
+        assertTrue(arrived.applied)
+        assertEquals(JourneyPhase.ARRIVED, port.readSnapshot().journeyPhase)
+    }
 
     @Test fun failedForegroundLifecycleRollsBackRemoteArm() {
         val controller = JourneyController()
@@ -304,44 +343,68 @@ class JourneyConnectorActionPortTest {
         assertEquals(GeoPoint(route.origin.latitude, route.origin.longitude), controller.state.start)
         assertEquals(GeoPoint(route.destination.latitude, route.destination.longitude), controller.state.destination)
     }
-    @Test
-    fun selectedTripArmRequiresFreshOneShotAuthorizationAtConnectorBoundary() {
-        val controller = JourneyController()
-        val port = JourneyConnectorActionPort(
-            controller = controller,
-            selectedTripArmValidationRequired = true,
+    @Test fun confirmedTripStartsAtBoardingAndArmsSelectedIntermediateTarget() {
+        val identity = GtfsTripInstanceIdentity(
+            tripId = "trip-7", serviceDate = GtfsServiceDate(2026, 10, 20),
+            serviceId = "service-1", routeId = "route-2", directionId = 1,
         )
-        port.setOrigin(MapPoint(52.66, 8.23, "Lohne"))
-        port.setDestination(MapPoint(52.67, 8.24, "Transfer"))
-
-        val directCommand = port.armArrivalAlarm()
-        assertFalse(directCommand.applied)
-        assertEquals(JourneyPhase.DESTINATION_SELECTED, controller.state.phase)
-
-        assertTrue(port.authorizeSelectedTripArmOnce())
-        assertTrue(port.armArrivalAlarm().applied)
-        assertEquals(JourneyPhase.ARMED, controller.state.phase)
-
-        // The authorization is consumed by the first arm attempt and cannot be replayed.
+        fun stop(sequence: Int, id: String, arrival: String, departure: String) =
+            GtfsTripDetailStop(
+                stopSequence = sequence, stopId = id, name = id,
+                parentStationId = null, platformCode = null, wheelchairBoarding = null,
+                scheduledArrival = arrival, scheduledDeparture = departure,
+                latitude = 52.0 + sequence * 0.001, longitude = 8.0 + sequence * 0.001,
+            )
+        val detail = GtfsTripDetail(identity = identity, headsign = "Achim", stops = listOf(
+            stop(2, "Lohne", "08:00:00", "08:01:00"),
+            stop(7, "Transfer", "08:10:00", "08:11:00"),
+            stop(13, "Achim", "08:20:00", "08:21:00"),
+        ))
+        val selected = GtfsSelectedTrip(
+            identity = identity,
+            boarding = GtfsSelectedStopRef(2, "Lohne"),
+            destination = GtfsSelectedStopRef(13, "Achim"),
+            alarmTarget = GtfsSelectedStopRef(7, "Transfer"),
+        )
+        val controller = JourneyController()
+        val port = JourneyConnectorActionPort(controller = controller)
+        val restore = GtfsSelectionRestore.Verified(selected, detail)
+        port.requireSelectedTripValidation()
         assertFalse(port.armArrivalAlarm().applied)
+
+        assertTrue(port.armConfirmedSelectedTrip(restore).applied)
         assertEquals(JourneyPhase.ARMED, controller.state.phase)
+        assertEquals(GeoPoint(52.002, 8.002), controller.state.start)
+        assertEquals(GeoPoint(52.007, 8.007), controller.state.destination)
+        assertFalse(port.armConfirmedSelectedTrip(restore).applied)
+        assertFalse(port.armArrivalAlarm().applied)
     }
 
-    @Test
-    fun clearingSelectedTripArmRequirementRestoresManualArmPath() {
-        val controller = JourneyController()
-        val port = JourneyConnectorActionPort(
-            controller = controller,
-            selectedTripArmValidationRequired = true,
+    @Test fun invalidTripCannotReplaceExistingManualJourneyOrArm() {
+        val identity = GtfsTripInstanceIdentity(
+            tripId = "trip-7", serviceDate = GtfsServiceDate(2026, 10, 20),
+            serviceId = "service-1", routeId = "route-2", directionId = 1,
         )
-        port.setOrigin(MapPoint(52.66, 8.23, "Lohne"))
-        port.setDestination(MapPoint(53.08, 8.81, "Bremen Hbf"))
-
-        assertFalse(port.armArrivalAlarm().applied)
-        port.setSelectedTripArmValidationRequired(false)
-
-        assertTrue(port.armArrivalAlarm().applied)
-        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+        val boarding = GtfsTripDetailStop(
+            stopSequence = 1, stopId = "B", name = "B",
+            parentStationId = null, platformCode = null, wheelchairBoarding = null,
+            scheduledArrival = "08:00:00", scheduledDeparture = "08:01:00",
+            latitude = 52.0, longitude = 8.0,
+        )
+        val detail = GtfsTripDetail(identity = identity, headsign = "Achim", stops = listOf(boarding))
+        val invalid = GtfsSelectedTrip(
+            identity = identity,
+            boarding = GtfsSelectedStopRef(1, "B"),
+            destination = GtfsSelectedStopRef(10, "missing"),
+            alarmTarget = GtfsSelectedStopRef(10, "missing"),
+        )
+        val controller = JourneyController()
+        val port = JourneyConnectorActionPort(controller = controller)
+        assertTrue(port.setOrigin(MapPoint(52.5, 8.5, "Other start")).applied)
+        assertTrue(port.setDestination(MapPoint(52.6, 8.6, "Other target")).applied)
+        val original = controller.state
+        assertFalse(port.armConfirmedSelectedTrip(GtfsSelectionRestore.Verified(invalid, detail)).applied)
+        assertEquals(original, controller.state)
     }
 
 }

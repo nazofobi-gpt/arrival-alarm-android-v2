@@ -26,7 +26,6 @@ class JourneyConnectorActionPort(
     private var selectedRoute: RouteOption? = null
     private var activeTrip: ConnectorTripState? = null
     private var selectedTripArmValidationRequired = selectedTripArmValidationRequired
-    private var selectedTripArmAuthorizationAvailable = false
 
     @Synchronized
     override fun readSnapshot(): ArrivalAlarmConnectorSnapshot {
@@ -144,31 +143,57 @@ class JourneyConnectorActionPort(
         return ConnectorActionOutcome(true, "Biniş durağı güncellendi")
     }
 
+    /** A newly saved GTFS selection must block unverified connector alarm commands. */
     @Synchronized
-    fun setSelectedTripArmValidationRequired(required: Boolean) {
-        selectedTripArmValidationRequired = required
-        selectedTripArmAuthorizationAvailable = false
+    fun requireSelectedTripValidation() {
+        selectedTripArmValidationRequired = true
     }
 
-    /** Grants one command-boundary authorization after the selected trip was freshly restored. */
+    /**
+     * User-initiated transition from a freshly restored, static-verified trip to
+     * an alarm. Validate before replacing a manual journey; do not arm in two
+     * independent steps that a connector command could interleave.
+     */
     @Synchronized
-    fun authorizeSelectedTripArmOnce(): Boolean {
-        if (!selectedTripArmValidationRequired) return false
-        selectedTripArmAuthorizationAvailable = true
-        return true
+    fun armConfirmedSelectedTrip(restore: GtfsSelectionRestore.Verified): ConnectorActionOutcome {
+        if (controller.state.phase == JourneyPhase.ARMED ||
+            controller.state.phase == JourneyPhase.ARRIVED
+        ) {
+            return ConnectorActionOutcome(false, "Önce mevcut varış alarmını sonlandırın")
+        }
+        val confirmed = SelectedTripAlarmArmGate.resolve(restore)
+            as? SelectedTripAlarmArmDecision.Ready
+            ?: return ConnectorActionOutcome(false, "Seçilen sefer güncel tarife ile doğrulanamadı")
+        // A saved trip cannot subsequently fall back to the unverified connector path.
+        selectedTripArmValidationRequired = true
+        val boarding = confirmed.roles.boarding
+        val alarmTarget = confirmed.roles.alarmTarget
+        val startOutcome = setOrigin(MapPoint(boarding.latitude, boarding.longitude, boarding.name))
+        if (!startOutcome.applied) return startOutcome
+        val targetOutcome = setDestination(
+            MapPoint(alarmTarget.latitude, alarmTarget.longitude, alarmTarget.name)
+        )
+        if (!targetOutcome.applied) return targetOutcome
+        if (SelectedTripAlarmArmGate.evaluate(restore, controller.state)
+            !is SelectedTripAlarmArmDecision.Ready
+        ) {
+            return ConnectorActionOutcome(false, "Sefer alarm hedefi yeniden doğrulanamadı")
+        }
+        return armInternal()
     }
 
     @Synchronized
     override fun armArrivalAlarm(): ConnectorActionOutcome {
-        if (selectedTripArmValidationRequired && !selectedTripArmAuthorizationAvailable) {
+        if (selectedTripArmValidationRequired) {
             return ConnectorActionOutcome(
                 false,
                 "Seçilen sefer ve alarm hedefi yeniden doğrulanmadan alarm kurulamaz",
             )
         }
-        // A selected-trip authorization is single-use and cannot be replayed by a
-        // second local or connector command after the validated arm attempt.
-        selectedTripArmAuthorizationAvailable = false
+        return armInternal()
+    }
+
+    private fun armInternal(): ConnectorActionOutcome {
         controller.arm()
         if (controller.state.phase != JourneyPhase.ARMED) {
             return ConnectorActionOutcome(false, controller.state.error ?: "Alarm kurulamadı")
@@ -186,7 +211,6 @@ class JourneyConnectorActionPort(
 
     @Synchronized
     override fun cancelArrivalAlarm(): ConnectorActionOutcome {
-        selectedTripArmAuthorizationAvailable = false
         if (controller.state.phase != JourneyPhase.ARMED && controller.state.phase != JourneyPhase.ARRIVED) {
             return ConnectorActionOutcome(false, "Kurulu varış alarmı yok")
         }
@@ -200,12 +224,20 @@ class JourneyConnectorActionPort(
     }
 
     @Synchronized
-    fun updateDistanceToDestination(distanceMeters: Double, allowArrival: Boolean = true): ConnectorActionOutcome {
+    fun updateDistanceToDestination(
+        distanceMeters: Double,
+        allowArrival: Boolean = true,
+        fixElapsedRealtimeNanos: Long? = null,
+    ): ConnectorActionOutcome {
         if (!distanceMeters.isFinite() || distanceMeters < 0.0) {
             return ConnectorActionOutcome(false, "Geçersiz hedef mesafesi")
         }
         val before = controller.state
-        controller.onDistanceChanged(distanceMeters, allowArrival = allowArrival)
+        controller.onDistanceChanged(
+            distanceMeters,
+            allowArrival = allowArrival,
+            fixElapsedRealtimeNanos = fixElapsedRealtimeNanos,
+        )
         val after = controller.state
         if (after == before) {
             return ConnectorActionOutcome(false, "Aktif varış alarmı yok")
@@ -215,6 +247,11 @@ class JourneyConnectorActionPort(
             true,
             if (after.phase == JourneyPhase.ARRIVED) "Varış eşiğine ulaşıldı" else "Hedef mesafesi güncellendi",
         )
+    }
+
+    @Synchronized
+    fun resetArrivalConfirmation() {
+        controller.resetArrivalConfirmation()
     }
 
     @Synchronized

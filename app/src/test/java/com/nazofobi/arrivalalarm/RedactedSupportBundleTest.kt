@@ -185,6 +185,86 @@ class RedactedSupportBundleTest {
         }))
     }
 
+    @Test fun unmeasuredProviderHealthCannotCarryMeasuredLatency() {
+        // A syntactically valid serializer field must not imply a real measurement
+        // when the provider itself has no verified health evidence.
+        val malformed = listOf(
+            "schema=VARIS_PROVIDER_PROBE_V1",
+            "scope=provider_health_only",
+            "provider_role=realtime",
+            "provider_state=not_measured",
+            "latency_bucket=under_250ms",
+        ).joinToString("\n", postfix = "\n")
+
+        assertEquals(
+            "not_measured" to "not_measured",
+            RedactedSupportBundle.reviewedProviderFields(malformed, "realtime"),
+        )
+    }
+
+    @Test fun oversizedSerializerInputsFailClosedBeforeFieldProjection() {
+        val approvedProvider = listOf(
+            "schema=VARIS_PROVIDER_PROBE_V1",
+            "scope=provider_health_only",
+            "provider_role=realtime",
+            "provider_state=ready",
+            "latency_bucket=under_250ms",
+        ).joinToString("\n", postfix = "\n")
+        assertTrue(approvedProvider.length < 512)
+        assertEquals(
+            "ready" to "under_250ms",
+            RedactedSupportBundle.reviewedProviderFields(approvedProvider, "realtime"),
+        )
+        assertEquals(
+            "not_measured" to "not_measured",
+            RedactedSupportBundle.reviewedProviderFields(
+                approvedProvider + "a".repeat(4096), "realtime",
+            ),
+        )
+
+        val approvedCapabilities = SupportDiagnostics.render(state(), now)
+        assertTrue(approvedCapabilities.length < 2048)
+        assertEquals(17, RedactedSupportBundle.reviewedCapabilityFields(approvedCapabilities).size)
+        assertEquals(
+            listOf("support_snapshot=not_measured"),
+            RedactedSupportBundle.reviewedCapabilityFields(
+                approvedCapabilities + "a".repeat(4096),
+            ),
+        )
+    }
+
+    @Test fun capabilityProjectionRejectsAsciiSafeSecretsAndInvalidTypedValues() {
+        val approved = SupportDiagnostics.render(state(), now)
+        val fallback = listOf("support_snapshot=not_measured")
+        val substitutions = listOf(
+            "location_permission=yes" to "location_permission=private_token",
+            "location_services_enabled=yes" to "location_services_enabled=possibly",
+            "notification_permission=no" to "notification_permission=access_granted",
+            "bluetooth_permission=no" to "bluetooth_permission=private_token",
+            "guidance_permission=partial" to "guidance_permission=private_token",
+            "audio_route=device" to "audio_route=secret_device",
+            "tracking_armed=no" to "tracking_armed=private_token",
+            "connector_configured=yes" to "connector_configured=unknown",
+            "connector_connected=no" to "connector_connected=private_token",
+            "transit_index=error" to "transit_index=private_endpoint",
+            "installed_stop_count=unknown" to "installed_stop_count=private_token",
+            "installed_stop_count=unknown" to "installed_stop_count=999999999999999999",
+            "installed_stop_count=unknown" to "installed_stop_count=00001",
+            "feed_age_bucket=unknown" to "feed_age_bucket=private_timestamp",
+            "search_probe=not_measured" to "search_probe=private_token",
+            "routing_probe=not_measured" to "routing_probe=private_token",
+            "realtime_probe=not_measured" to "realtime_probe=private_token",
+        )
+        for ((before, after) in substitutions) {
+            assertTrue("Test setup must target an existing field: $before", approved.contains(before))
+            val malformed = approved.replaceFirst(before, after)
+            assertEquals("Unsafe field: $after", fallback,
+                RedactedSupportBundle.reviewedCapabilityFields(malformed))
+        }
+        // The independent export validation must also retain all current legitimate fields.
+        assertEquals(17, RedactedSupportBundle.reviewedCapabilityFields(approved).size)
+    }
+
     @Test fun capabilityProjectionRejectsSchemaAndScopeDrift() {
         val approved = SupportDiagnostics.render(state(), now)
         val reviewed = RedactedSupportBundle.reviewedCapabilityFields(approved)

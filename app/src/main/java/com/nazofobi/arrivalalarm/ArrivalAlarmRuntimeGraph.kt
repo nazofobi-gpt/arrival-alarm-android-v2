@@ -55,7 +55,7 @@ private fun hasPersistedSelectedTripSnapshot(context: Context): Boolean = try {
     context.getSharedPreferences("selected_gtfs_trip_state", Context.MODE_PRIVATE)
         .contains(SelectedGtfsTripStore.KEY)
 } catch (_: RuntimeException) {
-    // An unreadable preference must fail closed rather than allow a connector arm command.
+    // An unreadable selection must not silently permit unverified remote arming.
     true
 }
 

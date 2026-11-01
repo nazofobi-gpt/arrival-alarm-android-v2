@@ -65,6 +65,21 @@ class JourneyController(
     } ?: JourneyUiState()
         private set
 
+    // A terminal arrival requires two distinct, monotonic provider fixes. These
+    // watermarks stay in memory so process recreation always requires fresh evidence.
+    private var lastArrivalEvaluationElapsedRealtimeNanos: Long? = null
+    private var firstArrivalConfirmationElapsedRealtimeNanos: Long? = null
+
+    private fun clearArrivalConfirmationState() {
+        lastArrivalEvaluationElapsedRealtimeNanos = null
+        firstArrivalConfirmationElapsedRealtimeNanos = null
+    }
+
+    @Synchronized
+    fun resetArrivalConfirmation() {
+        clearArrivalConfirmationState()
+    }
+
     private fun update(newState: JourneyUiState) {
         state = newState
         try {
@@ -74,14 +89,17 @@ class JourneyController(
         }
     }
 
+    @Synchronized
     fun selectStart(point: GeoPoint) {
         if (!point.isValidCoordinate()) {
             update(state.copy(error = "Geçersiz başlangıç konumu"))
             return
         }
+        clearArrivalConfirmationState()
         update(JourneyUiState(phase = JourneyPhase.START_SELECTED, start = point))
     }
 
+    @Synchronized
     fun selectDestination(point: GeoPoint) {
         val start = state.start ?: run {
             update(state.copy(error = "Önce başlangıç seçilmeli"))
@@ -92,9 +110,11 @@ class JourneyController(
             return
         }
         // The previous GPS distance belongs to the old destination and must not survive reselection.
+        clearArrivalConfirmationState()
         update(state.copy(phase = JourneyPhase.DESTINATION_SELECTED, start = start, destination = point, distanceMeters = null, error = null))
     }
 
+    @Synchronized
     fun arm() {
         if (state.start == null || state.destination == null) {
             update(state.copy(error = "Başlangıç ve hedef gerekli"))
@@ -105,15 +125,18 @@ class JourneyController(
             return
         }
         // An earlier arrival distance is not evidence for the newly armed alarm.
+        if (state.phase != JourneyPhase.ARMED) clearArrivalConfirmationState()
         val distance = if (state.phase == JourneyPhase.ARRIVED) null else state.distanceMeters
         update(state.copy(phase = JourneyPhase.ARMED, distanceMeters = distance, error = null))
     }
 
+    @Synchronized
     fun cancelAlarm() {
         if (state.start == null || state.destination == null) {
             update(state.copy(error = "İptal edilecek kurulu alarm yok"))
             return
         }
+        clearArrivalConfirmationState()
         update(
             state.copy(
                 phase = JourneyPhase.DESTINATION_SELECTED,
@@ -123,14 +146,49 @@ class JourneyController(
         )
     }
 
-    fun onDistanceChanged(distanceMeters: Double, allowArrival: Boolean = true) {
-        if (state.phase != JourneyPhase.ARMED || !distanceMeters.isFinite() || distanceMeters < 0.0) return
-        update(
-            state.copy(
-                phase = if (allowArrival && distanceMeters <= arrivalRadiusMeters) JourneyPhase.ARRIVED else JourneyPhase.ARMED,
-                distanceMeters = distanceMeters,
-                error = null,
-            )
-        )
+    @Synchronized
+    fun onDistanceChanged(
+        distanceMeters: Double,
+        allowArrival: Boolean = true,
+        fixElapsedRealtimeNanos: Long? = null,
+    ) {
+        if (state.phase != JourneyPhase.ARMED) return
+        if (!distanceMeters.isFinite() || distanceMeters < 0.0) {
+            clearArrivalConfirmationState()
+            return
+        }
+
+        val fixTimestamp = fixElapsedRealtimeNanos
+        if (fixTimestamp == null || fixTimestamp <= 0L) {
+            clearArrivalConfirmationState()
+            update(state.copy(phase = JourneyPhase.ARMED, distanceMeters = distanceMeters, error = null))
+            return
+        }
+
+        val lastTimestamp = lastArrivalEvaluationElapsedRealtimeNanos
+        if (lastTimestamp != null && fixTimestamp <= lastTimestamp) {
+            // Duplicate or out-of-order provider callbacks cannot count as new evidence
+            // or overwrite a more recent distance.
+            return
+        }
+        lastArrivalEvaluationElapsedRealtimeNanos = fixTimestamp
+
+        val isArrivalCandidate = allowArrival && distanceMeters <= arrivalRadiusMeters
+        if (!isArrivalCandidate) {
+            firstArrivalConfirmationElapsedRealtimeNanos = null
+            update(state.copy(phase = JourneyPhase.ARMED, distanceMeters = distanceMeters, error = null))
+            return
+        }
+
+        val firstConfirmation = firstArrivalConfirmationElapsedRealtimeNanos
+        if (firstConfirmation == null) {
+            firstArrivalConfirmationElapsedRealtimeNanos = fixTimestamp
+            update(state.copy(phase = JourneyPhase.ARMED, distanceMeters = distanceMeters, error = null))
+            return
+        }
+
+        // fixTimestamp is strictly newer than the first confirmation and every prior fix.
+        firstArrivalConfirmationElapsedRealtimeNanos = null
+        update(state.copy(phase = JourneyPhase.ARRIVED, distanceMeters = distanceMeters, error = null))
     }
 }
