@@ -1,5 +1,6 @@
 package com.nazofobi.arrivalalarm
 
+import android.content.SharedPreferences
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -199,5 +200,128 @@ internal object SavedRoutePresetsCodec {
         "1" -> true
         "0" -> false
         else -> throw IllegalArgumentException("Invalid saved-route boolean")
+    }
+}
+
+/**
+ * Minimal string storage contract keeps persistence policy testable without an Android runtime.
+ */
+internal interface SavedRoutePresetStringStorage {
+    fun read(key: String): String?
+    fun write(key: String, value: String)
+}
+
+internal class SharedPreferencesSavedRoutePresetStringStorage(
+    private val preferences: SharedPreferences,
+) : SavedRoutePresetStringStorage {
+    override fun read(key: String): String? = preferences.getString(key, null)
+
+    override fun write(key: String, value: String) {
+        preferences.edit().putString(key, value).apply()
+    }
+}
+
+internal enum class SavedRoutePresetStoreRejection {
+    SOURCE_UNSAFE,
+    INVALID_PRESET,
+    LIMIT_REACHED,
+    NOT_FOUND,
+    STORAGE_FAILURE,
+}
+
+internal sealed interface SavedRoutePresetStoreResult {
+    data class Success(val presets: List<SavedRoutePreset>) : SavedRoutePresetStoreResult
+
+    data class Rejected(
+        val reason: SavedRoutePresetStoreRejection,
+        val issues: Set<String> = emptySet(),
+    ) : SavedRoutePresetStoreResult
+}
+
+/**
+ * Local-only persistence policy for route templates.
+ *
+ * A malformed or partially decoded source is never rewritten. Saving a route with endpoints
+ * already present updates that preset in place (retaining its ID); adding a thirteenth distinct
+ * preset is rejected rather than silently evicting an older route.
+ */
+internal class SavedRoutePresetsStore(
+    private val storage: SavedRoutePresetStringStorage,
+) {
+    fun load(): SavedRoutePresetDecodeResult =
+        runCatching {
+            SavedRoutePresetsCodec.decodeWithStatus(storage.read(PREFERENCE_KEY))
+        }.getOrElse {
+            SavedRoutePresetDecodeResult(
+                presets = emptyList(),
+                isSourceSafeToReplace = false,
+                issues = setOf("storage-read-failed"),
+            )
+        }
+
+    fun save(preset: SavedRoutePreset): SavedRoutePresetStoreResult {
+        val current = load()
+        if (!current.isSourceSafeToReplace) {
+            return SavedRoutePresetStoreResult.Rejected(
+                SavedRoutePresetStoreRejection.SOURCE_UNSAFE,
+                current.issues,
+            )
+        }
+
+        val existing = current.presets.firstOrNull { it.hasSameEndpoints(preset) }
+        val candidate = if (existing == null) preset else preset.copy(id = existing.id)
+        if (SavedRoutePresetsCodec.encode(listOf(candidate)) == null) {
+            return SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.INVALID_PRESET)
+        }
+
+        val updated = listOf(candidate) + current.presets.filterNot {
+            it.id == candidate.id || it.hasSameEndpoints(preset)
+        }
+        if (updated.size > SavedRoutePresetsCodec.MAX_PRESETS) {
+            return SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.LIMIT_REACHED)
+        }
+
+        val encoded = SavedRoutePresetsCodec.encode(updated)
+            ?: return SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.INVALID_PRESET)
+        return persist(encoded, updated)
+    }
+
+    fun remove(id: String): SavedRoutePresetStoreResult {
+        val current = load()
+        if (!current.isSourceSafeToReplace) {
+            return SavedRoutePresetStoreResult.Rejected(
+                SavedRoutePresetStoreRejection.SOURCE_UNSAFE,
+                current.issues,
+            )
+        }
+
+        val updated = current.presets.filterNot { it.id == id }
+        if (updated.size == current.presets.size) {
+            return SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.NOT_FOUND)
+        }
+
+        val encoded = SavedRoutePresetsCodec.encode(updated)
+            ?: return SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.INVALID_PRESET)
+        return persist(encoded, updated)
+    }
+
+    private fun persist(
+        encoded: String,
+        presets: List<SavedRoutePreset>,
+    ): SavedRoutePresetStoreResult =
+        if (runCatching { storage.write(PREFERENCE_KEY, encoded) }.isSuccess) {
+            SavedRoutePresetStoreResult.Success(presets)
+        } else {
+            SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.STORAGE_FAILURE)
+        }
+
+    private fun SavedRoutePreset.hasSameEndpoints(other: SavedRoutePreset): Boolean =
+        originLatitude == other.originLatitude &&
+            originLongitude == other.originLongitude &&
+            destinationLatitude == other.destinationLatitude &&
+            destinationLongitude == other.destinationLongitude
+
+    companion object {
+        const val PREFERENCE_KEY = "saved_route_presets_v1"
     }
 }
