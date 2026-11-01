@@ -126,9 +126,24 @@ internal class SelectedTripItineraryPlanner(
             return conflict(SelectedTripPlanFailure.STOP_REFERENCE_CHANGED)
         }
 
-        if (
+        // A fresh overlay may represent a different trip even when its
+        // cancellation IDs include this trip. Bind the evidence to this exact
+        // selection before allowing it to cancel the rider's itinerary.
+        val tripScopedRealtime = if (
             realtime?.state == RouteRealtimeState.FRESH_MATCHED &&
-            identity.tripId in realtime.cancelledTripIds
+            identity.tripId !in realtime.matchedTripIds
+        ) {
+            realtime.copy(
+                state = RouteRealtimeState.FRESH_NO_MATCH,
+                matchedTripIds = emptyList(),
+                cancelledTripIds = emptyList(),
+            )
+        } else {
+            realtime
+        }
+        if (
+            tripScopedRealtime?.state == RouteRealtimeState.FRESH_MATCHED &&
+            identity.tripId in tripScopedRealtime.cancelledTripIds
         ) {
             return conflict(SelectedTripPlanFailure.TRIP_CANCELLED)
         }
@@ -223,7 +238,7 @@ internal class SelectedTripItineraryPlanner(
             stops = routeStops,
             refreshToken = null,
             sourceUpdatedAtEpochSeconds = sourceUpdatedAt,
-            realtime = realtime,
+            realtime = tripScopedRealtime,
             departureEpochMillis = departureMillis,
             arrivalEpochMillis = arrivalMillis,
             accessWalking = null,
