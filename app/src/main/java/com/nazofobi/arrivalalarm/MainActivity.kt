@@ -1381,6 +1381,14 @@ fun ArrivalAlarmApp(
                                 nowEpochSeconds = liveNowEpochSeconds,
                                 modifier = Modifier.fillMaxWidth(),
                             )
+                        }
+                        // A real, persisted alarm can survive Activity recreation while the
+                        // Compose-only selected GTFS route preview cannot. Keep cancellation
+                        // reachable without inventing a route or a live vehicle position.
+                        if (selectedRoute != null ||
+                            journey.phase == JourneyPhase.ARMED ||
+                            journey.phase == JourneyPhase.ARRIVED
+                        ) {
                             JourneyAlarmControls(
                                 journey = journey,
                                 onArmAlarm = {
