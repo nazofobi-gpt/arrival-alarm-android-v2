@@ -20,15 +20,16 @@ class G176RetainedRegionalSamplesTest {
             "r-be-s5" to GtfsScheduleRoute("r-be-s5", "vbb", "S5", "Strausberg Nord", 2),
         ),
         stops = mapOf(
-            "de:hb:hbf" to stop("de:hb:hbf", "1"),
-            "de:hb:hbf:platform:7" to stop("de:hb:hbf:platform:7", "7"),
+            "de:hb:hbf" to stop("de:hb:hbf", null, locationType = 1),
+            "de:hb:hbf:platform:1" to stop("de:hb:hbf:platform:1", "1", "de:hb:hbf"),
+            "de:hb:hbf:platform:7" to stop("de:hb:hbf:platform:7", "7", "de:hb:hbf"),
             "de:hb:airport" to stop("de:hb:airport", "2"),
             "de:be:hbf" to stop("de:be:hbf", "11"),
             "de:be:alex" to stop("de:be:alex", "3"),
         ),
         stopTimes = mapOf(
             "t-hb-6-1200" to listOf(
-                st("t-hb-6-1200", 1, "de:hb:hbf", "12:00:00"),
+                st("t-hb-6-1200", 1, "de:hb:hbf:platform:1", "12:00:00"),
                 st("t-hb-6-1200", 2, "de:hb:airport", "12:20:00"),
             ),
             "t-be-s5-1205" to listOf(
@@ -50,7 +51,7 @@ class G176RetainedRegionalSamplesTest {
             stops = listOf(
                 GermanyRealtimeStopUpdate(
                     stopSequence = 1,
-                    stopId = "de:hb:hbf",
+                    stopId = "de:hb:hbf:platform:7",
                     arrivalDelaySeconds = null,
                     departureDelaySeconds = 180,
                     arrivalTimeEpochSeconds = null,
@@ -74,7 +75,7 @@ class G176RetainedRegionalSamplesTest {
                     routeId = "r-hb-6",
                     routeType = 3,
                     directionId = null,
-                    stopId = "de:hb:hbf",
+                    stopId = "de:hb:hbf:platform:1",
                     trip = null,
                     validity = GermanyRealtimeAlertSelectorValidity.VALID,
                 ),
@@ -89,7 +90,7 @@ class G176RetainedRegionalSamplesTest {
         assertEquals("t-hb-6-1200", matched.tripOverlays.single().staticTrip.id)
         assertTrue(matched.tripOverlays.single().cancelled)
         val stop = matched.tripOverlays.single().stopUpdates.single()
-        assertEquals("de:hb:hbf", stop.scheduledStopId)
+        assertEquals("de:hb:hbf:platform:1", stop.scheduledStopId)
         assertEquals(180, stop.departureDelaySeconds)
         assertEquals("7", stop.platformCode)
         assertEquals(listOf("retained-vbn-alert"), matched.serviceAlerts.map { it.entityId })
@@ -290,8 +291,12 @@ class G176RetainedRegionalSamplesTest {
         bikesAllowed = null,
     )
 
-    private fun stop(id: String, platform: String) =
-        GtfsScheduleStop(id, id, 52.0, 8.0, null, 0, platform, null)
+    private fun stop(
+        id: String,
+        platform: String?,
+        parentStationId: String? = null,
+        locationType: Int = 0,
+    ) = GtfsScheduleStop(id, id, 52.0, 8.0, parentStationId, locationType, platform, null)
 
     private fun st(tripId: String, sequence: Int, stopId: String, time: String) =
         GtfsScheduleStopTime(tripId, sequence, stopId, time, time, null, null, null, null)
