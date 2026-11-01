@@ -4,6 +4,9 @@ on:
     branches: [main]
 permissions:
   contents: read
+concurrency:
+  group: g176-provider-acceptance-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   verify:
     if: github.head_ref == 'g176-real-sample-acceptance-20261005'
@@ -28,7 +31,7 @@ jobs:
           sha256sum /tmp/g176-live.pb | tee /tmp/g176-live.sha256
           curl -fL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 1200 https://download.gtfs.de/germany/free/latest.zip -o /tmp/germany-full.zip
           mkdir -p app/build/g176-provider-samples
-          python3 tools/extract_g176_provider_samples.py --realtime /tmp/g176-live.pb --static /tmp/germany-full.zip --output app/build/g176-provider-samples/g176-provider-regional-samples.json
+          python3 tools/extract_g176_provider_samples.py --realtime /tmp/g176-live.pb --static /tmp/germany-full.zip --realtime-license CC-BY-SA-4.0 --static-license CC-4.0 --output app/build/g176-provider-samples/g176-provider-regional-samples.json
           test -s app/build/g176-provider-samples/g176-provider-regional-samples.json
           curl -fL --compressed --retry 5 --retry-all-errors --connect-timeout 30 --max-time 600 \
             -H 'User-Agent: ArrivalAlarm-G176-ProviderAcceptance/1.0 (+https://github.com/nazofobi-gpt/arrival-alarm-android-v2)' \
@@ -47,9 +50,61 @@ jobs:
             --regions berlin --allow-missing-regions \
             --endpoint https://production.gtfsrt.vbb.de/data \
             --static-source https://unternehmen.vbb.de/gtfs \
+            --realtime-license CC-BY-4.0 --static-license UNSPECIFIED \
             --realtime /tmp/vbb-live.pb --static /tmp/vbb-static.zip \
             --output app/build/g176-provider-samples/g176-vbb-platform-samples.json
           test -s app/build/g176-provider-samples/g176-vbb-platform-samples.json
+          curl -fL --compressed --retry 3 --retry-all-errors --connect-timeout 30 --max-time 900 \
+            -H 'User-Agent: ArrivalAlarm-G176-ProviderAcceptance/1.0 (+https://github.com/nazofobi-gpt/arrival-alarm-android-v2)' \
+            https://germany.motis-project.org/gtfsrt -o /tmp/delfi-live.pb
+          delfi_bytes="$(stat -c%s /tmp/delfi-live.pb)"
+          test "$delfi_bytes" -gt 0
+          test "$delfi_bytes" -le 134217728
+          sha256sum /tmp/delfi-live.pb | tee /tmp/delfi-live.sha256
+          curl -fL --retry 3 --retry-all-errors --connect-timeout 30 --max-time 1200 \
+            https://gtfs-source-feeds.transit.land/delfi-germany.zip -o /tmp/delfi-static.zip
+          delfi_static_bytes="$(stat -c%s /tmp/delfi-static.zip)"
+          test "$delfi_static_bytes" -gt 0
+          test "$delfi_static_bytes" -le 1073741824
+          sha256sum /tmp/delfi-static.zip | tee /tmp/delfi-static.sha256
+          python3 tools/extract_g176_provider_samples.py \
+            --regions berlin --allow-missing-regions \
+            --endpoint https://germany.motis-project.org/gtfsrt \
+            --static-source https://gtfs-source-feeds.transit.land/delfi-germany.zip \
+            --realtime-license CC-BY-SA-4.0 --static-license CC-BY-4.0 \
+            --realtime /tmp/delfi-live.pb --static /tmp/delfi-static.zip \
+            --output app/build/g176-provider-samples/g176-delfi-platform-samples.json
+          test -s app/build/g176-provider-samples/g176-delfi-platform-samples.json
+      - name: Capture DB Fernverkehr GTFS-RT when API key is configured
+        env:
+          DB_GTFS_API_KEY: ${{ secrets.DB_GTFS_API_KEY }}
+        run: |
+          set -eu
+          if [ -z "${DB_GTFS_API_KEY:-}" ]; then
+            echo "DB_GTFS_API_KEY is not configured; DB Fernverkehr capture skipped."
+            exit 0
+          fi
+          db_base="https://gtfs-datenstroeme.tech.deutschebahn.com/db-fernverkehr"
+          curl -fL --compressed --retry 3 --retry-all-errors --connect-timeout 30 --max-time 900 \
+            -H "DB-Api-Key: ${DB_GTFS_API_KEY}" "${db_base}/gtfsrt_trip_updates.proto" -o /tmp/db-live.pb
+          db_bytes="$(stat -c%s /tmp/db-live.pb)"
+          test "$db_bytes" -gt 0
+          test "$db_bytes" -le 134217728
+          sha256sum /tmp/db-live.pb | tee /tmp/db-live.sha256
+          curl -fL --retry 3 --retry-all-errors --connect-timeout 30 --max-time 1200 \
+            -H "DB-Api-Key: ${DB_GTFS_API_KEY}" "${db_base}/gtfs.zip" -o /tmp/db-static.zip
+          db_static_bytes="$(stat -c%s /tmp/db-static.zip)"
+          test "$db_static_bytes" -gt 0
+          test "$db_static_bytes" -le 1073741824
+          sha256sum /tmp/db-static.zip | tee /tmp/db-static.sha256
+          python3 tools/extract_g176_provider_samples.py \
+            --regions berlin --allow-missing-regions \
+            --endpoint "${db_base}/gtfsrt_trip_updates.proto" \
+            --static-source "${db_base}/gtfs.zip" \
+            --realtime-license DB-API-TERMS --static-license DB-API-TERMS \
+            --realtime /tmp/db-live.pb --static /tmp/db-static.zip \
+            --output app/build/g176-provider-samples/g176-db-platform-samples.json
+          test -s app/build/g176-provider-samples/g176-db-platform-samples.json
       - name: Enable KVM access
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -72,7 +127,13 @@ jobs:
             echo "G176_SYNTHETIC_API36_MATCHER=PASS"
             adb push app/build/g176-provider-samples/g176-provider-regional-samples.json /data/local/tmp/g176-provider-regional-samples.json
             adb push app/build/g176-provider-samples/g176-vbb-platform-samples.json /data/local/tmp/g176-vbb-platform-samples.json
-            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.G176ProviderDerivedRegionalInstrumentedTest -Pandroid.testInstrumentationRunnerArguments.providerSamplesPath=/data/local/tmp/g176-provider-regional-samples.json -Pandroid.testInstrumentationRunnerArguments.alternatePlatformSamplesPath=/data/local/tmp/g176-vbb-platform-samples.json
+            adb push app/build/g176-provider-samples/g176-delfi-platform-samples.json /data/local/tmp/g176-delfi-platform-samples.json
+            ALT_PATHS="/data/local/tmp/g176-vbb-platform-samples.json,/data/local/tmp/g176-delfi-platform-samples.json"
+            if [ -s app/build/g176-provider-samples/g176-db-platform-samples.json ]; then
+              adb push app/build/g176-provider-samples/g176-db-platform-samples.json /data/local/tmp/g176-db-platform-samples.json
+              ALT_PATHS="${ALT_PATHS},/data/local/tmp/g176-db-platform-samples.json"
+            fi
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.G176ProviderDerivedRegionalInstrumentedTest -Pandroid.testInstrumentationRunnerArguments.providerSamplesPath=/data/local/tmp/g176-provider-regional-samples.json -Pandroid.testInstrumentationRunnerArguments.alternatePlatformSamplesPaths="$ALT_PATHS"
 
       - name: Upload G176 provider instrumentation diagnostics
         if: always()

@@ -524,6 +524,8 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--endpoint", default="https://realtime.gtfs.de/realtime-free.pb")
     parser.add_argument("--static-source", default="https://download.gtfs.de/germany/free/latest.zip")
+    parser.add_argument("--realtime-license", default="UNSPECIFIED")
+    parser.add_argument("--static-license", default="UNSPECIFIED")
     parser.add_argument("--regions", nargs="+", choices=tuple(REGIONS), default=list(REGIONS))
     parser.add_argument("--allow-missing-regions", action="store_true")
     args = parser.parse_args()
@@ -868,6 +870,7 @@ def main():
         "allowMissingRegions": args.allow_missing_regions,
         "realtime": {
             "endpoint": args.endpoint,
+            "license": args.realtime_license,
             "sha256": file_sha256(args.realtime),
             "bytes": os.path.getsize(args.realtime),
             "header": header,
@@ -877,6 +880,7 @@ def main():
         },
         "static": {
             "source": args.static_source,
+            "license": args.static_license,
             "sha256": file_sha256(args.static),
             "bytes": os.path.getsize(args.static),
             "feedInfo": feed_info,

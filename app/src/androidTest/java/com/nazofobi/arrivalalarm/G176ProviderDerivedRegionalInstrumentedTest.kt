@@ -24,21 +24,41 @@ class G176ProviderDerivedRegionalInstrumentedTest {
         }
         val root = JSONObject(File(samplePath).readText())
         assertEquals("G176_PROVIDER_DERIVED_REGIONAL_SAMPLES_V1", root.getString("schema"))
-        val alternatePlatformSamplesPath = InstrumentationRegistry.getArguments()
+        val alternatePaths = InstrumentationRegistry.getArguments()
+            .getString("alternatePlatformSamplesPaths").orEmpty()
+            .split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        val legacyAlternatePath = InstrumentationRegistry.getArguments()
             .getString("alternatePlatformSamplesPath").orEmpty()
+        val allAlternatePaths = (alternatePaths + legacyAlternatePath).filter { it.isNotBlank() }.distinct()
         val platformEvidenceRoots = mutableListOf("Germany GTFS-RT" to root)
-        if (alternatePlatformSamplesPath.isNotBlank()) {
-            val alternateRoot = JSONObject(File(alternatePlatformSamplesPath).readText())
+        allAlternatePaths.forEach { path ->
+            val alternateRoot = JSONObject(File(path).readText())
             assertEquals("G176_PROVIDER_DERIVED_REGIONAL_SAMPLES_V1", alternateRoot.getString("schema"))
-            assertEquals(
-                "https://production.gtfsrt.vbb.de/data",
-                alternateRoot.getJSONObject("realtime").getString("endpoint"),
-            )
-            assertEquals(
-                "https://unternehmen.vbb.de/gtfs",
-                alternateRoot.getJSONObject("static").getString("source"),
-            )
-            platformEvidenceRoots += ("VBB GTFS-RT" to alternateRoot)
+            val alternateRealtime = alternateRoot.getJSONObject("realtime")
+            val alternateStatic = alternateRoot.getJSONObject("static")
+            val endpoint = alternateRealtime.getString("endpoint")
+            val sourceLabel = when (endpoint) {
+                "https://production.gtfsrt.vbb.de/data" -> {
+                    assertEquals("https://unternehmen.vbb.de/gtfs", alternateStatic.getString("source"))
+                    assertEquals("CC-BY-4.0", alternateRealtime.getString("license"))
+                    assertEquals("UNSPECIFIED", alternateStatic.getString("license"))
+                    "VBB GTFS-RT"
+                }
+                "https://germany.motis-project.org/gtfsrt" -> {
+                    assertEquals("https://gtfs-source-feeds.transit.land/delfi-germany.zip", alternateStatic.getString("source"))
+                    assertEquals("CC-BY-SA-4.0", alternateRealtime.getString("license"))
+                    assertEquals("CC-BY-4.0", alternateStatic.getString("license"))
+                    "DELFI/MOTIS GTFS-RT"
+                }
+                "https://gtfs-datenstroeme.tech.deutschebahn.com/db-fernverkehr/gtfsrt_trip_updates.proto" -> {
+                    assertEquals("https://gtfs-datenstroeme.tech.deutschebahn.com/db-fernverkehr/gtfs.zip", alternateStatic.getString("source"))
+                    assertEquals("DB-API-TERMS", alternateRealtime.getString("license"))
+                    assertEquals("DB-API-TERMS", alternateStatic.getString("license"))
+                    "DB Fernverkehr GTFS-RT"
+                }
+                else -> throw AssertionError("Unexpected alternate provider endpoint: $endpoint")
+            }
+            platformEvidenceRoots += (sourceLabel to alternateRoot)
         }
 
         val realtime = root.getJSONObject("realtime")
