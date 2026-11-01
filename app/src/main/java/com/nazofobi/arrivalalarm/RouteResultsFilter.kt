@@ -11,9 +11,11 @@ internal data class RouteResultsFilter(
     val fewerTransfersFirst: Boolean = false,
     val shorterWalkingFirst: Boolean = false,
     val maxTransfers: Int? = null,
+    val maxWalkingMinutes: Int? = null,
 ) {
     fun apply(options: List<RouteOption>): List<RouteOption> {
         val limit = maxTransfers
+        val walkingLimit = maxWalkingMinutes
         val usable = options.filter { option ->
             // Never offer an unnamed or nonphysical itinerary as a selectable
             // arrival target; reject it before route-card limiting.
@@ -55,7 +57,8 @@ internal data class RouteResultsFilter(
         val filtered = usable.filter { option ->
             option.id !in ambiguousIds &&
                 (!directOnly || option.transfers == 0) &&
-                (limit == null || option.transfers <= limit)
+                (limit == null || option.transfers <= limit) &&
+                (walkingLimit == null || (walkingLimit >= 0 && option.walkingMinutes <= walkingLimit))
         }
         // Keep provider order for equally convenient routes.
         return when {

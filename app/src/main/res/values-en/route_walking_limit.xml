@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="route_max_walking_15_filter">At most 15 min walking</string>
+    <string name="route_max_walking_15_empty">No route with at most 15 minutes of walking. Turn off the filter to see alternatives.</string>
+</resources>

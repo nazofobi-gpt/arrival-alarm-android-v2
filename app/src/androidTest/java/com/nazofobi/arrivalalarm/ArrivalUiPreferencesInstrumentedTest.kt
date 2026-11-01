@@ -104,6 +104,34 @@ class ArrivalUiPreferencesInstrumentedTest {
         }
     }
 
+    @Test
+    fun maxWalking15PreferencePersistsIndependentlyAndRejectsWrongType() {
+        val prefs = context.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+        withRestoredPreferenceKeys(
+            prefs,
+            ArrivalUiPreferences.KEY_MAX_WALKING_15_MINUTES,
+            ArrivalUiPreferences.KEY_SHORTER_WALKING_FIRST,
+        ) {
+            prefs.edit()
+                .remove(ArrivalUiPreferences.KEY_MAX_WALKING_15_MINUTES)
+                .remove(ArrivalUiPreferences.KEY_SHORTER_WALKING_FIRST)
+                .commit()
+            assertFalse(ArrivalUiPreferences(context).loadMaxWalking15Minutes())
+
+            ArrivalUiPreferences(context).saveShorterWalkingFirst(true)
+            ArrivalUiPreferences(context).saveMaxWalking15Minutes(true)
+            assertTrue(ArrivalUiPreferences(context).loadMaxWalking15Minutes())
+            assertTrue(ArrivalUiPreferences(context).loadShorterWalkingFirst())
+
+            ArrivalUiPreferences(context).saveMaxWalking15Minutes(false)
+            assertFalse(ArrivalUiPreferences(context).loadMaxWalking15Minutes())
+            assertTrue(ArrivalUiPreferences(context).loadShorterWalkingFirst())
+
+            prefs.edit().putString(ArrivalUiPreferences.KEY_MAX_WALKING_15_MINUTES, "bad-type").commit()
+            assertFalse(ArrivalUiPreferences(context).loadMaxWalking15Minutes())
+        }
+    }
+
     private inline fun withRestoredPreferenceKeys(
         prefs: SharedPreferences,
         vararg keys: String,
