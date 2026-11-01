@@ -30,8 +30,8 @@ internal enum class SelectedTripAlarmArmProblem {
 }
 
 internal object SelectedTripAlarmArmGate {
-    fun resolve(restore: GtfsSelectionRestore): SelectedTripAlarmArmDecision =
-        when (restore) {
+    fun resolve(restore: GtfsSelectionRestore): SelectedTripAlarmArmDecision {
+        return when (restore) {
             GtfsSelectionRestore.Empty -> SelectedTripAlarmArmDecision.ManualJourney
             is GtfsSelectionRestore.Rejected ->
                 SelectedTripAlarmArmDecision.Blocked(SelectedTripAlarmArmProblem.RESTORE_REJECTED)
@@ -82,6 +82,7 @@ internal object SelectedTripAlarmArmGate {
                 SelectedTripAlarmArmDecision.Ready(selection, roles)
             }
         }
+    }
 
     fun evaluate(
         restore: GtfsSelectionRestore,
