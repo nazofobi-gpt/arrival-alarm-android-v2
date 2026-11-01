@@ -173,12 +173,20 @@ class JourneyConnectorActionPort(
     }
 
     @Synchronized
-    fun updateDistanceToDestination(distanceMeters: Double, allowArrival: Boolean = true): ConnectorActionOutcome {
+    fun updateDistanceToDestination(
+        distanceMeters: Double,
+        allowArrival: Boolean = true,
+        fixElapsedRealtimeNanos: Long? = null,
+    ): ConnectorActionOutcome {
         if (!distanceMeters.isFinite() || distanceMeters < 0.0) {
             return ConnectorActionOutcome(false, "Geçersiz hedef mesafesi")
         }
         val before = controller.state
-        controller.onDistanceChanged(distanceMeters, allowArrival = allowArrival)
+        controller.onDistanceChanged(
+            distanceMeters,
+            allowArrival = allowArrival,
+            fixElapsedRealtimeNanos = fixElapsedRealtimeNanos,
+        )
         val after = controller.state
         if (after == before) {
             return ConnectorActionOutcome(false, "Aktif varış alarmı yok")
@@ -188,6 +196,11 @@ class JourneyConnectorActionPort(
             true,
             if (after.phase == JourneyPhase.ARRIVED) "Varış eşiğine ulaşıldı" else "Hedef mesafesi güncellendi",
         )
+    }
+
+    @Synchronized
+    fun resetArrivalConfirmation() {
+        controller.resetArrivalConfirmation()
     }
 
     @Synchronized
