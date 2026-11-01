@@ -59,6 +59,42 @@ class SavedRoutePresetsTest {
     }
 
     @Test
+    fun bidiControlsMalformedSurrogatesAndUnicodeSeparatorsFailClosed() {
+        val unsafe = listOf(
+            preset(name = "Home \u202e work"),
+            preset(name = "Home \u2067 work"),
+            preset(name = "Home \u200f work"),
+            preset().copy(originLabel = "Station\u2028different line"),
+            preset().copy(destinationLabel = "Station\u2029different paragraph"),
+            preset(name = "Home \ud800"),
+            preset(name = "Home \udc00"),
+        )
+        unsafe.forEach { candidate ->
+            assertNull("Unsafe route label must not be serialized",
+                SavedRoutePresetsCodec.encode(listOf(candidate)))
+        }
+
+        val original = preset()
+        val encoded = SavedRoutePresetsCodec.encode(listOf(original))!!
+        val storage = MemorySavedRoutePresetStringStorage(value = encoded)
+        val store = SavedRoutePresetsStore(storage)
+        assertEquals(
+            SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.INVALID_PRESET),
+            store.save(preset(name = "Wrong\u202eorder")),
+        )
+        assertEquals(encoded, storage.value)
+        assertEquals(0, storage.writeCount)
+    }
+
+    @Test
+    fun validSupplementaryEmojiAndJoinedEmojiRemainRoundTrippable() {
+        val valid = preset(name = "Home \ud83d\ude89 \ud83d\udc69\u200d\ud83d\udcbb")
+        val encoded = SavedRoutePresetsCodec.encode(listOf(valid))
+        assertEquals(listOf(valid), SavedRoutePresetsCodec.decode(encoded))
+        assertTrue(SavedRoutePresetsCodec.decodeWithStatus(encoded).isSourceSafeToReplace)
+    }
+
+    @Test
     fun malformedRecordKeepsValidSiblingButMarksSourceUnsafeToReplace() {
         val valid = preset()
         val encoded = SavedRoutePresetsCodec.encode(listOf(valid))!! + "\nnot-a-valid-record"
