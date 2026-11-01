@@ -393,6 +393,21 @@ class JourneyControllerTest {
         assertEquals(JourneyPhase.ARRIVED, restoredProcess.state.phase)
     }
 
+    @Test fun explicitEvidenceResetBreaksPendingArrivalConfirmation() {
+        val controller = JourneyController(arrivalRadiusMeters = 250.0)
+        controller.selectStart(GeoPoint(53.5, 8.1))
+        controller.selectDestination(GeoPoint(53.6, 8.2))
+        controller.arm()
+
+        controller.onDistanceChanged(120.0, fixElapsedRealtimeNanos = 1_000_000_000L)
+        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+        controller.resetArrivalConfirmation()
+        controller.onDistanceChanged(120.0, fixElapsedRealtimeNanos = 2_000_000_000L)
+        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+        controller.onDistanceChanged(120.0, fixElapsedRealtimeNanos = 3_000_000_000L)
+        assertEquals(JourneyPhase.ARRIVED, controller.state.phase)
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun invalidRadiusCannotCreateAlwaysArrivingController() {
         JourneyController(arrivalRadiusMeters = Double.POSITIVE_INFINITY)
