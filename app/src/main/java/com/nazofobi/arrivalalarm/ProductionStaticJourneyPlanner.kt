@@ -332,12 +332,15 @@ class ProductionStaticJourneyPlanner(
         destination: MapPoint,
         limit: Int = 3,
         maxWalkingMinutes: Int? = null,
+        maxTransfers: Int? = null,
     ): LocalStaticJourneyOutcome {
         if (!validTransitJourneyCoordinates(origin.latitude, origin.longitude) ||
             !validTransitJourneyCoordinates(destination.latitude, destination.longitude)
         ) return LocalStaticJourneyOutcome.NoPath
         val boundedLimit = boundedStaticJourneyOptionLimit(limit)
-        if (boundedLimit == 0 || (maxWalkingMinutes != null && maxWalkingMinutes < 0)) {
+        if (boundedLimit == 0 || (maxWalkingMinutes != null && maxWalkingMinutes < 0) ||
+            (maxTransfers != null && maxTransfers !in 0..3)
+        ) {
             return LocalStaticJourneyOutcome.NoPath
         }
         val maxWalkingSeconds = maxWalkingMinutes
@@ -388,6 +391,7 @@ class ProductionStaticJourneyPlanner(
                         serviceDate = serviceDate,
                         departureEpochMillis = departureMillis,
                         maxWalkingSeconds = maxWalkingSeconds,
+                        maxAllowedTransfers = maxTransfers,
                     )
                 ) {
                     is StaticRouterResult.Journeys -> result.journeys.forEach { journey ->

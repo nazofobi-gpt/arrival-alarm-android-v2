@@ -557,6 +557,7 @@ class NationwideTransitGateway(
             staticJourneyPlanner.plan(
                 origin, destination, limit,
                 maxWalkingMinutes = if (routePreferences.loadMaxWalking15Minutes()) 15 else null,
+                maxTransfers = if (routePreferences.loadAtMostOneTransfer()) 1 else null,
             )
         }.getOrDefault(LocalStaticJourneyOutcome.Unavailable)
 

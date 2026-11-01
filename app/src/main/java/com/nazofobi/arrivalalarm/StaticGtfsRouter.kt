@@ -165,8 +165,12 @@ class StaticGtfsRouter(
         serviceDate: GtfsServiceDate,
         departureEpochMillis: Long,
         maxWalkingSeconds: Int? = null,
+        maxAllowedTransfers: Int? = null,
     ): StaticRouterResult {
         if (maxWalkingSeconds != null && maxWalkingSeconds < 0) return StaticRouterResult.NoPath
+        if (maxAllowedTransfers != null && maxAllowedTransfers !in 0..maxTransfers) {
+            return StaticRouterResult.NoPath
+        }
         // A stop may be supplied by multiple access/egress strategies. Preserve the
         // shortest feasible walk rather than whichever duplicate arrived first.
         // Rank before the bounded selection so a nearby stop is not dropped merely
@@ -210,7 +214,7 @@ class StaticGtfsRouter(
                     serviceDate = serviceDate,
                     destinationByStop = destinationByStop,
                     priorLegs = emptyList(),
-                    remainingTransfers = maxTransfers,
+                    remainingTransfers = maxAllowedTransfers ?: maxTransfers,
                     visitedTripIds = emptySet(),
                     bestBoardByState = bestBoardByState,
                     budget = budget,
