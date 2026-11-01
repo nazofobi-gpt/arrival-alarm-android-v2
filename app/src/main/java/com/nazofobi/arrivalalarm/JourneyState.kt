@@ -70,9 +70,14 @@ class JourneyController(
     private var lastArrivalEvaluationElapsedRealtimeNanos: Long? = null
     private var firstArrivalConfirmationElapsedRealtimeNanos: Long? = null
 
-    private fun resetArrivalConfirmation() {
+    private fun clearArrivalConfirmationState() {
         lastArrivalEvaluationElapsedRealtimeNanos = null
         firstArrivalConfirmationElapsedRealtimeNanos = null
+    }
+
+    @Synchronized
+    fun resetArrivalConfirmation() {
+        clearArrivalConfirmationState()
     }
 
     private fun update(newState: JourneyUiState) {
@@ -90,7 +95,7 @@ class JourneyController(
             update(state.copy(error = "Geçersiz başlangıç konumu"))
             return
         }
-        resetArrivalConfirmation()
+        clearArrivalConfirmationState()
         update(JourneyUiState(phase = JourneyPhase.START_SELECTED, start = point))
     }
 
@@ -105,7 +110,7 @@ class JourneyController(
             return
         }
         // The previous GPS distance belongs to the old destination and must not survive reselection.
-        resetArrivalConfirmation()
+        clearArrivalConfirmationState()
         update(state.copy(phase = JourneyPhase.DESTINATION_SELECTED, start = start, destination = point, distanceMeters = null, error = null))
     }
 
@@ -120,7 +125,7 @@ class JourneyController(
             return
         }
         // An earlier arrival distance is not evidence for the newly armed alarm.
-        if (state.phase != JourneyPhase.ARMED) resetArrivalConfirmation()
+        if (state.phase != JourneyPhase.ARMED) clearArrivalConfirmationState()
         val distance = if (state.phase == JourneyPhase.ARRIVED) null else state.distanceMeters
         update(state.copy(phase = JourneyPhase.ARMED, distanceMeters = distance, error = null))
     }
@@ -131,7 +136,7 @@ class JourneyController(
             update(state.copy(error = "İptal edilecek kurulu alarm yok"))
             return
         }
-        resetArrivalConfirmation()
+        clearArrivalConfirmationState()
         update(
             state.copy(
                 phase = JourneyPhase.DESTINATION_SELECTED,
@@ -149,13 +154,13 @@ class JourneyController(
     ) {
         if (state.phase != JourneyPhase.ARMED) return
         if (!distanceMeters.isFinite() || distanceMeters < 0.0) {
-            resetArrivalConfirmation()
+            clearArrivalConfirmationState()
             return
         }
 
         val fixTimestamp = fixElapsedRealtimeNanos
         if (fixTimestamp == null || fixTimestamp <= 0L) {
-            resetArrivalConfirmation()
+            clearArrivalConfirmationState()
             update(state.copy(phase = JourneyPhase.ARMED, distanceMeters = distanceMeters, error = null))
             return
         }
