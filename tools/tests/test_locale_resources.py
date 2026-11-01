@@ -147,6 +147,23 @@ class LocaleResourceContractTest(unittest.TestCase):
                 self.assertEqual({(1, "d"): 1}, dict(placeholders(token)))
         self.assertEqual({(1, "x"): 1}, dict(placeholders("%#x")))
 
+    def test_java_formatter_rejects_invalid_octal_hex_flags_and_width(self):
+        for token in ("%+o", "% o", "%,o", "%(o", "%+x", "% x", "%,x", "%(x", "%0o", "%-o", "%0x", "%-x", "%-05o", "%-05x", "%#-05x"):
+            with self.subTest(token=token):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    r"(invalid octal/hex format flags|missing octal/hex format width)",
+                ):
+                    placeholders(token)
+        for token in ("%#o", "%#x", "%05x", "%-5x", "%1$-5o", "%#08X"):
+            with self.subTest(token=token):
+                self.assertEqual(1, sum(placeholders(token).values()))
+
+    def test_matching_invalid_octal_hex_flags_fail_locale_gate(self):
+        for locale in ("values", "values-de", "values-en"):
+            self.write(locale, '<string name="arrival">%+x</string>')
+        self.assertTrue(any("invalid format for arrival" in error for error in validate(self.root)))
+
     def test_invalid_decimal_flags_fail_even_when_all_locales_agree(self):
         for locale in ("values", "values-de", "values-en"):
             self.write(locale, '<string name="arrival">Arrives in %1$#8d minutes</string>')
