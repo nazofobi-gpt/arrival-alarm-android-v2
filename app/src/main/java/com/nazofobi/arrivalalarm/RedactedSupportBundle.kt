@@ -16,6 +16,9 @@ internal data class ProviderProbeSample(
  */
 internal object RedactedSupportBundle {
     private const val MAX_PROVIDER_SAMPLES = 16
+    // Reject oversized serializer regressions before splitting or allocating field lists.
+    private const val MAX_PROVIDER_SUMMARY_CHARS = 512
+    private const val MAX_CAPABILITY_SUMMARY_CHARS = 2048
     private val safeValue = Regex("[A-Za-z0-9_]+")
     private val binaryValues = setOf("yes", "no")
     // A character-only regex also accepts ASCII secrets such as "private_token".
@@ -64,6 +67,7 @@ internal object RedactedSupportBundle {
         summary: String,
         expectedRole: String,
     ): Pair<String, String> {
+        if (summary.length > MAX_PROVIDER_SUMMARY_CHARS) return "not_measured" to "not_measured"
         val requiredKeys = listOf(
             "schema", "scope", "provider_role", "provider_state", "latency_bucket",
         )
@@ -93,6 +97,9 @@ internal object RedactedSupportBundle {
     // A schema/scope change must not silently cross the user-share boundary.
     // Keep this independent of SupportDiagnostics' own serializer implementation.
     internal fun reviewedCapabilityFields(summary: String): List<String> {
+        if (summary.length > MAX_CAPABILITY_SUMMARY_CHARS) {
+            return listOf("support_snapshot=not_measured")
+        }
         val pairs = summary.trimEnd('\n')
             .lines()
             .map { line ->
