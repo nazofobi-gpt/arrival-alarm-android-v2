@@ -193,6 +193,19 @@ class JourneyConnectorActionPort(
         return armInternal()
     }
 
+    /** A deliberate on-device manual alarm remains usable after a different GTFS trip was saved.
+     * Remote connector calls cannot invoke this UI-only operation.
+     */
+    @Synchronized
+    fun armExplicitManualAlarm(): ConnectorActionOutcome {
+        if (controller.state.phase == JourneyPhase.ARMED ||
+            controller.state.phase == JourneyPhase.ARRIVED
+        ) {
+            return ConnectorActionOutcome(false, "Kurulu varış alarmı zaten mevcut")
+        }
+        return armInternal()
+    }
+
     private fun armInternal(): ConnectorActionOutcome {
         controller.arm()
         if (controller.state.phase != JourneyPhase.ARMED) {
