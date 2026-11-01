@@ -33,7 +33,7 @@ jobs:
           mkdir -p app/build/g176-provider-samples
           python3 tools/extract_g176_provider_samples.py --realtime /tmp/g176-live.pb --static /tmp/germany-full.zip --realtime-license CC-BY-SA-4.0 --static-license CC-4.0 --output app/build/g176-provider-samples/g176-provider-regional-samples.json
           test -s app/build/g176-provider-samples/g176-provider-regional-samples.json
-          curl -fL --compressed --retry 5 --retry-all-errors --connect-timeout 30 --max-time 600 \
+          curl -fL --compressed --retry 1 --retry-delay 10 --retry-max-time 60 --retry-all-errors --connect-timeout 30 --max-time 600 \
             -H 'User-Agent: ArrivalAlarm-G176-ProviderAcceptance/1.0 (+https://github.com/nazofobi-gpt/arrival-alarm-android-v2)' \
             https://production.gtfsrt.vbb.de/data -o /tmp/vbb-live.pb
           vbb_bytes="$(stat -c%s /tmp/vbb-live.pb)"
@@ -50,7 +50,7 @@ jobs:
             --regions berlin --allow-missing-regions \
             --endpoint https://production.gtfsrt.vbb.de/data \
             --static-source https://unternehmen.vbb.de/gtfs \
-            --realtime-license CC-BY-4.0 --static-license UNSPECIFIED \
+            --realtime-license CC-BY-4.0 --static-license CC-BY-4.0 \
             --realtime /tmp/vbb-live.pb --static /tmp/vbb-static.zip \
             --output app/build/g176-provider-samples/g176-vbb-platform-samples.json
           test -s app/build/g176-provider-samples/g176-vbb-platform-samples.json
@@ -122,12 +122,8 @@ jobs:
             adb push app/build/g176-provider-samples/g176-provider-regional-samples.json /data/local/tmp/g176-provider-regional-samples.json
             adb push app/build/g176-provider-samples/g176-vbb-platform-samples.json /data/local/tmp/g176-vbb-platform-samples.json
             adb push app/build/g176-provider-samples/g176-delfi-platform-samples.json /data/local/tmp/g176-delfi-platform-samples.json
-            ALT_PATHS="/data/local/tmp/g176-vbb-platform-samples.json,/data/local/tmp/g176-delfi-platform-samples.json"
-            if [ -s app/build/g176-provider-samples/g176-db-platform-samples.json ]; then
-              adb push app/build/g176-provider-samples/g176-db-platform-samples.json /data/local/tmp/g176-db-platform-samples.json
-              ALT_PATHS="${ALT_PATHS},/data/local/tmp/g176-db-platform-samples.json"
-            fi
-            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.G176ProviderDerivedRegionalInstrumentedTest -Pandroid.testInstrumentationRunnerArguments.providerSamplesPath=/data/local/tmp/g176-provider-regional-samples.json -Pandroid.testInstrumentationRunnerArguments.alternatePlatformSamplesPaths="$ALT_PATHS"
+            # Keep optional DB push, argument construction and Gradle invocation in one shell; emulator-runner isolates script lines.
+            sh -eu -c 'ALT_PATHS="/data/local/tmp/g176-vbb-platform-samples.json,/data/local/tmp/g176-delfi-platform-samples.json"; if [ -s app/build/g176-provider-samples/g176-db-platform-samples.json ]; then adb push app/build/g176-provider-samples/g176-db-platform-samples.json /data/local/tmp/g176-db-platform-samples.json; ALT_PATHS="${ALT_PATHS},/data/local/tmp/g176-db-platform-samples.json"; fi; ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.G176ProviderDerivedRegionalInstrumentedTest -Pandroid.testInstrumentationRunnerArguments.providerSamplesPath=/data/local/tmp/g176-provider-regional-samples.json -Pandroid.testInstrumentationRunnerArguments.alternatePlatformSamplesPaths="${ALT_PATHS}"'
 
       - name: Upload G176 provider instrumentation diagnostics
         if: always()
