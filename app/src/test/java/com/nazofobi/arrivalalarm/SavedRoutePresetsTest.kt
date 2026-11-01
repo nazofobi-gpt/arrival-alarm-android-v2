@@ -65,9 +65,13 @@ class SavedRoutePresetsTest {
 
     @Test
     fun duplicateIdsAndExcessPresetsAreBoundedWithoutReordering() {
-        val presets = (0 until 12).map { index ->
+        val first = preset(id = "route-0", name = "Route 0")
+        val presets = listOf(
+            first,
+            first.copy(name = "Duplicate must not replace first"),
+        ) + (1..10).map { index ->
             preset(id = "route-$index", name = "Route $index")
-        } + preset(id = "route-0", name = "Duplicate must not replace first")
+        }
 
         val restored = SavedRoutePresetsCodec.decode(SavedRoutePresetsCodec.encode(presets))
 
@@ -76,6 +80,11 @@ class SavedRoutePresetsTest {
         assertEquals("Route 0", restored.first().name)
         assertEquals("route-9", restored.last().id)
         assertEquals(restored.size, restored.map { it.id }.distinct().size)
+
+        val duplicateRaw = SavedRoutePresetsCodec.encode(
+            listOf(first, preset(id = "route-1", name = "Route 1"))
+        ).replace("route-1", "route-0")
+        assertEquals(listOf(first), SavedRoutePresetsCodec.decode(duplicateRaw))
     }
 
     @Test
