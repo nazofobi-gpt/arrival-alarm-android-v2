@@ -379,6 +379,17 @@ class JourneyConnectorActionPortTest {
         assertFalse(port.armConfirmedSelectedTrip(restore).applied)
         assertFalse(port.armArrivalAlarm().applied)
     }
+    @Test fun manualAlarmStillWorksAfterSavingUnrelatedVerifiedTrip() {
+        val controller = JourneyController()
+        val port = JourneyConnectorActionPort(controller = controller)
+        port.setOrigin(MapPoint(52.0, 8.0, "A"))
+        port.setDestination(MapPoint(53.0, 9.0, "B"))
+        port.requireSelectedTripValidation()
+        assertFalse(port.armArrivalAlarm().applied)
+        assertTrue(port.armExplicitManualAlarm().applied)
+        assertEquals(JourneyPhase.ARMED, controller.state.phase)
+        assertFalse(port.armExplicitManualAlarm().applied)
+    }
 
     @Test fun invalidTripCannotReplaceExistingManualJourneyOrArm() {
         val identity = GtfsTripInstanceIdentity(
