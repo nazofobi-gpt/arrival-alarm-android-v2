@@ -634,7 +634,7 @@ fun ArrivalAlarmApp(
             routeStatus = context.getString(R.string.route_realtime_cancelled_action_blocked)
             return
         }
-        val outcome = connectorPort.armArrivalAlarm()
+        val outcome = connectorPort.armExplicitManualAlarm()
         journey = controller.state
         if (!outcome.applied) {
             routeStatus = localizedDomainMessage(context, outcome.message)
