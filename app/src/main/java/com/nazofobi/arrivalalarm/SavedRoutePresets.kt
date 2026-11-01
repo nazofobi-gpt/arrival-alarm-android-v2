@@ -186,7 +186,22 @@ internal object SavedRoutePresetsCodec {
         value.isFinite() && value in minimum..maximum
 
     private fun isValidText(value: String, maximumLength: Int): Boolean =
-        value.isNotBlank() && value.length <= maximumLength && value.none(Character::isISOControl)
+        value.isNotBlank() && value.length <= maximumLength && value.indices.none { index ->
+            val char = value[index]
+            val category = Character.getType(char)
+            // Bidi formatting controls can make saved route names display a different
+            // order from their stored content. Keep normal Unicode/emoji (including ZWJ).
+            val bidiControl = char == '\u061c' || char == '\u200e' || char == '\u200f' ||
+                char in '\u202a'..'\u202e' || char in '\u2066'..'\u2069'
+            val unpairedSurrogate =
+                (Character.isHighSurrogate(char) &&
+                    (index + 1 == value.length || !Character.isLowSurrogate(value[index + 1]))) ||
+                (Character.isLowSurrogate(char) &&
+                    (index == 0 || !Character.isHighSurrogate(value[index - 1])))
+            Character.isISOControl(char) || bidiControl || unpairedSurrogate ||
+                category == Character.LINE_SEPARATOR.toInt() ||
+                category == Character.PARAGRAPH_SEPARATOR.toInt()
+        }
 
     private fun encodeText(value: String): String =
         URLEncoder.encode(value, StandardCharsets.UTF_8.name())
