@@ -123,6 +123,26 @@ class SelectedTripItineraryPlannerTest {
     }
 
     @Test
+    fun unrelatedFreshMatchCannotCancelOrContaminateSelectedTrip() {
+        // A provider snapshot for another trip must not mark the rider's
+        // selected service as cancelled, even if its IDs are inconsistent.
+        val unrelated = RouteRealtimeInfo(
+            state = RouteRealtimeState.FRESH_MATCHED,
+            matchedTripIds = listOf("different-trip"),
+            cancelledTripIds = listOf(identity.tripId),
+        )
+
+        val planned = planner().plan(selection, unrelated) as SelectedTripPlanOutcome.Planned
+        assertEquals(
+            RouteRealtimeState.FRESH_NO_MATCH,
+            planned.routeOption.realtime?.state,
+        )
+        assertEquals(emptyList<String>(), planned.routeOption.realtime?.matchedTripIds)
+        assertEquals(emptyList<String>(), planned.routeOption.realtime?.cancelledTripIds)
+        assertEquals(listOf(identity.tripId), planned.routeOption.tripIds)
+    }
+
+    @Test
     fun staleCancellationCannotReplaceStaticSelectedTrip() {
         val realtime = RouteRealtimeInfo(
             state = RouteRealtimeState.STALE,
