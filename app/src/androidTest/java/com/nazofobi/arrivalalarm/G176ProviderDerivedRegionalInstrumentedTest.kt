@@ -41,7 +41,7 @@ class G176ProviderDerivedRegionalInstrumentedTest {
                 "https://production.gtfsrt.vbb.de/data" -> {
                     assertEquals("https://unternehmen.vbb.de/gtfs", alternateStatic.getString("source"))
                     assertEquals("CC-BY-4.0", alternateRealtime.getString("license"))
-                    assertEquals("UNSPECIFIED", alternateStatic.getString("license"))
+                    assertEquals("CC-BY-4.0", alternateStatic.getString("license"))
                     "VBB GTFS-RT"
                 }
                 "https://germany.motis-project.org/gtfsrt" -> {
