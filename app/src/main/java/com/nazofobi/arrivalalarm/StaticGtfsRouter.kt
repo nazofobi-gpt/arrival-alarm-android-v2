@@ -164,14 +164,20 @@ class StaticGtfsRouter(
         destinations: List<StaticRouterAccess>,
         serviceDate: GtfsServiceDate,
         departureEpochMillis: Long,
+        maxWalkingSeconds: Int? = null,
     ): StaticRouterResult {
+        if (maxWalkingSeconds != null && maxWalkingSeconds < 0) return StaticRouterResult.NoPath
         // A stop may be supplied by multiple access/egress strategies. Preserve the
         // shortest feasible walk rather than whichever duplicate arrived first.
         // Rank before the bounded selection so a nearby stop is not dropped merely
         // because more distant candidates came earlier in the input list.
         val walkOrder = compareBy<StaticRouterAccess> { it.walkSeconds }.thenBy { it.stopId }
-        val from = origins.sortedWith(walkOrder).distinctBy { it.stopId }.take(16)
-        val to = destinations.sortedWith(walkOrder).distinctBy { it.stopId }.take(16)
+        val from = origins.sortedWith(walkOrder)
+            .filter { maxWalkingSeconds == null || it.walkSeconds <= maxWalkingSeconds }
+            .distinctBy { it.stopId }.take(16)
+        val to = destinations.sortedWith(walkOrder)
+            .filter { maxWalkingSeconds == null || it.walkSeconds <= maxWalkingSeconds }
+            .distinctBy { it.stopId }.take(16)
         if (from.isEmpty() || to.isEmpty()) return StaticRouterResult.NoPath
         // Nearby access/egress windows commonly overlap at adjacent stations. A shared
         // candidate must not hide a valid journey between two different stops.
@@ -214,7 +220,14 @@ class StaticGtfsRouter(
             if (budget.exhausted) break
         }
 
+        // Enforce the user walking budget before the six-journey result cap:
+        // otherwise earlier long-walk trips can hide later usable trips.
         val deduped = found
+            .filter { journey ->
+                maxWalkingSeconds == null ||
+                    journey.access.walkSeconds.toLong() + journey.egress.walkSeconds.toLong() <=
+                    maxWalkingSeconds.toLong()
+            }
             .sortedWith(
                 compareBy<StaticTransitJourney> { it.arrivalEpochMillis }
                     .thenBy { it.transferCount }
