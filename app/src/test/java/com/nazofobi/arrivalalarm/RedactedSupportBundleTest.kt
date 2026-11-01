@@ -185,6 +185,37 @@ class RedactedSupportBundleTest {
         }))
     }
 
+    @Test fun oversizedSerializerInputsFailClosedBeforeFieldProjection() {
+        val approvedProvider = listOf(
+            "schema=VARIS_PROVIDER_PROBE_V1",
+            "scope=provider_health_only",
+            "provider_role=realtime",
+            "provider_state=ready",
+            "latency_bucket=under_250ms",
+        ).joinToString("\n", postfix = "\n")
+        assertTrue(approvedProvider.length < 512)
+        assertEquals(
+            "ready" to "under_250ms",
+            RedactedSupportBundle.reviewedProviderFields(approvedProvider, "realtime"),
+        )
+        assertEquals(
+            "not_measured" to "not_measured",
+            RedactedSupportBundle.reviewedProviderFields(
+                approvedProvider + "a".repeat(4096), "realtime",
+            ),
+        )
+
+        val approvedCapabilities = SupportDiagnostics.render(state(), now)
+        assertTrue(approvedCapabilities.length < 2048)
+        assertEquals(17, RedactedSupportBundle.reviewedCapabilityFields(approvedCapabilities).size)
+        assertEquals(
+            listOf("support_snapshot=not_measured"),
+            RedactedSupportBundle.reviewedCapabilityFields(
+                approvedCapabilities + "a".repeat(4096),
+            ),
+        )
+    }
+
     @Test fun capabilityProjectionRejectsAsciiSafeSecretsAndInvalidTypedValues() {
         val approved = SupportDiagnostics.render(state(), now)
         val fallback = listOf("support_snapshot=not_measured")
