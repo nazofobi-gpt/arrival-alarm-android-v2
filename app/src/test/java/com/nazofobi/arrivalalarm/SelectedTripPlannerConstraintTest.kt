@@ -1,5 +1,6 @@
 package com.nazofobi.arrivalalarm
 
+import java.util.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -26,43 +27,69 @@ class SelectedTripPlannerConstraintTest {
     private val evidence = SelectedTripCancellationEvidence(1L, emptySet())
 
     @Test
-    fun exactTripAndStopReferencesAreAccepted() {
+    fun acceptsExactIdentityAndOrderedReferences() {
         val result = SelectedTripPlannerConstraint.validate(selection, detail, evidence)
         assertTrue(result is SelectedTripPlannerValidation.Accepted)
     }
 
     @Test
-    fun missingCancellationEvidenceFailsClosed() {
+    fun missingCancellationSnapshotFailsClosed() {
         val result = SelectedTripPlannerConstraint.validate(selection, detail, null)
             as SelectedTripPlannerValidation.Rejected
         assertEquals(SelectedTripPlannerConflictReason.MISSING_CANCELLATION_EVIDENCE, result.reason)
     }
 
     @Test
-    fun cancelledTripIsRejected() {
-        val cancelled = evidence.copy(cancelledTripIds = setOf("trip-a"))
-        val result = SelectedTripPlannerConstraint.validate(selection, detail, cancelled)
+    fun cancellationIsMatchedToTheFullTripInstance() {
+        val cancelled = evidence.copy(cancelledTripInstances = setOf(identity))
+        val rejected = SelectedTripPlannerConstraint.validate(selection, detail, cancelled)
             as SelectedTripPlannerValidation.Rejected
-        assertEquals(SelectedTripPlannerConflictReason.SELECTED_TRIP_CANCELLED, result.reason)
+        assertEquals(SelectedTripPlannerConflictReason.SELECTED_TRIP_CANCELLED, rejected.reason)
+
+        val otherDate = identity.copy(serviceDate = GtfsServiceDate.parse("2026-11-02"))
+        val accepted = SelectedTripPlannerConstraint.validate(
+            selection,
+            detail,
+            evidence.copy(cancelledTripInstances = setOf(otherDate)),
+        )
+        assertTrue(accepted is SelectedTripPlannerValidation.Accepted)
     }
 
     @Test
-    fun loopOccurrencesRetainDistinctSequenceIds() {
+    fun safeAlternativesExcludeSelectedCancelledAndIdentitylessOptions() {
+        val origin = MapPoint(0.01, 0.01, "Origin")
+        val destination = MapPoint(0.04, 0.04, "Destination")
+        fun option(id: String, tripIds: List<String>) = RouteOption(
+            id, origin, destination, "Line", "Direction", "08:00", "08:15", 0, 0, tripIds,
+        )
+        val cancelled = identity.copy(tripId = "trip-b")
+        val alternatives = SelectedTripPlannerConstraint.safeAlternatives(
+            listOf(
+                option("selected", listOf("trip-a")),
+                option("cancelled", listOf("trip-b")),
+                option("other", listOf("trip-c")),
+                option("unknown", emptyList()),
+            ),
+            selection,
+            evidence.copy(cancelledTripInstances = setOf(cancelled)),
+        )
+        assertEquals(listOf("other"), alternatives.map { it.id })
+    }
+
+    @Test
+    fun loopOccurrencesKeepSequenceInRouteStopIdentity() {
         val roles = (TripStopRoleValidator.validate(
             detail,
             TripStopRoles(2, 4, 3),
         ) as TripStopRoleResult.Accepted).roles
-        val option = SelectedTripRouteOptionMapper(
-            java.util.TimeZone.getTimeZone("UTC"),
-            1.2,
-        ).map(
-            MapPoint(0.0, 0.0, "Origin"),
-            MapPoint(0.03, 0.03, "Destination"),
-            selection,
-            detail,
-            roles,
-            "Line 1",
-            1L,
+        val option = SelectedTripRouteOptionMapper(TimeZone.getTimeZone("UTC"), 1.2).map(
+            origin = MapPoint(0.02, 0.02, "Origin"),
+            destination = MapPoint(0.04, 0.04, "Destination"),
+            selection = selection,
+            detail = detail,
+            roles = roles,
+            line = "Line",
+            sourceUpdatedAtEpochSeconds = 1L,
         )!!
         assertEquals(listOf("2:loop", "3:loop", "4:stop-d"), option.stops.map { it.id })
     }

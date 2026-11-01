@@ -3,11 +3,7 @@ package com.nazofobi.arrivalalarm
 import java.util.TimeZone
 
 fun interface SelectedTripAlternativePlanner {
-    fun plan(
-        origin: MapPoint,
-        destination: MapPoint,
-        limit: Int,
-    ): LocalStaticJourneyOutcome
+    fun plan(origin: MapPoint, destination: MapPoint, limit: Int): LocalStaticJourneyOutcome
 }
 
 class SelectedTripPlanner(
@@ -15,13 +11,10 @@ class SelectedTripPlanner(
     private val sourceUpdatedAtEpochSeconds: () -> Long,
     private val routeLabel: (String) -> String,
     private val alternativesPlanner: SelectedTripAlternativePlanner,
-    private val timeZone: TimeZone,
-    private val walkingMetersPerSecond: Double,
+    timeZone: TimeZone,
+    walkingMetersPerSecond: Double,
 ) {
-    private val optionMapper = SelectedTripRouteOptionMapper(
-        agencyTimeZone = timeZone,
-        walkingMetersPerSecond = walkingMetersPerSecond,
-    )
+    private val optionMapper = SelectedTripRouteOptionMapper(timeZone, walkingMetersPerSecond)
 
     fun plan(
         origin: MapPoint,
@@ -31,17 +24,16 @@ class SelectedTripPlanner(
         limit: Int = 3,
     ): SelectedTripPlannerOutcome {
         fun alternatives(): List<RouteOption> {
-            val evidence = cancellationEvidence ?: return emptyList()
-            if (evidence.snapshotUpdatedAtEpochSeconds <= 0L ||
-                evidence.cancelledTripIds.any { it.isBlank() }
-            ) return emptyList()
+            if (!SelectedTripPlannerConstraint.hasValidCancellationEvidence(cancellationEvidence)) {
+                return emptyList()
+            }
             val planned = runCatching {
                 alternativesPlanner.plan(origin, destination, limit)
             }.getOrNull() as? LocalStaticJourneyOutcome.Results ?: return emptyList()
             return SelectedTripPlannerConstraint.safeAlternatives(
                 planned.options,
                 selection,
-                evidence,
+                cancellationEvidence,
             )
         }
 
@@ -69,15 +61,13 @@ class SelectedTripPlanner(
         }
 
         val evidence = cancellationEvidence
-        if (evidence == null || evidence.snapshotUpdatedAtEpochSeconds <= 0L ||
-            evidence.cancelledTripIds.any { it.isBlank() }
-        ) {
+        if (!SelectedTripPlannerConstraint.hasValidCancellationEvidence(evidence)) {
             return conflict(
                 SelectedTripPlannerConflictReason.MISSING_CANCELLATION_EVIDENCE,
                 SelectedTripAlternativeAction.REFRESH_REALTIME_EVIDENCE,
             )
         }
-        if (selection.identity.tripId in evidence.cancelledTripIds) {
+        if (selection.identity in evidence!!.cancelledTripInstances) {
             return conflict(
                 SelectedTripPlannerConflictReason.SELECTED_TRIP_CANCELLED,
                 SelectedTripAlternativeAction.SELECT_ANOTHER_TRIP,
@@ -111,11 +101,7 @@ class SelectedTripPlanner(
             }
         }
 
-        val validation = SelectedTripPlannerConstraint.validate(
-            selection = selection,
-            detail = detail,
-            cancellationEvidence = evidence,
-        )
+        val validation = SelectedTripPlannerConstraint.validate(selection, detail, evidence)
         if (validation is SelectedTripPlannerValidation.Rejected) {
             return conflict(
                 validation.reason,
@@ -125,9 +111,7 @@ class SelectedTripPlanner(
         }
         val roles = (validation as SelectedTripPlannerValidation.Accepted).roles
 
-        val sourceUpdatedAt = runCatching {
-            sourceUpdatedAtEpochSeconds()
-        }.getOrDefault(0L)
+        val sourceUpdatedAt = runCatching { sourceUpdatedAtEpochSeconds() }.getOrDefault(0L)
         if (sourceUpdatedAt <= 0L) {
             return conflict(
                 SelectedTripPlannerConflictReason.MISSING_SCHEDULE_EVIDENCE,
@@ -136,9 +120,8 @@ class SelectedTripPlanner(
             )
         }
 
-        val line = runCatching {
-            routeLabel(selection.identity.routeId)
-        }.getOrNull()?.takeIf { it.isNotBlank() } ?: selection.identity.routeId
+        val line = runCatching { routeLabel(selection.identity.routeId) }
+            .getOrNull()?.takeIf { it.isNotBlank() } ?: selection.identity.routeId
         val option = optionMapper.map(
             origin = origin,
             destination = destination,
