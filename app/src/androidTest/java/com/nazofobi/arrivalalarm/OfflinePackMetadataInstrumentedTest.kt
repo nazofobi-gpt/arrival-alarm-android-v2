@@ -116,6 +116,43 @@ class OfflinePackMetadataInstrumentedTest {
     }
 
     @Test
+    fun untrustedFeedVersionsCannotSpoofOfflinePackMetadata() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val unknown = context.getString(R.string.offline_pack_version_unknown)
+        val nowMillis = 1_783_000_000_000L
+        // Embedded newlines, bidi overrides, line separators and zero-width format
+        // controls are not valid user-visible version identifiers.
+        for (version in listOf(
+            "\"release\ntrusted\"",
+            "\"release\u202Etrusted\"",
+            "\"release\u2028trusted\"",
+            "\"release\u200Btrusted\"",
+        )) {
+            val text = offlinePackMetadataText(
+                context,
+                NationwideDataState.Ready(
+                    stopCount = 10_000,
+                    fetchedAtEpochSeconds = nowMillis / 1_000L - 60L,
+                    sourceVersion = version,
+                ),
+                nowMillis = nowMillis,
+            )
+            assertTrue("Unsafe provider version must be unknown: $text", text.contains(unknown))
+            assertTrue("Unsafe provider version must not be shown: $text", !text.contains("release"))
+        }
+        val safe = offlinePackMetadataText(
+            context,
+            NationwideDataState.Ready(
+                stopCount = 10_000,
+                fetchedAtEpochSeconds = nowMillis / 1_000L - 60L,
+                sourceVersion = "\"etag-g185-safe\"",
+            ),
+            nowMillis = nowMillis,
+        )
+        assertTrue("Safe ETag must be preserved: $safe", safe.contains("etag-g185-safe"))
+    }
+
+    @Test
     fun invalidFetchTimesMustNotBePresentedAsRecentPackUpdates() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val nowMillis = 1_783_000_000_000L
