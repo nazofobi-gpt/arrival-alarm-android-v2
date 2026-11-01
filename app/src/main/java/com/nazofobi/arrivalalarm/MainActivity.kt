@@ -238,6 +238,15 @@ fun ArrivalAlarmApp(
     val tripSearchGate = remember { LatestRequestGate() }
     val selectedTripAlarmGate = remember { LatestRequestGate() }
     var selectedTripAlarmBusy by remember { mutableStateOf(false) }
+    LaunchedEffect(activeScreen) {
+        // A no-longer-visible selected trip must not start tracking later.
+        if (activeScreen != ArrivalAppScreen.SEARCH &&
+            activeScreen != ArrivalAppScreen.DEPARTURES
+        ) {
+            selectedTripAlarmGate.invalidate()
+            selectedTripAlarmBusy = false
+        }
+    }
     var tripSearchTemplate by remember { mutableStateOf<GtfsTripSearchIdentityTemplate?>(null) }
     var tripSearchSelection by remember { mutableStateOf<GtfsTripSearchSelection?>(null) }
     var tripSearchInspection by remember { mutableStateOf<GtfsTripDetailResult?>(null) }
@@ -646,6 +655,7 @@ fun ArrivalAlarmApp(
 
     fun activateConfirmedTripAlarm(expected: GtfsSelectionRestore.Verified) {
         if (selectedTripAlarmBusy) return
+        val initialJourney = controller.state
         val token = selectedTripAlarmGate.begin()
         selectedTripAlarmBusy = true
         coroutineScope.launch {
@@ -660,7 +670,8 @@ fun ArrivalAlarmApp(
                 selectedTripAlarmBusy = false
                 if (fresh !is GtfsSelectionRestore.Verified ||
                     fresh.selection != expected.selection ||
-                    fresh.detail != expected.detail
+                    fresh.detail != expected.detail ||
+                    controller.state != initialJourney
                 ) {
                     val message = context.getString(R.string.gtfs_selected_alarm_changed)
                     tripSearchStatus = message
@@ -1105,6 +1116,8 @@ fun ArrivalAlarmApp(
                                 return@DatePickerDialog
                             }
                             val selection = currentTemplate.forServiceDate(GtfsServiceDate(year, month + 1, day))
+                            selectedTripAlarmGate.invalidate()
+                            selectedTripAlarmBusy = false
                             val token = tripSearchGate.begin()
                             tripSearchSelection = selection
                             tripSearchInspection = null
@@ -1138,6 +1151,8 @@ fun ArrivalAlarmApp(
                         tripSearchStatus = context.getString(R.string.gtfs_trip_search_identity_mismatch)
                         return
                     }
+                    selectedTripAlarmGate.invalidate()
+                    selectedTripAlarmBusy = false
                     val token = tripSearchGate.begin()
                     tripSearchBusy = true
                     coroutineScope.launch {
@@ -1178,6 +1193,8 @@ fun ArrivalAlarmApp(
                             onArmConfirmedTrip = { verified -> activateConfirmedTripAlarm(verified) },
                             alarmBusy = selectedTripAlarmBusy,
                             onDismiss = {
+                                selectedTripAlarmGate.invalidate()
+                                selectedTripAlarmBusy = false
                                 tripSearchGate.invalidate()
                                 tripSearchTemplate = null
                                 tripSearchSelection = null
@@ -1447,6 +1464,8 @@ fun ArrivalAlarmApp(
                     val boardDepartures = if (boardStopId != null) stationDepartures else departures
                     val boardAlerts = if (stationResolved) stationAlerts else emptyList()
                     LaunchedEffect(boardStopId, stationResolved) {
+                        selectedTripAlarmGate.invalidate()
+                        selectedTripAlarmBusy = false
                         gtfsConsentGate.invalidate()
                         gtfsPreview = null
                         gtfsConfirmed = null
@@ -1505,6 +1524,8 @@ fun ArrivalAlarmApp(
                         },
                         onSelectDeparture = if (boardStopId != null && stationResolved) {
                             departure: Departure ->
+                                selectedTripAlarmGate.invalidate()
+                                selectedTripAlarmBusy = false
                                 val token = gtfsConsentGate.begin()
                                 gtfsPreview = null
                                 gtfsConfirmed = null
@@ -1569,6 +1590,8 @@ fun ArrivalAlarmApp(
                                 gtfsConsentStatus = null
                             },
                             onConfirm = { selection ->
+                                selectedTripAlarmGate.invalidate()
+                                selectedTripAlarmBusy = false
                                 val token = gtfsConsentGate.begin()
                                 gtfsConsentBusy = true
                                 coroutineScope.launch {
