@@ -244,6 +244,23 @@ fun TransitExperiencePanel(
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                     )
+                    visibleDepartureDelayMinutes(departure)?.let { minutes ->
+                        val deltaLabel = if (minutes > 0) {
+                            stringResource(R.string.departure_delay_late_minutes, minutes)
+                        } else {
+                            stringResource(R.string.departure_delay_early_minutes, -minutes)
+                        }
+                        Text(
+                            text = stringResource(
+                                R.string.departure_delay_planned_context,
+                                formatDepartureEpoch(departure.scheduledEpochSeconds),
+                                deltaLabel,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.testTag("departure-delay-$index"),
+                        )
+                    }
                     departure.platform?.takeIf { it.isNotBlank() }?.let {
                         Text(
                             text = stringResource(R.string.departure_platform, it),
