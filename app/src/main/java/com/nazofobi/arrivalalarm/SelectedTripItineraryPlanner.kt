@@ -241,9 +241,10 @@ internal class SelectedTripItineraryPlanner(
 
     private fun serviceIsoTime(raw: String, serviceDate: GtfsServiceDate): String? {
         val epochMillis = serviceEpochMillis(raw, serviceDate) ?: return null
-        return SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.ROOT).apply {
+        val offsetWithoutColon = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.ROOT).apply {
             timeZone = agencyTimeZone
         }.format(Date(epochMillis))
+        return offsetWithoutColon.dropLast(2) + ":" + offsetWithoutColon.takeLast(2)
     }
 
     private fun displayClock(epochMillis: Long): String =
