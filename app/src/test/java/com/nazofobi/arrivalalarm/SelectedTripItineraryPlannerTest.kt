@@ -100,6 +100,7 @@ class SelectedTripItineraryPlannerTest {
         )
         assertEquals(1_793_507_777L, planned.routeOption.sourceUpdatedAtEpochSeconds)
         assertTrue(planned.routeOption.stops.first().plannedDeparture!!.contains("T08:01:00"))
+        assertTrue(planned.routeOption.stops.first().plannedDeparture!!.endsWith("+02:00"))
         assertTrue(planned.routeOption.stops.last().plannedArrival!!.contains("T08:20:00"))
     }
 
