@@ -3,6 +3,7 @@ package com.nazofobi.arrivalalarm
 import android.content.Context
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -214,4 +215,53 @@ class TransitExperiencePanelTest {
             editor.commit()
         }
     }
+
+    @Test
+    fun departureBoardShowsSourceBackedDelayBesideScheduledTime() {
+        rule.setContent {
+            MaterialTheme {
+                TransitExperiencePanel(
+                    stopId = "re9-delay-test",
+                    stopName = "Lohne",
+                    lineName = "RE9",
+                    direction = "Bremen",
+                    departures = listOf(
+                        Departure("re9-trip", "RE9", "Bremen", 1_500L,
+                            realtimeEpochSeconds = 1_800L),
+                    ),
+                    alerts = emptyList(),
+                    isOfflineCache = false,
+                    nowEpochSeconds = 1_000L,
+                    providerCapabilities = TransitProviderCapabilities(realtimeDepartures = true),
+                )
+            }
+        }
+        rule.onNodeWithTag("departure-0").assertExists()
+        rule.onNodeWithTag("departure-delay-0").assertTextContains("5", substring = true)
+    }
+
+    @Test
+    fun offlineDepartureBoardHidesUnverifiedDelay() {
+        rule.setContent {
+            MaterialTheme {
+                TransitExperiencePanel(
+                    stopId = "re9-offline-delay-test",
+                    stopName = "Lohne",
+                    lineName = "RE9",
+                    direction = "Bremen",
+                    departures = listOf(
+                        Departure("re9-trip-offline", "RE9", "Bremen", 1_500L,
+                            realtimeEpochSeconds = 1_800L),
+                    ),
+                    alerts = emptyList(),
+                    isOfflineCache = true,
+                    nowEpochSeconds = 1_000L,
+                    providerCapabilities = TransitProviderCapabilities(realtimeDepartures = true),
+                )
+            }
+        }
+        rule.onNodeWithTag("departure-0").assertExists()
+        rule.onNodeWithTag("departure-delay-0").assertDoesNotExist()
+    }
+
 }
