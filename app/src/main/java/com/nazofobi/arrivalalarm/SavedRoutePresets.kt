@@ -24,6 +24,16 @@ internal data class SavedRoutePreset(
     val savedAtEpochMillis: Long,
 )
 
+/**
+ * Decode metadata lets the future persistence adapter preserve an unreadable/corrupt snapshot
+ * instead of treating a partial decode as permission to overwrite it.
+ */
+internal data class SavedRoutePresetDecodeResult(
+    val presets: List<SavedRoutePreset>,
+    val isSourceSafeToReplace: Boolean,
+    val issues: Set<String>,
+)
+
 /** Versioned, bounded, fail-closed codec for device-local saved route presets. */
 internal object SavedRoutePresetsCodec {
     private const val HEADER = "SAVED_ROUTE_PRESETS_V1"
@@ -34,17 +44,24 @@ internal object SavedRoutePresetsCodec {
     private const val MAX_ID_LENGTH = 64
     private const val MAX_NAME_LENGTH = 80
     private const val MAX_LOCATION_LABEL_LENGTH = 120
-    const val MAX_PRESETS = 10
+    const val MAX_PRESETS = 12
 
     private val idPattern = Regex("[A-Za-z0-9._-]{1,$MAX_ID_LENGTH}")
 
-    fun encode(presets: List<SavedRoutePreset>): String {
-        val normalized = normalize(presets)
-        if (normalized.isEmpty()) return ""
+    /**
+     * Returns null for invalid, duplicate or over-cap input. Callers must not replace an
+     * existing preference value when encoding is rejected. An empty list intentionally clears.
+     */
+    fun encode(presets: List<SavedRoutePreset>): String? {
+        if (presets.isEmpty()) return ""
+        if (presets.size > MAX_PRESETS) return null
+
+        val seenIds = HashSet<String>()
+        if (presets.any { !isValid(it) || !seenIds.add(it.id) }) return null
 
         val encoded = buildString {
             append(HEADER)
-            normalized.forEach { preset ->
+            presets.forEach { preset ->
                 append('\n')
                 append(
                     listOf(
@@ -65,22 +82,53 @@ internal object SavedRoutePresetsCodec {
                 )
             }
         }
-        return encoded.takeIf { it.length <= MAX_ENCODED_CHARS }.orEmpty()
+        return encoded.takeIf { it.length <= MAX_ENCODED_CHARS }
     }
 
-    /** Invalid rows are skipped independently; a corrupt preset never erases valid siblings. */
-    fun decode(encoded: String?): List<SavedRoutePreset> {
-        if (encoded.isNullOrBlank() || encoded.length > MAX_ENCODED_CHARS) return emptyList()
+    /** Convenience view for consumers that only need valid decoded entries. */
+    fun decode(encoded: String?): List<SavedRoutePreset> = decodeWithStatus(encoded).presets
+
+    /** Invalid rows are skipped independently, but make the source unsafe to overwrite. */
+    fun decodeWithStatus(encoded: String?): SavedRoutePresetDecodeResult {
+        if (encoded.isNullOrBlank()) {
+            return SavedRoutePresetDecodeResult(emptyList(), isSourceSafeToReplace = true, issues = emptySet())
+        }
+        if (encoded.length > MAX_ENCODED_CHARS) {
+            return SavedRoutePresetDecodeResult(
+                emptyList(),
+                isSourceSafeToReplace = false,
+                issues = setOf("payload-too-large"),
+            )
+        }
+
         val lines = encoded.split('\n')
-        if (lines.firstOrNull()?.trimEnd('\r') != HEADER) return emptyList()
+        if (lines.firstOrNull()?.trimEnd('\r') != HEADER) {
+            return SavedRoutePresetDecodeResult(
+                emptyList(),
+                isSourceSafeToReplace = false,
+                issues = setOf("unsupported-version"),
+            )
+        }
 
         val result = ArrayList<SavedRoutePreset>(MAX_PRESETS)
         val seenIds = HashSet<String>()
-        for (rawLine in lines.drop(1).take(MAX_SCAN_RECORDS)) {
+        val issues = linkedSetOf<String>()
+        var scannedRecords = 0
+
+        for (rawLine in lines.drop(1)) {
             val line = rawLine.trimEnd('\r')
             if (line.isBlank()) continue
+            scannedRecords += 1
+            if (scannedRecords > MAX_SCAN_RECORDS) {
+                issues += "too-many-records"
+                break
+            }
+
             val fields = line.split(FIELD_SEPARATOR)
-            if (fields.size != FIELD_COUNT) continue
+            if (fields.size != FIELD_COUNT) {
+                issues += "corrupt-record"
+                continue
+            }
 
             val preset = runCatching {
                 SavedRoutePreset(
@@ -98,22 +146,28 @@ internal object SavedRoutePresetsCodec {
                     atMostOneTransfer = decodeBoolean(fields[11]),
                     savedAtEpochMillis = fields[12].toLong(),
                 )
-            }.getOrNull() ?: continue
+            }.getOrNull()
 
-            if (!isValid(preset) || !seenIds.add(preset.id)) continue
+            if (preset == null || !isValid(preset)) {
+                issues += "corrupt-record"
+                continue
+            }
+            if (!seenIds.add(preset.id)) {
+                issues += "duplicate-id"
+                continue
+            }
+            if (result.size == MAX_PRESETS) {
+                issues += "too-many-presets"
+                continue
+            }
             result += preset
-            if (result.size == MAX_PRESETS) break
         }
-        return result
-    }
 
-    private fun normalize(presets: List<SavedRoutePreset>): List<SavedRoutePreset> {
-        val seenIds = HashSet<String>()
-        return presets.asSequence()
-            .filter(::isValid)
-            .filter { seenIds.add(it.id) }
-            .take(MAX_PRESETS)
-            .toList()
+        return SavedRoutePresetDecodeResult(
+            presets = result,
+            isSourceSafeToReplace = issues.isEmpty(),
+            issues = issues,
+        )
     }
 
     private fun isValid(preset: SavedRoutePreset): Boolean =
