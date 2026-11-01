@@ -143,6 +143,34 @@ class SelectedTripItineraryPlannerTest {
     }
 
     @Test
+    fun mixedFreshRealtimeOnlyExposesTheSelectedTripsCancellationEvidence() {
+        val realtime = RouteRealtimeInfo(
+            state = RouteRealtimeState.FRESH_MATCHED,
+            sourceLabel = "regional-provider",
+            matchedTripIds = listOf("another-trip", identity.tripId),
+            cancelledTripIds = listOf("another-trip"),
+        )
+
+        val planned = planner().plan(selection, realtime) as SelectedTripPlanOutcome.Planned
+        assertEquals(listOf(identity.tripId), planned.routeOption.tripIds)
+        assertEquals(listOf(identity.tripId), planned.routeOption.realtime?.matchedTripIds)
+        assertEquals(emptyList<String>(), planned.routeOption.realtime?.cancelledTripIds)
+        assertEquals("regional-provider", planned.routeOption.realtime?.sourceLabel)
+    }
+
+    @Test
+    fun selectedCancellationStillBlocksWhenProviderSnapshotMatchesSeveralTrips() {
+        val realtime = RouteRealtimeInfo(
+            state = RouteRealtimeState.FRESH_MATCHED,
+            matchedTripIds = listOf("another-trip", identity.tripId),
+            cancelledTripIds = listOf("another-trip", identity.tripId),
+        )
+
+        val outcome = planner().plan(selection, realtime) as SelectedTripPlanOutcome.Conflict
+        assertEquals(SelectedTripPlanFailure.TRIP_CANCELLED, outcome.reason)
+    }
+
+    @Test
     fun staleCancellationCannotReplaceStaticSelectedTrip() {
         val realtime = RouteRealtimeInfo(
             state = RouteRealtimeState.STALE,
