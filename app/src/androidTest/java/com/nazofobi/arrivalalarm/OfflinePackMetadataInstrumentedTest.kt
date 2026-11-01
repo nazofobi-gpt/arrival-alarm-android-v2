@@ -153,6 +153,36 @@ class OfflinePackMetadataInstrumentedTest {
     }
 
     @Test
+    fun malformedUnicodeVersionsFailClosedAndTruncationPreservesCodePoints() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val unknown = context.getString(R.string.offline_pack_version_unknown)
+        val nowMillis = 1_783_000_000_000L
+
+        fun metadata(version: String) = offlinePackMetadataText(
+            context,
+            NationwideDataState.Ready(
+                stopCount = 10_000,
+                fetchedAtEpochSeconds = nowMillis / 1_000L - 60L,
+                sourceVersion = version,
+            ),
+            nowMillis = nowMillis,
+        )
+
+        for (invalidVersion in listOf("etag-\uD800", "etag-\uDC00")) {
+            val rendered = metadata(invalidVersion)
+            assertTrue("Incomplete UTF-16 must be unknown: $rendered", rendered.contains(unknown))
+            assertTrue("Untrusted label must not appear: $rendered", !rendered.contains("etag-"))
+        }
+
+        // 26 BMP characters + a supplementary bus emoji + suffix exceed the
+        // 28-code-unit limit; the ellipsis must not split the surrogate pair.
+        val truncated = metadata("v".repeat(26) + "🚌" + "x")
+        assertTrue("Truncation must end before the pair: $truncated", truncated.contains("v".repeat(26) + "…"))
+        assertTrue("No replacement character: $truncated", !truncated.contains("\uFFFD"))
+        assertTrue("No dangling surrogate: $truncated", !truncated.contains("\uD83D"))
+    }
+
+    @Test
     fun invalidFetchTimesMustNotBePresentedAsRecentPackUpdates() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val nowMillis = 1_783_000_000_000L
