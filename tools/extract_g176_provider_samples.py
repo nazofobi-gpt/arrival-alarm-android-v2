@@ -187,19 +187,26 @@ def parse_trip_update(raw, full=False):
     protocol_valid_assigned_count = 0
     protocol_valid_assigned_sequences = []
     protocol_valid_assigned_stops = []
+    stop_id_reassignment_candidate_count = 0
+    stop_id_reassignment_candidates = []
+    provider_stop_sequence_counts = {}
     for field, wire, value in iter_fields(raw):
         if wire == 2 and field == 1:
             trip = parse_trip_descriptor(value)
         elif wire == 2 and field == 2:
             stop_count += 1
             stop = parse_stop_update(value)
+            stop_sequence = stop.get("stop_sequence")
+            if stop_sequence is not None:
+                provider_stop_sequence_counts[stop_sequence] = (
+                    provider_stop_sequence_counts.get(stop_sequence, 0) + 1
+                )
             if (stop.get("arrival") or {}).get("delay") is not None or (stop.get("departure") or {}).get("delay") is not None:
                 delay_count += 1
             assigned_stop_id = (stop.get("properties") or {}).get("assigned_stop_id")
+            stop_id = stop.get("stop_id")
             if assigned_stop_id:
                 assigned_count += 1
-                stop_sequence = stop.get("stop_sequence")
-                stop_id = stop.get("stop_id")
                 if stop_sequence is not None and (not stop_id or stop_id == assigned_stop_id):
                     protocol_valid_assigned_count += 1
                     protocol_valid_assigned_sequences.append(stop_sequence)
@@ -208,6 +215,12 @@ def parse_trip_update(raw, full=False):
                         "stop_id": stop_id,
                         "assigned_stop_id": assigned_stop_id,
                     })
+            elif stop_sequence is not None and stop_id:
+                stop_id_reassignment_candidate_count += 1
+                stop_id_reassignment_candidates.append({
+                    "stop_sequence": stop_sequence,
+                    "stop_id": stop_id,
+                })
             if full:
                 stops.append(stop)
         elif wire == 0 and field == 4:
@@ -224,7 +237,12 @@ def parse_trip_update(raw, full=False):
         "protocol_valid_assigned_count": protocol_valid_assigned_count,
         "protocol_valid_assigned_sequences": protocol_valid_assigned_sequences,
         "protocol_valid_assigned_stops": protocol_valid_assigned_stops,
+        "stop_id_reassignment_candidate_count": stop_id_reassignment_candidate_count,
+        "stop_id_reassignment_candidates": stop_id_reassignment_candidates,
+        "provider_stop_sequence_counts": provider_stop_sequence_counts,
     }
+
+
 
 
 def parse_entity_summary(raw):
@@ -257,8 +275,13 @@ def parse_entity_summary(raw):
         "protocol_valid_assigned_count": update["protocol_valid_assigned_count"],
         "protocol_valid_assigned_sequences": update["protocol_valid_assigned_sequences"],
         "protocol_valid_assigned_stops": update["protocol_valid_assigned_stops"],
+        "stop_id_reassignment_candidate_count": update["stop_id_reassignment_candidate_count"],
+        "stop_id_reassignment_candidates": update["stop_id_reassignment_candidates"],
+        "provider_stop_sequence_counts": update["provider_stop_sequence_counts"],
         "has_alert": has_alert,
     }
+
+
 
 
 def parse_entity_full(raw):
@@ -343,18 +366,88 @@ def haversine_km(lat1, lon1, lat2, lon2):
     return 2 * radius * math.asin(math.sqrt(h))
 
 
-def select_static_matchable_assigned_stops(summary, static_sequence_counts):
-    """Return only unambiguous protocol-valid assignments present in static stop_times."""
+def select_static_matchable_assigned_stops(
+    summary,
+    static_sequence_rows,
+    static_stop_ids,
+    parent_station_by_stop,
+):
+    """Return only unique, same-station assigned_stop_id reassignments."""
     assignments = summary.get("protocol_valid_assigned_stops", [])
-    provider_sequence_counts = Counter(
-        assignment["stop_sequence"] for assignment in assignments
-    )
-    return [
-        assignment
-        for assignment in assignments
-        if provider_sequence_counts[assignment["stop_sequence"]] == 1
-        and static_sequence_counts.get(assignment["stop_sequence"]) == 1
-    ]
+    provider_sequence_counts = summary.get("provider_stop_sequence_counts", {})
+    matchable = []
+    for assignment in assignments:
+        sequence = assignment.get("stop_sequence")
+        if provider_sequence_counts.get(sequence, 0) != 1:
+            continue
+        scheduled_ids = static_sequence_rows.get(sequence, [])
+        if len(scheduled_ids) != 1:
+            continue
+        scheduled_stop_id = scheduled_ids[0]
+        assigned_stop_id = assignment.get("assigned_stop_id") or ""
+        if not scheduled_stop_id or not assigned_stop_id or assigned_stop_id == scheduled_stop_id:
+            continue
+        if scheduled_stop_id not in static_stop_ids or assigned_stop_id not in static_stop_ids:
+            continue
+        scheduled_parent = parent_station_by_stop.get(scheduled_stop_id) or ""
+        assigned_parent = parent_station_by_stop.get(assigned_stop_id) or ""
+        if not scheduled_parent or scheduled_parent != assigned_parent:
+            continue
+        matchable.append({
+            **assignment,
+            "scheduled_stop_id": scheduled_stop_id,
+            "parent_station_id": scheduled_parent,
+        })
+    return matchable
+
+
+def select_protocol_valid_stop_id_reassignments(summary, static_sequence_rows):
+    """Resolve stop_id + stop_sequence to one changed static stop_time row."""
+    candidates = summary.get("stop_id_reassignment_candidates", [])
+    provider_sequence_counts = summary.get("provider_stop_sequence_counts", {})
+    protocol_valid = []
+    for candidate in candidates:
+        sequence = candidate.get("stop_sequence")
+        realtime_stop_id = candidate.get("stop_id") or ""
+        if provider_sequence_counts.get(sequence, 0) != 1:
+            continue
+        scheduled_ids = static_sequence_rows.get(sequence, [])
+        if len(scheduled_ids) != 1:
+            continue
+        scheduled_stop_id = scheduled_ids[0]
+        if not scheduled_stop_id or not realtime_stop_id or realtime_stop_id == scheduled_stop_id:
+            continue
+        protocol_valid.append({
+            **candidate,
+            "scheduled_stop_id": scheduled_stop_id,
+            "realtime_stop_id": realtime_stop_id,
+        })
+    return protocol_valid
+
+
+def select_static_matchable_stop_id_reassignments(
+    protocol_valid,
+    static_stop_ids,
+    parent_station_by_stop,
+):
+    """Require both stop IDs in stops.txt and the same non-empty parent_station."""
+    matchable = []
+    for reassignment in protocol_valid:
+        scheduled_stop_id = reassignment.get("scheduled_stop_id") or ""
+        realtime_stop_id = reassignment.get("realtime_stop_id") or ""
+        if scheduled_stop_id not in static_stop_ids or realtime_stop_id not in static_stop_ids:
+            continue
+        scheduled_parent = parent_station_by_stop.get(scheduled_stop_id) or ""
+        realtime_parent = parent_station_by_stop.get(realtime_stop_id) or ""
+        if not scheduled_parent or scheduled_parent != realtime_parent:
+            continue
+        matchable.append({
+            **reassignment,
+            "parent_station_id": scheduled_parent,
+        })
+    return matchable
+
+
 
 
 def choose_sample(candidates, summaries):
@@ -363,13 +456,17 @@ def choose_sample(candidates, summaries):
         summary = summaries.get(trip_id)
         if not summary:
             continue
+        protocol_valid_platform = (
+            summary.get("protocol_valid_assigned_count", 0)
+            + summary.get("protocol_valid_stop_id_reassignment_count", 0)
+        )
+        static_matchable = summary.get("static_matchable_platform_evidence_count", 0)
         score = (
-            min(summary["protocol_valid_assigned_count"], 1) * 30
+            min(protocol_valid_platform, 1) * 30
             + min(summary["delay_count"], 1) * 20
             + (10 if summary.get("schedule_relationship") not in (None, 0) else 0)
             + min(summary["stop_count"], 20)
         )
-        static_matchable = summary.get("static_matchable_assigned_count", 0)
         ranked.append((
             min(static_matchable, 1),
             static_matchable,
@@ -386,12 +483,16 @@ def choose_sample(candidates, summaries):
 def choose_platform_evidence(summaries):
     ranked = []
     for trip_id, summary in summaries.items():
-        static_matchable = summary.get("static_matchable_assigned_count", 0)
+        static_matchable = summary.get("static_matchable_platform_evidence_count", 0)
         if static_matchable <= 0:
             continue
+        protocol_valid_platform = (
+            summary.get("protocol_valid_assigned_count", 0)
+            + summary.get("protocol_valid_stop_id_reassignment_count", 0)
+        )
         ranked.append((
             static_matchable,
-            summary["protocol_valid_assigned_count"],
+            protocol_valid_platform,
             min(summary["delay_count"], 1),
             summary["stop_count"],
             trip_id,
@@ -400,6 +501,8 @@ def choose_platform_evidence(summaries):
         return None
     ranked.sort(reverse=True)
     return ranked[0][4]
+
+
 
 
 def main():
@@ -440,9 +543,20 @@ def main():
         for trip_id, summary in summaries.items()
         if summary["protocol_valid_assigned_sequences"]
     }
-    static_assigned_sequence_counts = {
-        trip_id: {} for trip_id in assigned_sequences_by_trip
+    stop_id_sequences_by_trip = {
+        trip_id: {
+            candidate["stop_sequence"]
+            for candidate in summary["stop_id_reassignment_candidates"]
+        }
+        for trip_id, summary in summaries.items()
+        if summary["stop_id_reassignment_candidates"]
     }
+    candidate_sequences_by_trip = {
+        trip_id: assigned_sequences_by_trip.get(trip_id, set())
+        | stop_id_sequences_by_trip.get(trip_id, set())
+        for trip_id in live_trip_ids
+    }
+    static_sequence_rows_by_trip = {}
 
     with zipfile.ZipFile(args.static) as zf:
         names = set(zf.namelist())
@@ -452,7 +566,13 @@ def main():
             raise SystemExit(f"static GTFS missing {sorted(missing)}")
 
         region_stop_ids = {name: set() for name in REGIONS}
+        static_stop_ids = set()
+        parent_station_by_stop = {}
         for row in csv_rows(zf, "stops.txt"):
+            static_stop_id = row.get("stop_id") or ""
+            if static_stop_id:
+                static_stop_ids.add(static_stop_id)
+                parent_station_by_stop[static_stop_id] = row.get("parent_station") or ""
             try:
                 lat = float(row.get("stop_lat") or "")
                 lon = float(row.get("stop_lon") or "")
@@ -472,26 +592,49 @@ def main():
             trip_id = row.get("trip_id") or ""
             if trip_id not in live_trip_ids:
                 continue
-            assigned_sequences = assigned_sequences_by_trip.get(trip_id)
-            if assigned_sequences:
-                try:
-                    stop_sequence = int(row.get("stop_sequence") or "")
-                except ValueError:
-                    stop_sequence = None
-                if stop_sequence in assigned_sequences:
-                    counts = static_assigned_sequence_counts[trip_id]
-                    counts[stop_sequence] = counts.get(stop_sequence, 0) + 1
             stop_id = row.get("stop_id") or ""
+            try:
+                stop_sequence = int(row.get("stop_sequence") or "")
+            except ValueError:
+                stop_sequence = None
+            if stop_sequence is not None and stop_sequence in candidate_sequences_by_trip.get(trip_id, set()):
+                static_sequence_rows_by_trip.setdefault(trip_id, {}).setdefault(stop_sequence, []).append(stop_id)
             for region_name in REGIONS:
                 if stop_id in region_stop_ids[region_name]:
                     candidate_ids[region_name].add(trip_id)
                     candidate_match_stop[region_name].setdefault(trip_id, stop_id)
 
         for trip_id, summary in summaries.items():
-            sequence_counts = static_assigned_sequence_counts.get(trip_id, {})
-            matchable = select_static_matchable_assigned_stops(summary, sequence_counts)
-            summary["static_matchable_assigned_stops"] = matchable
-            summary["static_matchable_assigned_count"] = len(matchable)
+            static_sequence_rows = static_sequence_rows_by_trip.get(trip_id, {})
+            protocol_valid_stop_id = select_protocol_valid_stop_id_reassignments(
+                summary,
+                static_sequence_rows,
+            )
+            matchable_assigned = select_static_matchable_assigned_stops(
+                summary,
+                static_sequence_rows,
+                static_stop_ids,
+                parent_station_by_stop,
+            )
+            matchable_stop_id = select_static_matchable_stop_id_reassignments(
+                protocol_valid_stop_id,
+                static_stop_ids,
+                parent_station_by_stop,
+            )
+            summary["protocol_valid_stop_id_reassignments"] = protocol_valid_stop_id
+            summary["protocol_valid_stop_id_reassignment_count"] = len(protocol_valid_stop_id)
+            summary["static_matchable_assigned_stops"] = matchable_assigned
+            summary["static_matchable_assigned_count"] = len(matchable_assigned)
+            summary["static_matchable_stop_id_reassignments"] = matchable_stop_id
+            summary["static_matchable_stop_id_reassignment_count"] = len(matchable_stop_id)
+            summary["protocol_valid_platform_evidence_count"] = (
+                summary["protocol_valid_assigned_count"]
+                + summary["protocol_valid_stop_id_reassignment_count"]
+            )
+            summary["static_matchable_platform_evidence_count"] = (
+                summary["static_matchable_assigned_count"]
+                + summary["static_matchable_stop_id_reassignment_count"]
+            )
 
         chosen = {name: choose_sample(candidate_ids[name], summaries) for name in REGIONS}
         platform_trip_id = choose_platform_evidence(summaries)
@@ -536,7 +679,7 @@ def main():
                     agency_rows[agency_id] = dict(row)
 
         selected_stop_times = {trip_id: [] for trip_id in chosen_ids}
-        selected_stop_ids = set()
+        selected_stop_ids_by_trip = {trip_id: set() for trip_id in chosen_ids}
         for row in csv_rows(zf, "stop_times.txt"):
             trip_id = row.get("trip_id") or ""
             if trip_id in selected_stop_times:
@@ -544,14 +687,19 @@ def main():
                 selected_stop_times[trip_id].append(copy)
                 stop_id = row.get("stop_id") or ""
                 if stop_id:
-                    selected_stop_ids.add(stop_id)
+                    selected_stop_ids_by_trip[trip_id].add(stop_id)
 
         for trip_id in chosen_ids:
             for assignment in summaries[trip_id].get("static_matchable_assigned_stops", []):
                 assigned_stop_id = assignment.get("assigned_stop_id") or ""
                 if assigned_stop_id:
-                    selected_stop_ids.add(assigned_stop_id)
+                    selected_stop_ids_by_trip[trip_id].add(assigned_stop_id)
+            for reassignment in summaries[trip_id].get("static_matchable_stop_id_reassignments", []):
+                realtime_stop_id = reassignment.get("realtime_stop_id") or ""
+                if realtime_stop_id:
+                    selected_stop_ids_by_trip[trip_id].add(realtime_stop_id)
 
+        selected_stop_ids = set().union(*selected_stop_ids_by_trip.values()) if selected_stop_ids_by_trip else set()
         selected_stop_rows = {}
         for row in csv_rows(zf, "stops.txt"):
             stop_id = row.get("stop_id") or ""
@@ -596,8 +744,7 @@ def main():
             "staticStopTimes": selected_stop_times[trip_id],
             "staticStops": {
                 stop_id: selected_stop_rows.get(stop_id)
-                for stop_id in {row.get("stop_id") for row in selected_stop_times[trip_id]}
-                if stop_id
+                for stop_id in selected_stop_ids_by_trip[trip_id]
             },
         }
         samples[region_name] = sample
@@ -617,17 +764,15 @@ def main():
             "staticStopTimes": selected_stop_times[platform_trip_id],
             "staticStops": {
                 stop_id: selected_stop_rows.get(stop_id)
-                for stop_id in {row.get("stop_id") for row in selected_stop_times[platform_trip_id]}
-                if stop_id
+                for stop_id in selected_stop_ids_by_trip[platform_trip_id]
             },
         }
 
     chosen_routes = {sample["staticTrip"].get("route_id") for sample in samples.values()}
     chosen_stops = {
-        row.get("stop_id")
-        for sample in samples.values()
-        for row in sample["staticStopTimes"]
-        if row.get("stop_id")
+        stop_id
+        for trip_id in chosen.values()
+        for stop_id in selected_stop_ids_by_trip[trip_id]
     }
     chosen_trip_ids = set(chosen.values())
 
@@ -679,6 +824,22 @@ def main():
             1 for summary in summaries.values()
             if summary["static_matchable_assigned_count"] > 0
         ),
+        "globalProtocolValidStopIdReassignmentTripCount": sum(
+            1 for summary in summaries.values()
+            if summary["protocol_valid_stop_id_reassignment_count"] > 0
+        ),
+        "globalStaticMatchableStopIdReassignmentTripCount": sum(
+            1 for summary in summaries.values()
+            if summary["static_matchable_stop_id_reassignment_count"] > 0
+        ),
+        "globalProtocolValidPlatformTripCount": sum(
+            1 for summary in summaries.values()
+            if summary["protocol_valid_platform_evidence_count"] > 0
+        ),
+        "globalStaticMatchablePlatformTripCount": sum(
+            1 for summary in summaries.values()
+            if summary["static_matchable_platform_evidence_count"] > 0
+        ),
     }
 
     output = {
@@ -708,6 +869,8 @@ def main():
         "notes": [
             "Samples are selected from the exact provider GTFS-RT payload by matching live trip_id to the matching Germany static GTFS.",
             "Regional identity is evidenced by a static stop within the recorded geographic anchor radius.",
+            "Platform evidence accepts either assigned_stop_id plus stop_sequence or stop_id plus stop_sequence when both static stops share the same non-empty parent_station.",
+            "Assigned-stop and stop_id reassignment counters remain separate; duplicate provider/static sequences and cross-station IDs fail closed.",
             "No provider or agency completeness is inferred from this sample.",
         ],
     }
@@ -729,6 +892,9 @@ def main():
                 "assignedCount": sample["realtimeSummary"]["assigned_count"],
                 "protocolValidAssignedCount": sample["realtimeSummary"]["protocol_valid_assigned_count"],
                 "staticMatchableAssignedCount": sample["realtimeSummary"]["static_matchable_assigned_count"],
+                "protocolValidStopIdReassignmentCount": sample["realtimeSummary"]["protocol_valid_stop_id_reassignment_count"],
+                "staticMatchableStopIdReassignmentCount": sample["realtimeSummary"]["static_matchable_stop_id_reassignment_count"],
+                "staticMatchablePlatformEvidenceCount": sample["realtimeSummary"]["static_matchable_platform_evidence_count"],
                 "relationship": sample["realtimeSummary"]["schedule_relationship"],
             }
             for name, sample in samples.items()
@@ -739,6 +905,9 @@ def main():
             "assignedCount": platform_evidence["realtimeSummary"]["assigned_count"],
             "protocolValidAssignedCount": platform_evidence["realtimeSummary"]["protocol_valid_assigned_count"],
             "staticMatchableAssignedCount": platform_evidence["realtimeSummary"]["static_matchable_assigned_count"],
+            "protocolValidStopIdReassignmentCount": platform_evidence["realtimeSummary"]["protocol_valid_stop_id_reassignment_count"],
+            "staticMatchableStopIdReassignmentCount": platform_evidence["realtimeSummary"]["static_matchable_stop_id_reassignment_count"],
+            "staticMatchablePlatformEvidenceCount": platform_evidence["realtimeSummary"]["static_matchable_platform_evidence_count"],
         },
         "globalProtocolValidAssignedTripCount": sum(
             1 for summary in summaries.values()
@@ -748,6 +917,10 @@ def main():
             1 for summary in summaries.values()
             if summary["static_matchable_assigned_count"] > 0
         ),
+        "globalProtocolValidStopIdReassignmentTripCount": platform_evidence_counts["globalProtocolValidStopIdReassignmentTripCount"],
+        "globalStaticMatchableStopIdReassignmentTripCount": platform_evidence_counts["globalStaticMatchableStopIdReassignmentTripCount"],
+        "globalProtocolValidPlatformTripCount": platform_evidence_counts["globalProtocolValidPlatformTripCount"],
+        "globalStaticMatchablePlatformTripCount": platform_evidence_counts["globalStaticMatchablePlatformTripCount"],
         "associatedAlerts": len(associated_alerts),
     }, ensure_ascii=False))
 

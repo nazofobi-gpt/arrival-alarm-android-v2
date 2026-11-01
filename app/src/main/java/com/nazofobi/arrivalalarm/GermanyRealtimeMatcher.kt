@@ -236,8 +236,12 @@ class GermanyRealtimeMatcher(
         ) ?: return null
 
         val staticStopTimes = data.stopTimesForTrip(staticTrip.id, maxStopTimesPerTrip)
+        val providerStopSequenceCounts = update.stops
+            .mapNotNull { it.stopSequence }
+            .groupingBy { it }
+            .eachCount()
         val matchedStops = update.stops.mapNotNull { stopUpdate ->
-            matchStopUpdate(stopUpdate, staticStopTimes)
+            matchStopUpdate(stopUpdate, staticStopTimes, providerStopSequenceCounts)
         }
 
         return GermanyRealtimeTripOverlay(
@@ -331,6 +335,7 @@ class GermanyRealtimeMatcher(
     private fun matchStopUpdate(
         update: GermanyRealtimeStopUpdate,
         staticStopTimes: List<GtfsScheduleStopTime>,
+        providerStopSequenceCounts: Map<Int, Int>,
     ): GermanyRealtimeMatchedStopUpdate? {
         if (update.validity != GermanyRealtimeStopUpdateValidity.VALID) return null
         val scheduled = if (update.stopSequence != null) {
@@ -340,15 +345,29 @@ class GermanyRealtimeMatcher(
             staticStopTimes.filter { it.stopId == stopId }.singleOrNull()
         } ?: return null
 
-        // stop_sequence identifies the scheduled stop, but an explicit stop_id
-        // must agree unless this is a declared reassignment. Never project
-        // another stop's cancellation, delay or platform onto this one.
-        if (update.stopId != null &&
-            update.stopId != scheduled.stopId &&
-            update.assignedStopId == null
+        // If both experimental assigned_stop_id and stop_id are present, GTFS-RT
+        // requires them to agree. A changed realtime stop ID is accepted only as a
+        // sequence-identified platform reassignment within the same static station.
+        if (update.assignedStopId != null &&
+            update.stopId != null &&
+            update.assignedStopId != update.stopId
         ) return null
 
         val realtimeStopId = update.assignedStopId ?: update.stopId
+        if (realtimeStopId != null && realtimeStopId != scheduled.stopId) {
+            val sequence = update.stopSequence ?: return null
+            if (providerStopSequenceCounts[sequence] != 1) return null
+
+            val scheduledParentStationId = data.stop(scheduled.stopId)
+                ?.parentStationId
+                ?.takeIf { it.isNotBlank() }
+                ?: return null
+            val realtimeParentStationId = data.stop(realtimeStopId)
+                ?.parentStationId
+                ?.takeIf { it.isNotBlank() }
+                ?: return null
+            if (scheduledParentStationId != realtimeParentStationId) return null
+        }
         val platformCode = realtimeStopId?.let(data::stop)?.platformCode
             ?: data.stop(scheduled.stopId)?.platformCode
 
