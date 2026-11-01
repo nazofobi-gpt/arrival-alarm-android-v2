@@ -62,6 +62,9 @@ fun RouteJourneyPanel(
     var atMostOneTransfer by rememberSaveable {
         mutableStateOf(preferences.loadAtMostOneTransfer())
     }
+    var maxWalking15Minutes by rememberSaveable {
+        mutableStateOf(preferences.loadMaxWalking15Minutes())
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -142,6 +145,7 @@ fun RouteJourneyPanel(
                     fewerTransfersFirst = fewerTransfersFirst,
                     shorterWalkingFirst = shorterWalkingFirst,
                     maxTransfers = if (atMostOneTransfer) 1 else null,
+                    maxWalkingMinutes = if (maxWalking15Minutes) 15 else null,
                 ).apply(routeOptions)
                 FilterChip(
                     selected = directOnly,
@@ -189,6 +193,18 @@ fun RouteJourneyPanel(
                         .testTag("route-at-most-one-transfer-filter"),
                 )
 
+                FilterChip(
+                    selected = maxWalking15Minutes,
+                    onClick = {
+                        maxWalking15Minutes = !maxWalking15Minutes
+                        preferences.saveMaxWalking15Minutes(maxWalking15Minutes)
+                    },
+                    label = { Text(stringResource(R.string.route_max_walking_15_filter)) },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("route-max-walking-15-filter"),
+                )
+
                 visibleOptions.take(6).forEachIndexed { index, option ->
                     RouteOptionCard(
                         option = option,
@@ -207,6 +223,8 @@ fun RouteJourneyPanel(
                                 stringResource(R.string.route_direct_only_empty)
                             atMostOneTransfer && routeOptions.isNotEmpty() ->
                                 stringResource(R.string.route_at_most_one_transfer_empty)
+                            maxWalking15Minutes && routeOptions.isNotEmpty() ->
+                                stringResource(R.string.route_max_walking_15_empty)
                             else -> routeStatus ?: stringResource(R.string.route_not_found)
                         },
                         style = MaterialTheme.typography.bodyMedium,

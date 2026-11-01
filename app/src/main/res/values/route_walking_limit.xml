@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="route_max_walking_15_filter">En fazla 15 dk yürüme</string>
+    <string name="route_max_walking_15_empty">15 dakikadan az yürüyüşlü rota bulunamadı. Alternatifler için filtreyi kapatın.</string>
+</resources>

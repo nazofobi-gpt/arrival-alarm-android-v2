@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="route_max_walking_15_filter">Maximal 15 Min. Fußweg</string>
+    <string name="route_max_walking_15_empty">Keine Verbindung mit höchstens 15 Minuten Fußweg. Filter für Alternativen ausschalten.</string>
+</resources>
