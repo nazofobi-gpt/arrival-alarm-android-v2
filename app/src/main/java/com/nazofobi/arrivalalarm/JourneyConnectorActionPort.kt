@@ -199,6 +199,11 @@ class JourneyConnectorActionPort(
     }
 
     @Synchronized
+    fun resetArrivalConfirmation() {
+        controller.resetArrivalConfirmation()
+    }
+
+    @Synchronized
     fun updateTripProgress(
         previousStop: ConnectorStopState?,
         currentStop: ConnectorStopState?,
