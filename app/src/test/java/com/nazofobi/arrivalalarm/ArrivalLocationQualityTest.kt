@@ -57,19 +57,37 @@ class ArrivalLocationQualityTest {
         assertTrue(ArrivalLocationQuality.hasValidCoordinates(90.0, 180.0))
     }
 
-    @Test fun lowConfidenceLocationUpdatesDistanceWithoutFiringAlarm() {
+    @Test fun lowConfidenceFixUpdatesDistanceAndTwoFreshPreciseFixesAreRequiredForArrival() {
         val journey = JourneyController()
         journey.selectStart(GeoPoint(53.08, 8.81))
         journey.selectDestination(GeoPoint(53.06, 8.79))
         journey.arm()
 
         val uncertain = evidence(distance = 200.0, accuracy = 80.0)
-        journey.onDistanceChanged(uncertain.distanceMeters, allowArrival = ArrivalLocationQuality.confirmsArrival(uncertain))
+        journey.onDistanceChanged(
+            uncertain.distanceMeters,
+            allowArrival = ArrivalLocationQuality.confirmsArrival(uncertain),
+            fixElapsedRealtimeNanos = 1_000_000_000L,
+        )
         assertEquals(JourneyPhase.ARMED, journey.state.phase)
         assertEquals(200.0, journey.state.distanceMeters!!, 0.01)
 
         val confirmed = evidence(distance = 180.0, accuracy = 20.0)
-        journey.onDistanceChanged(confirmed.distanceMeters, allowArrival = ArrivalLocationQuality.confirmsArrival(confirmed))
+        journey.onDistanceChanged(
+            confirmed.distanceMeters,
+            allowArrival = ArrivalLocationQuality.confirmsArrival(confirmed),
+            fixElapsedRealtimeNanos = 2_000_000_000L,
+        )
+        assertEquals(JourneyPhase.ARMED, journey.state.phase)
+        assertEquals(180.0, journey.state.distanceMeters!!, 0.01)
+
+        val secondConfirmed = evidence(distance = 175.0, accuracy = 20.0)
+        journey.onDistanceChanged(
+            secondConfirmed.distanceMeters,
+            allowArrival = ArrivalLocationQuality.confirmsArrival(secondConfirmed),
+            fixElapsedRealtimeNanos = 3_000_000_000L,
+        )
         assertEquals(JourneyPhase.ARRIVED, journey.state.phase)
+        assertEquals(175.0, journey.state.distanceMeters!!, 0.01)
     }
 }
