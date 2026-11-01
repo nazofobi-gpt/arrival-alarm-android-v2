@@ -224,6 +224,7 @@ class ActiveJourneyService : Service(), LocationListener {
         graph.connectorPort.updateDistanceToDestination(
             distanceMeters,
             allowArrival = ArrivalLocationQuality.confirmsArrival(evidence),
+            fixElapsedRealtimeNanos = location.elapsedRealtimeNanos,
         )
         updateTrackingNotification(distanceMeters)
 
