@@ -179,7 +179,28 @@ class JourneyConnectorActionPort(
         ) {
             return ConnectorActionOutcome(false, "Sefer alarm hedefi yeniden doğrulanamadı")
         }
-        return armInternal()
+        val armed = armInternal()
+        if (!armed.applied) return armed
+        // Preserve the real GTFS trip identity in the connector snapshot; the GPS
+        // alarm target is the selected intermediate stop, not a guessed final stop.
+        // No timetable-derived current/next stop or realtime position is asserted.
+        val identity = confirmed.selection.identity
+        val day = identity.serviceDate
+        activeTrip = ConnectorTripState(
+            journeyId = "${identity.tripId}@${day.year}-${day.month.toString().padStart(2, '0')}-${day.day.toString().padStart(2, '0')}",
+            tripId = identity.tripId,
+            routeId = identity.routeId,
+            direction = restore.detail.headsign,
+            origin = origin,
+            destination = destination,
+            boardingStop = ConnectorStopState(
+                id = confirmed.roles.boarding.stopId,
+                name = confirmed.roles.boarding.name,
+                latitude = confirmed.roles.boarding.latitude,
+                longitude = confirmed.roles.boarding.longitude,
+            ),
+        )
+        return armed
     }
 
     @Synchronized
