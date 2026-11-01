@@ -177,6 +177,11 @@
     <string name="map_point_label">Map point</string>
     <string name="map_load_failed">Map could not load • search and stop list remain available</string>
     <string name="map_provider_note">Map: OpenFreeMap • MapLibre</string>
+    <string name="map_accessible_coordinates_hint">Or enter latitude and longitude manually.</string>
+    <string name="map_coordinate_latitude">Latitude</string>
+    <string name="map_coordinate_longitude">Longitude</string>
+    <string name="map_coordinate_invalid">Enter valid coordinates to select a point.</string>
+    <string name="map_coordinate_select">Select map point</string>
     <string name="location_kind_stop">Stop</string>
     <string name="location_kind_address">Address</string>
     <string name="location_kind_poi">Place/POI</string>
