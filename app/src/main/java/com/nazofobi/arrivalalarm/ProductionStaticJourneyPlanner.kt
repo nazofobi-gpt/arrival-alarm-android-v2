@@ -305,11 +305,27 @@ class ProductionStaticJourneyPlanner(
         RepositoryStaticRouteOptionData(repository),
         agencyTimeZone = agencyTimeZone,
     )
+    private val selectedTripPlanner = SelectedTripItineraryPlanner(
+        indexReady = index::isReady,
+        resolveDetail = GtfsTripDetailResolver(repository)::resolve,
+        routeLookup = repository::route,
+        sourceUpdatedAtEpochSeconds = index::fetchedAt,
+        agencyTimeZone = timeZone,
+    )
 
     init {
         require(maxAccessStops in 1..8)
         require(walkingMetersPerSecond in 0.5..3.0)
     }
+
+    /**
+     * Plans only the rider-confirmed trip and ordered stop roles. Conflicts
+     * return an explicit alternative action instead of falling back to search.
+     */
+    internal fun planSelectedTrip(
+        selection: GtfsSelectedTrip,
+        realtime: RouteRealtimeInfo? = null,
+    ): SelectedTripPlanOutcome = selectedTripPlanner.plan(selection, realtime)
 
     fun plan(
         origin: MapPoint,
