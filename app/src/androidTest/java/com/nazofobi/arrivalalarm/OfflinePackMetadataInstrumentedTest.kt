@@ -14,6 +14,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -111,6 +112,26 @@ class OfflinePackMetadataInstrumentedTest {
             assertContainsNormalizedTokens(expectedRelativeUpdate)
         } finally {
             files.forEach { it.delete() }
+        }
+    }
+
+    @Test
+    fun invalidFetchTimesMustNotBePresentedAsRecentPackUpdates() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val nowMillis = 1_783_000_000_000L
+        val unknown = context.getString(R.string.offline_pack_updated_unknown)
+        for (timestamp in listOf(0L, -1L, Long.MAX_VALUE, nowMillis / 1_000L + 3_600L)) {
+            val text = offlinePackMetadataText(
+                context,
+                NationwideDataState.Ready(
+                    stopCount = 10_000,
+                    fetchedAtEpochSeconds = timestamp,
+                    sourceVersion = "\"feed-1\"",
+                ),
+                nowMillis = nowMillis,
+            )
+            assertTrue("Invalid timestamp $timestamp must be shown as unknown: $text", text.contains(unknown))
+            assertTrue("Feed version must remain visible", text.contains("feed-1"))
         }
     }
 }
