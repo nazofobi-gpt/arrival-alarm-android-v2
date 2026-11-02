@@ -415,4 +415,73 @@ class LiveTripPanelTest {
         rule.onNodeWithTag("live-trip-destination-countdown").assertDoesNotExist()
     }
 
+    @Test
+    fun destinationNextAdvisoryNeedsDepartedStopAndAnArmedJourney() {
+        val now = mutableLongStateOf(
+            "2026-09-26T07:55:00+02:00".toTransitEpochSecondsOrNull()!!
+        )
+        val armed = mutableStateOf(true)
+        val route = RouteOption(
+            id = "final-stop-advisory",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
+            line = "RE 9",
+            direction = "Bremen Hbf",
+            departure = "08:00",
+            arrival = "08:45",
+            walkingMinutes = 0,
+            transfers = 0,
+            stops = listOf(
+                RouteStop(
+                    id = "origin", name = "Lohne",
+                    plannedDeparture = "2026-09-26T08:00:00+02:00",
+                ),
+                RouteStop(
+                    id = "target", name = "Bremen Hbf",
+                    plannedArrival = "2026-09-26T08:45:00+02:00",
+                ),
+            ),
+        )
+        rule.setContent {
+            MaterialTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    LiveTripPanel(
+                        selectedRoute = route,
+                        journey = JourneyUiState(
+                            phase = if (armed.value) JourneyPhase.ARMED
+                                else JourneyPhase.DESTINATION_SELECTED,
+                        ),
+                        guidanceState = GuidanceReliabilityState(),
+                        routeOffline = true,
+                        nowEpochSeconds = now.longValue,
+                    )
+                }
+            }
+        }
+        // No false "get off" preparation before the boarding stop departs.
+        rule.onNodeWithTag("live-trip-final-stop-advisory").assertDoesNotExist()
+        rule.runOnUiThread {
+            now.longValue = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-final-stop-advisory").performScrollTo()
+            .assertTextContains(
+                InstrumentationRegistry.getInstrumentation().targetContext.getString(
+                    R.string.live_trip_destination_next_advisory,
+                ),
+                substring = true,
+            )
+        // If not armed, timetable evidence must not imply an active journey.
+        rule.runOnUiThread { armed.value = false }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-final-stop-advisory").assertDoesNotExist()
+        rule.runOnUiThread {
+            armed.value = true
+            now.longValue = "2026-09-26T09:00:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-final-stop-advisory").assertDoesNotExist()
+    }
+
+
 }

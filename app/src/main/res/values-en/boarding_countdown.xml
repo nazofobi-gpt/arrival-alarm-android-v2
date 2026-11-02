@@ -4,4 +4,5 @@
     <string name="live_trip_planned_boarding_minutes">%1$d min</string>
     <string name="live_trip_arrival_scheduled_countdown">Time until scheduled arrival</string>
     <string name="live_trip_arrival_realtime_countdown">Time to arrival from live data</string>
+    <string name="live_trip_destination_next_advisory">Stop-time data indicates your destination is next. Prepare to get off; vehicle location is not confirmed.</string>
 </resources>

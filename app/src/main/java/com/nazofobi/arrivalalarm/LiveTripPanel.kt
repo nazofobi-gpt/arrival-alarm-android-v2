@@ -191,6 +191,25 @@ fun LiveTripPanel(
                 )
             }
 
+            // This is an advisory from ordered stop-time evidence, NOT an observed vehicle location.
+            // Only show it between the penultimate and destination stops, after an actual
+            // departure-time boundary; never before boarding or for unarmed journeys.
+            if (journey.phase == JourneyPhase.ARMED &&
+                selectedRoute.stops.size >= 2 &&
+                progress.resolvedByProviderTime &&
+                progress.current == null &&
+                progress.previous != null &&
+                progress.next === target &&
+                progress.remainingStops == 1
+            ) {
+                Text(
+                    text = stringResource(R.string.live_trip_destination_next_advisory),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.testTag("live-trip-final-stop-advisory"),
+                )
+            }
+
             // The count is schedule/provider-time derived, not a GPS vehicle position.
             // Unknown or contradictory stop evidence must not produce a guessed count.
             progress.remainingStops?.takeIf {
