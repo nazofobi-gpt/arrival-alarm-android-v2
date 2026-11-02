@@ -668,7 +668,11 @@ fun ArrivalAlarmApp(
         val selected = selectedRouteId?.let { id ->
             routeOptions.firstOrNull { it.id == id }
         }
-        if (selected?.realtime?.cancelledTripIds?.isNotEmpty() == true) {
+        if (routeHasVerifiedRealtimeCancellation(
+            routeOffline = routeOffline,
+            state = selected?.realtime?.state,
+            suppliedCancellation = selected?.realtime?.cancelledTripIds?.isNotEmpty() == true,
+        )) {
             routeStatus = context.getString(R.string.route_realtime_cancelled_action_blocked)
             return
         }
@@ -745,7 +749,11 @@ fun ArrivalAlarmApp(
     }
 
     fun selectRouteOption(option: RouteOption) {
-        if (option.realtime?.cancelledTripIds?.isNotEmpty() == true) {
+        if (routeHasVerifiedRealtimeCancellation(
+            routeOffline = routeOffline,
+            state = option.realtime?.state,
+            suppliedCancellation = option.realtime?.cancelledTripIds?.isNotEmpty() == true,
+        )) {
             routeStatus = context.getString(R.string.route_realtime_cancelled_action_blocked)
             return
         }
