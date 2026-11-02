@@ -332,6 +332,25 @@ internal class SavedRoutePresetsStore(
         return persist(encoded, updated)
     }
 
+    /**
+     * Explicit bulk deletion. Compare the full confirmation snapshot against fresh storage;
+     * a stale confirmation must never erase routes changed by another screen/session.
+     * Corrupt/unsupported sources remain untouched even if some rows can be decoded.
+     */
+    fun clearAll(expected: List<SavedRoutePreset>): SavedRoutePresetStoreResult {
+        val current = load()
+        if (!current.isSourceSafeToReplace) {
+            return SavedRoutePresetStoreResult.Rejected(
+                SavedRoutePresetStoreRejection.SOURCE_UNSAFE,
+                current.issues,
+            )
+        }
+        if (current.presets.isEmpty() || current.presets != expected) {
+            return SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.NOT_FOUND)
+        }
+        return persist("", emptyList())
+    }
+
     fun remove(id: String): SavedRoutePresetStoreResult {
         val current = load()
         if (!current.isSourceSafeToReplace) {
