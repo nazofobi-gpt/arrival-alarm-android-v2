@@ -14,4 +14,9 @@
     <string name="saved_routes_home_delete_confirm_title">Gespeicherte Route löschen?</string>
     <string name="saved_routes_home_delete_confirm_message">Die Route %1$s wird dauerhaft von diesem Gerät gelöscht. Fortfahren?</string>
     <string name="saved_routes_home_delete_cancel">Abbrechen</string>
+    <string name="saved_routes_home_rename">Route umbenennen</string>
+    <string name="saved_routes_home_rename_title">Gespeicherte Route umbenennen</string>
+    <string name="saved_routes_home_rename_hint">Routenname</string>
+    <string name="saved_routes_home_rename_confirm">Namen speichern</string>
+    <string name="saved_routes_home_renamed">Routenname auf diesem Gerät geändert.</string>
 </resources>
