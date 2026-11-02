@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="departure_delay_planned_context">Planlı %1$s • %2$s</string>
+    <string name="departure_delay_late_minutes">+%1$d dk gecikme</string>
+    <string name="departure_delay_early_minutes">%1$d dk erken</string>
+</resources>

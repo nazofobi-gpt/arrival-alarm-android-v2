@@ -46,6 +46,20 @@ internal fun Departure.sameScheduledInstanceAs(other: Departure): Boolean =
         gtfsInstance == other.gtfsInstance &&
         boardingStopSequence == other.boardingStopSequence
 
+/**
+ * Source-backed board delta. Realtime timestamps are projected onto the board
+ * only while provider capability is available and the view is not offline.
+ * Do not present sub-minute noise, invalid clocks, or implausible >24h offsets.
+ */
+internal fun visibleDepartureDelayMinutes(departure: Departure): Int? {
+    if (!departure.isRealtime || !departure.scheduledEpochSeconds.isDisplayableDepartureEpochSeconds()) {
+        return null
+    }
+    val deltaSeconds = departure.effectiveEpochSeconds - departure.scheduledEpochSeconds
+    if (deltaSeconds !in -86_400L..86_400L || deltaSeconds in -59L..59L) return null
+    return (deltaSeconds / 60L).toInt().takeIf { it != 0 }
+}
+
 data class ServiceAlert(val id: String, val title: String, val detail: String)
 data class LiveVehicle(val tripId: String, val point: GeoPoint)
 data class AccessibilityPreference(val stepFreeOnly: Boolean = false, val extraTransferMinutes: Int = 0)

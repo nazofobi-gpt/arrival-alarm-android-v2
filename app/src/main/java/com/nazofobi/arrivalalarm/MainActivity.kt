@@ -477,7 +477,9 @@ fun ArrivalAlarmApp(
         stationSource = null
         stationRealtimeState = null
         stationStatus = null
-        transit.stationDepartures(stop) callback@{ snapshot ->
+        // Fetch the provider's bounded 20 departures once, while the UI initially shows 8.
+        // This makes later departures available without a second request or hidden stale results.
+        transit.stationDepartures(stop, limit = 20) callback@{ snapshot ->
             stationRequestGate.commitIfCurrent(token) {
                 stationLoading = false
                 if (snapshot.error == null) {

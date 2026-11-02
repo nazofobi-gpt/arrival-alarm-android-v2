@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="departures_show_more">Weitere Abfahrten anzeigen (%1$d)</string>
+    <string name="departures_show_fewer">Weniger Abfahrten anzeigen</string>
+    <string name="departures_filter_all">Alle Linien und Richtungen</string>
+</resources>
