@@ -139,6 +139,20 @@ class MainActivityTest {
         rule.onNodeWithTag("restored-alarm-distance")
             .performScrollTo()
             .assertTextContains("430", substring = true)
+        rule.onNodeWithTag("restored-alarm-copy-target")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        rule.activityRule.scenario.onActivity { activity ->
+            val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE)
+                as android.content.ClipboardManager
+            assertEquals(
+                "53.08300, 8.81300",
+                clipboard.primaryClip?.getItemAt(0)?.coerceToText(activity)?.toString(),
+            )
+            // Copying an already-armed target must not stop, re-arm or change the journey.
+            assertEquals(JourneyPhase.ARMED, ArrivalAlarmRuntimeGraph.get(activity).controller.state.phase)
+        }
         rule.onNodeWithTag("cancel-alarm")
             .performScrollTo()
             .assertIsDisplayed()

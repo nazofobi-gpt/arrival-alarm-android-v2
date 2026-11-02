@@ -5,4 +5,7 @@
     <string name="restored_alarm_target_format">Kayıtlı alarm hedefi (enlem, boylam): %1$s</string>
     <string name="restored_alarm_last_distance_format">Son kayıtlı GPS mesafesi: %1$s m (güncel olmayabilir)</string>
     <string name="restored_alarm_distance_unavailable">Son GPS mesafesi henüz kayıtlı değil.</string>
+    <string name="restored_alarm_copy_label">Hedef koordinatlarını kopyala</string>
+    <string name="restored_alarm_open_map">Hedefi haritada aç</string>
+    <string name="restored_alarm_map_unavailable">Harita uygulaması açılamadı. Koordinatları kopyalayabilirsiniz.</string>
 </resources>
