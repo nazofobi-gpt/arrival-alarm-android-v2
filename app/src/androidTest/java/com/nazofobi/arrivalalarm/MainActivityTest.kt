@@ -120,6 +120,7 @@ class MainActivityTest {
                     phase = JourneyPhase.ARMED,
                     start = GeoPoint(52.665, 8.237),
                     destination = GeoPoint(53.083, 8.813),
+                    distanceMeters = 430.0,
                 )
             )
             ArrivalAlarmRuntimeGraph.resetForTests()
@@ -129,9 +130,15 @@ class MainActivityTest {
         rule.waitForIdle()
 
         navigateTo("nav-journey")
-        rule.onNodeWithTag("live-trip-empty-state")
+        rule.onNodeWithTag("restored-alarm-summary")
             .performScrollTo()
             .assertIsDisplayed()
+        rule.onNodeWithTag("restored-alarm-target")
+            .performScrollTo()
+            .assertTextContains("53.08300, 8.81300", substring = true)
+        rule.onNodeWithTag("restored-alarm-distance")
+            .performScrollTo()
+            .assertTextContains("430", substring = true)
         rule.onNodeWithTag("cancel-alarm")
             .performScrollTo()
             .assertIsDisplayed()

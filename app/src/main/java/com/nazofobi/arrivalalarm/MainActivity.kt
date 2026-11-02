@@ -1464,13 +1464,20 @@ fun ArrivalAlarmApp(
                             routeOptions, selectedRouteId, confirmedTripLiveRoute, journey,
                         )
                         if (selectedRoute == null) {
-                            ScreenEmptyState(
-                                title = stringResource(R.string.journey_detail_title),
-                                body = stringResource(R.string.error_trip_required),
-                                actionLabel = stringResource(R.string.journey_empty_action),
-                                onAction = { activeScreen = ArrivalAppScreen.ROUTES },
-                                testTag = "live-trip-empty-state",
-                            )
+                            if (restoredAlarmTargetCoordinates(journey) != null) {
+                                RestoredAlarmSummary(
+                                    journey = journey,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            } else {
+                                ScreenEmptyState(
+                                    title = stringResource(R.string.journey_detail_title),
+                                    body = stringResource(R.string.error_trip_required),
+                                    actionLabel = stringResource(R.string.journey_empty_action),
+                                    onAction = { activeScreen = ArrivalAppScreen.ROUTES },
+                                    testTag = "live-trip-empty-state",
+                                )
+                            }
                         } else {
                             LiveTripPanel(
                                 selectedRoute = selectedRoute,
