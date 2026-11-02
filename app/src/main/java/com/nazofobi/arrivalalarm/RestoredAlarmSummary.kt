@@ -3,6 +3,9 @@ package com.nazofobi.arrivalalarm
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,6 +16,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -31,14 +38,24 @@ internal fun restoredAlarmTargetCoordinates(journey: JourneyUiState): String? {
     return String.format(Locale.ROOT, "%.5f, %.5f", target.latitude, target.longitude)
 }
 
+/** The deep link contains only validated, already-saved alarm coordinates. */
+internal fun restoredAlarmTargetMapUri(journey: JourneyUiState): String? =
+    restoredAlarmTargetCoordinates(journey)?.replace(", ", ",")?.let { "geo:0,0?q=$it" }
+
 @Composable
-internal fun RestoredAlarmSummary(journey: JourneyUiState, modifier: Modifier = Modifier) {
+internal fun RestoredAlarmSummary(
+    journey: JourneyUiState,
+    modifier: Modifier = Modifier,
+    onOpenTargetMap: ((String) -> Unit)? = null,
+) {
     val coordinates = restoredAlarmTargetCoordinates(journey) ?: return
     val lastDistance = journey.distanceMeters?.takeIf {
         it.isFinite() && it in 0.0..20_000_000.0
     }
     val context = LocalContext.current
     val copyLabel = stringResource(R.string.restored_alarm_copy_label)
+    val mapUri = restoredAlarmTargetMapUri(journey) ?: return
+    var mapUnavailable by remember(mapUri) { mutableStateOf(false) }
     Card(modifier = modifier.fillMaxWidth().testTag("restored-alarm-summary")) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -71,6 +88,32 @@ internal fun RestoredAlarmSummary(journey: JourneyUiState, modifier: Modifier = 
                 modifier = Modifier.fillMaxWidth().testTag("restored-alarm-copy-target"),
             ) {
                 Text(stringResource(R.string.restored_alarm_copy_label))
+            }
+            OutlinedButton(
+                onClick = {
+                    // Launching the map is an explicit, opt-in external action.
+                    if (onOpenTargetMap != null) {
+                        onOpenTargetMap(mapUri)
+                    } else {
+                        try {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(mapUri)))
+                            mapUnavailable = false
+                        } catch (_: ActivityNotFoundException) {
+                            mapUnavailable = true
+                        } catch (_: SecurityException) {
+                            mapUnavailable = true
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().testTag("restored-alarm-open-map"),
+            ) {
+                Text(stringResource(R.string.restored_alarm_open_map))
+            }
+            if (mapUnavailable) {
+                Text(
+                    text = stringResource(R.string.restored_alarm_map_unavailable),
+                    modifier = Modifier.testTag("restored-alarm-map-error"),
+                )
             }
             Text(
                 text = if (lastDistance != null) {

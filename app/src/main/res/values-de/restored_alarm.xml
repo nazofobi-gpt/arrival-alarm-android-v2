@@ -6,4 +6,6 @@
     <string name="restored_alarm_last_distance_format">Zuletzt gespeicherte GPS-Distanz: %1$s m (möglicherweise veraltet)</string>
     <string name="restored_alarm_distance_unavailable">Noch keine GPS-Distanz gespeichert.</string>
     <string name="restored_alarm_copy_label">Zielkoordinaten kopieren</string>
+    <string name="restored_alarm_open_map">Ziel in Karten öffnen</string>
+    <string name="restored_alarm_map_unavailable">Keine Karten-App verfügbar. Du kannst die Koordinaten kopieren.</string>
 </resources>
