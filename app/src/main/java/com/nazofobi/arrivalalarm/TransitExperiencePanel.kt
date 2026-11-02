@@ -108,7 +108,7 @@ fun TransitExperiencePanel(
             emptySet()
         })
     }
-    val board = engine.departureBoard(departures, nowEpochSeconds)
+    val board = engine.departureBoard(departures, nowEpochSeconds, limit = 20)
     val cancelled = upcomingCancelledDepartures(departures, nowEpochSeconds)
 
     Column(
