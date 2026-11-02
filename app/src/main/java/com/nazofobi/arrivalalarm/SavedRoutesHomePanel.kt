@@ -40,7 +40,12 @@ internal fun SavedRoutesHomePanel(
     onRestore: (SavedRoutePreset) -> Unit,
     onRemove: (String) -> Unit,
     onRename: (SavedRoutePreset, String) -> Unit = { _, _ -> },
+    onClearAll: (List<SavedRoutePreset>) -> Unit = {},
 ) {
+    // A confirmation is intentionally discarded after recreation rather than persisted.
+    var pendingClearSnapshot by androidx.compose.runtime.remember {
+        mutableStateOf<List<SavedRoutePreset>?>(null)
+    }
     var pendingDeleteId by rememberSaveable { mutableStateOf<String?>(null) }
     val pendingDelete = presets.firstOrNull { it.id == pendingDeleteId }
     var pendingRenameId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -113,6 +118,40 @@ internal fun SavedRoutesHomePanel(
                 TextButton(
                     onClick = { pendingDeleteId = null },
                     modifier = Modifier.testTag("saved-route-cancel-delete"),
+                ) {
+                    Text(stringResource(R.string.saved_routes_home_delete_cancel))
+                }
+            },
+        )
+    }
+
+    pendingClearSnapshot?.let { expected ->
+        val canConfirm = sourceSafe && canRestore && expected.size >= 2 && presets == expected
+        AlertDialog(
+            onDismissRequest = { pendingClearSnapshot = null },
+            title = { Text(stringResource(R.string.saved_routes_home_clear_all_confirm_title)) },
+            text = {
+                Text(stringResource(
+                    R.string.saved_routes_home_clear_all_confirm_message,
+                    expected.size,
+                ))
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingClearSnapshot = null
+                        if (canConfirm) onClearAll(expected)
+                    },
+                    enabled = canConfirm,
+                    modifier = Modifier.testTag("saved-routes-confirm-clear-all"),
+                ) {
+                    Text(stringResource(R.string.saved_routes_home_clear_all))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { pendingClearSnapshot = null },
+                    modifier = Modifier.testTag("saved-routes-cancel-clear-all"),
                 ) {
                     Text(stringResource(R.string.saved_routes_home_delete_cancel))
                 }
@@ -196,6 +235,16 @@ internal fun SavedRoutesHomePanel(
                             .testTag("saved-route-delete-$index"),
                     ) {
                         Text(stringResource(R.string.saved_routes_home_delete))
+                    }
+                }
+                if (presets.size >= 2) {
+                    OutlinedButton(
+                        onClick = { pendingClearSnapshot = presets.toList() },
+                        enabled = canRestore,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .testTag("saved-routes-clear-all"),
+                    ) {
+                        Text(stringResource(R.string.saved_routes_home_clear_all))
                     }
                 }
             }
