@@ -1,7 +1,10 @@
 package com.nazofobi.arrivalalarm
 
 import android.content.Context
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -10,6 +13,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -97,6 +101,8 @@ fun TransitExperiencePanel(
     var selectedDeparture by remember(stopId) { mutableStateOf<Departure?>(null) }
     // Expanding the board is local UI state: never changes a chosen trip or arms an alarm.
     var showMoreDepartures by remember(stopId) { mutableStateOf(false) }
+    // View-only filter; never changes the selected journey or arms an alarm.
+    var selectedDepartureGroup by remember(stopId) { mutableStateOf<Pair<String, String>?>(null) }
     var recentTripCount by remember(store) { mutableStateOf(store.recents().size) }
     // Stop-scoped route bookmarks never imply realtime alert subscriptions.
     // Fail closed on legacy/malformed preference types, preserving the departure board.
@@ -109,6 +115,16 @@ fun TransitExperiencePanel(
         })
     }
     val board = engine.departureBoard(departures, nowEpochSeconds, limit = 20)
+    // Do not invent a filter category from missing provider line/direction metadata.
+    val groups = board.mapNotNull { departure ->
+        val line = departure.line.trim()
+        val direction = departure.direction.trim()
+        if (line.isBlank() || direction.isBlank()) null else line to direction
+    }.distinct()
+    val activeGroup = selectedDepartureGroup?.takeIf { it in groups }
+    val visibleBoard = if (activeGroup == null) board else board.filter {
+        it.line.trim() == activeGroup.first && it.direction.trim() == activeGroup.second
+    }
     val cancelled = upcomingCancelledDepartures(departures, nowEpochSeconds)
 
     Column(
@@ -216,9 +232,32 @@ fun TransitExperiencePanel(
             }
         }
 
+        // Filters are explicit and local: no route, history or alarm side effect.
+        if (groups.size > 1) {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = activeGroup == null,
+                    onClick = { selectedDepartureGroup = null; showMoreDepartures = false },
+                    label = { Text(stringResource(R.string.departures_filter_all)) },
+                    modifier = Modifier.testTag("departures-filter-all"),
+                )
+                groups.forEachIndexed { index, group ->
+                    FilterChip(
+                        selected = activeGroup == group,
+                        onClick = { selectedDepartureGroup = group; showMoreDepartures = false },
+                        label = { Text("${group.first} → ${group.second}") },
+                        modifier = Modifier.testTag("departures-filter-$index"),
+                    )
+                }
+            }
+        }
+
         // The production request retrieves up to 20 candidates; reveal later trips only
         // after an explicit tap so the default departure board remains compact.
-        if (board.size > 8) {
+        if (visibleBoard.size > 8) {
             OutlinedButton(
                 onClick = { showMoreDepartures = !showMoreDepartures },
                 modifier = Modifier
@@ -230,13 +269,13 @@ fun TransitExperiencePanel(
                     if (showMoreDepartures) {
                         stringResource(R.string.departures_show_fewer)
                     } else {
-                        stringResource(R.string.departures_show_more, (board.size - 8).coerceAtMost(12))
+                        stringResource(R.string.departures_show_more, (visibleBoard.size - 8).coerceAtMost(12))
                     },
                 )
             }
         }
 
-        board.take(if (showMoreDepartures) 20 else 8).forEachIndexed { index, departure ->
+        visibleBoard.take(if (showMoreDepartures) 20 else 8).forEachIndexed { index, departure ->
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -377,7 +416,7 @@ fun TransitExperiencePanel(
         }
 
         selectedDeparture?.let { selected ->
-            if (board.any { it.sameScheduledInstanceAs(selected) }) {
+            if (visibleBoard.any { it.sameScheduledInstanceAs(selected) }) {
                 val alternatives = engine.alternateDepartures(departures, selected, nowEpochSeconds)
                 Text(
                     stringResource(R.string.alternate_departures, alternatives.size),
