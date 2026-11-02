@@ -196,6 +196,9 @@ fun LiveTripPanel(
             // position; the destination already has its own separate countdown.
             if (journey.phase == JourneyPhase.ARMED &&
                 progress.resolvedByProviderTime &&
+                // Before boarding, the first scheduled stop is not a next en-route stop.
+                // Do not present its arrival clock as progress toward an intermediate stop.
+                (progress.previous != null || progress.current != null) &&
                 progress.next != null &&
                 progress.next !== target
             ) {
