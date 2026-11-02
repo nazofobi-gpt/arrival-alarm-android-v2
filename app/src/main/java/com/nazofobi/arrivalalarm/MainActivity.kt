@@ -181,9 +181,15 @@ fun ArrivalAlarmApp(
     var query by remember { mutableStateOf("") }
     // Changing the active catalog must also invalidate remembered query deduplication.
     val searchQueryRequestGate = remember(dataState) { SearchQueryRequestGate() }
+    var recentHistoryEnabled by remember {
+        mutableStateOf(RecentSearchHistory.isEnabled(searchRecentsPreferences))
+    }
     var recentSearches by remember {
         mutableStateOf(
-            restoredRecentSearchQueries(searchRecentsPreferences.getString("queries", ""))
+            RecentSearchHistory.visibleQueries(
+                RecentSearchHistory.isEnabled(searchRecentsPreferences),
+                restoredRecentSearchQueries(searchRecentsPreferences.getString("queries", "")),
+            )
         )
     }
     var favoriteStopIds by remember {
@@ -551,7 +557,7 @@ fun ArrivalAlarmApp(
 
     fun saveRecentSearch(rawQuery: String) {
         val q = rawQuery.trim()
-        if (!isSupportedSearchQuery(q)) return
+        if (!isSupportedSearchQuery(q) || !recentHistoryEnabled) return
         val next = (listOf(q) + recentSearches.filterNot { it.equals(q, ignoreCase = true) })
             .take(5)
         recentSearches = next
@@ -1348,6 +1354,13 @@ fun ArrivalAlarmApp(
                         nearbySource = nearbySource,
                         nearbyMessage = nearbyMessage,
                         recentSearches = recentSearches,
+                        recentHistoryEnabled = recentHistoryEnabled,
+                        onRecentHistoryEnabledChange = { enabled ->
+                            if (RecentSearchHistory.setEnabledAndPersist(searchRecentsPreferences, enabled)) {
+                                recentHistoryEnabled = enabled
+                                if (!enabled) recentSearches = emptyList()
+                            }
+                        },
                         favoriteStopIds = favoriteStopIds,
                         onToggleFavoriteStop = { stopId ->
                             val updated = toggleFavoriteStopIds(favoriteStopIds, stopId)
