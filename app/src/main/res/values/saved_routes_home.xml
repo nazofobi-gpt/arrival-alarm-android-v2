@@ -3,6 +3,7 @@
     <string name="saved_routes_home_title">Kayıtlı rotalar</string>
     <string name="saved_routes_home_note">Yalnız başlangıç, varış ve rota tercihleri cihazda tutulur. Açıldığında rota güncel verilerle yeniden hesaplanır; alarm otomatik başlamaz.</string>
     <string name="saved_routes_home_save">Mevcut rotayı kaydet</string>
+    <string name="saved_routes_home_endpoints">Başlangıç: %1$s · Varış: %2$s</string>
     <string name="saved_routes_home_open">Rotayı aç ve yeniden hesapla</string>
     <string name="saved_routes_home_delete">Kaydı sil</string>
     <string name="saved_routes_home_empty">Henüz kayıtlı rota yok.</string>

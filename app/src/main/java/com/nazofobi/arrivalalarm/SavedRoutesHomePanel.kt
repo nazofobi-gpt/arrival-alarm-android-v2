@@ -220,6 +220,16 @@ internal fun SavedRoutesHomePanel(
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.testTag("saved-route-name-$index"),
                     )
+                    Text(
+                        text = stringResource(
+                            R.string.saved_routes_home_endpoints,
+                            preset.originLabel,
+                            preset.destinationLabel,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("saved-route-endpoints-$index"),
+                    )
                     OutlinedButton(
                         onClick = { onRestore(preset) },
                         enabled = canRestore,

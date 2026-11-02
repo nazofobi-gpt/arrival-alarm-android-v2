@@ -3,6 +3,7 @@ package com.nazofobi.arrivalalarm
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -34,6 +35,35 @@ class SavedRoutesHomePanelTest {
         atMostOneTransfer = true,
         savedAtEpochMillis = 1_000L,
     )
+
+    @Test
+    fun savedRoutePreviewShowsStoredEndpointsWithoutStartingAnAction() {
+        var opened = 0
+        val named = preset.copy(name = "Morning commute")
+        rule.setContent {
+            MaterialTheme {
+                SavedRoutesHomePanel(
+                    presets = listOf(named),
+                    canSave = true,
+                    canRestore = true,
+                    sourceSafe = true,
+                    status = null,
+                    onSave = {},
+                    onRestore = { opened++ },
+                    onRemove = {},
+                )
+            }
+        }
+        val context = androidx.test.platform.app.InstrumentationRegistry
+            .getInstrumentation().targetContext
+        val expected = context.getString(
+            R.string.saved_routes_home_endpoints,
+            "Lohne",
+            "Bremen Hbf",
+        )
+        rule.onNodeWithTag("saved-route-endpoints-0").assertTextEquals(expected)
+        rule.runOnIdle { assertEquals(0, opened) }
+    }
 
     @Test
     fun savedRouteCanBeOpenedButDeleteRequiresExplicitConfirmation() {
