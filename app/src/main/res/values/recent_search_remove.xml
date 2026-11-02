@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_recent_remove">Kaydı sil</string>
+    <string name="search_recent_remove_accessibility">%1$s aramasını geçmişten sil</string>
+</resources>
