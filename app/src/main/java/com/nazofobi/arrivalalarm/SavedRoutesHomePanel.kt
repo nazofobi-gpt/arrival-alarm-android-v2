@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -237,6 +238,9 @@ internal fun SavedRoutesHomePanel(
             }
             if (sourceSafe) {
                 visiblePresets.take(SavedRoutePresetsCodec.MAX_PRESETS).forEachIndexed { index, preset ->
+                    val openLabel = stringResource(R.string.saved_routes_home_open_accessibility, preset.name)
+                    val renameLabel = stringResource(R.string.saved_routes_home_rename_accessibility, preset.name)
+                    val deleteLabel = stringResource(R.string.saved_routes_home_delete_accessibility, preset.name)
                     Text(
                         text = preset.name,
                         style = MaterialTheme.typography.bodyMedium,
@@ -256,7 +260,8 @@ internal fun SavedRoutesHomePanel(
                         onClick = { onRestore(preset) },
                         enabled = canRestore,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                            .testTag("saved-route-open-$index"),
+                            .testTag("saved-route-open-$index")
+                            .semantics { contentDescription = openLabel },
                     ) {
                         Text(stringResource(R.string.saved_routes_home_open))
                     }
@@ -267,7 +272,8 @@ internal fun SavedRoutesHomePanel(
                         },
                         enabled = canRestore,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                            .testTag("saved-route-rename-$index"),
+                            .testTag("saved-route-rename-$index")
+                            .semantics { contentDescription = renameLabel },
                     ) {
                         Text(stringResource(R.string.saved_routes_home_rename))
                     }
@@ -275,7 +281,8 @@ internal fun SavedRoutesHomePanel(
                         onClick = { pendingDeleteId = preset.id },
                         enabled = canRestore,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                            .testTag("saved-route-delete-$index"),
+                            .testTag("saved-route-delete-$index")
+                            .semantics { contentDescription = deleteLabel },
                     ) {
                         Text(stringResource(R.string.saved_routes_home_delete))
                     }
