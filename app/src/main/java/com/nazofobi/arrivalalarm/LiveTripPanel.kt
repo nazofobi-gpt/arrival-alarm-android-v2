@@ -214,7 +214,10 @@ fun LiveTripPanel(
                             if (countdown.fromRealtime) R.string.live_trip_next_stop_realtime_countdown
                             else R.string.live_trip_next_stop_scheduled_countdown,
                         ),
-                        value = stringResource(R.string.live_trip_planned_boarding_minutes, countdown.minutes),
+                        value = listOf(
+                            progress.next.name,
+                            stringResource(R.string.live_trip_planned_boarding_minutes, countdown.minutes),
+                        ).joinToString(" • "),
                         tag = "live-trip-next-stop-countdown",
                     )
                 }
