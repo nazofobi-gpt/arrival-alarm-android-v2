@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="saved_commute_pin">Pin saved commute to top</string>
+    <string name="saved_commute_unpin">Unpin saved commute</string>
+    <string name="saved_commute_pinned_label">%1$s — pinned</string>
+</resources>
