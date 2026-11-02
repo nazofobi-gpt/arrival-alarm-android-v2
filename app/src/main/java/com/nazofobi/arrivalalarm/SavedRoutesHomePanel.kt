@@ -48,6 +48,13 @@ internal fun SavedRoutesHomePanel(
     var pendingClearSnapshot by androidx.compose.runtime.remember {
         mutableStateOf<List<SavedRoutePreset>?>(null)
     }
+    var savedRouteQuery by rememberSaveable { mutableStateOf("") }
+    val normalizedQuery = savedRouteQuery.trim()
+    val visiblePresets = if (normalizedQuery.isEmpty()) presets else presets.filter { preset ->
+        listOf(preset.name, preset.originLabel, preset.destinationLabel).any {
+            it.contains(normalizedQuery, ignoreCase = true)
+        }
+    }
     var pendingDeleteId by rememberSaveable { mutableStateOf<String?>(null) }
     val pendingDelete = presets.firstOrNull { it.id == pendingDeleteId }
     var pendingRenameId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -213,8 +220,23 @@ internal fun SavedRoutesHomePanel(
                     }
                 }
             }
+            if (sourceSafe && presets.size >= 2) {
+                OutlinedTextField(
+                    value = savedRouteQuery,
+                    onValueChange = { savedRouteQuery = it.take(80) },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.saved_routes_home_filter)) },
+                    modifier = Modifier.fillMaxWidth().testTag("saved-route-filter"),
+                )
+                if (normalizedQuery.isNotEmpty() && visiblePresets.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.saved_routes_home_filter_empty),
+                        modifier = Modifier.testTag("saved-route-filter-empty"),
+                    )
+                }
+            }
             if (sourceSafe) {
-                presets.take(SavedRoutePresetsCodec.MAX_PRESETS).forEachIndexed { index, preset ->
+                visiblePresets.take(SavedRoutePresetsCodec.MAX_PRESETS).forEachIndexed { index, preset ->
                     Text(
                         text = preset.name,
                         style = MaterialTheme.typography.bodyMedium,
