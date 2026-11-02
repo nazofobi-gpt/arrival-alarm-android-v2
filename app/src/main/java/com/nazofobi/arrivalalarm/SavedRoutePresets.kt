@@ -351,6 +351,26 @@ internal class SavedRoutePresetsStore(
         return persist("", emptyList())
     }
 
+    /**
+     * One-shot UI undo after clearing all local routes. Never replace new or unsafe data.
+     * The undo snapshot exists only in Compose memory, never in device storage.
+     */
+    fun undoClearAll(previous: List<SavedRoutePreset>): SavedRoutePresetStoreResult {
+        val current = load()
+        if (!current.isSourceSafeToReplace) {
+            return SavedRoutePresetStoreResult.Rejected(
+                SavedRoutePresetStoreRejection.SOURCE_UNSAFE,
+                current.issues,
+            )
+        }
+        if (current.presets.isNotEmpty() || previous.size < 2) {
+            return SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.NOT_FOUND)
+        }
+        val encoded = SavedRoutePresetsCodec.encode(previous)
+            ?: return SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.INVALID_PRESET)
+        return persist(encoded, previous)
+    }
+
     fun remove(id: String): SavedRoutePresetStoreResult {
         val current = load()
         if (!current.isSourceSafeToReplace) {

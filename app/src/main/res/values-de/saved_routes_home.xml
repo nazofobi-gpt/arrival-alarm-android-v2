@@ -21,6 +21,8 @@
     <string name="saved_routes_home_renamed">Routenname auf diesem Gerät geändert.</string>
     <string name="saved_routes_home_clear_all">Alle gespeicherten Routen löschen</string>
     <string name="saved_routes_home_clear_all_confirm_title">Alle gespeicherten Routen löschen?</string>
-    <string name="saved_routes_home_clear_all_confirm_message">Alle %1$d gespeicherten Routen auf diesem Gerät werden dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden. Fortfahren?</string>
+    <string name="saved_routes_home_clear_all_confirm_message">Alle %1$d gespeicherten Routen auf diesem Gerät werden dauerhaft gelöscht. Direkt danach ist ein Rückgängig auf diesem Bildschirm möglich. Fortfahren?</string>
     <string name="saved_routes_home_cleared_all">Alle gespeicherten Routen wurden von diesem Gerät gelöscht.</string>
+    <string name="saved_routes_home_undo_clear_all">Löschen rückgängig machen</string>
+    <string name="saved_routes_home_restored_all">Gespeicherte Routen wiederhergestellt.</string>
 </resources>

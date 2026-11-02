@@ -371,6 +371,47 @@ class SavedRoutePresetsTest {
     }
 
     @Test
+    fun bulkClearUndoRestoresSnapshotButNeverOverwritesNewOrUnsafeData() {
+        val first = preset(id = "first", name = "Lohne commute")
+        val second = preset(id = "second", name = "Bremen commute").copy(
+            originLatitude = 51.5,
+            destinationLatitude = 54.2,
+        )
+        val storage = MemorySavedRoutePresetStringStorage()
+        val store = SavedRoutePresetsStore(storage)
+        assertTrue(store.save(first) is SavedRoutePresetStoreResult.Success)
+        assertTrue(store.save(second) is SavedRoutePresetStoreResult.Success)
+        val before = store.load().presets
+
+        assertEquals(SavedRoutePresetStoreResult.Success(emptyList()), store.clearAll(before))
+        assertEquals(SavedRoutePresetStoreResult.Success(before), store.undoClearAll(before))
+        assertEquals(before, store.load().presets)
+        val restoredValue = storage.value
+        val restoredWrites = storage.writeCount
+        assertEquals(
+            SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.NOT_FOUND),
+            store.undoClearAll(before),
+        )
+        assertEquals(restoredValue, storage.value)
+        assertEquals(restoredWrites, storage.writeCount)
+
+        assertEquals(SavedRoutePresetStoreResult.Success(emptyList()), store.clearAll(before))
+        assertTrue(store.save(first) is SavedRoutePresetStoreResult.Success)
+        val addedValue = storage.value
+        assertEquals(
+            SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.NOT_FOUND),
+            store.undoClearAll(before),
+        )
+        assertEquals(addedValue, storage.value)
+
+        assertEquals(SavedRoutePresetStoreResult.Success(emptyList()), store.clearAll(listOf(first)))
+        storage.value = "invalid-record"
+        val unsafe = store.undoClearAll(before)
+        assertTrue(unsafe is SavedRoutePresetStoreResult.Rejected)
+        assertEquals("invalid-record", storage.value)
+    }
+
+    @Test
     fun removingLastPresetWritesAnExplicitEmptySnapshot() {
         val storage = MemorySavedRoutePresetStringStorage()
         val store = SavedRoutePresetsStore(storage)

@@ -41,6 +41,8 @@ internal fun SavedRoutesHomePanel(
     onRemove: (String) -> Unit,
     onRename: (SavedRoutePreset, String) -> Unit = { _, _ -> },
     onClearAll: (List<SavedRoutePreset>) -> Unit = {},
+    undoPresets: List<SavedRoutePreset>? = null,
+    onUndoClearAll: (List<SavedRoutePreset>) -> Unit = {},
 ) {
     // A confirmation is intentionally discarded after recreation rather than persisted.
     var pendingClearSnapshot by androidx.compose.runtime.remember {
@@ -201,6 +203,15 @@ internal fun SavedRoutesHomePanel(
             }
             if (sourceSafe && presets.isEmpty()) {
                 Text(stringResource(R.string.saved_routes_home_empty))
+                if (canRestore && undoPresets != null && undoPresets.size >= 2) {
+                    OutlinedButton(
+                        onClick = { onUndoClearAll(undoPresets) },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .testTag("saved-routes-undo-clear-all"),
+                    ) {
+                        Text(stringResource(R.string.saved_routes_home_undo_clear_all))
+                    }
+                }
             }
             if (sourceSafe) {
                 presets.take(SavedRoutePresetsCodec.MAX_PRESETS).forEachIndexed { index, preset ->

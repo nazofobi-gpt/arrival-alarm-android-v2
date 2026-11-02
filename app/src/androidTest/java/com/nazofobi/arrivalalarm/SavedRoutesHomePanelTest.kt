@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -139,6 +140,48 @@ class SavedRoutesHomePanelTest {
         rule.onNodeWithTag("saved-routes-clear-all").performClick()
         rule.onNodeWithTag("saved-routes-confirm-clear-all").performClick()
         rule.runOnIdle { assertEquals(listOf(listOf(preset, second)), confirmed) }
+    }
+
+    @Test
+    fun clearedSavedRoutesOfferOneShotUndoAndRestoreBothCards() {
+        val second = preset.copy(
+            id = "test-route-2",
+            name = "Other commute",
+            originLatitude = 51.0,
+            destinationLatitude = 54.0,
+        )
+        val shown = mutableStateOf(listOf(preset, second))
+        val undo = mutableStateOf<List<SavedRoutePreset>?>(null)
+        rule.setContent {
+            MaterialTheme {
+                SavedRoutesHomePanel(
+                    presets = shown.value,
+                    canSave = false,
+                    canRestore = true,
+                    sourceSafe = true,
+                    status = null,
+                    onSave = {},
+                    onRestore = {},
+                    onRemove = {},
+                    onClearAll = { expected ->
+                        undo.value = expected
+                        shown.value = emptyList()
+                    },
+                    undoPresets = undo.value,
+                    onUndoClearAll = { previous ->
+                        shown.value = previous
+                        undo.value = null
+                    },
+                )
+            }
+        }
+        rule.onNodeWithTag("saved-routes-clear-all").performClick()
+        rule.onNodeWithTag("saved-routes-confirm-clear-all").performClick()
+        rule.onNodeWithTag("saved-routes-undo-clear-all").assertExists().performClick()
+        rule.onNodeWithTag("saved-route-name-0").assertExists()
+        rule.onNodeWithTag("saved-route-name-1").assertExists()
+        rule.onNodeWithTag("saved-routes-undo-clear-all").assertDoesNotExist()
+        rule.runOnIdle { assertEquals(listOf(preset, second), shown.value) }
     }
 
     @Test
