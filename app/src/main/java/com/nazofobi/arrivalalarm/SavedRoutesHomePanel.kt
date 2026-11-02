@@ -263,6 +263,22 @@ internal fun SavedRoutesHomePanel(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.testTag("saved-route-endpoints-$index"),
                     )
+                    val activePreferences = listOfNotNull(
+                        if (preset.directOnlyRoutes) stringResource(R.string.saved_routes_home_preference_direct) else null,
+                        if (preset.fewerTransfersFirst) stringResource(R.string.saved_routes_home_preference_fewer_transfers) else null,
+                        if (preset.shorterWalkingFirst) stringResource(R.string.saved_routes_home_preference_shorter_walk) else null,
+                        if (preset.atMostOneTransfer) stringResource(R.string.saved_routes_home_preference_max_one_transfer) else null,
+                    )
+                    Text(
+                        text = if (activePreferences.isEmpty()) {
+                            stringResource(R.string.saved_routes_home_preference_default)
+                        } else {
+                            activePreferences.joinToString(" · ")
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("saved-route-preferences-$index"),
+                    )
                     OutlinedButton(
                         onClick = { onRestore(preset) },
                         enabled = canRestore,

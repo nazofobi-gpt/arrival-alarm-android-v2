@@ -32,4 +32,9 @@
     <string name="saved_routes_home_open_accessibility">%1$s rotasını aç ve yeniden hesapla</string>
     <string name="saved_routes_home_rename_accessibility">%1$s rotasını yeniden adlandır</string>
     <string name="saved_routes_home_delete_accessibility">%1$s rotasını sil</string>
+    <string name="saved_routes_home_preference_direct">Yalnız aktarmasız</string>
+    <string name="saved_routes_home_preference_fewer_transfers">Daha az aktarma</string>
+    <string name="saved_routes_home_preference_shorter_walk">Daha kısa yürüyüş</string>
+    <string name="saved_routes_home_preference_max_one_transfer">En fazla bir aktarma</string>
+    <string name="saved_routes_home_preference_default">Varsayılan rota tercihleri</string>
 </resources>

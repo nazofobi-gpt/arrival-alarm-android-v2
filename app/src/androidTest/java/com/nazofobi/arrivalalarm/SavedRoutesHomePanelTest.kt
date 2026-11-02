@@ -181,6 +181,45 @@ class SavedRoutesHomePanelTest {
     }
 
     @Test
+    fun savedCommutePreviewShowsStoredPreferencesWithoutOpeningOrReplanning() {
+        val standard = preset.copy(
+            id = "test-route-default",
+            name = "Unrestricted route",
+            directOnlyRoutes = false,
+            fewerTransfersFirst = false,
+            shorterWalkingFirst = false,
+            atMostOneTransfer = false,
+        )
+        var opened = 0
+        rule.setContent {
+            MaterialTheme {
+                SavedRoutesHomePanel(
+                    presets = listOf(preset, standard),
+                    canSave = false,
+                    canRestore = true,
+                    sourceSafe = true,
+                    status = null,
+                    onSave = {},
+                    onRestore = { opened++ },
+                    onRemove = {},
+                )
+            }
+        }
+        val context = androidx.test.platform.app.InstrumentationRegistry
+            .getInstrumentation().targetContext
+        val expected = listOf(
+            context.getString(R.string.saved_routes_home_preference_fewer_transfers),
+            context.getString(R.string.saved_routes_home_preference_shorter_walk),
+            context.getString(R.string.saved_routes_home_preference_max_one_transfer),
+        ).joinToString(" · ")
+        rule.onNodeWithTag("saved-route-preferences-0").assertTextEquals(expected)
+        rule.onNodeWithTag("saved-route-preferences-1").assertTextEquals(
+            context.getString(R.string.saved_routes_home_preference_default),
+        )
+        rule.runOnIdle { assertEquals(0, opened) }
+    }
+
+    @Test
     fun routeActionsIdentifyTheCorrectSavedCommuteForScreenReaders() {
         val other = preset.copy(id = "test-route-2", name = "Other commute")
         val opened = mutableListOf<String>()
