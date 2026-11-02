@@ -37,4 +37,6 @@
     <string name="saved_routes_home_preference_shorter_walk">Kürzere Fußwege</string>
     <string name="saved_routes_home_preference_max_one_transfer">Höchstens ein Umstieg</string>
     <string name="saved_routes_home_preference_default">Standard-Routenoptionen</string>
+    <string name="saved_routes_home_undo_delete">Zuletzt gelöschte Route wiederherstellen</string>
+    <string name="saved_routes_home_restored_one">Gelöschte Route wiederhergestellt.</string>
 </resources>

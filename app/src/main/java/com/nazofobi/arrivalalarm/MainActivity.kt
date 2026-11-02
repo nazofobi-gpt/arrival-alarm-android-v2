@@ -199,6 +199,7 @@ fun ArrivalAlarmApp(
     var savedRouteStatus by remember { mutableStateOf<String?>(null) }
     // Volatile undo state: never persist deleted routes or restore after process death.
     var savedRouteClearUndo by remember { mutableStateOf<List<SavedRoutePreset>?>(null) }
+    var savedRouteRemovalUndo by remember { mutableStateOf<SavedRouteRemovalUndo?>(null) }
     var searchBusy by remember { mutableStateOf(false) }
     var searchResults by remember { mutableStateOf(emptyList<TransitLocationResult>()) }
     var searchSource by remember { mutableStateOf<String?>(null) }
@@ -1118,8 +1119,10 @@ fun ArrivalAlarmApp(
                         sourceSafe = savedRouteSnapshot.isSourceSafeToReplace,
                         status = savedRouteStatus,
                         undoPresets = savedRouteClearUndo,
+                        undoRemoval = savedRouteRemovalUndo,
                         onSave = {
                             savedRouteClearUndo = null
+                            savedRouteRemovalUndo = null
                             val from = origin
                             val to = destination
                             if (from != null && to != null) {
@@ -1190,6 +1193,7 @@ fun ArrivalAlarmApp(
                         },
                         onRename = { expected, name ->
                             savedRouteClearUndo = null
+                            savedRouteRemovalUndo = null
                             val outcome = if (journey.phase != JourneyPhase.ARMED) {
                                 savedRouteStore.rename(expected, name)
                             } else {
@@ -1208,17 +1212,32 @@ fun ArrivalAlarmApp(
                         },
                         onRemove = { id ->
                             savedRouteClearUndo = null
-                            val outcome = savedRouteStore.remove(id)
+                            savedRouteRemovalUndo = null
+                            val before = savedRouteStore.load()
+                            val outcome = if (journey.phase != JourneyPhase.ARMED &&
+                                before.isSourceSafeToReplace &&
+                                before.presets.count { it.id == id } == 1
+                            ) {
+                                savedRouteStore.remove(id)
+                            } else null
                             savedRouteSnapshot = savedRouteStore.load()
+                            if (outcome is SavedRoutePresetStoreResult.Success &&
+                                savedRouteSnapshot.presets == before.presets.filterNot { it.id == id }
+                            ) {
+                                savedRouteRemovalUndo = SavedRouteRemovalUndo(before.presets, id)
+                            }
                             savedRouteStatus = context.getString(
-                                if (outcome is SavedRoutePresetStoreResult.Success) {
-                                    R.string.saved_routes_home_deleted
-                                } else {
-                                    R.string.saved_routes_home_failed
+                                when {
+                                    journey.phase == JourneyPhase.ARMED ->
+                                        R.string.saved_routes_home_active_trip
+                                    outcome is SavedRoutePresetStoreResult.Success ->
+                                        R.string.saved_routes_home_deleted
+                                    else -> R.string.saved_routes_home_failed
                                 }
                             )
                         },
                         onClearAll = { expected ->
+                            savedRouteRemovalUndo = null
                             val outcome = if (journey.phase != JourneyPhase.ARMED) {
                                 savedRouteStore.clearAll(expected)
                             } else null
@@ -1237,6 +1256,7 @@ fun ArrivalAlarmApp(
                             )
                         },
                         onUndoClearAll = { previous ->
+                            savedRouteRemovalUndo = null
                             val outcome = if (journey.phase != JourneyPhase.ARMED &&
                                 savedRouteClearUndo == previous
                             ) {
@@ -1247,6 +1267,22 @@ fun ArrivalAlarmApp(
                             savedRouteStatus = context.getString(
                                 if (outcome is SavedRoutePresetStoreResult.Success) {
                                     R.string.saved_routes_home_restored_all
+                                } else {
+                                    R.string.saved_routes_home_failed
+                                }
+                            )
+                        },
+                        onUndoRemoval = { undo ->
+                            val outcome = if (journey.phase != JourneyPhase.ARMED &&
+                                savedRouteRemovalUndo == undo
+                            ) {
+                                savedRouteStore.undoRemove(undo)
+                            } else null
+                            savedRouteRemovalUndo = null
+                            savedRouteSnapshot = savedRouteStore.load()
+                            savedRouteStatus = context.getString(
+                                if (outcome is SavedRoutePresetStoreResult.Success) {
+                                    R.string.saved_routes_home_restored_one
                                 } else {
                                     R.string.saved_routes_home_failed
                                 }

@@ -37,4 +37,6 @@
     <string name="saved_routes_home_preference_shorter_walk">Daha kısa yürüyüş</string>
     <string name="saved_routes_home_preference_max_one_transfer">En fazla bir aktarma</string>
     <string name="saved_routes_home_preference_default">Varsayılan rota tercihleri</string>
+    <string name="saved_routes_home_undo_delete">Silinen son rotayı geri al</string>
+    <string name="saved_routes_home_restored_one">Silinen rota geri yüklendi.</string>
 </resources>

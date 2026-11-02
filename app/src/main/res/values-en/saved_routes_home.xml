@@ -37,4 +37,6 @@
     <string name="saved_routes_home_preference_shorter_walk">Shorter walking</string>
     <string name="saved_routes_home_preference_max_one_transfer">At most one transfer</string>
     <string name="saved_routes_home_preference_default">Default route preferences</string>
+    <string name="saved_routes_home_undo_delete">Undo last deleted route</string>
+    <string name="saved_routes_home_restored_one">Deleted route restored.</string>
 </resources>

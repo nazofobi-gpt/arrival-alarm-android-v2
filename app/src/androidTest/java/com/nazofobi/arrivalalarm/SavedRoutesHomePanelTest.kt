@@ -406,6 +406,42 @@ class SavedRoutesHomePanelTest {
     }
 
     @Test
+    fun singleRouteDeleteOffersOneShotUndoWithoutStartingJourney() {
+        val shown = mutableStateOf(listOf(preset))
+        val undo = mutableStateOf<SavedRouteRemovalUndo?>(null)
+        var opened = 0
+        rule.setContent {
+            MaterialTheme {
+                SavedRoutesHomePanel(
+                    presets = shown.value,
+                    canSave = false,
+                    canRestore = true,
+                    sourceSafe = true,
+                    status = null,
+                    onSave = {},
+                    onRestore = { opened++ },
+                    onRemove = { id ->
+                        val before = shown.value
+                        shown.value = before.filterNot { it.id == id }
+                        undo.value = SavedRouteRemovalUndo(before, id)
+                    },
+                    undoRemoval = undo.value,
+                    onUndoRemoval = { previous ->
+                        shown.value = previous.before
+                        undo.value = null
+                    },
+                )
+            }
+        }
+        rule.onNodeWithTag("saved-route-delete-0").performClick()
+        rule.onNodeWithTag("saved-route-confirm-delete").performClick()
+        rule.onNodeWithTag("saved-route-undo-delete").assertExists().performClick()
+        rule.onNodeWithTag("saved-route-name-0").assertExists()
+        rule.onNodeWithTag("saved-route-undo-delete").assertDoesNotExist()
+        rule.runOnIdle { assertEquals(0, opened) }
+    }
+
+    @Test
     fun activeJourneyCannotOpenOrDeleteSavedRoute() {
         var opened = false
         var removed = false

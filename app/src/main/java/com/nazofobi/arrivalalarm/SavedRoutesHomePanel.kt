@@ -44,6 +44,8 @@ internal fun SavedRoutesHomePanel(
     onClearAll: (List<SavedRoutePreset>) -> Unit = {},
     undoPresets: List<SavedRoutePreset>? = null,
     onUndoClearAll: (List<SavedRoutePreset>) -> Unit = {},
+    undoRemoval: SavedRouteRemovalUndo? = null,
+    onUndoRemoval: (SavedRouteRemovalUndo) -> Unit = {},
 ) {
     // A confirmation is intentionally discarded after recreation rather than persisted.
     var pendingClearSnapshot by androidx.compose.runtime.remember {
@@ -206,6 +208,19 @@ internal fun SavedRoutesHomePanel(
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.testTag("saved-routes-status"),
                 )
+            }
+            val canUndoRemoval = sourceSafe && canRestore && undoRemoval?.let { undo ->
+                undo.before.count { it.id == undo.removedId } == 1 &&
+                    presets == undo.before.filterNot { it.id == undo.removedId }
+            } == true
+            if (canUndoRemoval) {
+                OutlinedButton(
+                    onClick = { undoRemoval?.let(onUndoRemoval) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                        .testTag("saved-route-undo-delete"),
+                ) {
+                    Text(stringResource(R.string.saved_routes_home_undo_delete))
+                }
             }
             if (sourceSafe && presets.isEmpty()) {
                 Text(stringResource(R.string.saved_routes_home_empty))
