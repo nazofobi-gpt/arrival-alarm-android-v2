@@ -305,6 +305,74 @@ class TransitExperiencePanelTest {
         rule.onNodeWithTag("departure-7").assertExists()
     }
 
+
+    @Test
+    fun lineAndDirectionFilterChangesCardsOnlyUntilUserSelectsTrip() {
+        val candidates = (0 until 12).map { index ->
+            val group = index % 3
+            Departure(
+                tripId = "filtered-trip-$index",
+                line = if (group == 2) "RE18" else "RE9",
+                direction = if (group == 1) "Osnabrück" else "Bremen",
+                scheduledEpochSeconds = 2_000L + index * 60L,
+                routeId = "route-$index",
+            )
+        }
+        var selected: String? = null
+        rule.setContent {
+            MaterialTheme {
+                TransitExperiencePanel(
+                    stopId = "group-filter-test",
+                    stopName = "Lohne",
+                    lineName = "",
+                    direction = "",
+                    departures = candidates,
+                    alerts = emptyList(),
+                    isOfflineCache = false,
+                    nowEpochSeconds = 1_000L,
+                    onSelectDeparture = { selected = it.tripId },
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                )
+            }
+        }
+        rule.onNodeWithTag("departures-show-more-toggle").assertExists()
+        rule.onNodeWithTag("departures-filter-all").assertExists()
+        rule.onNodeWithTag("departures-filter-1").performClick()
+        rule.runOnIdle { assertEquals(null, selected) }
+        rule.onNodeWithTag("departures-show-more-toggle").assertDoesNotExist()
+        rule.onNodeWithTag("departure-3").assertExists()
+        rule.onNodeWithTag("departure-4").assertDoesNotExist()
+        rule.onNodeWithTag("departure-0").performScrollTo().performClick()
+        rule.runOnIdle { assertEquals("filtered-trip-1", selected) }
+        rule.onNodeWithTag("departures-filter-all").performClick()
+        rule.runOnIdle { assertEquals("filtered-trip-1", selected) }
+        rule.onNodeWithTag("departures-show-more-toggle").assertExists()
+        rule.onNodeWithTag("departure-7").assertExists()
+    }
+
+    @Test
+    fun singleDepartureGroupCannotShowMisleadingFilter() {
+        rule.setContent {
+            MaterialTheme {
+                TransitExperiencePanel(
+                    stopId = "single-group-test",
+                    stopName = "Lohne",
+                    lineName = "RE9",
+                    direction = "Bremen",
+                    departures = listOf(
+                        Departure("first", "RE9", "Bremen", 2_000L),
+                        Departure("second", "RE9", "Bremen", 2_060L),
+                    ),
+                    alerts = emptyList(),
+                    isOfflineCache = false,
+                    nowEpochSeconds = 1_000L,
+                )
+            }
+        }
+        rule.onNodeWithTag("departures-filter-all").assertDoesNotExist()
+        rule.onNodeWithTag("departure-1").assertExists()
+    }
+
     @Test
     fun offlineDepartureBoardHidesUnverifiedDelay() {
         rule.setContent {
