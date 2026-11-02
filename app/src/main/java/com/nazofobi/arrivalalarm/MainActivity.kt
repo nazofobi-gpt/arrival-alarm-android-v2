@@ -1197,6 +1197,21 @@ fun ArrivalAlarmApp(
                                 }
                             )
                         },
+                        onClearAll = { expected ->
+                            val outcome = if (journey.phase != JourneyPhase.ARMED) {
+                                savedRouteStore.clearAll(expected)
+                            } else null
+                            savedRouteSnapshot = savedRouteStore.load()
+                            savedRouteStatus = context.getString(
+                                when {
+                                    journey.phase == JourneyPhase.ARMED ->
+                                        R.string.saved_routes_home_active_trip
+                                    outcome is SavedRoutePresetStoreResult.Success ->
+                                        R.string.saved_routes_home_cleared_all
+                                    else -> R.string.saved_routes_home_failed
+                                }
+                            )
+                        },
                     )
                 }
 
