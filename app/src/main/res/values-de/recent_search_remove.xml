@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_recent_remove">Suche entfernen</string>
+    <string name="search_recent_remove_accessibility">%1$s aus den letzten Suchen entfernen</string>
+    <string name="search_history_record_enabled">Suchverlauf speichern</string>
+    <string name="search_history_disabled_hint">Beim Abschalten wird der bisherige Verlauf gelöscht.</string>
+</resources>

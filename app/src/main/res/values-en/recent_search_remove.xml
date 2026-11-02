@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_recent_remove">Remove search</string>
+    <string name="search_recent_remove_accessibility">Remove %1$s from recent searches</string>
+    <string name="search_history_record_enabled">Save search history</string>
+    <string name="search_history_disabled_hint">When off, searches are not saved and existing history is cleared.</string>
+</resources>

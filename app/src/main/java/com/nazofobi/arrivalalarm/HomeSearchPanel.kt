@@ -13,6 +13,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -23,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +51,8 @@ fun HomeSearchPanel(
     nearbySource: String?,
     nearbyMessage: String?,
     recentSearches: List<String>,
+    recentHistoryEnabled: Boolean = true,
+    onRecentHistoryEnabledChange: (Boolean) -> Unit = {},
     favoriteStopIds: Set<String>,
     onToggleFavoriteStop: (String) -> Unit = {},
     onSelectOriginTarget: () -> Unit,
@@ -59,6 +63,7 @@ fun HomeSearchPanel(
     onSearch: () -> Unit,
     onSearchResultSelected: (TransitLocationResult) -> Unit,
     onRecentSearchSelected: (String) -> Unit,
+    onRemoveRecentSearch: (String) -> Unit = {},
     onClearRecentSearches: () -> Unit,
     onUseCurrentLocation: () -> Unit,
     onMapStopSelected: (CatalogStop) -> Unit,
@@ -68,6 +73,7 @@ fun HomeSearchPanel(
     mode: HomeSearchMode = HomeSearchMode.HOME,
     modifier: Modifier = Modifier,
 ) {
+    val historyRecordingDescription = stringResource(R.string.search_history_record_enabled)
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -446,6 +452,25 @@ fun HomeSearchPanel(
                         )
                     }
 
+                    Text(
+                        text = stringResource(R.string.search_history_record_enabled),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Switch(
+                        checked = recentHistoryEnabled,
+                        onCheckedChange = onRecentHistoryEnabledChange,
+                        modifier = Modifier
+                            .testTag("search-history-enabled-toggle")
+                            .semantics { contentDescription = historyRecordingDescription },
+                    )
+                    if (!recentHistoryEnabled) {
+                        Text(
+                            text = stringResource(R.string.search_history_disabled_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
                     searchResults.take(12).forEachIndexed { index, result ->
                         OutlinedButton(
                             onClick = { onSearchResultSelected(result) },
@@ -500,7 +525,7 @@ fun HomeSearchPanel(
                         }
                     }
 
-                    if (recentSearches.isNotEmpty()) {
+                    if (recentHistoryEnabled && recentSearches.isNotEmpty()) {
                         HorizontalDivider()
                         Text(
                             text = stringResource(R.string.search_recents_title),
@@ -508,6 +533,7 @@ fun HomeSearchPanel(
                             fontWeight = FontWeight.SemiBold,
                         )
                         recentSearches.take(5).forEachIndexed { index, recent ->
+                            val removeDescription = stringResource(R.string.search_recent_remove_accessibility, recent)
                             OutlinedButton(
                                 onClick = { onRecentSearchSelected(recent) },
                                 modifier = Modifier
@@ -515,6 +541,16 @@ fun HomeSearchPanel(
                                     .testTag("search-recent-$index"),
                             ) {
                                 Text(recent)
+                            }
+                            TextButton(
+                                onClick = { onRemoveRecentSearch(recent) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("search-recent-remove-$index")
+                                    .semantics { contentDescription = removeDescription },
+                            ) {
+                                Text(stringResource(R.string.search_recent_remove))
                             }
                         }
                         OutlinedButton(
