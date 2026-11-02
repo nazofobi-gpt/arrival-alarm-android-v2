@@ -82,6 +82,11 @@ class SavedRoutesHomePanelTest {
         rule.onNodeWithTag("saved-route-filter").performTextInput("unknown-place")
         rule.onNodeWithTag("saved-route-filter-empty").assertExists()
         rule.onNodeWithTag("saved-route-open-0").assertDoesNotExist()
+        // Explicitly recover all results without editing saved data or opening an alarm.
+        rule.onNodeWithTag("saved-route-filter-clear").performClick()
+        rule.onNodeWithTag("saved-route-name-0").assertTextEquals(preset.name)
+        rule.onNodeWithTag("saved-route-name-1").assertTextEquals("Weekend ride")
+        rule.onNodeWithTag("saved-route-filter-clear").assertDoesNotExist()
         rule.runOnIdle { assertEquals(emptyList<String>(), removed) }
     }
 
@@ -142,6 +147,7 @@ class SavedRoutesHomePanelTest {
         }
         rule.onNodeWithTag("saved-routes-unsafe").assertExists()
         rule.onNodeWithTag("saved-route-filter").assertDoesNotExist()
+        rule.onNodeWithTag("saved-route-filter-clear").assertDoesNotExist()
         rule.onNodeWithTag("saved-route-open-0").assertDoesNotExist()
     }
 

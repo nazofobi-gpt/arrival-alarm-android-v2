@@ -28,6 +28,7 @@
     <string name="saved_routes_home_restored_all">Gespeicherte Routen wiederhergestellt.</string>
     <string name="saved_routes_home_filter">Gespeicherte Routen suchen</string>
     <string name="saved_routes_home_filter_empty">Keine passenden gespeicherten Routen.</string>
+    <string name="saved_routes_home_filter_clear">Suche zurücksetzen</string>
     <string name="saved_routes_home_open_accessibility">Route %1$s öffnen und neu berechnen</string>
     <string name="saved_routes_home_rename_accessibility">Route %1$s umbenennen</string>
     <string name="saved_routes_home_delete_accessibility">Route %1$s löschen</string>

@@ -28,6 +28,7 @@
     <string name="saved_routes_home_restored_all">Silinen kayıtlı rotalar geri yüklendi.</string>
     <string name="saved_routes_home_filter">Kayıtlı rotalarda ara</string>
     <string name="saved_routes_home_filter_empty">Eşleşen kayıtlı rota bulunamadı.</string>
+    <string name="saved_routes_home_filter_clear">Aramayı temizle</string>
     <string name="saved_routes_home_open_accessibility">%1$s rotasını aç ve yeniden hesapla</string>
     <string name="saved_routes_home_rename_accessibility">%1$s rotasını yeniden adlandır</string>
     <string name="saved_routes_home_delete_accessibility">%1$s rotasını sil</string>

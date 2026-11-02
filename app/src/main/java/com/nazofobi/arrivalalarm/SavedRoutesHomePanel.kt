@@ -227,6 +227,15 @@ internal fun SavedRoutesHomePanel(
                     label = { Text(stringResource(R.string.saved_routes_home_filter)) },
                     modifier = Modifier.fillMaxWidth().testTag("saved-route-filter"),
                 )
+                if (normalizedQuery.isNotEmpty()) {
+                    TextButton(
+                        onClick = { savedRouteQuery = "" },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .testTag("saved-route-filter-clear"),
+                    ) {
+                        Text(stringResource(R.string.saved_routes_home_filter_clear))
+                    }
+                }
                 if (normalizedQuery.isNotEmpty() && visiblePresets.isEmpty()) {
                     Text(
                         text = stringResource(R.string.saved_routes_home_filter_empty),
