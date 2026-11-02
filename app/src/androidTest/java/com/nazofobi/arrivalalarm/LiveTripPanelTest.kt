@@ -7,6 +7,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -564,6 +567,27 @@ class LiveTripPanelTest {
             .assertTextContains("Diepholz", substring = true)
         rule.onNodeWithTag("live-trip-next-stop-countdown")
             .assertTextContains("10", substring = true)
+        // Countdown remains readable well before the stop but must not speak
+        // every minute; only imminent stop guidance becomes a polite live region.
+        rule.runOnUiThread {
+            offline.value = false
+            now.longValue = "2026-09-26T08:19:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-next-stop-countdown").performScrollTo()
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
+        rule.runOnUiThread {
+            now.longValue = "2026-09-26T08:20:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-next-stop-countdown").performScrollTo()
+            .assert(SemanticsMatcher.expectValue(
+                SemanticsProperties.LiveRegion, LiveRegionMode.Polite,
+            ))
+        rule.runOnUiThread { offline.value = true }
+        rule.waitForIdle()
+        // Planned arrival has passed: never keep speaking stale realtime advice.
+        rule.onNodeWithTag("live-trip-next-stop-countdown").assertDoesNotExist()
         // A journey that has not been armed must not show active-stop guidance.
         rule.runOnUiThread { armed.value = false }
         rule.waitForIdle()
