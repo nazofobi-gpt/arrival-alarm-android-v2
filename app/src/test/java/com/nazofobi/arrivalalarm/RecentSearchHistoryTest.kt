@@ -5,6 +5,12 @@ import org.junit.Assert.assertSame
 import org.junit.Test
 
 class RecentSearchHistoryTest {
+    @Test fun disabledHistoryNeverDisplaysPersistedQueries() {
+        val stored = listOf("Bremen", "Lohne")
+        assertEquals(emptyList<String>(), RecentSearchHistory.visibleQueries(false, stored))
+        assertSame(stored, RecentSearchHistory.visibleQueries(true, stored))
+    }
+
     @Test fun deletesExactlyOneRecentQueryWithoutChangingOtherOrder() {
         val source = listOf("Bremen Hbf", "Lohne", "Berlin Hbf")
         assertEquals(
