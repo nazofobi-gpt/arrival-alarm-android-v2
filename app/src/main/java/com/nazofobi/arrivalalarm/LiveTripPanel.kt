@@ -46,7 +46,8 @@ fun LiveTripPanel(
     )
     val target = selectedRoute.stops.lastOrNull()
     val targetLabel = target?.name ?: selectedRoute.destination.label
-    val targetTimeSource = if (trustedRealtime) {
+    // Match the stop-progress evidence basis even when a fresh feed is internally contradictory.
+    val targetTimeSource = if (trustedRealtime && progress.timingBasis == TransitTimingBasis.REALTIME) {
         target?.arrival ?: target?.plannedArrival ?: selectedRoute.arrival
     } else {
         target?.plannedArrival ?: target?.plannedDeparture
@@ -117,6 +118,19 @@ fun LiveTripPanel(
                 )
             }
 
+            if (journey.phase == JourneyPhase.ARMED) {
+                scheduledBoardingMinutesRemaining(
+                    selectedRoute.stops.firstOrNull()?.plannedDeparture,
+                    nowEpochSeconds,
+                )?.let { minutes ->
+                    LiveTripFact(
+                        label = stringResource(R.string.live_trip_planned_boarding),
+                        value = stringResource(R.string.live_trip_planned_boarding_minutes, minutes),
+                        tag = "live-trip-planned-boarding",
+                    )
+                }
+            }
+
             HorizontalDivider()
 
             progress.previous?.let {
@@ -148,11 +162,51 @@ fun LiveTripPanel(
                 )
             }
 
-            progress.next?.let {
+            progress.next?.let { nextStop ->
+                // A next stop is timetable/provider-time derived, not a GPS fix.
+                // Include only source-backed platform information and never reuse
+                // an unverified live platform when the route is offline or stale.
+                val formattedPlatform = if (progress.resolvedByProviderTime) {
+                    val trustedPlatform = routeHasVerifiedRealtimePlatform(
+                        routeOffline,
+                        selectedRoute.realtime?.state,
+                        nextStop.platform,
+                    )
+                    routeEvidencePlatform(
+                        if (trustedPlatform) nextStop.platform else null,
+                        nextStop.plannedPlatform,
+                        !trustedPlatform,
+                    )?.let { platform ->
+                        stringResource(
+                            if (trustedPlatform) R.string.route_realtime_platform_format
+                            else R.string.route_planned_platform_format,
+                            platform,
+                        )
+                    }
+                } else null
                 LiveTripFact(
                     label = stringResource(R.string.live_trip_next),
-                    value = it.name,
+                    value = listOfNotNull(nextStop.name, formattedPlatform).joinToString(" • "),
                     tag = "live-trip-next",
+                )
+            }
+
+            // This is an advisory from ordered stop-time evidence, NOT an observed vehicle location.
+            // Only show it between the penultimate and destination stops, after an actual
+            // departure-time boundary; never before boarding or for unarmed journeys.
+            if (journey.phase == JourneyPhase.ARMED &&
+                selectedRoute.stops.size >= 2 &&
+                progress.resolvedByProviderTime &&
+                progress.current == null &&
+                progress.previous != null &&
+                progress.next === target &&
+                progress.remainingStops == 1
+            ) {
+                Text(
+                    text = stringResource(R.string.live_trip_destination_next_advisory),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.testTag("live-trip-final-stop-advisory"),
                 )
             }
 
@@ -180,6 +234,29 @@ fun LiveTripPanel(
                     value = it,
                     tag = "live-trip-target-time",
                 )
+            }
+
+            // Provider arrival time is guidance, not a verified GPS vehicle ETA.
+            // Unarmed trips, missing absolute clocks and stale realtime stay fail-closed.
+            if (journey.phase == JourneyPhase.ARMED && progress.resolvedByProviderTime && target != null) {
+                destinationArrivalCountdown(
+                    actualArrival = target.arrival,
+                    plannedArrival = target.plannedArrival,
+                    // A contradictory live stop timeline makes the tracker fall
+                    // back to planned times. The countdown must use that same basis.
+                    trustedRealtime = trustedRealtime &&
+                        progress.timingBasis == TransitTimingBasis.REALTIME,
+                    nowEpochSeconds = nowEpochSeconds,
+                )?.let { countdown ->
+                    LiveTripFact(
+                        label = stringResource(
+                            if (countdown.fromRealtime) R.string.live_trip_arrival_realtime_countdown
+                            else R.string.live_trip_arrival_scheduled_countdown,
+                        ),
+                        value = stringResource(R.string.live_trip_planned_boarding_minutes, countdown.minutes),
+                        tag = "live-trip-destination-countdown",
+                    )
+                }
             }
 
             journey.distanceMeters?.takeIf { it.isFinite() && it >= 0.0 }?.let {
@@ -244,6 +321,45 @@ private fun guidanceUiStatus(state: GuidanceReliabilityState): String = stringRe
         else -> R.string.guidance_device
     }
 )
+
+/**
+ * Display an advisory departure countdown only from a full, validated provider
+ * instant. This is scheduled guidance, not a realtime vehicle or leave-now alert.
+ */
+internal fun scheduledBoardingMinutesRemaining(
+    plannedDeparture: String?,
+    nowEpochSeconds: Long,
+): Long? {
+    val departure = plannedDeparture.toTransitEpochSecondsOrNull() ?: return null
+    if (nowEpochSeconds !in 946_684_800L..253_402_300_799L) return null
+    val seconds = departure - nowEpochSeconds
+    if (seconds <= 0L || seconds > 86_400L) return null
+    return (seconds + 59L) / 60L
+}
+
+/** Strict absolute-time countdown; no GPS vehicle-position inference. */
+internal data class DestinationArrivalCountdown(
+    val minutes: Long,
+    val fromRealtime: Boolean,
+)
+
+internal fun destinationArrivalCountdown(
+    actualArrival: String?,
+    plannedArrival: String?,
+    trustedRealtime: Boolean,
+    nowEpochSeconds: Long,
+): DestinationArrivalCountdown? {
+    if (nowEpochSeconds !in 946_684_800L..253_402_300_799L) return null
+    val scheduled = plannedArrival.toTransitEpochSecondsOrNull()
+    val realtime = if (trustedRealtime) actualArrival.toTransitEpochSecondsOrNull() else null
+    val arrival = realtime ?: scheduled ?: return null
+    val remainingSeconds = arrival - nowEpochSeconds
+    if (remainingSeconds <= 0L || remainingSeconds > 172_800L) return null
+    return DestinationArrivalCountdown(
+        minutes = (remainingSeconds + 59L) / 60L,
+        fromRealtime = realtime != null && (scheduled == null || realtime != scheduled),
+    )
+}
 
 /**
  * Show a destination clock only after validating the complete provider value.

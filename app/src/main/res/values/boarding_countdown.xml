@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_trip_planned_boarding">Planlı kalkışa kalan süre</string>
+    <string name="live_trip_planned_boarding_minutes">%1$d dk</string>
+    <string name="live_trip_arrival_scheduled_countdown">Planlı varışa kalan süre</string>
+    <string name="live_trip_arrival_realtime_countdown">Canlı veriye göre varışa kalan süre</string>
+    <string name="live_trip_destination_next_advisory">Durak saatlerine göre hedefiniz sıradaki durak. İnişe hazırlanın; araç konumu doğrulanmadı.</string>
+</resources>
