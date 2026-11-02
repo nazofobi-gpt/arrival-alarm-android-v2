@@ -1413,6 +1413,11 @@ fun ArrivalAlarmApp(
                             query = recent
                             runSearch(recent, recordRecent = true)
                         },
+                        onRemoveRecentSearch = { recent ->
+                            recentSearches = RecentSearchHistory.removeAndPersist(
+                                searchRecentsPreferences, recentSearches, recent,
+                            )
+                        },
                         onClearRecentSearches = {
                             recentSearches = emptyList()
                             searchRecentsPreferences.edit().remove("queries").apply()
