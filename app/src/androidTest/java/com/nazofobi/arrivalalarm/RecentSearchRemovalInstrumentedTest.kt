@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -87,4 +88,79 @@ class RecentSearchRemovalInstrumentedTest {
             restore.commit()
         }
     }
+
+    @Test
+    fun disablingHistoryClearsSavedQueriesAndPreservesSearchIndependence() {
+        val prefs = InstrumentationRegistry.getInstrumentation().targetContext
+            .getSharedPreferences("g183_recent_search_toggle_test", Context.MODE_PRIVATE)
+        val original = prefs.getString("queries", null)
+        val originalEnabled = prefs.getBoolean("history_enabled", true)
+        try {
+            check(prefs.edit().putBoolean("history_enabled", true).putString("queries", "Bremen").commit())
+            var searchCalls = 0
+            rule.setContent {
+                var enabled by remember { mutableStateOf(true) }
+                var recents by remember { mutableStateOf(listOf("Bremen")) }
+                MaterialTheme {
+                    HomeSearchPanel(
+                        selectingOrigin = true,
+                        query = "",
+                        searchBusy = false,
+                        searchResults = emptyList(),
+                        searchSource = null,
+                        searchMessage = null,
+                        locationMessage = null,
+                        origin = null,
+                        destination = null,
+                        mapMessage = null,
+                        nearby = emptyList(),
+                        nearbySource = null,
+                        nearbyMessage = null,
+                        recentSearches = recents,
+                        recentHistoryEnabled = enabled,
+                        onRecentHistoryEnabledChange = { newValue ->
+                            if (RecentSearchHistory.setEnabledAndPersist(prefs, newValue)) {
+                                enabled = newValue
+                                if (!newValue) recents = emptyList()
+                            }
+                        },
+                        favoriteStopIds = emptySet(),
+                        onSelectOriginTarget = {},
+                        onSelectDestinationTarget = {},
+                        onQueryChange = {},
+                        onSearch = { searchCalls++ },
+                        onSearchResultSelected = {},
+                        onRecentSearchSelected = { searchCalls++ },
+                        onClearRecentSearches = {},
+                        onUseCurrentLocation = {},
+                        onMapStopSelected = {},
+                        onMapPointSelected = {},
+                        onMapError = {},
+                        onNearbyStopSelected = {},
+                        mode = HomeSearchMode.SEARCH,
+                        modifier = Modifier.verticalScroll(rememberScrollState()),
+                    )
+                }
+            }
+            rule.onNodeWithTag("search-history-enabled-toggle").performScrollTo().performClick()
+            rule.onNodeWithTag("search-recent-0").assertDoesNotExist()
+            rule.runOnIdle {
+                assertEquals(false, RecentSearchHistory.isEnabled(prefs))
+                assertEquals(null, prefs.getString("queries", null))
+                assertEquals(0, searchCalls)
+            }
+            rule.onNodeWithTag("search-history-enabled-toggle").performScrollTo().performClick()
+            rule.onNodeWithTag("search-recent-0").assertDoesNotExist()
+            rule.runOnIdle {
+                assertEquals(true, RecentSearchHistory.isEnabled(prefs))
+                assertEquals(null, prefs.getString("queries", null))
+                assertEquals(0, searchCalls)
+            }
+        } finally {
+            val editor = prefs.edit().putBoolean("history_enabled", originalEnabled)
+            if (original == null) editor.remove("queries") else editor.putString("queries", original)
+            editor.commit()
+        }
+    }
+
 }
