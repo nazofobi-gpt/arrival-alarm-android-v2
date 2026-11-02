@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="recent_trip_unavailable">Trip not verified in current departures</string>
+    <string name="recent_trip_open">Open current departure</string>
+    <string name="recent_trip_remove">Remove this trip from history</string>
+</resources>

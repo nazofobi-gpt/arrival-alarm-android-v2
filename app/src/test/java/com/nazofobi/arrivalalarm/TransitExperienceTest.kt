@@ -247,6 +247,32 @@ class TransitExperienceTest {
         assertEquals(listOf("c","a"),store.recents())
     }
 
+    @Test fun selectiveRecentTripDeletionPersistsOnlyTheTargetAndKeepsFavorites() {
+        var publishes = 0
+        var persistedFavorites = emptyList<String>()
+        var persistedRecents = emptyList<String>()
+        val store = TransitRecentsStore(
+            favoriteIds = listOf("home-stop"),
+            recentTripIds = listOf("old", "middle", "latest"),
+        ) { favorites, recents ->
+            publishes++
+            persistedFavorites = favorites
+            persistedRecents = recents
+        }
+        assertTrue(store.removeRecentTrip("middle"))
+        assertEquals(listOf("old", "latest"), store.recents())
+        assertEquals(listOf("home-stop"), store.favorites())
+        assertEquals(listOf("home-stop"), persistedFavorites)
+        assertEquals(listOf("old", "latest"), persistedRecents)
+        assertEquals(1, publishes)
+        assertFalse(store.removeRecentTrip("missing"))
+        assertFalse(store.removeRecentTrip(" "))
+        assertEquals(1, publishes)
+        assertTrue(store.removeRecentTrip("old"))
+        assertEquals(listOf("latest"), persistedRecents)
+        assertEquals(2, publishes)
+    }
+
     @Test fun clearingTripHistoryPreservesFavoritesAndPublishesOnce() {
         var writes = 0
         var persistedFavorites = emptyList<String>()

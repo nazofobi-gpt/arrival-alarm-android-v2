@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="recent_trip_unavailable">Bu sefer mevcut kalkışlarda doğrulanamıyor</string>
+    <string name="recent_trip_open">Güncel seferi aç</string>
+    <string name="recent_trip_remove">Bu seferi geçmişten kaldır</string>
+</resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="recent_trip_unavailable">Diese Fahrt ist in den aktuellen Abfahrten nicht bestätigt</string>
+    <string name="recent_trip_open">Aktuelle Fahrt öffnen</string>
+    <string name="recent_trip_remove">Diese Fahrt aus dem Verlauf entfernen</string>
+</resources>

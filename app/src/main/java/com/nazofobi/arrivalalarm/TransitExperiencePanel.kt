@@ -424,6 +424,51 @@ fun TransitExperiencePanel(
                 ))
             }
             if (historyEnabled && recentTripCount > 0) {
+                // Previous selections are opaque IDs, not proof that a trip is still running.
+                // Only a unique currently validated departure may be reopened.
+                store.recents().forEachIndexed { index, recentTripId ->
+                    val available = board.filter { it.tripId == recentTripId }.singleOrNull()
+                    val canReopen = !loading && available != null &&
+                        (onSelectDeparture != null || !available.routeId.isNullOrBlank())
+                    Card(
+                        modifier = Modifier.fillMaxWidth().testTag("recent-trip-$index"),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                text = available?.let { "${it.line} → ${it.direction}" }
+                                    ?: stringResource(R.string.recent_trip_unavailable),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            OutlinedButton(
+                                onClick = {
+                                    available?.let { departure ->
+                                        if (onSelectDeparture != null) onSelectDeparture(departure)
+                                        else departure.routeId?.let(onSelectJourney)
+                                    }
+                                },
+                                enabled = canReopen,
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                    .testTag("recent-trip-open-$index"),
+                            ) {
+                                Text(stringResource(R.string.recent_trip_open))
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    store.removeRecentTrip(recentTripId)
+                                    recentTripCount = store.recents().size
+                                },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                    .testTag("recent-trip-remove-$index"),
+                            ) {
+                                Text(stringResource(R.string.recent_trip_remove))
+                            }
+                        }
+                    }
+                }
                 OutlinedButton(
                     onClick = {
                         store.clearRecents()
