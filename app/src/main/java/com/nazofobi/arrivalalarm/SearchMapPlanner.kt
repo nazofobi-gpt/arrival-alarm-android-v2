@@ -57,6 +57,8 @@ data class RouteOption(
     // Null means this provider did not supply separately verified walking legs.
     val accessWalking: RouteWalkingLegEvidence? = null,
     val egressWalking: RouteWalkingLegEvidence? = null,
+    // Feed-backed geometry for selected transit legs; empty means no safe line.
+    val shapePolylines: List<List<MapPoint>> = emptyList(),
 )
 
 interface GeocodeProvider { fun search(query: String): List<MapPoint> }
