@@ -49,6 +49,34 @@ class LiveTripClockTest {
         assertEquals(60L, scheduledBoardingMinutesRemaining("2026-10-25T02:40:00+01:00", now))
     }
 
+    @Test fun destinationCountdownDifferentiatesVerifiedRealtimeAndScheduledFallback() {
+        val now = "2026-10-25T00:40:00Z".toTransitEpochSecondsOrNull()!!
+        val actual = "2026-10-25T02:10:00+01:00"
+        val scheduled = "2026-10-25T02:08:00+01:00"
+        assertEquals(DestinationArrivalCountdown(30L, true),
+            destinationArrivalCountdown(actual, scheduled, true, now))
+        assertEquals(DestinationArrivalCountdown(28L, false),
+            destinationArrivalCountdown(actual, scheduled, false, now))
+        assertEquals(DestinationArrivalCountdown(28L, false),
+            destinationArrivalCountdown("malformed", scheduled, true, now))
+        assertEquals(DestinationArrivalCountdown(1L, true),
+            destinationArrivalCountdown("2026-10-25T00:40:01Z", null, true, now))
+    }
+
+    @Test fun destinationCountdownRejectsUntrustedAndImpossibleTimeEvidence() {
+        val now = "2026-10-25T00:40:00Z".toTransitEpochSecondsOrNull()!!
+        listOf(null, "", "08:45", "2026-10-25T02:10:00+99:00",
+            "2026-10-25T02:10:00+01:00junk", "2026-10-25T00:40:00Z",
+            "2026-10-24T23:40:00Z", "2026-10-28T00:40:00Z").forEach {
+            assertNull("Invalid or out-of-window arrival: $it",
+                destinationArrivalCountdown(it, null, true, now))
+        }
+        assertNull(destinationArrivalCountdown("2026-10-25T02:10:00+01:00",
+            null, false, now))
+        assertNull(destinationArrivalCountdown("2026-10-25T02:10:00+01:00",
+            null, true, 0L))
+    }
+
     @Test fun pastMalformedMissingAndDistantBoardingClocksStayHidden() {
         val now = "2026-10-25T00:40:00Z".toTransitEpochSecondsOrNull()!!
         listOf(null, "", "08:40", "2026-02-30T08:00:00Z",

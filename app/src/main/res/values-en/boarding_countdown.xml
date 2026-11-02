@@ -2,4 +2,6 @@
 <resources>
     <string name="live_trip_planned_boarding">Time until scheduled departure</string>
     <string name="live_trip_planned_boarding_minutes">%1$d min</string>
+    <string name="live_trip_arrival_scheduled_countdown">Time until scheduled arrival</string>
+    <string name="live_trip_arrival_realtime_countdown">Time to arrival from live data</string>
 </resources>

@@ -216,6 +216,26 @@ fun LiveTripPanel(
                 )
             }
 
+            // Provider arrival time is guidance, not a verified GPS vehicle ETA.
+            // Unarmed trips, missing absolute clocks and stale realtime stay fail-closed.
+            if (journey.phase == JourneyPhase.ARMED && progress.resolvedByProviderTime && target != null) {
+                destinationArrivalCountdown(
+                    actualArrival = target.arrival,
+                    plannedArrival = target.plannedArrival,
+                    trustedRealtime = trustedRealtime,
+                    nowEpochSeconds = nowEpochSeconds,
+                )?.let { countdown ->
+                    LiveTripFact(
+                        label = stringResource(
+                            if (countdown.fromRealtime) R.string.live_trip_arrival_realtime_countdown
+                            else R.string.live_trip_arrival_scheduled_countdown,
+                        ),
+                        value = stringResource(R.string.live_trip_planned_boarding_minutes, countdown.minutes),
+                        tag = "live-trip-destination-countdown",
+                    )
+                }
+            }
+
             journey.distanceMeters?.takeIf { it.isFinite() && it >= 0.0 }?.let {
                 LiveTripFact(
                     label = stringResource(R.string.live_trip_gps_distance),
@@ -292,6 +312,30 @@ internal fun scheduledBoardingMinutesRemaining(
     val seconds = departure - nowEpochSeconds
     if (seconds <= 0L || seconds > 86_400L) return null
     return (seconds + 59L) / 60L
+}
+
+/** Strict absolute-time countdown; no GPS vehicle-position inference. */
+internal data class DestinationArrivalCountdown(
+    val minutes: Long,
+    val fromRealtime: Boolean,
+)
+
+internal fun destinationArrivalCountdown(
+    actualArrival: String?,
+    plannedArrival: String?,
+    trustedRealtime: Boolean,
+    nowEpochSeconds: Long,
+): DestinationArrivalCountdown? {
+    if (nowEpochSeconds !in 946_684_800L..253_402_300_799L) return null
+    val scheduled = plannedArrival.toTransitEpochSecondsOrNull()
+    val realtime = if (trustedRealtime) actualArrival.toTransitEpochSecondsOrNull() else null
+    val arrival = realtime ?: scheduled ?: return null
+    val remainingSeconds = arrival - nowEpochSeconds
+    if (remainingSeconds <= 0L || remainingSeconds > 172_800L) return null
+    return DestinationArrivalCountdown(
+        minutes = (remainingSeconds + 59L) / 60L,
+        fromRealtime = realtime != null && (scheduled == null || realtime != scheduled),
+    )
 }
 
 /**

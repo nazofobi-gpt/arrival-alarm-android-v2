@@ -347,12 +347,16 @@ class LiveTripPanelTest {
 
         rule.onNodeWithTag("live-trip-next")
             .performScrollTo().assertTextContains("9", substring = true)
+        rule.onNodeWithTag("live-trip-destination-countdown")
+            .performScrollTo().assertTextContains("30", substring = true)
 
         // A cached/offline route must never present the actual platform as live.
         rule.runOnUiThread { offline.value = true }
         rule.waitForIdle()
         rule.onNodeWithTag("live-trip-next")
             .performScrollTo().assertTextContains("7", substring = true)
+        rule.onNodeWithTag("live-trip-destination-countdown")
+            .performScrollTo().assertTextContains("28", substring = true)
 
         // Do not invent a next stop (or its platform) once no next stop exists.
         rule.runOnUiThread {
@@ -360,6 +364,7 @@ class LiveTripPanelTest {
         }
         rule.waitForIdle()
         rule.onNodeWithTag("live-trip-next").assertDoesNotExist()
+        rule.onNodeWithTag("live-trip-destination-countdown").assertDoesNotExist()
     }
 
 }

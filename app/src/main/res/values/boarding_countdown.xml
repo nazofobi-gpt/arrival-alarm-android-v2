@@ -2,4 +2,6 @@
 <resources>
     <string name="live_trip_planned_boarding">Planlı kalkışa kalan süre</string>
     <string name="live_trip_planned_boarding_minutes">%1$d dk</string>
+    <string name="live_trip_arrival_scheduled_countdown">Planlı varışa kalan süre</string>
+    <string name="live_trip_arrival_realtime_countdown">Canlı veriye göre varışa kalan süre</string>
 </resources>
