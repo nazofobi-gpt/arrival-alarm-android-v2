@@ -161,12 +161,40 @@ fun LiveTripPanel(
                 )
             }
 
-            progress.next?.let {
+            progress.next?.let { nextStop ->
                 LiveTripFact(
                     label = stringResource(R.string.live_trip_next),
-                    value = it.name,
+                    value = nextStop.name,
                     tag = "live-trip-next",
                 )
+                // Platform guidance is a provider/schedule fact, not observed GPS
+                // positioning. Do not promote a stale realtime platform to current.
+                if (progress.resolvedByProviderTime) {
+                    val hasVerifiedRealtimePlatform = routeHasVerifiedRealtimePlatform(
+                        routeOffline,
+                        selectedRoute.realtime?.state,
+                        nextStop.platform,
+                    )
+                    val platform = routeEvidencePlatform(
+                        if (hasVerifiedRealtimePlatform) nextStop.platform else null,
+                        nextStop.plannedPlatform,
+                        !hasVerifiedRealtimePlatform,
+                    )
+                    platform?.let {
+                        LiveTripFact(
+                            label = stringResource(R.string.live_trip_next_platform),
+                            value = stringResource(
+                                if (hasVerifiedRealtimePlatform) {
+                                    R.string.route_realtime_platform_format
+                                } else {
+                                    R.string.route_planned_platform_format
+                                },
+                                it,
+                            ),
+                            tag = "live-trip-next-platform",
+                        )
+                    }
+                }
             }
 
             // The count is schedule/provider-time derived, not a GPS vehicle position.
