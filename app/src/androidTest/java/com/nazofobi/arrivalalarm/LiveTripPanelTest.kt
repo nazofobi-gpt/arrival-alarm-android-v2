@@ -487,7 +487,7 @@ class LiveTripPanelTest {
     @Test
     fun nextIntermediateStopCountdownUsesCoherentEvidenceAndRequiresActiveJourney() {
         val now = mutableLongStateOf(
-            "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
+            "2026-09-26T07:50:00+02:00".toTransitEpochSecondsOrNull()!!
         )
         val offline = mutableStateOf(false)
         val armed = mutableStateOf(true)
@@ -505,6 +505,7 @@ class LiveTripPanelTest {
             stops = listOf(
                 RouteStop(
                     id = "start", name = "Lohne",
+                    plannedArrival = "2026-09-26T07:55:00+02:00",
                     plannedDeparture = "2026-09-26T08:00:00+02:00",
                 ),
                 RouteStop(
@@ -536,6 +537,13 @@ class LiveTripPanelTest {
                 }
             }
         }
+        // Before boarding, the first stop's arrival timestamp is NOT the next
+        // intermediate stop. The earlier implementation displayed "5 min" here.
+        rule.onNodeWithTag("live-trip-next-stop-countdown").assertDoesNotExist()
+        rule.runOnUiThread {
+            now.longValue = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
         // Fresh, coherent realtime: 15 minutes to the next intermediate stop.
         rule.onNodeWithTag("live-trip-next-stop-countdown").performScrollTo()
             .assertTextContains("15", substring = true)
