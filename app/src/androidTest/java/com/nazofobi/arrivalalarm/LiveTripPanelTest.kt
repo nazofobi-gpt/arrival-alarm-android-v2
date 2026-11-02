@@ -297,4 +297,69 @@ class LiveTripPanelTest {
         rule.onNodeWithTag("live-trip-planned-boarding").assertDoesNotExist()
     }
 
+    @Test
+    fun liveNextStopPlatformDistinguishesVerifiedRealtimeFromOfflineSchedule() {
+        val offline = mutableStateOf(false)
+        val now = mutableLongStateOf(
+            "2026-09-26T08:15:30+02:00".toTransitEpochSecondsOrNull()!!
+        )
+        val route = RouteOption(
+            id = "next-platform",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
+            line = "RE 9",
+            direction = "Bremen Hbf",
+            departure = "08:00",
+            arrival = "08:45",
+            walkingMinutes = 0,
+            transfers = 0,
+            realtime = RouteRealtimeInfo(state = RouteRealtimeState.FRESH_MATCHED),
+            stops = listOf(
+                RouteStop(
+                    id = "start",
+                    name = "Diepholz",
+                    departure = "2026-09-26T08:00:00+02:00",
+                    plannedDeparture = "2026-09-26T08:00:00+02:00",
+                ),
+                RouteStop(
+                    id = "next",
+                    name = "Bremen Hbf",
+                    arrival = "2026-09-26T08:45:00+02:00",
+                    plannedArrival = "2026-09-26T08:43:00+02:00",
+                    platform = "9",
+                    plannedPlatform = "7",
+                ),
+            ),
+        )
+        rule.setContent {
+            MaterialTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    LiveTripPanel(
+                        selectedRoute = route,
+                        journey = JourneyUiState(phase = JourneyPhase.ARMED),
+                        guidanceState = GuidanceReliabilityState(),
+                        routeOffline = offline.value,
+                        nowEpochSeconds = now.longValue,
+                    )
+                }
+            }
+        }
+
+        rule.onNodeWithTag("live-trip-next-platform")
+            .performScrollTo().assertTextContains("9", substring = true)
+
+        // A cached/offline route must never present the actual platform as live.
+        rule.runOnUiThread { offline.value = true }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-next-platform")
+            .performScrollTo().assertTextContains("7", substring = true)
+
+        // Do not invent a next stop (or its platform) once no next stop exists.
+        rule.runOnUiThread {
+            now.longValue = "2026-09-26T09:00:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-next-platform").assertDoesNotExist()
+    }
+
 }
