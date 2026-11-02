@@ -84,15 +84,23 @@ class RouteStopDeviationUiTest {
             .performScrollTo().assertTextContains("3", substring = true)
     }
 
-    @Test fun staleOfflineOrCancelledTripNeverShowsStopDeviation() {
-        for ((state, offline, cancelled) in listOf(
-            Triple(RouteRealtimeState.STALE, false, false),
-            Triple(RouteRealtimeState.FRESH_MATCHED, true, false),
-            Triple(RouteRealtimeState.FRESH_MATCHED, false, true),
-        )) {
-            render(state, offline, cancelled)
-            rule.onNodeWithTag("journey-stop-deviation-0").assertDoesNotExist()
-            rule.onNodeWithTag("journey-stop-deviation-1").assertDoesNotExist()
-        }
+    private fun assertNoStopDeviation() {
+        rule.onNodeWithTag("journey-stop-deviation-0").assertDoesNotExist()
+        rule.onNodeWithTag("journey-stop-deviation-1").assertDoesNotExist()
+    }
+
+    @Test fun staleRouteNeverShowsStopDeviation() {
+        render(RouteRealtimeState.STALE)
+        assertNoStopDeviation()
+    }
+
+    @Test fun offlineRouteNeverShowsStopDeviation() {
+        render(RouteRealtimeState.FRESH_MATCHED, offline = true)
+        assertNoStopDeviation()
+    }
+
+    @Test fun cancelledRouteNeverShowsStopDeviation() {
+        render(RouteRealtimeState.FRESH_MATCHED, cancelled = true)
+        assertNoStopDeviation()
     }
 }
