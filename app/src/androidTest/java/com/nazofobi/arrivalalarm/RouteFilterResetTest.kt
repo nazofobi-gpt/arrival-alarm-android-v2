@@ -31,6 +31,7 @@ class RouteFilterResetTest {
             ArrivalUiPreferences.KEY_MAX_WALKING_15_MINUTES,
             ArrivalUiPreferences.KEY_FEWER_TRANSFERS_FIRST,
             ArrivalUiPreferences.KEY_SHORTER_WALKING_FIRST,
+            ArrivalUiPreferences.KEY_MIN_TRANSFER_FIVE_MINUTES,
         )
         val original = keys.associateWith { prefs.all[it] }
         try {
@@ -62,6 +63,7 @@ class RouteFilterResetTest {
             rule.onNodeWithTag("route-direct-only-filter").assertIsNotSelected()
             rule.onNodeWithTag("route-at-most-one-transfer-filter").assertIsNotSelected()
             rule.onNodeWithTag("route-max-walking-15-filter").assertIsNotSelected()
+            rule.onNodeWithTag("route-min-transfer-5-filter").assertIsNotSelected()
             rule.runOnIdle {
                 assertEquals(1, refreshes)
                 keys.forEach { key -> assertEquals(false, prefs.getBoolean(key, true)) }
@@ -121,6 +123,45 @@ class RouteFilterResetTest {
     }
 
     @Test
+    fun transferBudgetPreferencePersistsAndReplans() {
+        val prefs = InstrumentationRegistry.getInstrumentation().targetContext
+            .getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+        val key = ArrivalUiPreferences.KEY_MIN_TRANSFER_FIVE_MINUTES
+        val original = prefs.all[key]
+        try {
+            check(prefs.edit().putBoolean(key, false).commit())
+            var refreshes = 0
+            rule.setContent {
+                MaterialTheme {
+                    RouteJourneyPanel(
+                        origin = MapPoint(52.665, 8.237, "Lohne"),
+                        destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
+                        routeOptions = emptyList(), routeBusy = false, routeStatus = null,
+                        routeOffline = false, selectedRouteId = null, journey = JourneyUiState(),
+                        onRefreshRoutes = { refreshes++ }, onSelectRoute = {},
+                        onArmAlarm = {}, onCancelAlarm = {},
+                        modifier = Modifier.verticalScroll(rememberScrollState()),
+                    )
+                }
+            }
+            rule.onNodeWithTag("route-min-transfer-5-filter").performScrollTo().performClick()
+            rule.runOnIdle {
+                assertEquals(1, refreshes)
+                assertEquals(true, prefs.getBoolean(key, false))
+            }
+            rule.onNodeWithTag("route-min-transfer-5-filter").performScrollTo().performClick()
+            rule.runOnIdle {
+                assertEquals(2, refreshes)
+                assertEquals(false, prefs.getBoolean(key, true))
+            }
+        } finally {
+            val editor = prefs.edit()
+            if (original is Boolean) editor.putBoolean(key, original) else editor.remove(key)
+            editor.commit()
+        }
+    }
+
+    @Test
     fun noRouteWithoutRestrictiveFiltersDoesNotOfferMisleadingReset() {
         val prefs = InstrumentationRegistry.getInstrumentation().targetContext
             .getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
@@ -128,6 +169,7 @@ class RouteFilterResetTest {
             ArrivalUiPreferences.KEY_DIRECT_ONLY_ROUTES,
             ArrivalUiPreferences.KEY_AT_MOST_ONE_TRANSFER,
             ArrivalUiPreferences.KEY_MAX_WALKING_15_MINUTES,
+            ArrivalUiPreferences.KEY_MIN_TRANSFER_FIVE_MINUTES,
         )
         val original = keys.associateWith { prefs.all[it] }
         try {

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="route_min_transfer_5_filter">Local GTFS: at least 5 min to transfer</string>
+    <string name="route_min_transfer_5_unavailable">The 5-minute transfer buffer cannot be verified in local GTFS data. Remove this filter and search again.</string>
+</resources>

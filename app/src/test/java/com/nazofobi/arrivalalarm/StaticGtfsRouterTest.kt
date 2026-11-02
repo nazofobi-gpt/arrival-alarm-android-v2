@@ -233,6 +233,26 @@ class StaticGtfsRouterTest {
         )
     }
 
+    @Test fun fiveMinuteTransferBudgetChoosesLaterSafeConnectionBeforeResultCap() {
+        val data = baseTransferData(
+            extraCandidate = candidate("T3", "R3", "S", 1, "10:12:00"),
+            extraTrip = listOf(st("T3", 1, "X", "10:12:00"), st("T3", 2, "B", "10:24:00")),
+        )
+        val router = StaticGtfsRouter(data, zone, maxJourneys = 1)
+        val from = listOf(StaticRouterAccess("A"))
+        val to = listOf(StaticRouterAccess("B"))
+        val default = router.route(from, to, date, at("09:55:00"))
+        assertEquals(listOf("T1", "T2"),
+            (default as StaticRouterResult.Journeys).journeys.single().legs.map { it.tripId })
+        val buffered = router.route(from, to, date, at("09:55:00"), minTransferSeconds = 300)
+        assertEquals(listOf("T1", "T3"),
+            (buffered as StaticRouterResult.Journeys).journeys.single().legs.map { it.tripId })
+        assertTrue(router.route(from, to, date, at("09:55:00"), minTransferSeconds = -1)
+            is StaticRouterResult.NoPath)
+        assertTrue(router.route(from, to, date, at("09:55:00"), minTransferSeconds = 1_801)
+            is StaticRouterResult.NoPath)
+    }
+
     @Test fun implicitSameStopTransferWorksWithoutTransfersFile() {
         val data = baseTransferData()
         val result = StaticGtfsRouter(data, zone, implicitTransferSeconds = 120).route(

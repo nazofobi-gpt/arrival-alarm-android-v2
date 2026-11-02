@@ -166,11 +166,13 @@ class StaticGtfsRouter(
         departureEpochMillis: Long,
         maxWalkingSeconds: Int? = null,
         maxAllowedTransfers: Int? = null,
+        minTransferSeconds: Int? = null,
     ): StaticRouterResult {
         if (maxWalkingSeconds != null && maxWalkingSeconds < 0) return StaticRouterResult.NoPath
         if (maxAllowedTransfers != null && maxAllowedTransfers !in 0..maxTransfers) {
             return StaticRouterResult.NoPath
         }
+        if (minTransferSeconds != null && minTransferSeconds !in 0..1_800) return StaticRouterResult.NoPath
         // A stop may be supplied by multiple access/egress strategies. Preserve the
         // shortest feasible walk rather than whichever duplicate arrived first.
         // Rank before the bounded selection so a nearby stop is not dropped merely
@@ -215,6 +217,7 @@ class StaticGtfsRouter(
                     destinationByStop = destinationByStop,
                     priorLegs = emptyList(),
                     remainingTransfers = maxAllowedTransfers ?: maxTransfers,
+                    minTransferSeconds = minTransferSeconds ?: 0,
                     visitedTripIds = emptySet(),
                     bestBoardByState = bestBoardByState,
                     budget = budget,
@@ -282,6 +285,7 @@ class StaticGtfsRouter(
         destinationByStop: Map<String, StaticRouterAccess>,
         priorLegs: List<StaticTransitLeg>,
         remainingTransfers: Int,
+        minTransferSeconds: Int,
         visitedTripIds: Set<String>,
         bestBoardByState: MutableMap<SearchStateKey, Long>,
         budget: SearchBudget,
@@ -350,7 +354,7 @@ class StaticGtfsRouter(
             val rules = transferRulesFor(alight.stopId)
             val targets = transferTargets(alight.stopId, rules)
             for (target in targets) {
-                val earliestTransferReady = arrival + target.walkSeconds * 1_000L
+                val earliestTransferReady = arrival + max(target.walkSeconds, minTransferSeconds) * 1_000L
                 val earliestTransferSeconds =
                     serviceSeconds(earliestTransferReady, serviceDate) ?: continue
                 if (!budget.claimCandidateQuery()) return journeys
@@ -382,7 +386,7 @@ class StaticGtfsRouter(
                     } else {
                         target.walkSeconds
                     }
-                    val transferReady = arrival + transferSeconds * 1_000L
+                    val transferReady = arrival + max(transferSeconds, minTransferSeconds) * 1_000L
                     val state = SearchStateKey(
                         tripId = next.trip.id,
                         boardStopId = target.stopId,
@@ -403,6 +407,7 @@ class StaticGtfsRouter(
                         destinationByStop = destinationByStop,
                         priorLegs = legs,
                         remainingTransfers = remainingTransfers - 1,
+                        minTransferSeconds = minTransferSeconds,
                         visitedTripIds = visited,
                         bestBoardByState = bestBoardByState,
                         budget = budget,
