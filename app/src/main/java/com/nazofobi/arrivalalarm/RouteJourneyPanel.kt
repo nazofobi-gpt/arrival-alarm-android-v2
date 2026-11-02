@@ -236,6 +236,29 @@ fun RouteJourneyPanel(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.testTag("route-results-empty"),
                     )
+                    // A restrictive saved preference may hide every route. Offer a
+                    // one-step recovery and regenerate candidates before the result cap.
+                    if (directOnly || atMostOneTransfer || maxWalking15Minutes) {
+                        OutlinedButton(
+                            onClick = {
+                                directOnly = false
+                                atMostOneTransfer = false
+                                maxWalking15Minutes = false
+                                fewerTransfersFirst = false
+                                shorterWalkingFirst = false
+                                preferences.saveDirectOnlyRoutes(false)
+                                preferences.saveAtMostOneTransfer(false)
+                                preferences.saveMaxWalking15Minutes(false)
+                                preferences.saveFewerTransfersFirst(false)
+                                preferences.saveShorterWalkingFirst(false)
+                                onRefreshRoutes()
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                .testTag("route-filter-reset"),
+                        ) {
+                            Text(stringResource(R.string.route_filter_reset_and_search))
+                        }
+                    }
                 }
             }
         } else {
