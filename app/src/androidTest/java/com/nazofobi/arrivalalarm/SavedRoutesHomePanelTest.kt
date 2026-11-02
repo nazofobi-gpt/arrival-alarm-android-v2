@@ -37,6 +37,75 @@ class SavedRoutesHomePanelTest {
     )
 
     @Test
+    fun savedCommutesFilterByStoredEndpointWithoutOpeningOrChangingRoutes() {
+        val another = preset.copy(
+            id = "test-route-2",
+            name = "Weekend ride",
+            originLatitude = 53.55,
+            originLongitude = 10.0,
+            originLabel = "Hamburg",
+            destinationLatitude = 52.52,
+            destinationLongitude = 13.4,
+            destinationLabel = "Berlin",
+        )
+        val opened = mutableListOf<String>()
+        val removed = mutableListOf<String>()
+        rule.setContent {
+            MaterialTheme {
+                SavedRoutesHomePanel(
+                    presets = listOf(preset, another),
+                    canSave = false,
+                    canRestore = true,
+                    sourceSafe = true,
+                    status = null,
+                    onSave = {},
+                    onRestore = { opened += it.id },
+                    onRemove = { removed += it },
+                )
+            }
+        }
+
+        rule.onNodeWithTag("saved-route-filter").performTextInput("berLIN")
+        rule.onNodeWithTag("saved-route-name-0").assertTextEquals("Weekend ride")
+        rule.onNodeWithTag("saved-route-name-1").assertDoesNotExist()
+        rule.runOnIdle {
+            assertEquals(emptyList<String>(), opened)
+            assertEquals(emptyList<String>(), removed)
+        }
+        rule.onNodeWithTag("saved-route-open-0").performClick()
+        rule.runOnIdle { assertEquals(listOf(another.id), opened) }
+
+        rule.onNodeWithTag("saved-route-filter").performTextClearance()
+        rule.onNodeWithTag("saved-route-name-0").assertTextEquals(preset.name)
+        rule.onNodeWithTag("saved-route-name-1").assertTextEquals("Weekend ride")
+        rule.onNodeWithTag("saved-route-filter").performTextInput("unknown-place")
+        rule.onNodeWithTag("saved-route-filter-empty").assertExists()
+        rule.onNodeWithTag("saved-route-open-0").assertDoesNotExist()
+        rule.runOnIdle { assertEquals(emptyList<String>(), removed) }
+    }
+
+    @Test
+    fun unsafeSavedCommutesDoNotExposeFilterOrRouteActions() {
+        rule.setContent {
+            MaterialTheme {
+                SavedRoutesHomePanel(
+                    presets = listOf(preset, preset.copy(id = "test-route-2")),
+                    canSave = true,
+                    canRestore = true,
+                    sourceSafe = false,
+                    status = null,
+                    onSave = {},
+                    onRestore = {},
+                    onRemove = {},
+                )
+            }
+        }
+        rule.onNodeWithTag("saved-routes-unsafe").assertExists()
+        rule.onNodeWithTag("saved-route-filter").assertDoesNotExist()
+        rule.onNodeWithTag("saved-route-open-0").assertDoesNotExist()
+    }
+
+    @Test
     fun savedRoutePreviewShowsStoredEndpointsWithoutStartingAnAction() {
         var opened = 0
         val named = preset.copy(name = "Morning commute")
