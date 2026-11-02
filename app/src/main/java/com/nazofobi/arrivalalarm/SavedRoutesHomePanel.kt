@@ -1,5 +1,6 @@
 package com.nazofobi.arrivalalarm
 
+import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,9 +17,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
@@ -41,6 +44,20 @@ internal fun SavedRoutesHomePanel(
     onRemove: (String) -> Unit,
     onRename: (SavedRoutePreset, String) -> Unit = { _, _ -> },
 ) {
+    // This preference only changes local presentation order. It does not arm an
+    // alarm, subscribe to notifications, or mutate saved route endpoints.
+    val context = LocalContext.current.applicationContext
+    val pinPreferences = remember(context) {
+        context.getSharedPreferences("saved_route_home", Context.MODE_PRIVATE)
+    }
+    var pinnedRouteId by remember(pinPreferences) {
+        mutableStateOf(try {
+            pinPreferences.getString("pinned_commute_id_v1", null)
+        } catch (_: ClassCastException) {
+            null
+        })
+    }
+    val visiblePresets = prioritizeSavedCommute(presets, pinnedRouteId)
     var pendingDeleteId by rememberSaveable { mutableStateOf<String?>(null) }
     val pendingDelete = presets.firstOrNull { it.id == pendingDeleteId }
     var pendingRenameId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -164,12 +181,32 @@ internal fun SavedRoutesHomePanel(
                 Text(stringResource(R.string.saved_routes_home_empty))
             }
             if (sourceSafe) {
-                presets.take(SavedRoutePresetsCodec.MAX_PRESETS).forEachIndexed { index, preset ->
+                visiblePresets.take(SavedRoutePresetsCodec.MAX_PRESETS).forEachIndexed { index, preset ->
                     Text(
-                        text = preset.name,
+                        text = if (pinnedRouteId == preset.id) {
+                            stringResource(R.string.saved_commute_pinned_label, preset.name)
+                        } else preset.name,
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.testTag("saved-route-name-$index"),
                     )
+                    OutlinedButton(
+                        onClick = {
+                            val nextPin = if (pinnedRouteId == preset.id) null else preset.id
+                            val editor = pinPreferences.edit()
+                            if (nextPin == null) editor.remove("pinned_commute_id_v1")
+                            else editor.putString("pinned_commute_id_v1", nextPin)
+                            editor.apply()
+                            pinnedRouteId = nextPin
+                        },
+                        enabled = canRestore,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .testTag("saved-route-pin-$index"),
+                    ) {
+                        Text(stringResource(
+                            if (pinnedRouteId == preset.id) R.string.saved_commute_unpin
+                            else R.string.saved_commute_pin,
+                        ))
+                    }
                     OutlinedButton(
                         onClick = { onRestore(preset) },
                         enabled = canRestore,

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="saved_commute_pin">Kayıtlı yolculuğu üste sabitle</string>
+    <string name="saved_commute_unpin">Üstte sabitlemeyi kaldır</string>
+    <string name="saved_commute_pinned_label">%1$s — sabitlendi</string>
+</resources>

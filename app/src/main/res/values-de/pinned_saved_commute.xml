@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="saved_commute_pin">Gespeicherte Pendelstrecke oben anheften</string>
+    <string name="saved_commute_unpin">Anheftung entfernen</string>
+    <string name="saved_commute_pinned_label">%1$s — angeheftet</string>
+</resources>
