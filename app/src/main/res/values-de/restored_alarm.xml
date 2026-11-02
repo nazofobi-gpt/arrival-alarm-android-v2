@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="restored_alarm_title">Gespeicherter Ankunftsalarm</string>
+    <string name="restored_alarm_notice">Die Routenansicht konnte nicht wiederhergestellt werden. Das Ziel stammt aus gespeicherten GPS-Koordinaten; Haltestelle, Fahrt und Live-Fahrzeugposition sind nicht bestätigt.</string>
+    <string name="restored_alarm_target_format">Gespeichertes Alarmziel (Breite, Länge): %1$s</string>
+    <string name="restored_alarm_last_distance_format">Zuletzt gespeicherte GPS-Distanz: %1$s m (möglicherweise veraltet)</string>
+    <string name="restored_alarm_distance_unavailable">Noch keine GPS-Distanz gespeichert.</string>
+</resources>

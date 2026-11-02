@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="restored_alarm_title">Kayıtlı varış alarmı</string>
+    <string name="restored_alarm_notice">Rota önizlemesi geri yüklenemedi. Hedef kayıtlı GPS koordinatlarından gösteriliyor; durak, sefer ve canlı araç konumu doğrulanmadı.</string>
+    <string name="restored_alarm_target_format">Kayıtlı alarm hedefi (enlem, boylam): %1$s</string>
+    <string name="restored_alarm_last_distance_format">Son kayıtlı GPS mesafesi: %1$s m (güncel olmayabilir)</string>
+    <string name="restored_alarm_distance_unavailable">Son GPS mesafesi henüz kayıtlı değil.</string>
+</resources>

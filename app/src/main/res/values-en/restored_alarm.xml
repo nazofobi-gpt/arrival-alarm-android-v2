@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="restored_alarm_title">Saved arrival alarm</string>
+    <string name="restored_alarm_notice">The route preview could not be restored. The target comes from saved GPS coordinates; the stop, trip and live vehicle position are unverified.</string>
+    <string name="restored_alarm_target_format">Saved alarm target (latitude, longitude): %1$s</string>
+    <string name="restored_alarm_last_distance_format">Last saved GPS distance: %1$s m (may be outdated)</string>
+    <string name="restored_alarm_distance_unavailable">No GPS distance has been saved yet.</string>
+</resources>
