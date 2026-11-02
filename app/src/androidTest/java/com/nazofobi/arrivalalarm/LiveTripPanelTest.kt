@@ -484,4 +484,78 @@ class LiveTripPanelTest {
     }
 
 
+    @Test
+    fun nextIntermediateStopCountdownUsesCoherentEvidenceAndRequiresActiveJourney() {
+        val now = mutableLongStateOf(
+            "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
+        )
+        val offline = mutableStateOf(false)
+        val armed = mutableStateOf(true)
+        val route = RouteOption(
+            id = "next-stop-eta",
+            realtime = RouteRealtimeInfo(state = RouteRealtimeState.FRESH_MATCHED),
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
+            line = "RE 9",
+            direction = "Bremen Hbf",
+            departure = "08:00",
+            arrival = "09:00",
+            walkingMinutes = 0,
+            transfers = 0,
+            stops = listOf(
+                RouteStop(
+                    id = "start", name = "Lohne",
+                    plannedDeparture = "2026-09-26T08:00:00+02:00",
+                ),
+                RouteStop(
+                    id = "middle", name = "Diepholz",
+                    arrival = "2026-09-26T08:25:00+02:00",
+                    departure = "2026-09-26T08:26:00+02:00",
+                    plannedArrival = "2026-09-26T08:20:00+02:00",
+                    plannedDeparture = "2026-09-26T08:21:00+02:00",
+                ),
+                RouteStop(
+                    id = "destination", name = "Bremen Hbf",
+                    plannedArrival = "2026-09-26T09:00:00+02:00",
+                ),
+            ),
+        )
+        rule.setContent {
+            MaterialTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    LiveTripPanel(
+                        selectedRoute = route,
+                        journey = JourneyUiState(
+                            phase = if (armed.value) JourneyPhase.ARMED
+                                else JourneyPhase.DESTINATION_SELECTED,
+                        ),
+                        guidanceState = GuidanceReliabilityState(),
+                        routeOffline = offline.value,
+                        nowEpochSeconds = now.longValue,
+                    )
+                }
+            }
+        }
+        // Fresh, coherent realtime: 15 minutes to the next intermediate stop.
+        rule.onNodeWithTag("live-trip-next-stop-countdown").performScrollTo()
+            .assertTextContains("15", substring = true)
+        // Offline: no stale live ETA; use the 10-minute planned arrival instead.
+        rule.runOnUiThread { offline.value = true }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-next-stop-countdown").performScrollTo()
+            .assertTextContains("10", substring = true)
+        // A journey that has not been armed must not show active-stop guidance.
+        rule.runOnUiThread { armed.value = false }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-next-stop-countdown").assertDoesNotExist()
+        // Once the destination is next, avoid duplicating destination ETA.
+        rule.runOnUiThread {
+            armed.value = true
+            now.longValue = "2026-09-26T08:30:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-next-stop-countdown").assertDoesNotExist()
+    }
+
+
 }

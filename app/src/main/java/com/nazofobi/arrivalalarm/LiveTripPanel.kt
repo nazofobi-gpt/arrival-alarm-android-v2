@@ -191,6 +191,32 @@ fun LiveTripPanel(
                 )
             }
 
+            // Show ETA to the immediate next intermediate stop from the same coherent
+            // schedule/realtime basis as the stop tracker. Never imply observed vehicle
+            // position; the destination already has its own separate countdown.
+            if (journey.phase == JourneyPhase.ARMED &&
+                progress.resolvedByProviderTime &&
+                progress.next != null &&
+                progress.next !== target
+            ) {
+                destinationArrivalCountdown(
+                    actualArrival = progress.next.arrival,
+                    plannedArrival = progress.next.plannedArrival,
+                    trustedRealtime = trustedRealtime &&
+                        progress.timingBasis == TransitTimingBasis.REALTIME,
+                    nowEpochSeconds = nowEpochSeconds,
+                )?.let { countdown ->
+                    LiveTripFact(
+                        label = stringResource(
+                            if (countdown.fromRealtime) R.string.live_trip_next_stop_realtime_countdown
+                            else R.string.live_trip_next_stop_scheduled_countdown,
+                        ),
+                        value = stringResource(R.string.live_trip_planned_boarding_minutes, countdown.minutes),
+                        tag = "live-trip-next-stop-countdown",
+                    )
+                }
+            }
+
             // This is an advisory from ordered stop-time evidence, NOT an observed vehicle location.
             // Only show it between the penultimate and destination stops, after an actual
             // departure-time boundary; never before boarding or for unarmed journeys.
