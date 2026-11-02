@@ -494,6 +494,22 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
                         state = option.realtime?.state,
                         suppliedDelta = hasRealtimeDelta(stop),
                     )
+                    // A departure delta must never be paired with a planned arrival.
+                    val (observedStopTime, plannedStopTime) = when {
+                        stop.departure != null && stop.plannedDeparture != null ->
+                            stop.departure to stop.plannedDeparture
+                        stop.arrival != null && stop.plannedArrival != null ->
+                            stop.arrival to stop.plannedArrival
+                        else -> null to null
+                    }
+                    val stopDeviation = if (option.realtime?.cancelledTripIds.isNullOrEmpty()) {
+                        verifiedStopTimeDeviationMinutes(
+                            routeOffline = routeOffline,
+                            state = option.realtime?.state,
+                            actualIso = observedStopTime,
+                            plannedIso = plannedStopTime,
+                        )
+                    } else null
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -543,6 +559,18 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
                                 text = stringResource(R.string.route_realtime_badge),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.secondary,
+                            )
+                        }
+                        stopDeviation?.let { minutes ->
+                            Text(
+                                text = if (minutes > 0) {
+                                    stringResource(R.string.route_stop_delay_minutes, minutes)
+                                } else {
+                                    stringResource(R.string.route_stop_early_minutes, -minutes)
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.testTag("journey-stop-deviation-" + index),
                             )
                         }
                     }
