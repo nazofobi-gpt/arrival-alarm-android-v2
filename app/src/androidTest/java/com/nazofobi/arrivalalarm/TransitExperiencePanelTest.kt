@@ -1,11 +1,15 @@
 package com.nazofobi.arrivalalarm
 
 import android.content.Context
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
@@ -264,6 +268,7 @@ class TransitExperiencePanelTest {
                     isOfflineCache = false,
                     nowEpochSeconds = 1_000L,
                     onSelectDeparture = { selectedTrip = it.tripId },
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
                 )
             }
         }
@@ -271,9 +276,9 @@ class TransitExperiencePanelTest {
         rule.onNodeWithTag("departure-8").assertDoesNotExist()
         rule.onNodeWithTag("departures-show-more-toggle").performClick()
         rule.onNodeWithTag("departure-8").assertExists()
-        rule.onNodeWithTag("departure-11").assertExists().performClick()
+        rule.onNodeWithTag("departure-11").assertExists().performScrollTo().performClick()
         rule.runOnIdle { assertEquals("re9-later-11", selectedTrip) }
-        rule.onNodeWithTag("departures-show-more-toggle").performClick()
+        rule.onNodeWithTag("departures-show-more-toggle").performScrollTo().performClick()
         rule.onNodeWithTag("departure-8").assertDoesNotExist()
         rule.runOnIdle { assertEquals("re9-later-11", selectedTrip) }
     }
