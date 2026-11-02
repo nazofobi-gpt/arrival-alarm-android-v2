@@ -5,4 +5,5 @@
     <string name="restored_alarm_target_format">Gespeichertes Alarmziel (Breite, Länge): %1$s</string>
     <string name="restored_alarm_last_distance_format">Zuletzt gespeicherte GPS-Distanz: %1$s m (möglicherweise veraltet)</string>
     <string name="restored_alarm_distance_unavailable">Noch keine GPS-Distanz gespeichert.</string>
+    <string name="restored_alarm_copy_label">Zielkoordinaten kopieren</string>
 </resources>

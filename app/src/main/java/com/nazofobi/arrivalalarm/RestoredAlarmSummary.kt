@@ -1,14 +1,20 @@
 package com.nazofobi.arrivalalarm
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -31,6 +37,7 @@ internal fun RestoredAlarmSummary(journey: JourneyUiState, modifier: Modifier = 
     val lastDistance = journey.distanceMeters?.takeIf {
         it.isFinite() && it in 0.0..20_000_000.0
     }
+    val context = LocalContext.current
     Card(modifier = modifier.fillMaxWidth().testTag("restored-alarm-summary")) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -50,6 +57,20 @@ internal fun RestoredAlarmSummary(journey: JourneyUiState, modifier: Modifier = 
                 text = stringResource(R.string.restored_alarm_target_format, coordinates),
                 modifier = Modifier.testTag("restored-alarm-target"),
             )
+            OutlinedButton(
+                onClick = {
+                    (context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)
+                        ?.setPrimaryClip(
+                            ClipData.newPlainText(
+                                context.getString(R.string.restored_alarm_copy_label),
+                                coordinates,
+                            ),
+                        )
+                },
+                modifier = Modifier.fillMaxWidth().testTag("restored-alarm-copy-target"),
+            ) {
+                Text(stringResource(R.string.restored_alarm_copy_label))
+            }
             Text(
                 text = if (lastDistance != null) {
                     stringResource(

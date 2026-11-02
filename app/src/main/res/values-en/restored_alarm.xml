@@ -5,4 +5,5 @@
     <string name="restored_alarm_target_format">Saved alarm target (latitude, longitude): %1$s</string>
     <string name="restored_alarm_last_distance_format">Last saved GPS distance: %1$s m (may be outdated)</string>
     <string name="restored_alarm_distance_unavailable">No GPS distance has been saved yet.</string>
+    <string name="restored_alarm_copy_label">Copy target coordinates</string>
 </resources>
