@@ -198,7 +198,9 @@ fun LiveTripPanel(
                 progress.resolvedByProviderTime &&
                 // Before boarding, the first scheduled stop is not a next en-route stop.
                 // Do not present its arrival clock as progress toward an intermediate stop.
-                (progress.previous != null || progress.current != null) &&
+                (progress.previous != null ||
+                    (progress.current != null &&
+                        progress.current !== selectedRoute.stops.firstOrNull())) &&
                 progress.next != null &&
                 progress.next !== target
             ) {
