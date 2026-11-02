@@ -387,6 +387,20 @@ fun SettingsReadinessPanel(
                 Text(stringResource(R.string.readiness_open_app_settings))
             }
 
+            // App permissions and the device-wide location switch are independent.
+            // When the switch is off, app-details settings cannot restore GPS.
+            if (!state.locationServicesAvailable) {
+                OutlinedButton(
+                    onClick = { openArrivalAlarmDeviceLocationSettings(context) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("readiness-device-location-settings"),
+                ) {
+                    Text(stringResource(R.string.readiness_open_device_location_settings))
+                }
+            }
+
             if (shouldOfferNationwideDataRetry(state.dataState)) {
                 Button(
                     onClick = onRetryData,
@@ -573,4 +587,19 @@ private fun transitFunctionReadinessLevel(health: TransitFunctionHealth): Readin
         TransitFunctionHealth.WORKING -> ReadinessLevel.READY
         TransitFunctionHealth.UNVERIFIED -> ReadinessLevel.INFO
         TransitFunctionHealth.DEGRADED, TransitFunctionHealth.FAILED -> ReadinessLevel.ACTION_NEEDED
+    }
+
+/** Opens the system location toggle; the user must explicitly enable it. */
+internal fun deviceLocationSettingsIntent(): Intent =
+    Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+internal fun openArrivalAlarmDeviceLocationSettings(context: Context): Boolean =
+    try {
+        context.startActivity(deviceLocationSettingsIntent())
+        true
+    } catch (_: android.content.ActivityNotFoundException) {
+        false
+    } catch (_: SecurityException) {
+        false
     }
