@@ -337,14 +337,14 @@ class TransitExperiencePanelTest {
         }
         rule.onNodeWithTag("departures-show-more-toggle").assertExists()
         rule.onNodeWithTag("departures-filter-all").assertExists()
-        rule.onNodeWithTag("departures-filter-1").performClick()
+        rule.onNodeWithTag("departures-filter-1").performScrollTo().performClick()
         rule.runOnIdle { assertEquals(null, selected) }
         rule.onNodeWithTag("departures-show-more-toggle").assertDoesNotExist()
         rule.onNodeWithTag("departure-3").assertExists()
         rule.onNodeWithTag("departure-4").assertDoesNotExist()
         rule.onNodeWithTag("departure-0").performScrollTo().performClick()
         rule.runOnIdle { assertEquals("filtered-trip-1", selected) }
-        rule.onNodeWithTag("departures-filter-all").performClick()
+        rule.onNodeWithTag("departures-filter-all").performScrollTo().performClick()
         rule.runOnIdle { assertEquals("filtered-trip-1", selected) }
         rule.onNodeWithTag("departures-show-more-toggle").assertExists()
         rule.onNodeWithTag("departure-7").assertExists()
