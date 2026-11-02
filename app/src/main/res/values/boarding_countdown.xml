@@ -2,5 +2,4 @@
 <resources>
     <string name="live_trip_planned_boarding">Planlı kalkışa kalan süre</string>
     <string name="live_trip_planned_boarding_minutes">%1$d dk</string>
-    <string name="live_trip_next_platform">Sonraki durak peronu</string>
 </resources>
