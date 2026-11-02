@@ -2,4 +2,5 @@
 <resources>
     <string name="departures_show_more">Diğer kalkışları göster (%1$d)</string>
     <string name="departures_show_fewer">Daha az kalkış göster</string>
+    <string name="departures_filter_all">Tüm hatlar ve yönler</string>
 </resources>
