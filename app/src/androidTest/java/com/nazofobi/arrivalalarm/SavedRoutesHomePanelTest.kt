@@ -86,6 +86,45 @@ class SavedRoutesHomePanelTest {
     }
 
     @Test
+    fun savedCommutesFilterMatchesGermanUmlautsAndAsciiWithoutSideEffects() {
+        val german = preset.copy(
+            id = "german-route",
+            name = "München Pendelroute",
+            originLabel = "München",
+            destinationLabel = "Düsseldorf Straße",
+        )
+        val opened = mutableListOf<String>()
+        val removed = mutableListOf<String>()
+        rule.setContent {
+            MaterialTheme {
+                SavedRoutesHomePanel(
+                    presets = listOf(preset, german),
+                    canSave = false,
+                    canRestore = true,
+                    sourceSafe = true,
+                    status = null,
+                    onSave = {},
+                    onRestore = { opened += it.id },
+                    onRemove = { removed += it },
+                )
+            }
+        }
+        rule.onNodeWithTag("saved-route-filter").performTextInput("mUEnchen")
+        rule.onNodeWithTag("saved-route-name-0").assertTextEquals(german.name)
+        rule.onNodeWithTag("saved-route-name-1").assertDoesNotExist()
+        rule.onNodeWithTag("saved-route-filter").performTextClearance()
+        rule.onNodeWithTag("saved-route-filter").performTextInput("strasse")
+        rule.onNodeWithTag("saved-route-name-0").assertTextEquals(german.name)
+        rule.onNodeWithTag("saved-route-filter").performTextClearance()
+        rule.onNodeWithTag("saved-route-filter").performTextInput("unknown-city")
+        rule.onNodeWithTag("saved-route-filter-empty").assertExists()
+        rule.runOnIdle {
+            assertEquals(emptyList<String>(), opened)
+            assertEquals(emptyList<String>(), removed)
+        }
+    }
+
+    @Test
     fun unsafeSavedCommutesDoNotExposeFilterOrRouteActions() {
         rule.setContent {
             MaterialTheme {

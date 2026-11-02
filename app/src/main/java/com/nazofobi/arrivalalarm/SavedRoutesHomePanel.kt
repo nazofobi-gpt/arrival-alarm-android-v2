@@ -51,10 +51,8 @@ internal fun SavedRoutesHomePanel(
     }
     var savedRouteQuery by rememberSaveable { mutableStateOf("") }
     val normalizedQuery = savedRouteQuery.trim()
-    val visiblePresets = if (normalizedQuery.isEmpty()) presets else presets.filter { preset ->
-        listOf(preset.name, preset.originLabel, preset.destinationLabel).any {
-            it.contains(normalizedQuery, ignoreCase = true)
-        }
+    val visiblePresets = presets.filter { preset ->
+        savedRouteMatchesQuery(preset, normalizedQuery)
     }
     var pendingDeleteId by rememberSaveable { mutableStateOf<String?>(null) }
     val pendingDelete = presets.firstOrNull { it.id == pendingDeleteId }
