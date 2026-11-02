@@ -162,39 +162,32 @@ fun LiveTripPanel(
             }
 
             progress.next?.let { nextStop ->
-                LiveTripFact(
-                    label = stringResource(R.string.live_trip_next),
-                    value = nextStop.name,
-                    tag = "live-trip-next",
-                )
-                // Platform guidance is a provider/schedule fact, not observed GPS
-                // positioning. Do not promote a stale realtime platform to current.
-                if (progress.resolvedByProviderTime) {
-                    val hasVerifiedRealtimePlatform = routeHasVerifiedRealtimePlatform(
+                // A next stop is timetable/provider-time derived, not a GPS fix.
+                // Include only source-backed platform information and never reuse
+                // an unverified live platform when the route is offline or stale.
+                val formattedPlatform = if (progress.resolvedByProviderTime) {
+                    val trustedPlatform = routeHasVerifiedRealtimePlatform(
                         routeOffline,
                         selectedRoute.realtime?.state,
                         nextStop.platform,
                     )
-                    val platform = routeEvidencePlatform(
-                        if (hasVerifiedRealtimePlatform) nextStop.platform else null,
+                    routeEvidencePlatform(
+                        if (trustedPlatform) nextStop.platform else null,
                         nextStop.plannedPlatform,
-                        !hasVerifiedRealtimePlatform,
-                    )
-                    platform?.let {
-                        LiveTripFact(
-                            label = stringResource(R.string.live_trip_next_platform),
-                            value = stringResource(
-                                if (hasVerifiedRealtimePlatform) {
-                                    R.string.route_realtime_platform_format
-                                } else {
-                                    R.string.route_planned_platform_format
-                                },
-                                it,
-                            ),
-                            tag = "live-trip-next-platform",
+                        !trustedPlatform,
+                    )?.let { platform ->
+                        stringResource(
+                            if (trustedPlatform) R.string.route_realtime_platform_format
+                            else R.string.route_planned_platform_format,
+                            platform,
                         )
                     }
-                }
+                } else null
+                LiveTripFact(
+                    label = stringResource(R.string.live_trip_next),
+                    value = listOfNotNull(nextStop.name, formattedPlatform).joinToString(" • "),
+                    tag = "live-trip-next",
+                )
             }
 
             // The count is schedule/provider-time derived, not a GPS vehicle position.
