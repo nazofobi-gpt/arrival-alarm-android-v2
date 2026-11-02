@@ -101,6 +101,21 @@ def placeholders(value: str) -> Counter[tuple[int, str]]:
                 width_and_precision = token_suffix[len(flags):-len(conversion)]
                 if not width_and_precision or not width_and_precision[0].isdigit():
                     raise ValueError(f"missing decimal format width at offset {start}")
+        # Java Formatter forbids precision on every integral conversion;
+        # translation parity alone would miss matching invalid %1$.2d/%x tokens.
+        if conversion in ("d", "o", "x", "X") and "." in match.group(0):
+            raise ValueError(f"invalid integer format precision at offset {start}")
+        if conversion in ("o", "x", "X"):
+            # Java Formatter only allows #, -, 0 and argument reuse for octal/hex.
+            if set(flags).intersection("+ ,(") or ("-" in flags and "0" in flags):
+                raise ValueError(f"invalid octal/hex format flags at offset {start}")
+            if "-" in flags or "0" in flags:
+                token_suffix = match.group(0)[1:]
+                if match.group(1):
+                    token_suffix = token_suffix[len(match.group(1)) + 1:]
+                width_and_precision = token_suffix[len(flags):-len(conversion)]
+                if not width_and_precision or not width_and_precision[0].isdigit():
+                    raise ValueError(f"missing octal/hex format width at offset {start}")
         cursor = match.end()
         if conversion in ("%", "n"):
             # Java Formatter accepts no reused argument for %% or %n.
