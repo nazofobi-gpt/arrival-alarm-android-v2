@@ -26,4 +26,6 @@
     <string name="saved_routes_home_cleared_all">Bütün kayıtlı rotalar bu cihazdan silindi.</string>
     <string name="saved_routes_home_undo_clear_all">Toplu silmeyi geri al</string>
     <string name="saved_routes_home_restored_all">Silinen kayıtlı rotalar geri yüklendi.</string>
+    <string name="saved_routes_home_filter">Kayıtlı rotalarda ara</string>
+    <string name="saved_routes_home_filter_empty">Eşleşen kayıtlı rota bulunamadı.</string>
 </resources>
