@@ -1,0 +1,4 @@
+<resources>
+    <string name="route_stop_delay_minutes">Gecikme: +%1$d dk</string>
+    <string name="route_stop_early_minutes">Erken: %1$d dk</string>
+</resources>
