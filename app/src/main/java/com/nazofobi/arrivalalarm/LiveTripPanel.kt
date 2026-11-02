@@ -13,7 +13,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -221,6 +223,9 @@ fun LiveTripPanel(
                             stringResource(R.string.live_trip_planned_boarding_minutes, countdown.minutes),
                         ).joinToString(" • "),
                         tag = "live-trip-next-stop-countdown",
+                        // Only foreground assistive announcements within the last five
+                        // minutes; stop-time guidance never establishes vehicle position.
+                        announceApproaching = countdown.minutes in 1L..5L,
                     )
                 }
             }
@@ -323,6 +328,7 @@ private fun LiveTripFact(
     label: String,
     value: String,
     tag: String,
+    announceApproaching: Boolean = false,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -337,7 +343,11 @@ private fun LiveTripFact(
             text = value,
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Medium,
-            modifier = Modifier.testTag(tag),
+            modifier = Modifier.testTag(tag).then(
+                if (announceApproaching) Modifier.semantics {
+                    liveRegion = LiveRegionMode.Polite
+                } else Modifier,
+            ),
         )
     }
 }
