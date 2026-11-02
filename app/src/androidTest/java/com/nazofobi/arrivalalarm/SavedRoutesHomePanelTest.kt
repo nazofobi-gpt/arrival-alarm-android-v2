@@ -2,6 +2,7 @@ package com.nazofobi.arrivalalarm
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -132,6 +133,43 @@ class SavedRoutesHomePanelTest {
         )
         rule.onNodeWithTag("saved-route-endpoints-0").assertTextEquals(expected)
         rule.runOnIdle { assertEquals(0, opened) }
+    }
+
+    @Test
+    fun routeActionsIdentifyTheCorrectSavedCommuteForScreenReaders() {
+        val other = preset.copy(id = "test-route-2", name = "Other commute")
+        val opened = mutableListOf<String>()
+        rule.setContent {
+            MaterialTheme {
+                SavedRoutesHomePanel(
+                    presets = listOf(preset, other),
+                    canSave = false,
+                    canRestore = true,
+                    sourceSafe = true,
+                    status = null,
+                    onSave = {},
+                    onRestore = { opened += it.id },
+                    onRemove = {},
+                )
+            }
+        }
+        val context = androidx.test.platform.app.InstrumentationRegistry
+            .getInstrumentation().targetContext
+        rule.onNodeWithTag("saved-route-open-0").assertContentDescriptionEquals(
+            context.getString(R.string.saved_routes_home_open_accessibility, preset.name)
+        )
+        rule.onNodeWithTag("saved-route-open-1").assertContentDescriptionEquals(
+            context.getString(R.string.saved_routes_home_open_accessibility, other.name)
+        )
+        rule.onNodeWithTag("saved-route-rename-1").assertContentDescriptionEquals(
+            context.getString(R.string.saved_routes_home_rename_accessibility, other.name)
+        )
+        rule.onNodeWithTag("saved-route-delete-1").assertContentDescriptionEquals(
+            context.getString(R.string.saved_routes_home_delete_accessibility, other.name)
+        )
+        rule.runOnIdle { assertEquals(emptyList<String>(), opened) }
+        rule.onNodeWithTag("saved-route-open-1").performClick()
+        rule.runOnIdle { assertEquals(listOf(other.id), opened) }
     }
 
     @Test
