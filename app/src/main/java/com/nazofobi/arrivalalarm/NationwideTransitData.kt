@@ -557,7 +557,13 @@ class NationwideTransitGateway(
             staticJourneyPlanner.plan(
                 origin, destination, limit,
                 maxWalkingMinutes = if (routePreferences.loadMaxWalking15Minutes()) 15 else null,
-                maxTransfers = if (routePreferences.loadAtMostOneTransfer()) 1 else null,
+                // Direct-only must constrain GTFS search before the result cap; otherwise
+                // an earlier connecting itinerary can hide a later direct train.
+                maxTransfers = when {
+                    routePreferences.loadDirectOnlyRoutes() -> 0
+                    routePreferences.loadAtMostOneTransfer() -> 1
+                    else -> null
+                },
             )
         }.getOrDefault(LocalStaticJourneyOutcome.Unavailable)
 
