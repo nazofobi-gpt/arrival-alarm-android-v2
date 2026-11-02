@@ -198,6 +198,41 @@ class StaticGtfsRouterTest {
         )
     }
 
+    @Test fun directOnlyPreferenceFindsLaterDirectTrainBeforeResultCap() {
+        val data = FakeData(
+            candidates = mapOf(
+                "A" to listOf(
+                    candidate("FEED", "R1", "S", 1, "10:00:00"),
+                    candidate("DIRECT", "R3", "S", 1, "10:02:00"),
+                ),
+                "X" to listOf(candidate("CONNECT", "R2", "S", 1, "10:08:00")),
+            ),
+            times = mapOf(
+                "FEED" to listOf(st("FEED", 1, "A", "10:00:00"),
+                    st("FEED", 2, "X", "10:04:00")),
+                "CONNECT" to listOf(st("CONNECT", 1, "X", "10:08:00"),
+                    st("CONNECT", 2, "B", "10:18:00")),
+                "DIRECT" to listOf(st("DIRECT", 1, "A", "10:02:00"),
+                    st("DIRECT", 2, "B", "10:30:00")),
+            ),
+        )
+        val router = StaticGtfsRouter(data, zone, maxJourneys = 1)
+        val origin = listOf(StaticRouterAccess("A"))
+        val destination = listOf(StaticRouterAccess("B"))
+        val unrestricted = router.route(origin, destination, date, at("09:55:00"))
+        assertEquals(
+            listOf("FEED", "CONNECT"),
+            (unrestricted as StaticRouterResult.Journeys).journeys.single().legs.map { it.tripId },
+        )
+        val directOnly = router.route(
+            origin, destination, date, at("09:55:00"), maxAllowedTransfers = 0,
+        )
+        assertEquals(
+            listOf("DIRECT"),
+            (directOnly as StaticRouterResult.Journeys).journeys.single().legs.map { it.tripId },
+        )
+    }
+
     @Test fun implicitSameStopTransferWorksWithoutTransfersFile() {
         val data = baseTransferData()
         val result = StaticGtfsRouter(data, zone, implicitTransferSeconds = 120).route(
