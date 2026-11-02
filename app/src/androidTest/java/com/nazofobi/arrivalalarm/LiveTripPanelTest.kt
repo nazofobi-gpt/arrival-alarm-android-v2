@@ -345,13 +345,13 @@ class LiveTripPanelTest {
             }
         }
 
-        rule.onNodeWithTag("live-trip-next-platform")
+        rule.onNodeWithTag("live-trip-next")
             .performScrollTo().assertTextContains("9", substring = true)
 
         // A cached/offline route must never present the actual platform as live.
         rule.runOnUiThread { offline.value = true }
         rule.waitForIdle()
-        rule.onNodeWithTag("live-trip-next-platform")
+        rule.onNodeWithTag("live-trip-next")
             .performScrollTo().assertTextContains("7", substring = true)
 
         // Do not invent a next stop (or its platform) once no next stop exists.
@@ -359,7 +359,7 @@ class LiveTripPanelTest {
             now.longValue = "2026-09-26T09:00:00+02:00".toTransitEpochSecondsOrNull()!!
         }
         rule.waitForIdle()
-        rule.onNodeWithTag("live-trip-next-platform").assertDoesNotExist()
+        rule.onNodeWithTag("live-trip-next").assertDoesNotExist()
     }
 
 }
