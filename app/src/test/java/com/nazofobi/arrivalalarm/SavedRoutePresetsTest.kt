@@ -291,6 +291,38 @@ class SavedRoutePresetsTest {
     }
 
     @Test
+    fun renamePersistsOnlyNameAndRejectsStaleOrUnsafeChanges() {
+        val storage = MemorySavedRoutePresetStringStorage()
+        val store = SavedRoutePresetsStore(storage)
+        val original = preset(id = "commute-home-work", name = "Home to work")
+        assertTrue(store.save(original) is SavedRoutePresetStoreResult.Success)
+
+        assertEquals(
+            SavedRoutePresetStoreResult.Success(listOf(original.copy(name = "Morning commute"))),
+            store.rename(original, "  Morning commute  "),
+        )
+        val renamed = original.copy(name = "Morning commute")
+        assertEquals(listOf(renamed), store.load().presets)
+        val snapshot = storage.value
+        val writes = storage.writeCount
+
+        assertEquals(
+            SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.NOT_FOUND),
+            store.rename(original, "Stale rename"),
+        )
+        assertEquals(
+            SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.INVALID_PRESET),
+            store.rename(renamed, "Fake\u202ename"),
+        )
+        assertEquals(
+            SavedRoutePresetStoreResult.Success(listOf(renamed)),
+            store.rename(renamed, "Morning commute"),
+        )
+        assertEquals(snapshot, storage.value)
+        assertEquals(writes, storage.writeCount)
+    }
+
+    @Test
     fun removingLastPresetWritesAnExplicitEmptySnapshot() {
         val storage = MemorySavedRoutePresetStringStorage()
         val store = SavedRoutePresetsStore(storage)
