@@ -1119,6 +1119,7 @@ fun ArrivalAlarmApp(
                                     shorterWalkingFirst = savedRouteUiPreferences.loadShorterWalkingFirst(),
                                     atMostOneTransfer = savedRouteUiPreferences.loadAtMostOneTransfer(),
                                     savedAtEpochMillis = System.currentTimeMillis(),
+                                    maxWalking15Minutes = savedRouteUiPreferences.loadMaxWalking15Minutes(),
                                 )
                                 val outcome = savedRouteStore.save(preset)
                                 savedRouteSnapshot = savedRouteStore.load()
@@ -1147,6 +1148,7 @@ fun ArrivalAlarmApp(
                                     savedRouteUiPreferences.saveFewerTransfersFirst(preset.fewerTransfersFirst)
                                     savedRouteUiPreferences.saveShorterWalkingFirst(preset.shorterWalkingFirst)
                                     savedRouteUiPreferences.saveAtMostOneTransfer(preset.atMostOneTransfer)
+                                    savedRouteUiPreferences.saveMaxWalking15Minutes(preset.maxWalking15Minutes)
                                     setOrigin(
                                         MapPoint(
                                             preset.originLatitude,
