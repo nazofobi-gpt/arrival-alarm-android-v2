@@ -69,7 +69,7 @@ class SavedRoutePresetsTest {
         val updated = original.copy(maxWalking15Minutes = true)
         assertEquals(SavedRoutePresetStoreResult.Success(listOf(updated)), store.save(updated))
         assertEquals(1, storage.writeCount)
-        assertTrue(storage.value!!.startsWith("SAVED_ROUTE_PRESETS_V2\\n"))
+        assertTrue(storage.value!!.startsWith("SAVED_ROUTE_PRESETS_V2\n"))
         assertEquals(listOf(updated), store.load().presets)
         assertTrue(store.load().isSourceSafeToReplace)
     }
@@ -79,7 +79,7 @@ class SavedRoutePresetsTest {
         val current = SavedRoutePresetsCodec.encode(
             listOf(preset(maxWalking15Minutes = true))
         )!!
-        val malformed = current.substringBeforeLast('\u001f') + "\\u001fmaybe"
+        val malformed = current.substringBeforeLast('\u001f') + "\u001fmaybe"
         val storage = MemorySavedRoutePresetStringStorage(value = malformed)
         val store = SavedRoutePresetsStore(storage)
         assertFalse(store.load().isSourceSafeToReplace)
