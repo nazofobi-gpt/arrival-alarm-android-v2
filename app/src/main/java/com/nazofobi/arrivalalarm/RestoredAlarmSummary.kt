@@ -38,6 +38,7 @@ internal fun RestoredAlarmSummary(journey: JourneyUiState, modifier: Modifier = 
         it.isFinite() && it in 0.0..20_000_000.0
     }
     val context = LocalContext.current
+    val copyLabel = stringResource(R.string.restored_alarm_copy_label)
     Card(modifier = modifier.fillMaxWidth().testTag("restored-alarm-summary")) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -62,7 +63,7 @@ internal fun RestoredAlarmSummary(journey: JourneyUiState, modifier: Modifier = 
                     (context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)
                         ?.setPrimaryClip(
                             ClipData.newPlainText(
-                                context.getString(R.string.restored_alarm_copy_label),
+                                copyLabel,
                                 coordinates,
                             ),
                         )
