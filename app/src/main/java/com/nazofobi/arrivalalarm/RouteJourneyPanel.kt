@@ -152,6 +152,8 @@ fun RouteJourneyPanel(
                     onClick = {
                         directOnly = !directOnly
                         preferences.saveDirectOnlyRoutes(directOnly)
+                        // Refresh the candidate search itself, not only the already-capped cards.
+                        onRefreshRoutes()
                     },
                     label = { Text(stringResource(R.string.route_direct_only_filter)) },
                     modifier = Modifier
