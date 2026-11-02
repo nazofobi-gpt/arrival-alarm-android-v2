@@ -177,6 +177,11 @@
     <string name="map_point_label">Kartenpunkt</string>
     <string name="map_load_failed">Karte konnte nicht geladen werden • Suche und Haltestellenliste bleiben verfügbar</string>
     <string name="map_provider_note">Karte: OpenFreeMap • MapLibre</string>
+    <string name="map_accessible_coordinates_hint">Oder geben Sie Breiten- und Längengrad manuell ein.</string>
+    <string name="map_coordinate_latitude">Breitengrad</string>
+    <string name="map_coordinate_longitude">Längengrad</string>
+    <string name="map_coordinate_invalid">Bitte geben Sie gültige Koordinaten ein.</string>
+    <string name="map_coordinate_select">Punkt auf der Karte auswählen</string>
     <string name="location_kind_stop">Haltestelle</string>
     <string name="location_kind_address">Adresse</string>
     <string name="location_kind_poi">Ort/POI</string>

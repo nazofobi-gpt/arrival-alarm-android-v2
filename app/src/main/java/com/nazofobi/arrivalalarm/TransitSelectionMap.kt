@@ -1,8 +1,16 @@
 package com.nazofobi.arrivalalarm
 
 import android.content.Context
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -14,6 +22,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -192,12 +202,67 @@ fun TransitSelectionMap(
         }
     }
 
-    AndroidView(
-        factory = { mapView },
-        modifier = modifier
-            .fillMaxWidth()
-            .height(300.dp)
-            .semantics { contentDescription = currentMapPointLabel }
-            .testTag("transit-map"),
-    )
+    var coordinateLatitude by remember { mutableStateOf("") }
+    var coordinateLongitude by remember { mutableStateOf("") }
+    val manualPoint = remember(coordinateLatitude, coordinateLongitude, currentMapPointLabel) {
+        MapCoordinateInput.parse(coordinateLatitude, coordinateLongitude, currentMapPointLabel)
+    }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        AndroidView(
+            factory = { mapView },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(300.dp)
+                .semantics { contentDescription = currentMapPointLabel }
+                .testTag("transit-map"),
+        )
+        Text(
+            text = stringResource(R.string.map_accessible_coordinates_hint),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        OutlinedTextField(
+            value = coordinateLatitude,
+            onValueChange = { coordinateLatitude = it },
+            label = { Text(stringResource(R.string.map_coordinate_latitude)) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .testTag("map-coordinate-latitude"),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        )
+        OutlinedTextField(
+            value = coordinateLongitude,
+            onValueChange = { coordinateLongitude = it },
+            label = { Text(stringResource(R.string.map_coordinate_longitude)) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .testTag("map-coordinate-longitude"),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        )
+        if ((coordinateLatitude.isNotBlank() || coordinateLongitude.isNotBlank()) && manualPoint == null) {
+            Text(
+                text = stringResource(R.string.map_coordinate_invalid),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.testTag("map-coordinate-error"),
+            )
+        }
+        Button(
+            onClick = { manualPoint?.let(currentMapPointSelected) },
+            enabled = manualPoint != null,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .testTag("map-coordinate-select"),
+        ) {
+            Text(stringResource(R.string.map_coordinate_select))
+        }
+    }
 }
