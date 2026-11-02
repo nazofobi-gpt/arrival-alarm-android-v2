@@ -53,6 +53,8 @@ fun HomeSearchPanel(
     onToggleFavoriteStop: (String) -> Unit = {},
     onSelectOriginTarget: () -> Unit,
     onSelectDestinationTarget: () -> Unit,
+    canSwapEndpoints: Boolean = false,
+    onSwapEndpoints: () -> Unit = {},
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
     onSearchResultSelected: (TransitLocationResult) -> Unit,
@@ -90,6 +92,19 @@ fun HomeSearchPanel(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.testTag("search-target-status"),
         )
+
+        // Route reversal changes the planned journey, never an already-armed alarm.
+        if (origin != null && destination != null && canSwapEndpoints) {
+            OutlinedButton(
+                onClick = onSwapEndpoints,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("swap-route-endpoints"),
+            ) {
+                Text(stringResource(R.string.swap_route_endpoints))
+            }
+        }
 
         if (mode == HomeSearchMode.HOME) {
             Card(
