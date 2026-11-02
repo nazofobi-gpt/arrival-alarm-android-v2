@@ -13,6 +13,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -50,6 +51,8 @@ fun HomeSearchPanel(
     nearbySource: String?,
     nearbyMessage: String?,
     recentSearches: List<String>,
+    recentHistoryEnabled: Boolean = true,
+    onRecentHistoryEnabledChange: (Boolean) -> Unit = {},
     favoriteStopIds: Set<String>,
     onToggleFavoriteStop: (String) -> Unit = {},
     onSelectOriginTarget: () -> Unit,
@@ -68,6 +71,7 @@ fun HomeSearchPanel(
     mode: HomeSearchMode = HomeSearchMode.HOME,
     modifier: Modifier = Modifier,
 ) {
+    val historyRecordingDescription = stringResource(R.string.search_history_record_enabled)
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -433,6 +437,25 @@ fun HomeSearchPanel(
                         )
                     }
 
+                    Text(
+                        text = stringResource(R.string.search_history_record_enabled),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Switch(
+                        checked = recentHistoryEnabled,
+                        onCheckedChange = onRecentHistoryEnabledChange,
+                        modifier = Modifier
+                            .testTag("search-history-enabled-toggle")
+                            .semantics { contentDescription = historyRecordingDescription },
+                    )
+                    if (!recentHistoryEnabled) {
+                        Text(
+                            text = stringResource(R.string.search_history_disabled_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
                     searchResults.take(12).forEachIndexed { index, result ->
                         OutlinedButton(
                             onClick = { onSearchResultSelected(result) },
@@ -487,7 +510,7 @@ fun HomeSearchPanel(
                         }
                     }
 
-                    if (recentSearches.isNotEmpty()) {
+                    if (recentHistoryEnabled && recentSearches.isNotEmpty()) {
                         HorizontalDivider()
                         Text(
                             text = stringResource(R.string.search_recents_title),
