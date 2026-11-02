@@ -543,6 +543,21 @@ fun ArrivalAlarmApp(
         }
     }
 
+    fun swapRouteEndpoints() {
+        // Two existing, valid manual endpoints are required. An armed or arrived
+        // trip is never reversed, and no alarm is implicitly (re)armed.
+        val reversed = routeEndpointsForSwap(origin, destination, journey.phase) ?: return
+        val previousOrigin = origin ?: return
+        val previousDestination = destination ?: return
+        setOrigin(reversed.first)
+        if (!setDestinationPoint(reversed.second)) {
+            // Fail closed: restore the user's old unarmed route if the domain
+            // refuses the new destination; do not leave a half-reversed trip.
+            setOrigin(previousOrigin)
+            setDestinationPoint(previousDestination)
+        }
+    }
+
     fun openDepartureBoard(stop: CatalogStop) {
         departureBoardStop = stop
         loadStationDepartures(stop)
@@ -1375,6 +1390,8 @@ fun ArrivalAlarmApp(
                         },
                         onSelectOriginTarget = { selectingOrigin = true },
                         onSelectDestinationTarget = { selectingOrigin = false },
+                        canSwapEndpoints = journey.phase == JourneyPhase.DESTINATION_SELECTED,
+                        onSwapEndpoints = { swapRouteEndpoints() },
                         onQueryChange = {
                             query = it
                             searchRequestId += 1
