@@ -541,6 +541,13 @@ class LiveTripPanelTest {
         // intermediate stop. The earlier implementation displayed "5 min" here.
         rule.onNodeWithTag("live-trip-next-stop-countdown").assertDoesNotExist()
         rule.runOnUiThread {
+            now.longValue = "2026-09-26T07:57:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        // Even while the origin is "current" during its scheduled dwell,
+        // the rider has not departed; do not report the next station ETA.
+        rule.onNodeWithTag("live-trip-next-stop-countdown").assertDoesNotExist()
+        rule.runOnUiThread {
             now.longValue = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
         }
         rule.waitForIdle()
