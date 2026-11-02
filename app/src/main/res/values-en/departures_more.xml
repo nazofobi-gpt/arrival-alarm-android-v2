@@ -2,4 +2,5 @@
 <resources>
     <string name="departures_show_more">Show more departures (%1$d)</string>
     <string name="departures_show_fewer">Show fewer departures</string>
+    <string name="departures_filter_all">All lines and directions</string>
 </resources>
