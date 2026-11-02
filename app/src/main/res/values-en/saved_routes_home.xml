@@ -19,4 +19,8 @@
     <string name="saved_routes_home_rename_hint">Route name</string>
     <string name="saved_routes_home_rename_confirm">Save name</string>
     <string name="saved_routes_home_renamed">Route name updated on this device.</string>
+    <string name="saved_routes_home_clear_all">Delete all saved routes</string>
+    <string name="saved_routes_home_clear_all_confirm_title">Delete all saved routes?</string>
+    <string name="saved_routes_home_clear_all_confirm_message">All %1$d saved routes on this device will be permanently deleted. This cannot be undone. Continue?</string>
+    <string name="saved_routes_home_cleared_all">All saved routes deleted from this device.</string>
 </resources>
