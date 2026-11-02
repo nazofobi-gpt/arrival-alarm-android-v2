@@ -222,7 +222,10 @@ fun LiveTripPanel(
                 destinationArrivalCountdown(
                     actualArrival = target.arrival,
                     plannedArrival = target.plannedArrival,
-                    trustedRealtime = trustedRealtime,
+                    // A contradictory live stop timeline makes the tracker fall
+                    // back to planned times. The countdown must use that same basis.
+                    trustedRealtime = trustedRealtime &&
+                        progress.timingBasis == TransitTimingBasis.REALTIME,
                     nowEpochSeconds = nowEpochSeconds,
                 )?.let { countdown ->
                     LiveTripFact(

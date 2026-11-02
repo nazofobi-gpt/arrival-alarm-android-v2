@@ -298,6 +298,52 @@ class LiveTripPanelTest {
     }
 
     @Test
+    fun contradictoryRealtimeStopSequenceUsesOnlyCoherentScheduledArrivalCountdown() {
+        val route = RouteOption(
+            id = "contradictory-live-arrival",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
+            line = "RE 9",
+            direction = "Bremen Hbf",
+            departure = "08:00",
+            arrival = "08:43",
+            walkingMinutes = 0,
+            transfers = 0,
+            realtime = RouteRealtimeInfo(state = RouteRealtimeState.FRESH_MATCHED),
+            stops = listOf(
+                RouteStop(
+                    id = "start", name = "Lohne",
+                    departure = "2026-09-26T09:00:00+02:00",
+                    plannedDeparture = "2026-09-26T08:00:00+02:00",
+                ),
+                RouteStop(
+                    id = "target", name = "Bremen Hbf",
+                    arrival = "2026-09-26T08:45:00+02:00",
+                    plannedArrival = "2026-09-26T08:43:00+02:00",
+                ),
+            ),
+        )
+        rule.setContent {
+            MaterialTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    LiveTripPanel(
+                        selectedRoute = route,
+                        journey = JourneyUiState(phase = JourneyPhase.ARMED),
+                        guidanceState = GuidanceReliabilityState(),
+                        routeOffline = false,
+                        nowEpochSeconds =
+                            "2026-09-26T08:15:30+02:00".toTransitEpochSecondsOrNull()!!,
+                    )
+                }
+            }
+        }
+        // 09:00 live departure precedes an 08:45 live arrival in route order:
+        // fallback is the coherent 08:43 planned arrival (28 min), not 30 live.
+        rule.onNodeWithTag("live-trip-destination-countdown")
+            .performScrollTo().assertTextContains("28", substring = true)
+    }
+
+    @Test
     fun liveNextStopPlatformDistinguishesVerifiedRealtimeFromOfflineSchedule() {
         val offline = mutableStateOf(false)
         val now = mutableLongStateOf(
