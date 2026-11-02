@@ -108,6 +108,40 @@ class SavedRoutesHomePanelTest {
     }
 
     @Test
+    fun clearingAllSavedRoutesRequiresVisibleUserConfirmation() {
+        val second = preset.copy(
+            id = "test-route-2",
+            name = "Other commute",
+            originLatitude = 51.0,
+            destinationLatitude = 54.0,
+        )
+        val confirmed = mutableListOf<List<SavedRoutePreset>>()
+        rule.setContent {
+            MaterialTheme {
+                SavedRoutesHomePanel(
+                    presets = listOf(preset, second),
+                    canSave = false,
+                    canRestore = true,
+                    sourceSafe = true,
+                    status = null,
+                    onSave = {},
+                    onRestore = {},
+                    onRemove = {},
+                    onClearAll = { confirmed += it },
+                )
+            }
+        }
+        rule.onNodeWithTag("saved-routes-clear-all").performClick()
+        rule.onNodeWithTag("saved-routes-confirm-clear-all").assertExists()
+        rule.runOnIdle { assertEquals(0, confirmed.size) }
+        rule.onNodeWithTag("saved-routes-cancel-clear-all").performClick()
+        rule.runOnIdle { assertEquals(0, confirmed.size) }
+        rule.onNodeWithTag("saved-routes-clear-all").performClick()
+        rule.onNodeWithTag("saved-routes-confirm-clear-all").performClick()
+        rule.runOnIdle { assertEquals(listOf(listOf(preset, second)), confirmed) }
+    }
+
+    @Test
     fun activeJourneyCannotOpenOrDeleteSavedRoute() {
         var opened = false
         var removed = false
