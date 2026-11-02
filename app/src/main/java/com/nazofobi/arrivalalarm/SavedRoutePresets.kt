@@ -236,6 +236,12 @@ internal class SharedPreferencesSavedRoutePresetStringStorage(
     }
 }
 
+/** Volatile one-shot UI undo snapshot; never persisted with the preset list. */
+internal data class SavedRouteRemovalUndo(
+    val before: List<SavedRoutePreset>,
+    val removedId: String,
+)
+
 internal enum class SavedRoutePresetStoreRejection {
     SOURCE_UNSAFE,
     INVALID_PRESET,
@@ -330,6 +336,63 @@ internal class SavedRoutePresetsStore(
         val encoded = SavedRoutePresetsCodec.encode(updated)
             ?: return SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.INVALID_PRESET)
         return persist(encoded, updated)
+    }
+
+    /**
+     * Explicit bulk deletion. Compare the full confirmation snapshot against fresh storage;
+     * a stale confirmation must never erase routes changed by another screen/session.
+     * Corrupt/unsupported sources remain untouched even if some rows can be decoded.
+     */
+    fun clearAll(expected: List<SavedRoutePreset>): SavedRoutePresetStoreResult {
+        val current = load()
+        if (!current.isSourceSafeToReplace) {
+            return SavedRoutePresetStoreResult.Rejected(
+                SavedRoutePresetStoreRejection.SOURCE_UNSAFE,
+                current.issues,
+            )
+        }
+        if (current.presets.isEmpty() || current.presets != expected) {
+            return SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.NOT_FOUND)
+        }
+        return persist("", emptyList())
+    }
+
+    /**
+     * One-shot UI undo after clearing all local routes. Never replace new or unsafe data.
+     * The undo snapshot exists only in Compose memory, never in device storage.
+     */
+    fun undoClearAll(previous: List<SavedRoutePreset>): SavedRoutePresetStoreResult {
+        val current = load()
+        if (!current.isSourceSafeToReplace) {
+            return SavedRoutePresetStoreResult.Rejected(
+                SavedRoutePresetStoreRejection.SOURCE_UNSAFE,
+                current.issues,
+            )
+        }
+        if (current.presets.isNotEmpty() || previous.size < 2) {
+            return SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.NOT_FOUND)
+        }
+        val encoded = SavedRoutePresetsCodec.encode(previous)
+            ?: return SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.INVALID_PRESET)
+        return persist(encoded, previous)
+    }
+
+    /** Restore only if storage is still the exact post-deletion snapshot. */
+    fun undoRemove(undo: SavedRouteRemovalUndo): SavedRoutePresetStoreResult {
+        val current = load()
+        if (!current.isSourceSafeToReplace) {
+            return SavedRoutePresetStoreResult.Rejected(
+                SavedRoutePresetStoreRejection.SOURCE_UNSAFE, current.issues,
+            )
+        }
+        if (undo.before.count { it.id == undo.removedId } != 1 ||
+            current.presets != undo.before.filterNot { it.id == undo.removedId }
+        ) {
+            return SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.NOT_FOUND)
+        }
+        val encoded = SavedRoutePresetsCodec.encode(undo.before)
+            ?: return SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.INVALID_PRESET)
+        return persist(encoded, undo.before)
     }
 
     fun remove(id: String): SavedRoutePresetStoreResult {

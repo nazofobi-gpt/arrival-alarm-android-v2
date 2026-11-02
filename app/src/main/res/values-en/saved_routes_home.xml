@@ -3,6 +3,7 @@
     <string name="saved_routes_home_title">Saved routes</string>
     <string name="saved_routes_home_note">Only endpoints and routing preferences are kept on this device. Opening recalculates with current data; it never starts an alarm.</string>
     <string name="saved_routes_home_save">Save current route</string>
+    <string name="saved_routes_home_endpoints">From: %1$s · To: %2$s</string>
     <string name="saved_routes_home_open">Open and recalculate route</string>
     <string name="saved_routes_home_delete">Delete saved route</string>
     <string name="saved_routes_home_empty">No saved routes yet.</string>
@@ -19,4 +20,23 @@
     <string name="saved_routes_home_rename_hint">Route name</string>
     <string name="saved_routes_home_rename_confirm">Save name</string>
     <string name="saved_routes_home_renamed">Route name updated on this device.</string>
+    <string name="saved_routes_home_clear_all">Delete all saved routes</string>
+    <string name="saved_routes_home_clear_all_confirm_title">Delete all saved routes?</string>
+    <string name="saved_routes_home_clear_all_confirm_message">All %1$d saved routes on this device will be permanently deleted. You can undo immediately afterward on this screen. Continue?</string>
+    <string name="saved_routes_home_cleared_all">All saved routes deleted from this device.</string>
+    <string name="saved_routes_home_undo_clear_all">Undo delete all</string>
+    <string name="saved_routes_home_restored_all">Saved routes restored.</string>
+    <string name="saved_routes_home_filter">Search saved routes</string>
+    <string name="saved_routes_home_filter_empty">No matching saved routes.</string>
+    <string name="saved_routes_home_filter_clear">Clear search</string>
+    <string name="saved_routes_home_open_accessibility">Open and recalculate %1$s</string>
+    <string name="saved_routes_home_rename_accessibility">Rename %1$s</string>
+    <string name="saved_routes_home_delete_accessibility">Delete saved route %1$s</string>
+    <string name="saved_routes_home_preference_direct">Direct routes only</string>
+    <string name="saved_routes_home_preference_fewer_transfers">Fewer transfers</string>
+    <string name="saved_routes_home_preference_shorter_walk">Shorter walking</string>
+    <string name="saved_routes_home_preference_max_one_transfer">At most one transfer</string>
+    <string name="saved_routes_home_preference_default">Default route preferences</string>
+    <string name="saved_routes_home_undo_delete">Undo last deleted route</string>
+    <string name="saved_routes_home_restored_one">Deleted route restored.</string>
 </resources>

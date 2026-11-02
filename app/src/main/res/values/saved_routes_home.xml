@@ -3,6 +3,7 @@
     <string name="saved_routes_home_title">Kayıtlı rotalar</string>
     <string name="saved_routes_home_note">Yalnız başlangıç, varış ve rota tercihleri cihazda tutulur. Açıldığında rota güncel verilerle yeniden hesaplanır; alarm otomatik başlamaz.</string>
     <string name="saved_routes_home_save">Mevcut rotayı kaydet</string>
+    <string name="saved_routes_home_endpoints">Başlangıç: %1$s · Varış: %2$s</string>
     <string name="saved_routes_home_open">Rotayı aç ve yeniden hesapla</string>
     <string name="saved_routes_home_delete">Kaydı sil</string>
     <string name="saved_routes_home_empty">Henüz kayıtlı rota yok.</string>
@@ -19,4 +20,23 @@
     <string name="saved_routes_home_rename_hint">Rota adı</string>
     <string name="saved_routes_home_rename_confirm">Adı kaydet</string>
     <string name="saved_routes_home_renamed">Rota adı bu cihazda güncellendi.</string>
+    <string name="saved_routes_home_clear_all">Tüm kayıtlı rotaları sil</string>
+    <string name="saved_routes_home_clear_all_confirm_title">Bütün kayıtlı rotalar silinsin mi?</string>
+    <string name="saved_routes_home_clear_all_confirm_message">Bu cihazdaki %1$d kayıtlı rota kalıcı olarak silinecek. Silme işleminden hemen sonra aynı ekrandan geri alabilirsiniz. Devam edilsin mi?</string>
+    <string name="saved_routes_home_cleared_all">Bütün kayıtlı rotalar bu cihazdan silindi.</string>
+    <string name="saved_routes_home_undo_clear_all">Toplu silmeyi geri al</string>
+    <string name="saved_routes_home_restored_all">Silinen kayıtlı rotalar geri yüklendi.</string>
+    <string name="saved_routes_home_filter">Kayıtlı rotalarda ara</string>
+    <string name="saved_routes_home_filter_empty">Eşleşen kayıtlı rota bulunamadı.</string>
+    <string name="saved_routes_home_filter_clear">Aramayı temizle</string>
+    <string name="saved_routes_home_open_accessibility">%1$s rotasını aç ve yeniden hesapla</string>
+    <string name="saved_routes_home_rename_accessibility">%1$s rotasını yeniden adlandır</string>
+    <string name="saved_routes_home_delete_accessibility">%1$s rotasını sil</string>
+    <string name="saved_routes_home_preference_direct">Yalnız aktarmasız</string>
+    <string name="saved_routes_home_preference_fewer_transfers">Daha az aktarma</string>
+    <string name="saved_routes_home_preference_shorter_walk">Daha kısa yürüyüş</string>
+    <string name="saved_routes_home_preference_max_one_transfer">En fazla bir aktarma</string>
+    <string name="saved_routes_home_preference_default">Varsayılan rota tercihleri</string>
+    <string name="saved_routes_home_undo_delete">Silinen son rotayı geri al</string>
+    <string name="saved_routes_home_restored_one">Silinen rota geri yüklendi.</string>
 </resources>
