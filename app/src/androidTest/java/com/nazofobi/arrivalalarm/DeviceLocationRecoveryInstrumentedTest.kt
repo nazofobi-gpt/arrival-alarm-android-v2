@@ -8,6 +8,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -94,5 +102,68 @@ class DeviceLocationRecoveryInstrumentedTest {
         } finally {
             instrumentation.removeMonitor(monitor)
         }
+    }
+
+    @Test
+    fun returningFromDeviceSettingsRefreshesLiveReadiness() {
+        var locationAvailable by mutableStateOf(false)
+        var deviceLocationAvailable = false
+        var refreshCount = 0
+        val owner = object : LifecycleOwner {
+            val registry = LifecycleRegistry.createUnsafe(this)
+            override val lifecycle: Lifecycle get() = registry
+        }
+        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
+
+        rule.setContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+                MaterialTheme {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        SettingsReadinessPanel(
+                            state = SettingsReadinessState(
+                                themeMode = ArrivalThemeMode.SYSTEM,
+                                locationPermission = true,
+                                notificationPermission = true,
+                                locationServicesAvailable = locationAvailable,
+                                bluetoothPermission = true,
+                                guidancePermissionState = GuidancePermissionState.GRANTED,
+                                audioRoute = GuidanceAudioRoute.DEVICE,
+                                dataState = NationwideDataState.Idle,
+                                backgroundJourneyActive = false,
+                                connectorConfigured = false,
+                                connectorConnected = false,
+                            ),
+                            connectorBusy = false,
+                            connectorStatus = "",
+                            onThemeModeChange = {},
+                            onRequestJourneyPermissions = {},
+                            onRequestGuidancePermissions = {},
+                            onRefreshReadiness = {
+                                refreshCount++
+                                locationAvailable = deviceLocationAvailable
+                            },
+                            onShareDiagnostics = {},
+                            onOpenAppSettings = {},
+                            onRetryData = {},
+                            onConnectorAction = {},
+                        )
+                    }
+                }
+            }
+        }
+        rule.onNodeWithTag("readiness-device-location-settings").assertExists()
+        rule.runOnIdle {
+            owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+            owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        }
+        rule.onNodeWithTag("readiness-device-location-settings").assertExists()
+        rule.runOnIdle {
+            owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+            // Simulate the user enabling the Android system location switch.
+            deviceLocationAvailable = true
+            owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        }
+        rule.onNodeWithTag("readiness-device-location-settings").assertDoesNotExist()
+        rule.runOnIdle { assertEquals(2, refreshCount) }
     }
 }
