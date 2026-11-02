@@ -1,0 +1,4 @@
+<resources>
+    <string name="route_stop_delay_minutes">Verspätung: +%1$d Min.</string>
+    <string name="route_stop_early_minutes">Früher: %1$d Min.</string>
+</resources>
