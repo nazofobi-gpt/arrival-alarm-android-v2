@@ -19,4 +19,8 @@
     <string name="saved_routes_home_rename_hint">Rota adı</string>
     <string name="saved_routes_home_rename_confirm">Adı kaydet</string>
     <string name="saved_routes_home_renamed">Rota adı bu cihazda güncellendi.</string>
+    <string name="saved_routes_home_clear_all">Tüm kayıtlı rotaları sil</string>
+    <string name="saved_routes_home_clear_all_confirm_title">Bütün kayıtlı rotalar silinsin mi?</string>
+    <string name="saved_routes_home_clear_all_confirm_message">Bu cihazdaki %1$d kayıtlı rota kalıcı olarak silinecek. Bu işlem geri alınamaz. Devam edilsin mi?</string>
+    <string name="saved_routes_home_cleared_all">Bütün kayıtlı rotalar bu cihazdan silindi.</string>
 </resources>
