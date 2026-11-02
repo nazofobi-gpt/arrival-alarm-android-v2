@@ -14,4 +14,9 @@
     <string name="saved_routes_home_delete_confirm_title">Delete saved route?</string>
     <string name="saved_routes_home_delete_confirm_message">The route %1$s will be permanently removed from this device. Continue?</string>
     <string name="saved_routes_home_delete_cancel">Cancel</string>
+    <string name="saved_routes_home_rename">Rename route</string>
+    <string name="saved_routes_home_rename_title">Rename saved route</string>
+    <string name="saved_routes_home_rename_hint">Route name</string>
+    <string name="saved_routes_home_rename_confirm">Save name</string>
+    <string name="saved_routes_home_renamed">Route name updated on this device.</string>
 </resources>

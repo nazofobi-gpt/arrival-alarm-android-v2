@@ -10,6 +10,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -38,9 +39,53 @@ internal fun SavedRoutesHomePanel(
     onSave: () -> Unit,
     onRestore: (SavedRoutePreset) -> Unit,
     onRemove: (String) -> Unit,
+    onRename: (SavedRoutePreset, String) -> Unit = { _, _ -> },
 ) {
     var pendingDeleteId by rememberSaveable { mutableStateOf<String?>(null) }
     val pendingDelete = presets.firstOrNull { it.id == pendingDeleteId }
+    var pendingRenameId by rememberSaveable { mutableStateOf<String?>(null) }
+    var proposedName by rememberSaveable { mutableStateOf("") }
+    val pendingRename = presets.firstOrNull { it.id == pendingRenameId }
+    if (pendingRenameId != null) {
+        val trimmedName = proposedName.trim()
+        val validChange = pendingRename != null && sourceSafe && canRestore &&
+            trimmedName != pendingRename.name &&
+            SavedRoutePresetsCodec.encode(listOf(pendingRename.copy(name = trimmedName))) != null
+        AlertDialog(
+            onDismissRequest = { pendingRenameId = null },
+            title = { Text(stringResource(R.string.saved_routes_home_rename_title)) },
+            text = {
+                OutlinedTextField(
+                    value = proposedName,
+                    onValueChange = { proposedName = it.take(81) },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.saved_routes_home_rename_hint)) },
+                    modifier = Modifier.fillMaxWidth().testTag("saved-route-rename-input"),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val candidate = pendingRename
+                        pendingRenameId = null
+                        if (validChange && candidate != null) onRename(candidate, trimmedName)
+                    },
+                    enabled = validChange,
+                    modifier = Modifier.testTag("saved-route-confirm-rename"),
+                ) {
+                    Text(stringResource(R.string.saved_routes_home_rename_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { pendingRenameId = null },
+                    modifier = Modifier.testTag("saved-route-cancel-rename"),
+                ) {
+                    Text(stringResource(R.string.saved_routes_home_delete_cancel))
+                }
+            },
+        )
+    }
     if (pendingDeleteId != null) {
         AlertDialog(
             onDismissRequest = { pendingDeleteId = null },
@@ -132,6 +177,17 @@ internal fun SavedRoutesHomePanel(
                             .testTag("saved-route-open-$index"),
                     ) {
                         Text(stringResource(R.string.saved_routes_home_open))
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            pendingRenameId = preset.id
+                            proposedName = preset.name
+                        },
+                        enabled = canRestore,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .testTag("saved-route-rename-$index"),
+                    ) {
+                        Text(stringResource(R.string.saved_routes_home_rename))
                     }
                     OutlinedButton(
                         onClick = { pendingDeleteId = preset.id },

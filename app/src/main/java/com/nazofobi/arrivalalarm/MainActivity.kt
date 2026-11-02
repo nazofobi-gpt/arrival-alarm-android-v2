@@ -1169,6 +1169,23 @@ fun ArrivalAlarmApp(
                                 }
                             }
                         },
+                        onRename = { expected, name ->
+                            val outcome = if (journey.phase != JourneyPhase.ARMED) {
+                                savedRouteStore.rename(expected, name)
+                            } else {
+                                null
+                            }
+                            savedRouteSnapshot = savedRouteStore.load()
+                            savedRouteStatus = context.getString(
+                                when {
+                                    journey.phase == JourneyPhase.ARMED ->
+                                        R.string.saved_routes_home_active_trip
+                                    outcome is SavedRoutePresetStoreResult.Success ->
+                                        R.string.saved_routes_home_renamed
+                                    else -> R.string.saved_routes_home_failed
+                                }
+                            )
+                        },
                         onRemove = { id ->
                             val outcome = savedRouteStore.remove(id)
                             savedRouteSnapshot = savedRouteStore.load()

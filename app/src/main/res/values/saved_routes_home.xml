@@ -14,4 +14,9 @@
     <string name="saved_routes_home_delete_confirm_title">Kayıtlı rota silinsin mi?</string>
     <string name="saved_routes_home_delete_confirm_message">%1$s adlı rota yalnız bu cihazdan kalıcı olarak silinecek. Devam edilsin mi?</string>
     <string name="saved_routes_home_delete_cancel">Vazgeç</string>
+    <string name="saved_routes_home_rename">Rotayı yeniden adlandır</string>
+    <string name="saved_routes_home_rename_title">Kayıtlı rotanın adı</string>
+    <string name="saved_routes_home_rename_hint">Rota adı</string>
+    <string name="saved_routes_home_rename_confirm">Adı kaydet</string>
+    <string name="saved_routes_home_renamed">Rota adı bu cihazda güncellendi.</string>
 </resources>
