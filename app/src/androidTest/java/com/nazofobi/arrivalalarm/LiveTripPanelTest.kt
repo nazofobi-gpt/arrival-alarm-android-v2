@@ -338,7 +338,9 @@ class LiveTripPanelTest {
             }
         }
         // 09:00 live departure precedes an 08:45 live arrival in route order:
-        // fallback is the coherent 08:43 planned arrival (28 min), not 30 live.
+        // both the destination clock and countdown must use 08:43 planned, not live.
+        rule.onNodeWithTag("live-trip-target-time")
+            .performScrollTo().assertTextContains("08:43", substring = true)
         rule.onNodeWithTag("live-trip-destination-countdown")
             .performScrollTo().assertTextContains("28", substring = true)
     }

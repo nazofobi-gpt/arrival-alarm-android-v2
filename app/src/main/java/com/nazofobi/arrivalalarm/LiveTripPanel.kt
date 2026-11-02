@@ -46,7 +46,8 @@ fun LiveTripPanel(
     )
     val target = selectedRoute.stops.lastOrNull()
     val targetLabel = target?.name ?: selectedRoute.destination.label
-    val targetTimeSource = if (trustedRealtime) {
+    // Match the stop-progress evidence basis even when a fresh feed is internally contradictory.
+    val targetTimeSource = if (trustedRealtime && progress.timingBasis == TransitTimingBasis.REALTIME) {
         target?.arrival ?: target?.plannedArrival ?: selectedRoute.arrival
     } else {
         target?.plannedArrival ?: target?.plannedDeparture
