@@ -95,6 +95,8 @@ fun TransitExperiencePanel(
     }
     var favorite by remember(stopId) { mutableStateOf(store.isFavorite(stopId)) }
     var selectedDeparture by remember(stopId) { mutableStateOf<Departure?>(null) }
+    // Expanding the board is local UI state: never changes a chosen trip or arms an alarm.
+    var showMoreDepartures by remember(stopId) { mutableStateOf(false) }
     var recentTripCount by remember(store) { mutableStateOf(store.recents().size) }
     // Stop-scoped route bookmarks never imply realtime alert subscriptions.
     // Fail closed on legacy/malformed preference types, preserving the departure board.
@@ -214,7 +216,27 @@ fun TransitExperiencePanel(
             }
         }
 
-        board.take(8).forEachIndexed { index, departure ->
+        // The production request retrieves up to 20 candidates; reveal later trips only
+        // after an explicit tap so the default departure board remains compact.
+        if (board.size > 8) {
+            OutlinedButton(
+                onClick = { showMoreDepartures = !showMoreDepartures },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("departures-show-more-toggle"),
+            ) {
+                Text(
+                    if (showMoreDepartures) {
+                        stringResource(R.string.departures_show_fewer)
+                    } else {
+                        stringResource(R.string.departures_show_more, (board.size - 8).coerceAtMost(12))
+                    },
+                )
+            }
+        }
+
+        board.take(if (showMoreDepartures) 20 else 8).forEachIndexed { index, departure ->
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(

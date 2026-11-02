@@ -241,6 +241,66 @@ class TransitExperiencePanelTest {
     }
 
     @Test
+    fun laterDeparturesRequireExplicitShowMoreAndCanBeCollapsed() {
+        val candidates = (0 until 12).map { index ->
+            Departure(
+                tripId = "re9-later-$index",
+                line = "RE9",
+                direction = "Bremen",
+                scheduledEpochSeconds = 2_000L + index * 60L,
+                routeId = "re9-route",
+            )
+        }
+        var selectedTrip: String? = null
+        rule.setContent {
+            MaterialTheme {
+                TransitExperiencePanel(
+                    stopId = "test-more-departures",
+                    stopName = "Lohne",
+                    lineName = "RE9",
+                    direction = "Bremen",
+                    departures = candidates,
+                    alerts = emptyList(),
+                    isOfflineCache = false,
+                    nowEpochSeconds = 1_000L,
+                    onSelectDeparture = { selectedTrip = it.tripId },
+                )
+            }
+        }
+        rule.onNodeWithTag("departure-7").assertExists()
+        rule.onNodeWithTag("departure-8").assertDoesNotExist()
+        rule.onNodeWithTag("departures-show-more-toggle").performClick()
+        rule.onNodeWithTag("departure-8").assertExists()
+        rule.onNodeWithTag("departure-11").assertExists().performClick()
+        rule.runOnIdle { assertEquals("re9-later-11", selectedTrip) }
+        rule.onNodeWithTag("departures-show-more-toggle").performClick()
+        rule.onNodeWithTag("departure-8").assertDoesNotExist()
+        rule.runOnIdle { assertEquals("re9-later-11", selectedTrip) }
+    }
+
+    @Test
+    fun shortDepartureBoardHasNoExpansionControl() {
+        rule.setContent {
+            MaterialTheme {
+                TransitExperiencePanel(
+                    stopId = "short-board-test",
+                    stopName = "Lohne",
+                    lineName = "RE9",
+                    direction = "Bremen",
+                    departures = (0 until 8).map { index ->
+                        Departure("short-$index", "RE9", "Bremen", 2_000L + index * 60L)
+                    },
+                    alerts = emptyList(),
+                    isOfflineCache = false,
+                    nowEpochSeconds = 1_000L,
+                )
+            }
+        }
+        rule.onNodeWithTag("departures-show-more-toggle").assertDoesNotExist()
+        rule.onNodeWithTag("departure-7").assertExists()
+    }
+
+    @Test
     fun offlineDepartureBoardHidesUnverifiedDelay() {
         rule.setContent {
             MaterialTheme {
