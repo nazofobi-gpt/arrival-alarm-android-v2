@@ -544,13 +544,18 @@ class LiveTripPanelTest {
             now.longValue = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
         }
         rule.waitForIdle()
-        // Fresh, coherent realtime: 15 minutes to the next intermediate stop.
+        // The next-stop countdown identifies its stop, even for assistive reading.
+        // Fresh, coherent realtime: 15 minutes to Diepholz.
         rule.onNodeWithTag("live-trip-next-stop-countdown").performScrollTo()
+            .assertTextContains("Diepholz", substring = true)
+        rule.onNodeWithTag("live-trip-next-stop-countdown")
             .assertTextContains("15", substring = true)
-        // Offline: no stale live ETA; use the 10-minute planned arrival instead.
+        // Offline: no stale live ETA; keep Diepholz and the 10-minute planned arrival.
         rule.runOnUiThread { offline.value = true }
         rule.waitForIdle()
         rule.onNodeWithTag("live-trip-next-stop-countdown").performScrollTo()
+            .assertTextContains("Diepholz", substring = true)
+        rule.onNodeWithTag("live-trip-next-stop-countdown")
             .assertTextContains("10", substring = true)
         // A journey that has not been armed must not show active-stop guidance.
         rule.runOnUiThread { armed.value = false }
