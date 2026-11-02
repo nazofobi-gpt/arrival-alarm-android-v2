@@ -307,6 +307,31 @@ internal class SavedRoutePresetsStore(
         return persist(encoded, updated)
     }
 
+    /**
+     * Rename a saved commute without changing its route identity, options or order.
+     * A stale UI snapshot cannot recreate a deleted or externally changed preset.
+     */
+    fun rename(expected: SavedRoutePreset, newName: String): SavedRoutePresetStoreResult {
+        val current = load()
+        if (!current.isSourceSafeToReplace) {
+            return SavedRoutePresetStoreResult.Rejected(
+                SavedRoutePresetStoreRejection.SOURCE_UNSAFE,
+                current.issues,
+            )
+        }
+        val original = current.presets.firstOrNull { it.id == expected.id && it == expected }
+            ?: return SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.NOT_FOUND)
+        val renamed = original.copy(name = newName.trim())
+        if (SavedRoutePresetsCodec.encode(listOf(renamed)) == null) {
+            return SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.INVALID_PRESET)
+        }
+        if (renamed == original) return SavedRoutePresetStoreResult.Success(current.presets)
+        val updated = current.presets.map { if (it.id == original.id) renamed else it }
+        val encoded = SavedRoutePresetsCodec.encode(updated)
+            ?: return SavedRoutePresetStoreResult.Rejected(SavedRoutePresetStoreRejection.INVALID_PRESET)
+        return persist(encoded, updated)
+    }
+
     fun remove(id: String): SavedRoutePresetStoreResult {
         val current = load()
         if (!current.isSourceSafeToReplace) {
