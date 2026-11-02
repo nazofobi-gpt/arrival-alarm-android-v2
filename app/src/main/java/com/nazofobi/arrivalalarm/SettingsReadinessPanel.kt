@@ -8,6 +8,9 @@ import android.location.LocationManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,6 +24,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -154,6 +160,17 @@ fun SettingsReadinessPanel(
     var themeOptionsExpanded by rememberSaveable { mutableStateOf(false) }
     val connectorReady = hasVerifiedConnectorConnection(state.connectorConfigured, state.connectorConnected)
     val context = LocalContext.current
+    // Returning from the device-wide location switch must refresh live readiness;
+    // otherwise a stale BLOCKED snapshot remains until a manual tap.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val latestRefresh by rememberUpdatedState(onRefreshReadiness)
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) latestRefresh()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Card(
         modifier = modifier
