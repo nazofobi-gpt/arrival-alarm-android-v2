@@ -5,6 +5,8 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -74,6 +76,38 @@ class SavedRoutesHomePanelTest {
     }
 
     @Test
+    fun savedCommuteCanBeRenamedOnlyAfterValidExplicitConfirmation() {
+        val renames = mutableListOf<String>()
+        rule.setContent {
+            MaterialTheme {
+                SavedRoutesHomePanel(
+                    presets = listOf(preset),
+                    canSave = true,
+                    canRestore = true,
+                    sourceSafe = true,
+                    status = null,
+                    onSave = {},
+                    onRestore = {},
+                    onRemove = {},
+                    onRename = { _, name -> renames += name },
+                )
+            }
+        }
+        rule.onNodeWithTag("saved-route-rename-0").performClick()
+        rule.onNodeWithTag("saved-route-rename-input").performTextClearance()
+        rule.onNodeWithTag("saved-route-confirm-rename").assertIsNotEnabled()
+        rule.onNodeWithTag("saved-route-rename-input").performTextInput("Morning commute")
+        rule.onNodeWithTag("saved-route-cancel-rename").performClick()
+        rule.runOnIdle { assertEquals(emptyList<String>(), renames) }
+
+        rule.onNodeWithTag("saved-route-rename-0").performClick()
+        rule.onNodeWithTag("saved-route-rename-input").performTextClearance()
+        rule.onNodeWithTag("saved-route-rename-input").performTextInput("Morning commute")
+        rule.onNodeWithTag("saved-route-confirm-rename").performClick()
+        rule.runOnIdle { assertEquals(listOf("Morning commute"), renames) }
+    }
+
+    @Test
     fun activeJourneyCannotOpenOrDeleteSavedRoute() {
         var opened = false
         var removed = false
@@ -95,6 +129,7 @@ class SavedRoutesHomePanelTest {
         rule.onNodeWithTag("saved-route-save").assertIsNotEnabled()
         rule.onNodeWithTag("saved-route-open-0").assertIsNotEnabled()
         rule.onNodeWithTag("saved-route-delete-0").assertIsNotEnabled()
+        rule.onNodeWithTag("saved-route-rename-0").assertIsNotEnabled()
         rule.runOnIdle {
             assertEquals(false, opened)
             assertEquals(false, removed)
@@ -125,6 +160,7 @@ class SavedRoutesHomePanelTest {
         rule.onNodeWithTag("saved-route-save").assertIsNotEnabled()
         rule.onNodeWithTag("saved-route-open-0").assertDoesNotExist()
         rule.onNodeWithTag("saved-route-delete-0").assertDoesNotExist()
+        rule.onNodeWithTag("saved-route-rename-0").assertDoesNotExist()
         rule.runOnIdle {
             assertEquals(false, saved)
             assertEquals(false, opened)
