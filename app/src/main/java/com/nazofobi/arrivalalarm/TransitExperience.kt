@@ -162,6 +162,16 @@ class TransitRecentsStore(
 
     fun recents(): List<String> = recents.toList()
 
+    /** Remove only the requested local trip; favorites and all other history remain intact. */
+    fun removeRecentTrip(tripId: String): Boolean {
+        if (tripId.isBlank() || !recents.remove(tripId)) {
+            if (needsPersistenceRetry) publish()
+            return false
+        }
+        publish()
+        return true
+    }
+
     /** Clear local trip history without changing the user's saved favorite stops. */
     fun clearRecents() {
         if (recents.isEmpty()) {
