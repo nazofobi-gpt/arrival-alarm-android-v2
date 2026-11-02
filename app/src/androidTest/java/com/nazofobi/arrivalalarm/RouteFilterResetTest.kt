@@ -76,6 +76,51 @@ class RouteFilterResetTest {
     }
 
     @Test
+    fun changingDirectOnlyPreferenceReplansAndPersistsBothDirections() {
+        val prefs = InstrumentationRegistry.getInstrumentation().targetContext
+            .getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+        val key = ArrivalUiPreferences.KEY_DIRECT_ONLY_ROUTES
+        val original = prefs.all[key]
+        try {
+            check(prefs.edit().putBoolean(key, false).commit())
+            var refreshes = 0
+            rule.setContent {
+                MaterialTheme {
+                    RouteJourneyPanel(
+                        origin = MapPoint(52.665, 8.237, "Lohne"),
+                        destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
+                        routeOptions = emptyList(),
+                        routeBusy = false,
+                        routeStatus = null,
+                        routeOffline = false,
+                        selectedRouteId = null,
+                        journey = JourneyUiState(),
+                        onRefreshRoutes = { refreshes++ },
+                        onSelectRoute = {},
+                        onArmAlarm = {},
+                        onCancelAlarm = {},
+                        modifier = Modifier.verticalScroll(rememberScrollState()),
+                    )
+                }
+            }
+            rule.onNodeWithTag("route-direct-only-filter").performScrollTo().performClick()
+            rule.runOnIdle {
+                assertEquals(1, refreshes)
+                assertEquals(true, prefs.getBoolean(key, false))
+            }
+            rule.onNodeWithTag("route-direct-only-filter").performScrollTo().performClick()
+            rule.runOnIdle {
+                assertEquals(2, refreshes)
+                assertEquals(false, prefs.getBoolean(key, true))
+            }
+        } finally {
+            val editor = prefs.edit()
+            if (original is Boolean) editor.putBoolean(key, original) else editor.remove(key)
+            editor.commit()
+        }
+    }
+
+    @Test
     fun noRouteWithoutRestrictiveFiltersDoesNotOfferMisleadingReset() {
         val prefs = InstrumentationRegistry.getInstrumentation().targetContext
             .getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
