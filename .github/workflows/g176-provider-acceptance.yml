@@ -1,0 +1,138 @@
+name: G176 Provider Sample Acceptance
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: g176-provider-acceptance-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    if: github.head_ref == 'g176-real-sample-acceptance-20261005'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Capture provider-derived samples
+        run: |
+          set -eu
+          curl -fL --retry 5 --retry-all-errors --connect-timeout 60 --max-time 600 https://realtime.gtfs.de/realtime-free.pb -o /tmp/g176-live.pb
+          bytes="$(stat -c%s /tmp/g176-live.pb)"
+          test "$bytes" -gt 0
+          test "$bytes" -le 67108864
+          sha256sum /tmp/g176-live.pb | tee /tmp/g176-live.sha256
+          curl -fL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 1200 https://download.gtfs.de/germany/free/latest.zip -o /tmp/germany-full.zip
+          mkdir -p app/build/g176-provider-samples
+          python3 tools/extract_g176_provider_samples.py --realtime /tmp/g176-live.pb --static /tmp/germany-full.zip --realtime-license CC-BY-SA-4.0 --static-license CC-4.0 --output app/build/g176-provider-samples/g176-provider-regional-samples.json
+          test -s app/build/g176-provider-samples/g176-provider-regional-samples.json
+          curl -fL --compressed --retry 1 --retry-delay 10 --retry-max-time 60 --retry-all-errors --connect-timeout 30 --max-time 600 \
+            -H 'User-Agent: ArrivalAlarm-G176-ProviderAcceptance/1.0 (+https://github.com/nazofobi-gpt/arrival-alarm-android-v2)' \
+            https://production.gtfsrt.vbb.de/data -o /tmp/vbb-live.pb
+          vbb_bytes="$(stat -c%s /tmp/vbb-live.pb)"
+          test "$vbb_bytes" -gt 0
+          test "$vbb_bytes" -le 67108864
+          sha256sum /tmp/vbb-live.pb | tee /tmp/vbb-live.sha256
+          curl -fL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 1200 \
+            https://unternehmen.vbb.de/gtfs -o /tmp/vbb-static.zip
+          vbb_static_bytes="$(stat -c%s /tmp/vbb-static.zip)"
+          test "$vbb_static_bytes" -gt 0
+          test "$vbb_static_bytes" -le 536870912
+          sha256sum /tmp/vbb-static.zip | tee /tmp/vbb-static.sha256
+          python3 tools/extract_g176_provider_samples.py \
+            --regions berlin --allow-missing-regions \
+            --endpoint https://production.gtfsrt.vbb.de/data \
+            --static-source https://unternehmen.vbb.de/gtfs \
+            --realtime-license CC-BY-4.0 --static-license CC-BY-4.0 \
+            --realtime /tmp/vbb-live.pb --static /tmp/vbb-static.zip \
+            --output app/build/g176-provider-samples/g176-vbb-platform-samples.json
+          test -s app/build/g176-provider-samples/g176-vbb-platform-samples.json
+          curl -fL --compressed --retry 3 --retry-all-errors --connect-timeout 30 --max-time 900 \
+            -H 'User-Agent: ArrivalAlarm-G176-ProviderAcceptance/1.0 (+https://github.com/nazofobi-gpt/arrival-alarm-android-v2)' \
+            https://germany.motis-project.org/gtfsrt -o /tmp/delfi-live.pb
+          delfi_bytes="$(stat -c%s /tmp/delfi-live.pb)"
+          test "$delfi_bytes" -gt 0
+          test "$delfi_bytes" -le 134217728
+          sha256sum /tmp/delfi-live.pb | tee /tmp/delfi-live.sha256
+          python3 tools/extract_g176_provider_samples.py \
+            --regions berlin --allow-missing-regions \
+            --endpoint https://germany.motis-project.org/gtfsrt \
+            --static-source https://download.gtfs.de/germany/free/latest.zip \
+            --realtime-license CC-BY-SA-4.0 --static-license CC-4.0 \
+            --realtime /tmp/delfi-live.pb --static /tmp/germany-full.zip \
+            --output app/build/g176-provider-samples/g176-delfi-platform-samples.json
+          test -s app/build/g176-provider-samples/g176-delfi-platform-samples.json
+      - name: Capture DB Fernverkehr GTFS-RT when API key is configured
+        env:
+          DB_GTFS_API_KEY: ${{ secrets.DB_GTFS_API_KEY }}
+        run: |
+          set -eu
+          if [ -z "${DB_GTFS_API_KEY:-}" ]; then
+            echo "DB_GTFS_API_KEY is not configured; DB Fernverkehr capture skipped."
+            exit 0
+          fi
+          db_base="https://gtfs-datenstroeme.tech.deutschebahn.com/db-fernverkehr"
+          curl -fL --compressed --retry 3 --retry-all-errors --connect-timeout 30 --max-time 900 \
+            -H "DB-Api-Key: ${DB_GTFS_API_KEY}" "${db_base}/gtfsrt_trip_updates.proto" -o /tmp/db-live.pb
+          db_bytes="$(stat -c%s /tmp/db-live.pb)"
+          test "$db_bytes" -gt 0
+          test "$db_bytes" -le 134217728
+          sha256sum /tmp/db-live.pb | tee /tmp/db-live.sha256
+          curl -fL --retry 3 --retry-all-errors --connect-timeout 30 --max-time 1200 \
+            -H "DB-Api-Key: ${DB_GTFS_API_KEY}" "${db_base}/gtfs.zip" -o /tmp/db-static.zip
+          db_static_bytes="$(stat -c%s /tmp/db-static.zip)"
+          test "$db_static_bytes" -gt 0
+          test "$db_static_bytes" -le 1073741824
+          sha256sum /tmp/db-static.zip | tee /tmp/db-static.sha256
+          python3 tools/extract_g176_provider_samples.py \
+            --regions berlin --allow-missing-regions \
+            --endpoint "${db_base}/gtfsrt_trip_updates.proto" \
+            --static-source "${db_base}/gtfs.zip" \
+            --realtime-license DB-API-TERMS --static-license DB-API-TERMS \
+            --realtime /tmp/db-live.pb --static /tmp/db-static.zip \
+            --output app/build/g176-provider-samples/g176-db-platform-samples.json
+          test -s app/build/g176-provider-samples/g176-db-platform-samples.json
+      - name: Enable KVM access
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
+      - name: API36 retained-provider production-path acceptance
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            set -eu
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.GermanyRealtimeMatcherInstrumentedTest
+            echo "G176_SYNTHETIC_API36_MATCHER=PASS"
+            adb push app/build/g176-provider-samples/g176-provider-regional-samples.json /data/local/tmp/g176-provider-regional-samples.json
+            adb push app/build/g176-provider-samples/g176-vbb-platform-samples.json /data/local/tmp/g176-vbb-platform-samples.json
+            adb push app/build/g176-provider-samples/g176-delfi-platform-samples.json /data/local/tmp/g176-delfi-platform-samples.json
+            # Keep optional DB push, argument construction and Gradle invocation in one shell; emulator-runner isolates script lines.
+            sh -eu -c 'ALT_PATHS="/data/local/tmp/g176-vbb-platform-samples.json,/data/local/tmp/g176-delfi-platform-samples.json"; if [ -s app/build/g176-provider-samples/g176-db-platform-samples.json ]; then adb push app/build/g176-provider-samples/g176-db-platform-samples.json /data/local/tmp/g176-db-platform-samples.json; ALT_PATHS="${ALT_PATHS},/data/local/tmp/g176-db-platform-samples.json"; fi; ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nazofobi.arrivalalarm.G176ProviderDerivedRegionalInstrumentedTest -Pandroid.testInstrumentationRunnerArguments.providerSamplesPath=/data/local/tmp/g176-provider-regional-samples.json -Pandroid.testInstrumentationRunnerArguments.alternatePlatformSamplesPaths="${ALT_PATHS}"'
+
+      - name: Upload G176 provider instrumentation diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: g176-provider-diagnostics-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            app/build/reports/androidTests/
+            app/build/g176-provider-samples/
+            app/build/outputs/androidTest-results/
+          if-no-files-found: warn
+          retention-days: 14

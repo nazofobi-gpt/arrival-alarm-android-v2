@@ -32,7 +32,7 @@ class GermanyRealtimeMatcherInstrumentedTest {
                     "Scheduled",
                     52.0,
                     8.0,
-                    null,
+                    "station-1",
                     0,
                     "1",
                     null,
@@ -42,7 +42,7 @@ class GermanyRealtimeMatcherInstrumentedTest {
                     "Assigned",
                     52.0,
                     8.0,
-                    null,
+                    "station-1",
                     0,
                     "2",
                     null,
@@ -141,5 +141,20 @@ class GermanyRealtimeMatcherInstrumentedTest {
         assertEquals("2", stop.platformCode)
         assertEquals(60, stop.departureDelaySeconds)
         assertEquals("api36", result.provenance.feedVersion)
+
+        val stopIdOnlyUpdate = update.copy(
+            stops = listOf(update.stops.single().copy(assignedStopId = null)),
+        )
+        val stopIdOnlyResult = GermanyRealtimeMatcher(staticData).match(
+            snapshot.copy(tripUpdates = listOf(stopIdOnlyUpdate)),
+            1_800_000_010L,
+        )
+        assertTrue(stopIdOnlyResult is GermanyRealtimeOverlayResult.Matched)
+        val stopIdOnlyStop = (stopIdOnlyResult as GermanyRealtimeOverlayResult.Matched)
+            .tripOverlays.single().stopUpdates.single()
+        assertEquals("scheduled", stopIdOnlyStop.scheduledStopId)
+        assertEquals("assigned", stopIdOnlyStop.realtimeStopId)
+        assertEquals(null, stopIdOnlyStop.assignedStopId)
+        assertEquals("2", stopIdOnlyStop.platformCode)
     }
 }

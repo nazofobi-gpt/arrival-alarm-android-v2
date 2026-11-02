@@ -14,8 +14,8 @@ class GermanyRealtimeMatcherTest {
             trips = mapOf("T1" to trip),
             routes = mapOf("R1" to route("R1", "agency", 3)),
             stops = mapOf(
-                "scheduled-stop" to stop("scheduled-stop", "1"),
-                "assigned-stop" to stop("assigned-stop", "2"),
+                "scheduled-stop" to stop("scheduled-stop", "1", "station-1"),
+                "assigned-stop" to stop("assigned-stop", "2", "station-1"),
             ),
             stopTimes = mapOf(
                 "T1" to listOf(
@@ -67,14 +67,16 @@ class GermanyRealtimeMatcherTest {
     }
 
     @Test
-    fun sequencedStopRejectsConflictingStopIdButPreservesDeclaredReassignment() {
+    fun sequencedStopReassignmentRequiresSameStaticParentStationAndUniqueSequence() {
         val trip = trip("T1", "R1", "S", direction = 0)
         val data = FakeRealtimeStaticData(
             trips = mapOf("T1" to trip),
             routes = mapOf("R1" to route("R1", "agency", 3)),
             stops = mapOf(
-                "scheduled-stop" to stop("scheduled-stop", "1"),
-                "other-stop" to stop("other-stop", "9"),
+                "scheduled-stop" to stop("scheduled-stop", "1", "station-1"),
+                "other-stop" to stop("other-stop", "9", "station-1"),
+                "cross-station-stop" to stop("cross-station-stop", "3", "station-2"),
+                "orphan-stop" to stop("orphan-stop", "4"),
             ),
             stopTimes = mapOf(
                 "T1" to listOf(
@@ -99,8 +101,16 @@ class GermanyRealtimeMatcherTest {
                 1_800_000_010L,
             ) as GermanyRealtimeOverlayResult.Matched).tripOverlays.single().stopUpdates
 
-        // A sequence is not permission to apply another stop's delay or platform.
-        assertTrue(matchedStops(realtimeStop).isEmpty())
+        val stopIdReassignment = matchedStops(realtimeStop).single()
+        assertEquals("scheduled-stop", stopIdReassignment.scheduledStopId)
+        assertEquals("other-stop", stopIdReassignment.realtimeStopId)
+        assertEquals(null, stopIdReassignment.assignedStopId)
+        assertEquals("9", stopIdReassignment.platformCode)
+
+        assertTrue(matchedStops(realtimeStop.copy(stopId = "cross-station-stop")).isEmpty())
+        assertTrue(matchedStops(realtimeStop.copy(stopId = "orphan-stop")).isEmpty())
+        assertTrue(matchedStops(realtimeStop.copy(stopId = "unknown-stop")).isEmpty())
+        assertTrue(matchedStops(realtimeStop.copy(stopSequence = null)).isEmpty())
         assertEquals("scheduled-stop", matchedStops(
             realtimeStop.copy(stopId = "scheduled-stop"),
         ).single().scheduledStopId)
@@ -108,13 +118,36 @@ class GermanyRealtimeMatcherTest {
             realtimeStop.copy(stopId = null),
         ).single().scheduledStopId)
 
-        // A declared stop reassignment remains valid for the same sequence.
         val assigned = matchedStops(
             realtimeStop.copy(assignedStopId = "other-stop"),
         ).single()
         assertEquals("scheduled-stop", assigned.scheduledStopId)
         assertEquals("other-stop", assigned.assignedStopId)
         assertEquals("9", assigned.platformCode)
+
+        val assignedWithoutStopId = matchedStops(
+            realtimeStop.copy(stopId = null, assignedStopId = "other-stop"),
+        ).single()
+        assertEquals("other-stop", assignedWithoutStopId.assignedStopId)
+        assertEquals("9", assignedWithoutStopId.platformCode)
+
+        assertTrue(matchedStops(
+            realtimeStop.copy(stopId = "cross-station-stop", assignedStopId = "cross-station-stop"),
+        ).isEmpty())
+        assertTrue(matchedStops(
+            realtimeStop.copy(assignedStopId = "cross-station-stop"),
+        ).isEmpty())
+
+        val duplicateSequenceResult = matcher(data).match(
+            snapshot(tripUpdates = listOf(tripUpdate.copy(stops = listOf(
+                realtimeStop,
+                realtimeStop.copy(stopId = "scheduled-stop"),
+            )))),
+            1_800_000_010L,
+        ) as GermanyRealtimeOverlayResult.Matched
+        assertTrue(duplicateSequenceResult.tripOverlays.single().stopUpdates.none {
+            it.realtimeStopId == "other-stop"
+        })
     }
 
     @Test
@@ -520,8 +553,11 @@ class GermanyRealtimeMatcherTest {
     private fun route(id: String, agencyId: String?, routeType: Int?) =
         GtfsScheduleRoute(id, agencyId, id, null, routeType)
 
-    private fun stop(id: String, platform: String?) =
-        GtfsScheduleStop(id, id, 52.0, 8.0, null, 0, platform, null)
+    private fun stop(
+        id: String,
+        platform: String?,
+        parentStationId: String? = null,
+    ) = GtfsScheduleStop(id, id, 52.0, 8.0, parentStationId, 0, platform, null)
 
     private fun st(
         tripId: String,
