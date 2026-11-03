@@ -389,6 +389,13 @@ fun ArrivalAlarmApp(
     fun setOrigin(point: MapPoint) {
         // A late device fix must never override a newer manual origin selection.
         currentLocationRequestGate.invalidate()
+        val outcome = connectorPort.setOrigin(point)
+        journey = controller.state
+        if (!outcome.applied) {
+            // Keep the visible origin and active alarm aligned with domain truth.
+            locationMessage = localizedDomainMessage(context, outcome.message)
+            return
+        }
         locationMessage = null
         // Changing origin cancels any pending route and station responses.
         routeRequestGate.invalidate()
@@ -415,8 +422,6 @@ fun ArrivalAlarmApp(
         stationLoading = false
         stationResolved = false
         selectingOrigin = false
-        connectorPort.setOrigin(point)
-        journey = controller.state
         loadNearby(point)
     }
 
