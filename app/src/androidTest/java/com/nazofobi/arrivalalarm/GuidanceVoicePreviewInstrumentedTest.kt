@@ -15,6 +15,27 @@ import org.junit.runner.RunWith
 class GuidanceVoicePreviewInstrumentedTest {
     @get:Rule val rule = createComposeRule()
 
+    @Test fun arrivedJourneyDisablesPreviewToProtectFinalAlarmSpeech() {
+        var spoken = 0
+        val speaker = object : GuidanceSpeaker {
+            override fun speak(utterance: GuidanceUtterance): Boolean {
+                spoken++
+                return true
+            }
+        }
+        rule.setContent {
+            MaterialTheme {
+                GuidanceVoicePreviewPanel(
+                    speaker, GuidanceLanguage.GERMAN,
+                    isJourneyAudioActive = isVoicePreviewProtectedPhase(JourneyPhase.ARRIVED),
+                )
+            }
+        }
+        rule.onNodeWithTag("guidance-voice-preview").assertIsNotEnabled()
+        rule.onNodeWithTag("guidance-voice-preview-disabled").assertExists()
+        assertEquals(0, spoken)
+    }
+
     @Test fun noDestinationNeededAndExplicitTapUsesSelectedLocale() {
         val spoken = mutableListOf<GuidanceUtterance>()
         val speaker = object : GuidanceSpeaker {
@@ -25,7 +46,7 @@ class GuidanceVoicePreviewInstrumentedTest {
         }
         rule.setContent {
             MaterialTheme {
-                GuidanceVoicePreviewPanel(speaker, GuidanceLanguage.GERMAN, isJourneyArmed = false)
+                GuidanceVoicePreviewPanel(speaker, GuidanceLanguage.GERMAN, isJourneyAudioActive = false)
             }
         }
         assertEquals(0, spoken.size)
@@ -45,7 +66,7 @@ class GuidanceVoicePreviewInstrumentedTest {
         }
         rule.setContent {
             MaterialTheme {
-                GuidanceVoicePreviewPanel(speaker, GuidanceLanguage.TURKISH, isJourneyArmed = true)
+                GuidanceVoicePreviewPanel(speaker, GuidanceLanguage.TURKISH, isJourneyAudioActive = true)
             }
         }
         rule.onNodeWithTag("guidance-voice-preview").assertIsNotEnabled()
@@ -60,7 +81,7 @@ class GuidanceVoicePreviewInstrumentedTest {
         }
         rule.setContent {
             MaterialTheme {
-                GuidanceVoicePreviewPanel(speaker, GuidanceLanguage.ENGLISH, isJourneyArmed = false)
+                GuidanceVoicePreviewPanel(speaker, GuidanceLanguage.ENGLISH, isJourneyAudioActive = false)
             }
         }
         rule.onNodeWithTag("guidance-voice-preview").performClick()

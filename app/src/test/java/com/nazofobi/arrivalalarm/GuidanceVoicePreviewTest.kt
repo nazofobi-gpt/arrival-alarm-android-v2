@@ -7,6 +7,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GuidanceVoicePreviewTest {
+    @Test fun previewGuardProtectsTrackingAndFinalArrivalSpeech() {
+        assertFalse(isVoicePreviewProtectedPhase(JourneyPhase.EMPTY))
+        assertFalse(isVoicePreviewProtectedPhase(JourneyPhase.START_SELECTED))
+        assertFalse(isVoicePreviewProtectedPhase(JourneyPhase.DESTINATION_SELECTED))
+        assertTrue(isVoicePreviewProtectedPhase(JourneyPhase.ARMED))
+        assertTrue(isVoicePreviewProtectedPhase(JourneyPhase.ARRIVED))
+    }
+
     @Test fun selectedTrDeEnLanguageReachesSpeakerWithoutTripState() {
         val spoken = mutableListOf<GuidanceUtterance>()
         val speaker = object : GuidanceSpeaker {
@@ -18,7 +26,7 @@ class GuidanceVoicePreviewTest {
         val guidanceStore = InMemoryGuidanceStateStore()
         val controller = GuidanceReliabilityController(speaker, guidanceStore)
         GuidanceLanguage.values().forEach { language ->
-            assertTrue(requestGuidanceVoicePreview(speaker, language, isJourneyArmed = false))
+            assertTrue(requestGuidanceVoicePreview(speaker, language, isJourneyAudioActive = false))
         }
         assertEquals(listOf("tr-TR", "de-DE", "en-US"), spoken.map { it.localeTag })
         assertEquals(

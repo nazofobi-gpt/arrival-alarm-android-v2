@@ -1847,7 +1847,7 @@ fun ArrivalAlarmApp(
                 GuidanceVoicePreviewPanel(
                     speaker = guidanceSpeaker,
                     language = guidanceLanguage,
-                    isJourneyArmed = journey.phase == JourneyPhase.ARMED,
+                    isJourneyAudioActive = isVoicePreviewProtectedPhase(journey.phase),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 destination?.let { target ->

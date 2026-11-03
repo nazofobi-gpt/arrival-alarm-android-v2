@@ -34,12 +34,15 @@ internal fun voicePreviewUtterance(language: GuidanceLanguage): GuidanceUtteranc
  * preview must not be replayed later as a real next-stop announcement.
  * Disable while tracking so QUEUE_FLUSH cannot interrupt a real arrival cue.
  */
+internal fun isVoicePreviewProtectedPhase(phase: JourneyPhase): Boolean =
+    phase == JourneyPhase.ARMED || phase == JourneyPhase.ARRIVED
+
 internal fun requestGuidanceVoicePreview(
     speaker: GuidanceSpeaker,
     language: GuidanceLanguage,
-    isJourneyArmed: Boolean,
+    isJourneyAudioActive: Boolean,
 ): Boolean {
-    if (isJourneyArmed) return false
+    if (isJourneyAudioActive) return false
     return try {
         speaker.speak(voicePreviewUtterance(language))
     } catch (_: RuntimeException) {
@@ -51,7 +54,7 @@ internal fun requestGuidanceVoicePreview(
 internal fun GuidanceVoicePreviewPanel(
     speaker: GuidanceSpeaker,
     language: GuidanceLanguage,
-    isJourneyArmed: Boolean,
+    isJourneyAudioActive: Boolean,
     modifier: Modifier = Modifier,
 ) {
     var lastAttemptAccepted by remember(language) { mutableStateOf<Boolean?>(null) }
@@ -61,10 +64,10 @@ internal fun GuidanceVoicePreviewPanel(
                 lastAttemptAccepted = requestGuidanceVoicePreview(
                     speaker = speaker,
                     language = language,
-                    isJourneyArmed = isJourneyArmed,
+                    isJourneyAudioActive = isJourneyAudioActive,
                 )
             },
-            enabled = !isJourneyArmed,
+            enabled = !isJourneyAudioActive,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
@@ -72,7 +75,7 @@ internal fun GuidanceVoicePreviewPanel(
         ) {
             Text(stringResource(R.string.guidance_voice_preview_action))
         }
-        if (isJourneyArmed) {
+        if (isJourneyAudioActive) {
             Text(
                 text = stringResource(R.string.guidance_voice_preview_tracking_disabled),
                 style = MaterialTheme.typography.bodySmall,
