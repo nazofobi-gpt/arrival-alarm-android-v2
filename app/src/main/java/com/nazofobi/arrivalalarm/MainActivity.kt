@@ -193,6 +193,7 @@ fun ArrivalAlarmApp(
                 .toSet()
         )
     }
+    var resolvedFavoriteStops by remember { mutableStateOf(emptyList<CatalogStop>()) }
     var savedRouteSnapshot by remember(savedRouteStore) {
         mutableStateOf(savedRouteStore.load())
     }
@@ -862,6 +863,21 @@ fun ArrivalAlarmApp(
         }
     }
 
+    // Resolve saved stop IDs locally; nearby GPS results are not a prerequisite for Home favorites.
+    LaunchedEffect(favoriteStopIds, dataState) {
+        resolvedFavoriteStops = if (
+            favoriteStopIds.isNotEmpty() && dataState is NationwideDataState.Ready
+        ) {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    NationwideTransitIndex(context).use { index ->
+                        index.favoriteStopsById(favoriteStopIds)
+                    }
+                }.getOrDefault(emptyList())
+            }
+        } else emptyList()
+    }
+
     LaunchedEffect(controller) {
         while (true) {
             journey = controller.state
@@ -1116,6 +1132,12 @@ fun ArrivalAlarmApp(
                         onNearbyDeparturesSelected = { candidate ->
                             openDepartureBoard(candidate.stop)
                         },
+                    )
+                    FavoriteStopsHomePanel(
+                        favoriteIds = favoriteStopIds,
+                        stops = resolvedFavoriteStops,
+                        onOpenDepartures = { stop -> openDepartureBoard(stop) },
+                        onOpenSearch = { activeScreen = ArrivalAppScreen.SEARCH },
                     )
                     SavedRoutesHomePanel(
                         presets = savedRouteSnapshot.presets,

@@ -1,0 +1,7 @@
+<resources>
+    <string name="home_favorite_stops_title">Favori duraklar</string>
+    <string name="home_favorite_stops_empty">Henüz favori durağın yok. Arama ekranından bir durak ekleyebilirsin.</string>
+    <string name="home_favorite_stops_search">Durak ara</string>
+    <string name="home_favorite_stops_unavailable">Kayıtlı duraklar mevcut veri paketinde bulunamadı. Veri paketini güncelle veya tekrar ara.</string>
+    <string name="home_favorite_stops_departures">%1$s kalkışlarını aç</string>
+</resources>

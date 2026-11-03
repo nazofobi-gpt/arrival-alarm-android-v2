@@ -238,6 +238,36 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         onCount(counts["stops.txt"] ?: 0)
     }
 
+    /** Resolve local bookmarks against the current imported GTFS catalog, never coordinates or stale names. */
+    fun favoriteStopsById(stopIds: Collection<String>, limit: Int = 8): List<CatalogStop> {
+        if (limit <= 0 || !isReady()) return emptyList()
+        val ids = stopIds.asSequence()
+            .filter(::isFavoriteStopIdValid)
+            .filter { it.length <= 256 }
+            .distinct()
+            .sorted()
+            .take(100)
+            .toList()
+        if (ids.isEmpty()) return emptyList()
+        val bound = limit.coerceAtMost(8)
+        val placeholders = List(ids.size) { "?" }.joinToString(",")
+        val sql = "SELECT id,name,lat,lon,parent_station FROM stops WHERE id IN ($placeholders) ORDER BY name COLLATE NOCASE,id LIMIT ?"
+        return readableDatabase.rawQuery(sql, (ids + bound.toString()).toTypedArray()).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    val lat = cursor.getDouble(2)
+                    val lon = cursor.getDouble(3)
+                    if (validTransitJourneyCoordinates(lat, lon)) {
+                        add(CatalogStop(
+                            cursor.getString(0), PROVIDER_ID, cursor.getString(1),
+                            lat, lon, if (cursor.isNull(4)) null else cursor.getString(4),
+                        ))
+                    }
+                }
+            }
+        }
+    }
+
     fun search(query: String, limit: Int): List<CatalogStop> {
         // SQLite interprets a negative LIMIT as unlimited. Never allow a caller to
         // materialize the full nationwide stop index through an unbounded search.
