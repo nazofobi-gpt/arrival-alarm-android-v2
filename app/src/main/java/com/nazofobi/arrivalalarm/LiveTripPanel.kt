@@ -175,6 +175,40 @@ fun LiveTripPanel(
                             )
                         }
                     }
+
+                    // Boarding is never inferred from a clock alone. Show a short,
+                    // source-labeled identity check only when the selected journey is
+                    // armed and its named boarding stop has a valid imminent schedule.
+                    firstStop?.takeIf { stop ->
+                        boardingCheckEligible(
+                            journey.phase, minutes, selectedRoute.line,
+                            selectedRoute.direction, stop.name,
+                        )
+                    }?.let { stop ->
+                        val livePlatform = routeHasVerifiedRealtimePlatform(
+                            routeOffline, selectedRoute.realtime?.state, stop.platform,
+                        )
+                        val platformLabel = routeEvidencePlatform(
+                            if (livePlatform) stop.platform else null,
+                            stop.plannedPlatform,
+                            !livePlatform,
+                        )?.let { platform ->
+                            stringResource(
+                                if (livePlatform) R.string.route_realtime_platform_format
+                                else R.string.route_planned_platform_format,
+                                platform,
+                            )
+                        }
+                        LiveTripFact(
+                            label = stringResource(R.string.live_trip_boarding_check_label),
+                            value = listOfNotNull(
+                                "${selectedRoute.line.trim()} → ${selectedRoute.direction.trim()} • ${stop.name.trim()}",
+                                platformLabel,
+                            ).joinToString(" • "),
+                            tag = "live-trip-boarding-check",
+                        )
+                    }
+
                 }
             }
 
@@ -424,6 +458,27 @@ internal fun scheduledBoardingMinutesRemaining(
     val seconds = departure - nowEpochSeconds
     if (seconds <= 0L || seconds > 86_400L) return null
     return (seconds + 59L) / 60L
+}
+
+
+/** A short pre-boarding identity check, not a prediction that the vehicle is here. */
+internal fun boardingCheckEligible(
+    phase: JourneyPhase,
+    minutesUntilDeparture: Long?,
+    line: String,
+    direction: String,
+    stopName: String?,
+): Boolean {
+    if (phase != JourneyPhase.ARMED ||
+        minutesUntilDeparture == null || minutesUntilDeparture !in 1L..15L
+    ) return false
+    return listOf(line, direction, stopName).all { value ->
+        value != null && value.isNotBlank() && value.length <= 120 &&
+            value.none { ch ->
+                Character.isISOControl(ch) ||
+                    Character.getType(ch) == Character.FORMAT.toInt()
+            }
+    }
 }
 
 /**

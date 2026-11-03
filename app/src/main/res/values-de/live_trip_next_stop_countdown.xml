@@ -3,4 +3,5 @@
     <string name="live_trip_next_stop_scheduled_countdown">Zeit bis zum nächsten Halt (Fahrplan)</string>
     <string name="live_trip_next_stop_realtime_countdown">Zeit bis zum nächsten Halt (Echtzeitdaten)</string>
     <string name="live_trip_boarding_walk_window_warning">Geplanter Fußweg (%1$d Min.) ist länger als die Zeit bis zur planmäßigen Abfahrt. Kein Live-Fußweg ab Ihrem Standort; bitte den Einstieg prüfen.</string>
+    <string name="live_trip_boarding_check_label">Einstieg prüfen (Fahrplan; Fahrzeug nicht bestätigt)</string>
 </resources>

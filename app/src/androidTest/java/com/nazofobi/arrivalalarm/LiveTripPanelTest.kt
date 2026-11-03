@@ -703,4 +703,76 @@ class LiveTripPanelTest {
         rule.onNodeWithTag("live-trip-boarding-walk-risk").assertDoesNotExist()
     }
 
+    @Test
+    fun boardingIdentityShowsSelectedStopAndSourceQualifiedPlatformOnlyBeforeDeparture() {
+        val now = mutableLongStateOf("2026-09-26T07:44:00+02:00".toTransitEpochSecondsOrNull()!!)
+        val offline = mutableStateOf(false)
+        val armed = mutableStateOf(true)
+        val route = RouteOption(
+            id = "boarding-identity",
+            realtime = RouteRealtimeInfo(state = RouteRealtimeState.FRESH_MATCHED),
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
+            line = "RE 9",
+            direction = "Bremen Hbf",
+            departure = "08:00",
+            arrival = "09:00",
+            walkingMinutes = 0,
+            transfers = 0,
+            stops = listOf(
+                RouteStop(
+                    id = "lo", name = "Lohne",
+                    plannedDeparture = "2026-09-26T08:00:00+02:00",
+                    platform = "7", plannedPlatform = "2",
+                ),
+                RouteStop(
+                    id = "hb", name = "Bremen Hbf",
+                    plannedArrival = "2026-09-26T09:00:00+02:00",
+                ),
+            ),
+        )
+        rule.setContent {
+            MaterialTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    LiveTripPanel(
+                        selectedRoute = route,
+                        journey = JourneyUiState(
+                            phase = if (armed.value) JourneyPhase.ARMED
+                                else JourneyPhase.DESTINATION_SELECTED,
+                        ),
+                        guidanceState = GuidanceReliabilityState(),
+                        routeOffline = offline.value,
+                        nowEpochSeconds = now.longValue,
+                    )
+                }
+            }
+        }
+        rule.onNodeWithTag("live-trip-boarding-check").assertDoesNotExist()
+        rule.runOnUiThread {
+            now.longValue = "2026-09-26T07:50:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-boarding-check").performScrollTo()
+            .assertTextContains("RE 9", substring = true)
+        rule.onNodeWithTag("live-trip-boarding-check")
+            .assertTextContains("Bremen Hbf", substring = true)
+        rule.onNodeWithTag("live-trip-boarding-check")
+            .assertTextContains("Lohne", substring = true)
+        rule.onNodeWithTag("live-trip-boarding-check")
+            .assertTextContains("7", substring = true)
+        rule.runOnUiThread { offline.value = true }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-boarding-check").performScrollTo()
+            .assertTextContains("2", substring = true)
+        rule.runOnUiThread { armed.value = false }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-boarding-check").assertDoesNotExist()
+        rule.runOnUiThread {
+            armed.value = true
+            now.longValue = "2026-09-26T08:01:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-boarding-check").assertDoesNotExist()
+    }
+
 }

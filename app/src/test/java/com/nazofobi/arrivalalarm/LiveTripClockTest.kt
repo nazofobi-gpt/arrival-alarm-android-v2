@@ -107,4 +107,19 @@ class LiveTripClockTest {
         assertFalse(plannedWalkingExceedsBoardingWindow(departure, 301, 0))
     }
 
+    @Test fun boardingIdentityRequiresImminentArmedAndSourceNamedTrip() {
+        assertTrue(boardingCheckEligible(JourneyPhase.ARMED, 10L, "RE 9", "Bremen Hbf", "Lohne"))
+        assertTrue(boardingCheckEligible(JourneyPhase.ARMED, 15L, "RE 9", "Bremen Hbf", "Lohne"))
+        assertFalse(boardingCheckEligible(JourneyPhase.ARMED, 16L, "RE 9", "Bremen Hbf", "Lohne"))
+        assertFalse(boardingCheckEligible(JourneyPhase.ARMED, 0L, "RE 9", "Bremen Hbf", "Lohne"))
+        assertFalse(boardingCheckEligible(JourneyPhase.ARMED, null, "RE 9", "Bremen Hbf", "Lohne"))
+        assertFalse(boardingCheckEligible(JourneyPhase.ARRIVED, 10L, "RE 9", "Bremen Hbf", "Lohne"))
+        assertFalse(boardingCheckEligible(JourneyPhase.DESTINATION_SELECTED, 10L, "RE 9", "Bremen Hbf", "Lohne"))
+        assertFalse(boardingCheckEligible(JourneyPhase.ARMED, 10L, "", "Bremen Hbf", "Lohne"))
+        assertFalse(boardingCheckEligible(JourneyPhase.ARMED, 10L, "RE 9", "", "Lohne"))
+        assertFalse(boardingCheckEligible(JourneyPhase.ARMED, 10L, "RE 9", "Bremen Hbf", null))
+        assertFalse(boardingCheckEligible(JourneyPhase.ARMED, 10L, "RE 9", "Bremen Hbf", "\u200BLohne"))
+        assertFalse(boardingCheckEligible(JourneyPhase.ARMED, 10L, "RE 9", "Bremen Hbf", "X".repeat(121)))
+    }
+
 }
