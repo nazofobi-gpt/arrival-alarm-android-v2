@@ -284,4 +284,6 @@
     <string name="pin_line_at_stop">Linie an dieser Haltestelle anheften</string>
     <string name="unpin_line_at_stop">Linie hier lösen</string>
     <string name="pin_line_local_only">Für diese Haltestelle lokal gespeichert; keine Benachrichtigungen aktiviert.</string>
+    <string name="guidance_arrival_voice_label">Sprachansage bei Ankunft</string>
+    <string name="guidance_arrival_voice_description">Spricht nur nach bestätigter Ankunft. Standardmäßig aus; Audioausgabe hängt von Gerät und Bluetooth ab.</string>
 </resources>

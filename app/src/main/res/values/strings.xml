@@ -292,4 +292,6 @@
     <string name="pin_line_at_stop">Bu durakta hattı sabitle</string>
     <string name="unpin_line_at_stop">Bu durakta sabitlemeyi kaldır</string>
     <string name="pin_line_local_only">Hat bu durakta yalnızca cihaza kaydedildi; bildirimler etkin değil.</string>
+    <string name="guidance_arrival_voice_label">Sesli varış anonsu</string>
+    <string name="guidance_arrival_voice_description">Yalnızca varış doğrulandığında konuşur; varsayılan kapalıdır. Ses çıkışı cihaz ve Bluetooth ayarlarına bağlıdır.</string>
 </resources>

@@ -284,4 +284,6 @@
     <string name="pin_line_at_stop">Pin line at this stop</string>
     <string name="unpin_line_at_stop">Unpin line at this stop</string>
     <string name="pin_line_local_only">Saved locally for this stop; alerts are not enabled.</string>
+    <string name="guidance_arrival_voice_label">Speak on arrival</string>
+    <string name="guidance_arrival_voice_description">Speaks only after confirmed arrival. Off by default; audio output depends on device and Bluetooth.</string>
 </resources>

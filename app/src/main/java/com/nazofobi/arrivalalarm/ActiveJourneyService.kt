@@ -110,6 +110,8 @@ class ActiveJourneyService : Service(), LocationListener {
         }
     }
     @Volatile private var arrivalHandled = false
+    private var serviceDestroyed = false
+    private var arrivalVoicePlayer: AndroidArrivalVoicePlayer? = null
     private var locationRegistered = false
     private var registeredProvider: String? = null
 
@@ -241,9 +243,26 @@ class ActiveJourneyService : Service(), LocationListener {
             arrivalHandled = true
             removeLocationUpdates()
             completionExecutor.execute {
-                graph.connectorRuntimeCoordinator.syncNow()
-                postArrivalNotification()
-                stopSelf()
+                // Connector synchronization is best-effort; a network error must never
+                // suppress the locally confirmed arrival notification.
+                runCatching { graph.connectorRuntimeCoordinator.syncNow() }
+                mainHandler.post {
+                    if (!serviceDestroyed) {
+                        runCatching { postArrivalNotification() }
+                        val voiceRequest = arrivalVoiceRequest()
+                        if (voiceRequest == null) {
+                            stopSelf()
+                        } else {
+                            // Keep the existing location FGS alive only for this bounded
+                            // user-opted-in utterance; speech failure falls back to notification.
+                            arrivalVoicePlayer = AndroidArrivalVoicePlayer(
+                                this@ActiveJourneyService,
+                                voiceRequest,
+                                onFinished = { stopSelf() },
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -263,6 +282,9 @@ class ActiveJourneyService : Service(), LocationListener {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        serviceDestroyed = true
+        arrivalVoicePlayer?.cancel()
+        arrivalVoicePlayer = null
         graph.connectorPort.resetArrivalConfirmation()
         mainHandler.removeCallbacks(stateMonitor)
         if (providerReceiverRegistered) {
@@ -419,6 +441,32 @@ class ActiveJourneyService : Service(), LocationListener {
                 ).build()
             )
             .build()
+    }
+
+    private fun arrivalVoiceRequest(): ArrivalVoiceRequest? {
+        // An opt-in from Settings is required; legacy installs remain silent.
+        val preferences = getSharedPreferences("guidance_state", Context.MODE_PRIVATE)
+        val enabled = try {
+            preferences.getBoolean("arrival_voice_enabled", false)
+        } catch (_: RuntimeException) {
+            false
+        }
+        if (!enabled) return null
+        val language = try {
+            preferences.getString("preferred_locale", null)
+        } catch (_: RuntimeException) {
+            null
+        }
+        // The optional local name is usable only for the exact validated target.
+        val label = ArrivalTargetLabelStore(this).labelFor(graph.controller.state.destination)
+        return ArrivalVoicePolicy.select(
+            enabled = enabled,
+            arrived = graph.controller.state.phase == JourneyPhase.ARRIVED,
+            preferredLocale = language,
+            verifiedDestinationLabel = label,
+            genericText = getString(R.string.arrival_notification_body),
+            namedText = { getString(R.string.arrival_notification_named_body, it) },
+        )
     }
 
     private fun postArrivalNotification() {

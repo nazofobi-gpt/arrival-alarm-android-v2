@@ -19,6 +19,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -286,6 +287,12 @@ fun ArrivalAlarmApp(
             GuidanceLanguage.fromLocaleTag(
                 guidancePreferences.getString("preferred_locale", null),
             )
+        )
+    }
+    var arrivalVoiceEnabled by remember {
+        mutableStateOf(
+            runCatching { guidancePreferences.getBoolean("arrival_voice_enabled", false) }
+                .getOrDefault(false)
         )
     }
     var inferenceEnabled by remember { mutableStateOf(false) }
@@ -1838,6 +1845,33 @@ fun ArrivalAlarmApp(
                         )
                     }
                 }
+                Row(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.guidance_arrival_voice_label),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = arrivalVoiceEnabled,
+                        onCheckedChange = { enabled ->
+                            // Opt-in remains disabled on legacy installs. The background
+                            // service independently re-reads this preference on arrival.
+                            arrivalVoiceEnabled = enabled
+                            guidancePreferences.edit()
+                                .putBoolean("arrival_voice_enabled", enabled)
+                                .apply()
+                        },
+                        modifier = Modifier.testTag("guidance-arrival-voice-switch"),
+                    )
+                }
+                Text(
+                    stringResource(R.string.guidance_arrival_voice_description),
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 Button(
                     onClick = { guidancePermissionLauncher.launch(AndroidGuidancePermissions.runtimePermissions()) },
                     modifier = Modifier.heightIn(min = 48.dp).testTag("guidance-permissions"),
