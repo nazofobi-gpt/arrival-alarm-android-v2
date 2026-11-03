@@ -106,6 +106,9 @@
     <string name="journey_share_title">Varış • Journey summary</string>
     <string name="journey_share_schedule_note">Times may change; verify the current service before travel.</string>
     <string name="journey_share_offline_note">Scheduled times from offline cache; current service not verified.</string>
+    <string name="journey_share_copy_action">Copy route</string>
+    <string name="journey_share_copied">Route summary copied to clipboard.</string>
+    <string name="journey_share_copy_failed">Could not copy the route. Please try again.</string>
     <string name="journey_share_unavailable">No sharing app could be opened. Your route is still here; please try again.</string>
     <string name="journey_share_privacy_note">Origin and destination names are shared. GPS coordinates and trip history are not.</string>
     <string name="journey_detail_title">Journey details</string>

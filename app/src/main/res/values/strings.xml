@@ -117,6 +117,9 @@
     <string name="journey_share_title">Varış • Yolculuk özeti</string>
     <string name="journey_share_schedule_note">Saatler değişebilir; yola çıkmadan önce güncel seferi doğrulayın.</string>
     <string name="journey_share_offline_note">Çevrimdışı önbellekten planlı saatler; güncel sefer doğrulanmadı.</string>
+    <string name="journey_share_copy_action">Rotayı kopyala</string>
+    <string name="journey_share_copied">Rota özeti panoya kopyalandı.</string>
+    <string name="journey_share_copy_failed">Rota kopyalanamadı. Lütfen tekrar deneyin.</string>
     <string name="journey_share_unavailable">Paylaşım uygulaması açılamadı. Rota bu ekranda kaldı; tekrar deneyin.</string>
     <string name="journey_share_privacy_note">Paylaşım başlangıç/varış adlarını içerir. GPS koordinatları ve yolculuk geçmişi paylaşılmaz.</string>
     <string name="journey_detail_title">Yolculuk Detayı</string>

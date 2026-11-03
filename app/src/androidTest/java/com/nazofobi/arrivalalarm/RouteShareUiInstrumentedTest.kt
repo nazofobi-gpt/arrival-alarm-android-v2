@@ -1,6 +1,8 @@
 package com.nazofobi.arrivalalarm
 
 import android.content.ActivityNotFoundException
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.IntentFilter
@@ -35,13 +37,18 @@ class RouteShareUiInstrumentedTest {
         stops = emptyList(),
     )
 
-    private fun render(selectedId: String?, failShare: Boolean = false) {
+    private fun render(selectedId: String?, failShare: Boolean = false, failClipboard: Boolean = false) {
         rule.setContent {
             val baseContext = LocalContext.current
-            val shareContext = remember(baseContext, failShare) {
-                if (failShare) object : ContextWrapper(baseContext) {
+            val shareContext = remember(baseContext, failShare, failClipboard) {
+                if (failShare || failClipboard) object : ContextWrapper(baseContext) {
                     override fun startActivity(intent: Intent) {
-                        throw ActivityNotFoundException("No share target")
+                        if (failShare) throw ActivityNotFoundException("No share target")
+                        super.startActivity(intent)
+                    }
+                    override fun getSystemService(name: String): Any? {
+                        if (failClipboard && name == Context.CLIPBOARD_SERVICE) return null
+                        return super.getSystemService(name)
                     }
                 } else baseContext
             }
@@ -100,8 +107,32 @@ class RouteShareUiInstrumentedTest {
         rule.onNodeWithTag("journey-detail").assertExists()
     }
 
+    @Test fun failedChooserOffersExplicitClipboardFallbackWithoutCoordinates() {
+        render(option.id, failShare = true)
+        rule.onNodeWithTag("journey-share-route").performClick()
+        rule.onNodeWithTag("journey-share-error").assertIsDisplayed()
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        rule.onNodeWithTag("journey-share-copy").performClick()
+        rule.onNodeWithTag("journey-share-copied").assertIsDisplayed()
+        val summary = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context).toString()
+        assertTrue(summary.contains("Lohne"))
+        assertTrue(summary.contains("Bremen"))
+        assertTrue(!summary.contains("52.66") && !summary.contains("53.08"))
+        clipboard.clearPrimaryClip()
+    }
+
+    @Test fun clipboardUnavailableShowsRecoveryErrorWithoutCrashing() {
+        render(option.id, failShare = true, failClipboard = true)
+        rule.onNodeWithTag("journey-share-route").performClick()
+        rule.onNodeWithTag("journey-share-copy").performClick()
+        rule.onNodeWithTag("journey-share-copy-error").assertIsDisplayed()
+        rule.onNodeWithTag("journey-detail").assertExists()
+    }
+
     @Test fun noSelectionHasNoShareSideEffect() {
         render(null)
         rule.onNodeWithTag("journey-share-route").assertDoesNotExist()
+        rule.onNodeWithTag("journey-share-copy").assertDoesNotExist()
     }
 }
