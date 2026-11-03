@@ -73,6 +73,57 @@ class JourneyConnectorActionPortTest {
         assertTrue(port.setOrigin(MapPoint(52.0, 7.0, "Other origin")).applied)
     }
 
+    @Test fun routeSelectionCannotReplaceTheArmedTripUntilExplicitAlarmCancellation() {
+        val start = MapPoint(52.66, 8.23, "Lohne")
+        val target = MapPoint(53.08, 8.81, "Bremen Hbf")
+        val original = RouteOption(
+            id = "route-re9", origin = start, destination = target,
+            line = "RE 9", direction = "Bremen Hbf",
+            departure = "08:00", arrival = "08:45",
+            walkingMinutes = 3, transfers = 0,
+        )
+        val alternative = RouteOption(
+            id = "route-re10", origin = start, destination = target,
+            line = "RE 10", direction = "Bremen Hbf",
+            departure = "08:05", arrival = "08:50",
+            walkingMinutes = 3, transfers = 0,
+        )
+        val controller = JourneyController(arrivalRadiusMeters = 250.0)
+        val port = JourneyConnectorActionPort(
+            controller = controller,
+            routeResolver = { id ->
+                when (id) {
+                    original.id -> original
+                    alternative.id -> alternative
+                    else -> null
+                }
+            },
+            nowEpochSeconds = { 42_000L },
+        )
+        assertTrue(port.setOrigin(start).applied)
+        assertTrue(port.setDestination(target).applied)
+        assertTrue(port.selectJourney(original.id).applied)
+        assertTrue(port.armArrivalAlarm().applied)
+        val armed = port.readSnapshot()
+        assertEquals(original.id, armed.activeTrip?.routeId)
+
+        assertFalse(port.selectJourney(alternative.id).applied)
+        val denied = port.readSnapshot()
+        assertEquals(JourneyPhase.ARMED, denied.journeyPhase)
+        assertEquals(armed.activeTrip, denied.activeTrip)
+        assertEquals(armed.stateVersion, denied.stateVersion)
+
+        controller.onDistanceChanged(120.0, fixElapsedRealtimeNanos = 1_000_000_000L)
+        controller.onDistanceChanged(120.0, fixElapsedRealtimeNanos = 2_000_000_000L)
+        assertEquals(JourneyPhase.ARRIVED, controller.state.phase)
+        assertFalse(port.selectJourney(alternative.id).applied)
+        assertEquals(original.id, port.readSnapshot().activeTrip?.routeId)
+
+        assertTrue(port.cancelArrivalAlarm().applied)
+        assertTrue(port.selectJourney(alternative.id).applied)
+        assertEquals(alternative.id, port.readSnapshot().activeTrip?.routeId)
+    }
+
     @Test fun tripProgressIsReadableForConversationalQuestions() {
         val controller = JourneyController()
         val route = RouteOption(
