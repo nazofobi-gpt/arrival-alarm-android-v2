@@ -963,6 +963,8 @@ fun ArrivalAlarmApp(
                         onDownloadOfflineData = {
                             transit.ensureNationwideIndex { dataState = it }
                         },
+                        guidanceLanguage = guidanceLanguage,
+                        onGuidanceLanguageChange = { selectGuidanceLanguage(it) },
                         onContinue = {
                             appPreferences.edit()
                                 .putBoolean("onboarding_complete", true)

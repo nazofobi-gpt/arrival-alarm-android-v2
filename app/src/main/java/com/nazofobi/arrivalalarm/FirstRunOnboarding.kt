@@ -38,6 +38,8 @@ fun FirstRunOnboarding(
     onContinue: () -> Unit,
     offlineDataState: NationwideDataState,
     onDownloadOfflineData: () -> Unit,
+    guidanceLanguage: GuidanceLanguage = GuidanceLanguage.TURKISH,
+    onGuidanceLanguageChange: (GuidanceLanguage) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -127,6 +129,72 @@ fun FirstRunOnboarding(
                     ) {
                         Text(stringResource(R.string.onboarding_accessibility_action))
                     }
+                }
+            }
+
+
+            // ONB-005: reuse the same persisted announcement language as Settings.
+            // Pairing opens OS settings only when tapped; the app does not select or
+            // silently change the audio output or request broad permissions.
+            Card(
+                modifier = Modifier.fillMaxWidth().testTag("onboarding-audio-setup"),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.onboarding_audio_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.semantics { heading() },
+                    )
+                    Text(
+                        text = stringResource(R.string.onboarding_audio_body),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.guidance_language_status,
+                            guidanceLanguage.displayName,
+                        ),
+                        modifier = Modifier.testTag("onboarding-audio-language-status"),
+                    )
+                    GuidanceLanguage.values().forEach { language ->
+                        OutlinedButton(
+                            onClick = { onGuidanceLanguageChange(language) },
+                            enabled = language != guidanceLanguage,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("onboarding-audio-language-${language.localeTag}"),
+                        ) {
+                            Text(
+                                if (language == guidanceLanguage)
+                                    stringResource(
+                                        R.string.guidance_language_selected,
+                                        language.displayName,
+                                    )
+                                else language.displayName
+                            )
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = { context.startActivity(bluetoothQuickSetupIntent()) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("onboarding-bluetooth-settings"),
+                    ) {
+                        Text(stringResource(R.string.onboarding_bluetooth_action))
+                    }
+                    Text(
+                        text = stringResource(R.string.onboarding_bluetooth_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 
@@ -230,6 +298,10 @@ fun FirstRunOnboarding(
 /** Open the user's own device accessibility controls; no setting is changed by the app. */
 internal fun accessibilityQuickSetupIntent(): Intent =
     Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+
+/** Pairing remains under the user\'s control in the system Bluetooth UI. */
+internal fun bluetoothQuickSetupIntent(): Intent =
+    Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
 
 @Composable
 private fun OnboardingFeature(

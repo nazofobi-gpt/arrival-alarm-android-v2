@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -110,6 +111,67 @@ class FirstRunOnboardingAccessibilityTest {
             assertTrue(continued)
             assertEquals(0, downloadCalls)
         }
+    }
+
+
+    @Test fun announcementLanguageCanBeSetBeforeFirstTripWithoutBlockingContinue() {
+        var selected by mutableStateOf(GuidanceLanguage.TURKISH)
+        var callbacks = 0
+        var continued = false
+        rule.setContent {
+            MaterialTheme {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    FirstRunOnboarding(
+                        onContinue = { continued = true },
+                        offlineDataState = NationwideDataState.Idle,
+                        onDownloadOfflineData = {},
+                        guidanceLanguage = selected,
+                        onGuidanceLanguageChange = { language ->
+                            callbacks++
+                            selected = language
+                        },
+                    )
+                }
+            }
+        }
+        rule.onNodeWithTag("onboarding-audio-setup").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("onboarding-audio-language-de-DE")
+            .performScrollTo().performClick()
+        rule.runOnIdle {
+            assertEquals(GuidanceLanguage.GERMAN, selected)
+            assertEquals(1, callbacks)
+        }
+        rule.onNodeWithTag("onboarding-audio-language-de-DE").assertIsNotEnabled()
+        rule.onNodeWithTag("onboarding-complete").performScrollTo().performClick()
+        rule.runOnIdle { assertTrue(continued) }
+    }
+
+    @Test fun announcementLanguageAndBluetoothAreOptionalUntilExplicitChoice() {
+        var callbacks = 0
+        var continued = false
+        rule.setContent {
+            MaterialTheme {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    FirstRunOnboarding(
+                        onContinue = { continued = true },
+                        offlineDataState = NationwideDataState.Idle,
+                        onDownloadOfflineData = {},
+                        guidanceLanguage = GuidanceLanguage.ENGLISH,
+                        onGuidanceLanguageChange = { callbacks++ },
+                    )
+                }
+            }
+        }
+        rule.onNodeWithTag("onboarding-bluetooth-settings")
+            .performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("onboarding-complete").performScrollTo().performClick()
+        rule.runOnIdle {
+            assertTrue(continued)
+            assertEquals(0, callbacks)
+        }
+        val intent = bluetoothQuickSetupIntent()
+        assertEquals(Settings.ACTION_BLUETOOTH_SETTINGS, intent.action)
+        assertEquals(null, intent.component)
     }
 
     @Test fun quickSetupUsesOnlySystemAccessibilitySettings() {
