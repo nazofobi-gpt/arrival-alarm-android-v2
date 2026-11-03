@@ -1973,6 +1973,7 @@ internal fun localizedDomainMessage(context: Context, raw: String?): String {
         "Önce başlangıç seçilmeli" -> context.getString(R.string.error_start_required)
         "Başlangıç ve hedef gerekli" -> context.getString(R.string.error_start_destination_required)
         "İptal edilecek kurulu alarm yok" -> context.getString(R.string.error_no_alarm)
+        "Aktif alarmı önce iptal edin" -> context.getString(R.string.error_active_alarm_retarget_blocked)
         "Rota artık mevcut değil; güncel rota seçilmeli" -> context.getString(R.string.error_route_stale)
         "Önce sefer seçilmeli" -> context.getString(R.string.error_trip_required)
         "Kurulu varış alarmı yok" -> context.getString(R.string.error_alarm_missing)
