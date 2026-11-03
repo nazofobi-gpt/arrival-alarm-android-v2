@@ -7,6 +7,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -72,6 +73,7 @@ class OfflinePackMetadataInstrumentedTest {
                 routingHealth = TransitFunctionHealth.WORKING,
             )
 
+            var manualRefreshClicks = 0
             composeRule.setContent {
                 CompositionLocalProvider(LocalContext provides context) {
                     MaterialTheme {
@@ -87,10 +89,16 @@ class OfflinePackMetadataInstrumentedTest {
                             onOpenAppSettings = {},
                             onRetryData = {},
                             onConnectorAction = {},
+                            onUpdateInstalledData = { manualRefreshClicks++ },
                         )
                     }
                 }
             }
+
+            composeRule.onNodeWithTag("nationwide-index-refresh-now")
+                .assertIsDisplayed()
+                .performClick()
+            assertEquals(1, manualRefreshClicks)
 
             val metadataNode = composeRule.onNodeWithTag("offline-pack-metadata")
             metadataNode.assertIsDisplayed().assertTextContains("etag-g185-test", substring = true)
@@ -113,6 +121,34 @@ class OfflinePackMetadataInstrumentedTest {
         } finally {
             files.forEach { it.delete() }
         }
+    }
+
+    @Test
+    fun oldOfflineIndexWarnsAboutScheduleChangesWithoutFlaggingFreshOrUnknownData() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val nowMillis = 1_783_000_000_000L
+        val weekMillis = 7L * 24 * 60 * 60 * 1_000
+        val warning = context.getString(R.string.offline_pack_refresh_overdue)
+        fun metadata(ageMillis: Long) = offlinePackMetadataText(
+            context,
+            NationwideDataState.Ready(
+                stopCount = 42,
+                fetchedAtEpochSeconds = (nowMillis - ageMillis) / 1_000,
+                sourceVersion = "etag-test",
+            ),
+            nowMillis,
+        )
+
+        assertTrue(metadata(weekMillis + 60_000L).contains(warning))
+        assertTrue(!metadata(24L * 60 * 60 * 1_000).contains(warning))
+        assertTrue(!metadata(0L).contains(warning))
+        val unknown = offlinePackMetadataText(
+            context,
+            NationwideDataState.Ready(42, 0L, "etag-test"),
+            nowMillis,
+        )
+        assertTrue(!unknown.contains(warning))
+        assertTrue(unknown.contains(context.getString(R.string.offline_pack_updated_unknown)))
     }
 
     @Test
