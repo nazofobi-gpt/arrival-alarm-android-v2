@@ -1,5 +1,10 @@
 package com.nazofobi.arrivalalarm
 
+import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -377,8 +382,53 @@ private fun RouteOptionCard(
     }
 }
 
+/** Explicit route share; no private coordinates, trip IDs or history. */
+internal fun buildRouteShareSummary(
+    option: RouteOption,
+    routeOffline: Boolean,
+    title: String,
+    scheduleNote: String,
+    offlineNote: String,
+    unknownTime: String,
+    walkingTransferSummary: String,
+): String {
+    fun safe(value: String): String =
+        value.replace(Regex("\\p{C}"), " ").trim().take(120)
+
+    val line = listOf(option.line, option.direction)
+        .map(::safe)
+        .filter { it.isNotBlank() }
+        .joinToString(" • ")
+    val departure = routeOptionEvidenceClock(option, departure = true, routeOffline = routeOffline)
+        ?.let(::safe)?.takeIf { it.isNotBlank() } ?: safe(unknownTime)
+    val arrival = routeOptionEvidenceClock(option, departure = false, routeOffline = routeOffline)
+        ?.let(::safe)?.takeIf { it.isNotBlank() } ?: safe(unknownTime)
+    return listOf(
+        safe(title),
+        safe(option.origin.label) + " → " + safe(option.destination.label),
+        line,
+        safe(walkingTransferSummary),
+        departure + " → " + arrival,
+        safe(if (routeOffline) offlineNote else scheduleNote),
+    ).filter { it.isNotBlank() }.joinToString("\n")
+}
+
 @Composable
 private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
+    val context = LocalContext.current
+    val shareTitle = stringResource(R.string.journey_share_title)
+    val shareScheduleNote = stringResource(R.string.journey_share_schedule_note)
+    val shareOfflineNote = stringResource(R.string.journey_share_offline_note)
+    val shareUnknownTime = stringResource(R.string.unknown_time)
+    val shareWalkingTransfers = stringResource(
+        R.string.route_walk_transfer_format,
+        option.walkingMinutes,
+        option.transfers,
+    )
+    val shareActionLabel = stringResource(R.string.journey_share_action)
+    var shareLaunchFailed by remember(option.id) { mutableStateOf(false) }
+    var shareCopySucceeded by remember(option.id) { mutableStateOf(false) }
+    var shareCopyFailed by remember(option.id) { mutableStateOf(false) }
     val displayDeparture = routeOptionEvidenceClock(option, departure = true, routeOffline = routeOffline)
         ?: stringResource(R.string.unknown_time)
     val displayArrival = routeOptionEvidenceClock(option, departure = false, routeOffline = routeOffline)
@@ -418,6 +468,91 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
             Text(
                 text = displayDeparture + " → " + displayArrival,
                 style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            OutlinedButton(
+                onClick = {
+                    // User chooses the recipient. Never automatically send a trip.
+                    val sharedText = buildRouteShareSummary(
+                        option = option,
+                        routeOffline = routeOffline,
+                        title = shareTitle,
+                        scheduleNote = shareScheduleNote,
+                        offlineNote = shareOfflineNote,
+                        unknownTime = shareUnknownTime,
+                        walkingTransferSummary = shareWalkingTransfers,
+                    )
+                    val send = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, sharedText)
+                    }
+                    shareLaunchFailed = try {
+                        context.startActivity(Intent.createChooser(send, shareActionLabel))
+                        false
+                    } catch (_: ActivityNotFoundException) {
+                        true
+                    } catch (_: SecurityException) {
+                        true
+                    }
+                },
+                modifier = Modifier.heightIn(min = 48.dp).testTag("journey-share-route"),
+            ) {
+                Text(stringResource(R.string.journey_share_action))
+            }
+            if (shareLaunchFailed) {
+                Text(
+                    text = stringResource(R.string.journey_share_unavailable),
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("journey-share-error"),
+                )
+                // Clipboard export is opt-in and never triggered by chooser failure.
+                OutlinedButton(
+                    onClick = {
+                        val copiedText = buildRouteShareSummary(
+                            option = option,
+                            routeOffline = routeOffline,
+                            title = shareTitle,
+                            scheduleNote = shareScheduleNote,
+                            offlineNote = shareOfflineNote,
+                            unknownTime = shareUnknownTime,
+                            walkingTransferSummary = shareWalkingTransfers,
+                        )
+                        shareCopySucceeded = false
+                        shareCopyFailed = false
+                        try {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                            if (clipboard == null) {
+                                shareCopyFailed = true
+                            } else {
+                                clipboard.setPrimaryClip(ClipData.newPlainText(shareTitle, copiedText))
+                                shareCopySucceeded = true
+                            }
+                        } catch (_: RuntimeException) {
+                            shareCopyFailed = true
+                        }
+                    },
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("journey-share-copy"),
+                ) {
+                    Text(stringResource(R.string.journey_share_copy_action))
+                }
+                if (shareCopySucceeded) {
+                    Text(
+                        text = stringResource(R.string.journey_share_copied),
+                        modifier = Modifier.testTag("journey-share-copied"),
+                    )
+                }
+                if (shareCopyFailed) {
+                    Text(
+                        text = stringResource(R.string.journey_share_copy_failed),
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.testTag("journey-share-copy-error"),
+                    )
+                }
+            }
+            Text(
+                text = stringResource(R.string.journey_share_privacy_note),
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
