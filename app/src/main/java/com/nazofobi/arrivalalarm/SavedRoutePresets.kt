@@ -23,6 +23,7 @@ internal data class SavedRoutePreset(
     val shorterWalkingFirst: Boolean,
     val atMostOneTransfer: Boolean,
     val savedAtEpochMillis: Long,
+    val maxWalking15Minutes: Boolean = false,
 )
 
 /**
@@ -37,9 +38,11 @@ internal data class SavedRoutePresetDecodeResult(
 
 /** Versioned, bounded, fail-closed codec for device-local saved route presets. */
 internal object SavedRoutePresetsCodec {
-    private const val HEADER = "SAVED_ROUTE_PRESETS_V1"
+    private const val HEADER = "SAVED_ROUTE_PRESETS_V2"
+    private const val LEGACY_HEADER = "SAVED_ROUTE_PRESETS_V1"
     private const val FIELD_SEPARATOR = '\u001f'
-    private const val FIELD_COUNT = 13
+    private const val FIELD_COUNT = 14
+    private const val LEGACY_FIELD_COUNT = 13
     private const val MAX_SCAN_RECORDS = 50
     private const val MAX_ENCODED_CHARS = 32_768
     private const val MAX_ID_LENGTH = 64
@@ -79,6 +82,7 @@ internal object SavedRoutePresetsCodec {
                         encodeBoolean(preset.shorterWalkingFirst),
                         encodeBoolean(preset.atMostOneTransfer),
                         preset.savedAtEpochMillis.toString(),
+                        encodeBoolean(preset.maxWalking15Minutes),
                     ).joinToString(FIELD_SEPARATOR.toString())
                 )
             }
@@ -103,8 +107,10 @@ internal object SavedRoutePresetsCodec {
         }
 
         val lines = encoded.split('\n')
-        if (lines.firstOrNull()?.trimEnd('\r') != HEADER) {
-            return SavedRoutePresetDecodeResult(
+        val expectedFieldCount = when (lines.firstOrNull()?.trimEnd('\r')) {
+            HEADER -> FIELD_COUNT
+            LEGACY_HEADER -> LEGACY_FIELD_COUNT
+            else -> return SavedRoutePresetDecodeResult(
                 emptyList(),
                 isSourceSafeToReplace = false,
                 issues = setOf("unsupported-version"),
@@ -126,7 +132,7 @@ internal object SavedRoutePresetsCodec {
             }
 
             val fields = line.split(FIELD_SEPARATOR)
-            if (fields.size != FIELD_COUNT) {
+            if (fields.size != expectedFieldCount) {
                 issues += "corrupt-record"
                 continue
             }
@@ -146,6 +152,11 @@ internal object SavedRoutePresetsCodec {
                     shorterWalkingFirst = decodeBoolean(fields[10]),
                     atMostOneTransfer = decodeBoolean(fields[11]),
                     savedAtEpochMillis = fields[12].toLong(),
+                    // V1 records predate the walking-budget preference. Preserve every
+                    // legacy route while defaulting only that missing option to off.
+                    maxWalking15Minutes = if (expectedFieldCount == FIELD_COUNT) {
+                        decodeBoolean(fields[13])
+                    } else false,
                 )
             }.getOrNull()
 

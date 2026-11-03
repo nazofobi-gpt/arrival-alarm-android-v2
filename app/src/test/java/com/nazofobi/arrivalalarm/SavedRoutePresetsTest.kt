@@ -14,6 +14,7 @@ class SavedRoutePresetsTest {
         fewerTransfersFirst: Boolean = true,
         shorterWalkingFirst: Boolean = false,
         atMostOneTransfer: Boolean = true,
+        maxWalking15Minutes: Boolean = false,
     ) = SavedRoutePreset(
         id = id,
         name = name,
@@ -28,6 +29,7 @@ class SavedRoutePresetsTest {
         shorterWalkingFirst = shorterWalkingFirst,
         atMostOneTransfer = atMostOneTransfer,
         savedAtEpochMillis = 1_798_800_000_000L,
+        maxWalking15Minutes = maxWalking15Minutes,
     )
 
     @Test
@@ -38,11 +40,71 @@ class SavedRoutePresetsTest {
             fewerTransfersFirst = true,
             shorterWalkingFirst = true,
             atMostOneTransfer = false,
+            maxWalking15Minutes = true,
         )
         val encoded = SavedRoutePresetsCodec.encode(listOf(original))
 
         assertEquals(listOf(original), SavedRoutePresetsCodec.decode(encoded))
         assertTrue(SavedRoutePresetsCodec.decodeWithStatus(encoded).isSourceSafeToReplace)
+    }
+
+    @Test
+    fun legacyV1SavedRouteUpgradesWithEndpointsAndExistingOptionsUnchanged() {
+        val original = preset(
+            name = "Old commute",
+            directOnlyRoutes = true,
+            atMostOneTransfer = false,
+        )
+        val current = SavedRoutePresetsCodec.encode(listOf(original))!!
+        val oldSnapshot = current
+            .replaceFirst("SAVED_ROUTE_PRESETS_V2", "SAVED_ROUTE_PRESETS_V1")
+            .substringBeforeLast('\u001f')
+        val legacy = SavedRoutePresetsCodec.decodeWithStatus(oldSnapshot)
+        assertTrue(legacy.isSourceSafeToReplace)
+        assertEquals(listOf(original), legacy.presets)
+        assertFalse(legacy.presets.single().maxWalking15Minutes)
+
+        val storage = MemorySavedRoutePresetStringStorage(value = oldSnapshot)
+        val store = SavedRoutePresetsStore(storage)
+        val updated = original.copy(maxWalking15Minutes = true)
+        assertEquals(SavedRoutePresetStoreResult.Success(listOf(updated)), store.save(updated))
+        assertEquals(1, storage.writeCount)
+        assertTrue(storage.value!!.startsWith("SAVED_ROUTE_PRESETS_V2\n"))
+        assertEquals(listOf(updated), store.load().presets)
+        assertTrue(store.load().isSourceSafeToReplace)
+    }
+
+    @Test
+    fun invalidV2WalkingLimitCannotOverwriteOrEraseStoredRoutes() {
+        val current = SavedRoutePresetsCodec.encode(
+            listOf(preset(maxWalking15Minutes = true))
+        )!!
+        val malformed = current.substringBeforeLast('\u001f') + "\u001fmaybe"
+        val storage = MemorySavedRoutePresetStringStorage(value = malformed)
+        val store = SavedRoutePresetsStore(storage)
+        assertFalse(store.load().isSourceSafeToReplace)
+        assertTrue("corrupt-record" in store.load().issues)
+        assertEquals(
+            SavedRoutePresetStoreResult.Rejected(
+                SavedRoutePresetStoreRejection.SOURCE_UNSAFE,
+                setOf("corrupt-record"),
+            ),
+            store.save(preset(id = "another-trip")),
+        )
+        assertEquals(malformed, storage.value)
+        assertEquals(0, storage.writeCount)
+    }
+
+    @Test
+    fun malformedV1FieldCountIsUnsafeRatherThanSilentlyMigrated() {
+        val current = SavedRoutePresetsCodec.encode(listOf(preset()))!!
+        val oldSnapshot = current
+            .replaceFirst("SAVED_ROUTE_PRESETS_V2", "SAVED_ROUTE_PRESETS_V1")
+            .substringBeforeLast('\u001f')
+            .substringBeforeLast('\u001f')
+        val decoded = SavedRoutePresetsCodec.decodeWithStatus(oldSnapshot)
+        assertFalse(decoded.isSourceSafeToReplace)
+        assertTrue("corrupt-record" in decoded.issues)
     }
 
     @Test
@@ -142,7 +204,7 @@ class SavedRoutePresetsTest {
             "\u001fmaybe\u001f1\u001f0\u001f1\u001f",
         )
 
-        assertFalse(SavedRoutePresetsCodec.decodeWithStatus("SAVED_ROUTE_PRESETS_V2\n$encoded").isSourceSafeToReplace)
+        assertFalse(SavedRoutePresetsCodec.decodeWithStatus("SAVED_ROUTE_PRESETS_V3\n$encoded").isSourceSafeToReplace)
         assertFalse(SavedRoutePresetsCodec.decodeWithStatus("x".repeat(32_769)).isSourceSafeToReplace)
         assertFalse(SavedRoutePresetsCodec.decodeWithStatus(invalidBoolean).isSourceSafeToReplace)
         assertTrue(SavedRoutePresetsCodec.decode(invalidBoolean).isEmpty())
