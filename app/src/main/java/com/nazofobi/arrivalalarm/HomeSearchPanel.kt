@@ -297,10 +297,11 @@ fun HomeSearchPanel(
                                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                             )
                         }
+                        var showAllNearby by remember(nearby) { mutableStateOf(false) }
                         var expandedNearbyStopIds by remember(nearby) {
                             mutableStateOf(emptySet<String>())
                         }
-                        nearby.take(8).forEachIndexed { index, candidate ->
+                        nearby.take(if (showAllNearby) 20 else 8).forEachIndexed { index, candidate ->
                             OutlinedButton(
                                 onClick = { onNearbyStopSelected(candidate) },
                                 modifier = Modifier
@@ -383,6 +384,26 @@ fun HomeSearchPanel(
                                         )
                                     }
                                 }
+                            }
+                        }
+                        if (nearby.size > 8) {
+                            TextButton(
+                                onClick = { showAllNearby = !showAllNearby },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("nearby-show-more-toggle"),
+                            ) {
+                                Text(
+                                    if (showAllNearby) {
+                                        stringResource(R.string.nearby_show_less)
+                                    } else {
+                                        stringResource(
+                                            R.string.nearby_show_more,
+                                            nearby.size.coerceAtMost(20) - 8,
+                                        )
+                                    }
+                                )
                             }
                         }
                     }

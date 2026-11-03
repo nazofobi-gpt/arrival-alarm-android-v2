@@ -12,7 +12,7 @@ interface ArrivalTransitClient {
     fun nearbyStopsResolved(
         latitude: Double,
         longitude: Double,
-        limit: Int = 8,
+        limit: Int = 20,
         callback: (NationwideLookupResolution<NearbyStop>) -> Unit,
     )
     fun stationDepartures(
