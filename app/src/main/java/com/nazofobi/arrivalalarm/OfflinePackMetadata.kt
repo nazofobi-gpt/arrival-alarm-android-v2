@@ -77,5 +77,15 @@ internal fun offlinePackMetadataText(
         context.getString(R.string.offline_pack_updated_unknown)
     }
 
-    return context.getString(R.string.offline_pack_metadata, size, version, checked)
+    val metadata = context.getString(R.string.offline_pack_metadata, size, version, checked)
+    // A completed download is not proof that old timetables remain valid today.
+    // Only classify a known, nonfuture successful check as overdue; unknown timestamps
+    // remain explicitly unknown instead of acquiring a fabricated stale age.
+    val overdue = fetchedAtMillis != null &&
+        nowMillis - fetchedAtMillis >= 7L * 24 * 60 * 60 * 1_000
+    return if (overdue) {
+        metadata + " · " + context.getString(R.string.offline_pack_refresh_overdue)
+    } else {
+        metadata
+    }
 }
