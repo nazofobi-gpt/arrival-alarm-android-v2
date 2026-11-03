@@ -30,6 +30,9 @@ test("in-memory connector exposes GPS-only destination without inventing a route
   assert.equal(journey.active_trip, null);
   assert.deepEqual(journey.origin, gpsSnapshot.origin);
   assert.deepEqual(journey.destination, gpsSnapshot.destination);
+  const alarm = service.getAlarmState("user-1");
+  assert.equal(alarm.alarm_armed, true);
+  assert.deepEqual(alarm.destination, gpsSnapshot.destination);
 });
 
 test("D1 connector preserves GPS-only origin and destination across persisted state reads", async () => {
@@ -41,6 +44,9 @@ test("D1 connector preserves GPS-only origin and destination across persisted st
   assert.equal(journey.stale, false);
   assert.deepEqual(journey.origin, gpsSnapshot.origin);
   assert.deepEqual(journey.destination, gpsSnapshot.destination);
+  const alarm = await service.getAlarmState("user-1");
+  assert.equal(alarm.alarm_armed, true);
+  assert.deepEqual(alarm.destination, gpsSnapshot.destination);
 });
 
 test("both gateways expose legacy selected-trip endpoints but never invent missing targets", async () => {
@@ -71,4 +77,29 @@ test("both gateways expose legacy selected-trip endpoints but never invent missi
   await d1.putSnapshot("user-1", missing);
   assert.equal(sync.getCurrentJourney("user-1").destination, null);
   assert.equal((await asyncService.getCurrentJourney("user-1")).destination, null);
+});
+
+// A selected destination is not proof that the user currently has an armed alarm.
+test("both gateways omit unarmed and unverified alarm destinations", async () => {
+  const memory = new InMemoryGatewayStore({ nowEpochSeconds: () => 1000 });
+  const d1 = new D1GatewayStore(new FakeD1(), { nowEpochSeconds: () => 1000 });
+  const sync = new GatewayService(memory, { nowEpochSeconds: () => 1000 });
+  const asynchronous = new AsyncGatewayService(d1, { nowEpochSeconds: () => 1000 });
+  const unarmed = { ...gpsSnapshot, alarm_armed: false, journey_phase: "DESTINATION_SELECTED" };
+  memory.putSnapshot("user-1", unarmed);
+  await d1.putSnapshot("user-1", unarmed);
+  assert.equal(sync.getAlarmState("user-1").alarm_armed, false);
+  assert.equal(sync.getAlarmState("user-1").destination, null);
+  assert.equal((await asynchronous.getAlarmState("user-1")).destination, null);
+
+  // Legacy trip labels must never masquerade as a verified GPS alarm target.
+  const legacyWithoutTarget = {
+    ...gpsSnapshot,
+    destination: undefined,
+    active_trip: { destination: gpsSnapshot.destination },
+  };
+  memory.putSnapshot("user-1", legacyWithoutTarget);
+  await d1.putSnapshot("user-1", legacyWithoutTarget);
+  assert.equal(sync.getAlarmState("user-1").destination, null);
+  assert.equal((await asynchronous.getAlarmState("user-1")).destination, null);
 });
