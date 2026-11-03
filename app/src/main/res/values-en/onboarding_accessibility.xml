@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="onboarding_accessibility_title">Accessibility quick setup (optional)</string>
+    <string name="onboarding_accessibility_body">You can adjust TalkBack, larger text and other accessibility features in Android settings. You can also skip this step and continue using the app.</string>
+    <string name="onboarding_accessibility_action">Open accessibility settings</string>
+</resources>

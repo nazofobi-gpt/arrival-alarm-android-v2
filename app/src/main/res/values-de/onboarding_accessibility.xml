@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="onboarding_accessibility_title">Barrierefreiheit einrichten (optional)</string>
+    <string name="onboarding_accessibility_body">TalkBack, größere Schrift und weitere Bedienungshilfen lassen sich in den Android-Einstellungen anpassen. Du kannst diesen Schritt überspringen.</string>
+    <string name="onboarding_accessibility_action">Bedienungshilfen öffnen</string>
+</resources>

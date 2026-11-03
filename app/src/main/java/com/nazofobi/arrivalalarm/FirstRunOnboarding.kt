@@ -1,5 +1,7 @@
 package com.nazofobi.arrivalalarm
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,9 +19,11 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -34,6 +38,7 @@ fun FirstRunOnboarding(
     onContinue: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -91,6 +96,38 @@ fun FirstRunOnboarding(
                 body = stringResource(R.string.onboarding_alarm_body),
             )
 
+            // Optional: configuring TalkBack or display scaling never gates journey setup.
+            Card(
+                modifier = Modifier.fillMaxWidth().testTag("onboarding-accessibility-setup"),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.onboarding_accessibility_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.semantics { heading() },
+                    )
+                    Text(
+                        text = stringResource(R.string.onboarding_accessibility_body),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedButton(
+                        onClick = { context.startActivity(accessibilityQuickSetupIntent()) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("onboarding-accessibility-settings"),
+                    ) {
+                        Text(stringResource(R.string.onboarding_accessibility_action))
+                    }
+                }
+            }
+
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -131,6 +168,10 @@ fun FirstRunOnboarding(
         }
     }
 }
+
+/** Open the user's own device accessibility controls; no setting is changed by the app. */
+internal fun accessibilityQuickSetupIntent(): Intent =
+    Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
 
 @Composable
 private fun OnboardingFeature(

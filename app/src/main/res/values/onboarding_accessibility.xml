@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="onboarding_accessibility_title">Erişilebilirlik hızlı kurulumu (isteğe bağlı)</string>
+    <string name="onboarding_accessibility_body">Ekran okuyucu, büyük yazı ve diğer erişilebilirlik seçeneklerini Android ayarlarında düzenleyebilirsin. Bu adımı atlayarak da uygulamayı kullanabilirsin.</string>
+    <string name="onboarding_accessibility_action">Erişilebilirlik ayarlarını aç</string>
+</resources>
