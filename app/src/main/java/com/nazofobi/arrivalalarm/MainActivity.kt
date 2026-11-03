@@ -122,6 +122,13 @@ class MainActivity : ComponentActivity() {
 internal fun canReplayOnboarding(phase: JourneyPhase): Boolean =
     phase != JourneyPhase.ARMED && phase != JourneyPhase.ARRIVED
 
+/** A restored or newly armed arrival alarm must never be obscured by setup. */
+internal fun shouldShowOnboarding(
+    isComplete: Boolean,
+    replayRequested: Boolean,
+    phase: JourneyPhase,
+): Boolean = canReplayOnboarding(phase) && (!isComplete || replayRequested)
+
 @Composable
 fun ArrivalAlarmApp(
     oauthCallbackUri: String? = null,
@@ -183,6 +190,8 @@ fun ArrivalAlarmApp(
     // Replay is UI-only: never clear the persisted first-run completion flag.
     var onboardingReplay by rememberSaveable { mutableStateOf(false) }
     var activeScreen by rememberSaveable { mutableStateOf(ArrivalAppScreen.HOME) }
+    // Reevaluate on every phase transition, before any navigation or guide is composed.
+    val showOnboarding = shouldShowOnboarding(onboardingComplete, onboardingReplay, journey.phase)
     var dataState by remember { mutableStateOf(transit.currentState()) }
     var query by remember { mutableStateOf("") }
     // Changing the active catalog must also invalidate remembered query deduplication.
@@ -808,6 +817,13 @@ fun ArrivalAlarmApp(
         refreshReadiness()
     }
 
+    LaunchedEffect(journey.phase) {
+        if (!canReplayOnboarding(journey.phase)) {
+            onboardingReplay = false
+            activeScreen = ArrivalAppScreen.LIVE
+        }
+    }
+
     LaunchedEffect(journey.phase, selectedRouteId) {
         liveNowEpochSeconds = System.currentTimeMillis() / 1_000
         if (journey.phase == JourneyPhase.ARMED) {
@@ -928,7 +944,7 @@ fun ArrivalAlarmApp(
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
-            if (onboardingComplete && !onboardingReplay) {
+            if (!showOnboarding) {
                 ArrivalBottomNavigation(
                     current = activeScreen,
                     onSelect = { requested ->
@@ -963,7 +979,7 @@ fun ArrivalAlarmApp(
                         .testTag("adaptive-content"),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                if (!onboardingComplete || onboardingReplay) {
+                if (showOnboarding) {
                     FirstRunOnboarding(
                         offlineDataState = dataState,
                         onDownloadOfflineData = {
@@ -992,7 +1008,7 @@ fun ArrivalAlarmApp(
                     )
                 }
 
-                if (onboardingComplete && !onboardingReplay) {
+                if (!showOnboarding) {
                 Text(
                     stringResource(R.string.app_name),
                     style = MaterialTheme.typography.titleLarge,
