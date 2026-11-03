@@ -24,14 +24,15 @@ import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 
 object ActiveJourneyPermissions {
+    fun hasNotificationGrant(context: Context): Boolean =
+        Build.VERSION.SDK_INT < 33 ||
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
     fun hasRuntimeGrants(context: Context): Boolean {
         val hasLocation =
             context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
                 context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        val hasNotifications =
-            Build.VERSION.SDK_INT < 33 ||
-                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-        return hasLocation && hasNotifications
+        return hasLocation && hasNotificationGrant(context)
     }
 
     fun hasRequired(context: Context): Boolean {
@@ -170,6 +171,9 @@ class ActiveJourneyService : Service(), LocationListener {
             }
             return START_NOT_STICKY
         }
+        // The prior forced-stop alert becomes stale only after foreground tracking starts.
+        // A failed start must retain its actionable stop notice.
+        runCatching { clearStoppedTrackingNotification(this) }
         // Provider registration can fail after the initial availability check.
         // Keep the armed foreground journey alive and retry through the existing
         // state monitor, but stop promptly if grants are revoked or the trip ends.
@@ -276,9 +280,22 @@ class ActiveJourneyService : Service(), LocationListener {
     }
 
     private fun disarmAndStopAfterLocationLoss() {
-        // Stopping the FGS alone would leave a silently armed alarm with no location updates.
+        // Never leave a silently armed alarm without location updates.
+        // After involuntary disarm, replace the disappearing tracking notification
+        // with a generic, user-actionable alert. User cancellation does not enter here.
+        val shouldNotify = LocationProviderRecovery.shouldNotifyForcedDisarm(
+            graph.controller.state.phase,
+            ActiveJourneyPermissions.hasNotificationGrant(this),
+        )
         if (graph.controller.state.phase == JourneyPhase.ARMED) {
             graph.connectorPort.cancelArrivalAlarm()
+            if (shouldNotify) {
+                // Notification restrictions must not prevent authoritative cancellation.
+                runCatching {
+                    val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    manager.notify(TRACKING_STOPPED_NOTIFICATION_ID, trackingStoppedNotification(this))
+                }
+            }
         }
         stopSelf()
     }
@@ -470,6 +487,7 @@ class ActiveJourneyService : Service(), LocationListener {
         private const val ARRIVAL_CHANNEL_ID = "arrival_alerts"
         private const val TRACKING_NOTIFICATION_ID = 4101
         private const val ARRIVAL_NOTIFICATION_ID = 4102
+        internal const val TRACKING_STOPPED_NOTIFICATION_ID = 4104
         private const val CANCEL_REQUEST_CODE = 4103
         private const val MIN_UPDATE_MILLIS = 10_000L
         private const val MIN_UPDATE_METERS = 25f
@@ -477,6 +495,38 @@ class ActiveJourneyService : Service(), LocationListener {
 
         internal fun cancellationIntent(context: Context): Intent =
             Intent(context, ActiveJourneyService::class.java).setAction(ACTION_CANCEL)
+
+        /** Remove a stale forced-stop alert only after tracking has restarted. */
+        internal fun clearStoppedTrackingNotification(context: Context) {
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.cancel(TRACKING_STOPPED_NOTIFICATION_ID)
+        }
+
+        /** Destination-free notice that remains after the forced tracking stop. */
+        internal fun trackingStoppedNotification(context: Context): Notification {
+            val builder = if (Build.VERSION.SDK_INT >= 26) {
+                Notification.Builder(context, ARRIVAL_CHANNEL_ID)
+            } else {
+                Notification.Builder(context)
+            }
+            val openApp = PendingIntent.getActivity(
+                context,
+                0,
+                Intent(context, MainActivity::class.java).addFlags(
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                ),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            return builder
+                .setContentTitle(context.getString(R.string.active_tracking_stopped_title))
+                .setContentText(context.getString(R.string.active_tracking_stopped_body))
+                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setCategory(Notification.CATEGORY_ERROR)
+                .setVisibility(Notification.VISIBILITY_PUBLIC)
+                .setAutoCancel(true)
+                .setContentIntent(openApp)
+                .build()
+        }
 
         fun tryStart(context: Context): Boolean {
             if (!ActiveJourneyPermissions.hasRequired(context)) return false

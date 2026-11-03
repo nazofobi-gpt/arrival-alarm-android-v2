@@ -1,20 +1,80 @@
 package com.nazofobi.arrivalalarm
 
 import android.Manifest
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
 import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ActiveJourneyServiceInstrumentedTest {
+    @Test fun forcedTrackingStopNoticeHasNoPrivateDestinationAndOpensTheApp() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val notice = ActiveJourneyService.trackingStoppedNotification(context)
+        assertEquals(
+            context.getString(R.string.active_tracking_stopped_title),
+            notice.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString(),
+        )
+        assertEquals(
+            context.getString(R.string.active_tracking_stopped_body),
+            notice.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
+        )
+        assertEquals(Notification.CATEGORY_ERROR, notice.category)
+        assertEquals(Notification.VISIBILITY_PUBLIC, notice.visibility)
+        assertFalse(notice.flags and Notification.FLAG_ONGOING_EVENT != 0)
+        assertNotNull(notice.contentIntent)
+        if (Build.VERSION.SDK_INT >= 26) {
+            assertEquals("arrival_alerts", notice.channelId)
+        }
+    }
+
+    @Test fun clearingStaleForcedStopNoticeRemovesOnlyTheOldAlert() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        if (Build.VERSION.SDK_INT >= 33 &&
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            // A real notification assertion requires a runtime grant on the API36 emulator.
+            InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(
+                context.packageName,
+                Manifest.permission.POST_NOTIFICATIONS,
+            )
+        }
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        // Service.onCreate normally creates this channel; the test posts directly.
+        if (Build.VERSION.SDK_INT >= 26) {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    "arrival_alerts",
+                    context.getString(R.string.arrival_alerts_channel_name),
+                    NotificationManager.IMPORTANCE_HIGH,
+                ),
+            )
+        }
+        val stoppedId = ActiveJourneyService.TRACKING_STOPPED_NOTIFICATION_ID
+        manager.cancel(stoppedId)
+        try {
+            manager.notify(stoppedId, ActiveJourneyService.trackingStoppedNotification(context))
+            assertTrue(manager.activeNotifications.any { it.id == stoppedId })
+            ActiveJourneyService.clearStoppedTrackingNotification(context)
+            assertFalse(manager.activeNotifications.any { it.id == stoppedId })
+        } finally {
+            manager.cancel(stoppedId)
+        }
+    }
+
     @Test fun cancellationActionTargetsTheNonExportedTrackingService() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val intent = ActiveJourneyService.cancellationIntent(context)

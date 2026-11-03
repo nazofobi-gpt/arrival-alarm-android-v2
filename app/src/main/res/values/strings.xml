@@ -284,6 +284,8 @@
     <string name="active_tracking_title">Varış alarmı etkin</string>
     <string name="active_tracking_degraded">Konum doğruluğu yetersiz; alarm etkin, yeni GPS bekleniyor</string>
     <string name="active_tracking_in_progress">Konum takip ediliyor</string>
+    <string name="active_tracking_stopped_title">Varış alarmı durduruldu</string>
+    <string name="active_tracking_stopped_body">Konum hizmetleri veya gerekli izin kayboldu. Konumu yeniden açın ve alarmı tekrar kurun.</string>
     <string name="active_tracking_distance">Hedefe yaklaşık %1$d m kaldı</string>
     <string name="arrival_notification_title">Varış noktasına ulaşıldı</string>
     <string name="arrival_notification_body">Varış alarmı tamamlandı.</string>
