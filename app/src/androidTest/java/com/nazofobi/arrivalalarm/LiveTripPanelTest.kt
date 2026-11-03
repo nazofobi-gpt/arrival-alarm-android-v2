@@ -607,4 +607,83 @@ class LiveTripPanelTest {
     }
 
 
+
+    @Test
+    fun activeBoardingShowsStopMatchedWalkingEstimateOnlyBeforeDeparture() {
+        val now = mutableLongStateOf(
+            "2026-09-26T07:50:00+02:00".toTransitEpochSecondsOrNull()!!
+        )
+        val armed = mutableStateOf(true)
+        val accessStopId = mutableStateOf("boarding")
+        val route = RouteOption(
+            id = "access-walk-guidance",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
+            line = "RE 9",
+            direction = "Bremen Hbf",
+            departure = "08:00",
+            arrival = "08:45",
+            walkingMinutes = 6,
+            transfers = 0,
+            accessWalking = RouteWalkingLegEvidence(
+                stopId = "boarding", stopName = "Lohne", walkSeconds = 301,
+            ),
+            stops = listOf(
+                RouteStop(
+                    id = "boarding", name = "Lohne",
+                    plannedDeparture = "2026-09-26T08:00:00+02:00",
+                ),
+                RouteStop(
+                    id = "destination", name = "Bremen Hbf",
+                    plannedArrival = "2026-09-26T08:45:00+02:00",
+                ),
+            ),
+        )
+        rule.setContent {
+            MaterialTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    LiveTripPanel(
+                        selectedRoute = route.copy(
+                            accessWalking = route.accessWalking?.copy(stopId = accessStopId.value),
+                        ),
+                        journey = JourneyUiState(
+                            phase = if (armed.value) JourneyPhase.ARMED
+                                else JourneyPhase.DESTINATION_SELECTED,
+                        ),
+                        guidanceState = GuidanceReliabilityState(),
+                        routeOffline = true,
+                        nowEpochSeconds = now.longValue,
+                    )
+                }
+            }
+        }
+        // This is an existing route estimate, not measured pedestrian movement.
+        rule.onNodeWithTag("live-trip-access-walk").performScrollTo()
+            .assertTextContains("Lohne", substring = true)
+        rule.onNodeWithTag("live-trip-access-walk")
+            .assertTextContains("6", substring = true)
+
+        // A stale or wrong boarding stop must never inherit another stop's walk.
+        rule.runOnUiThread { accessStopId.value = "different-stop" }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-access-walk").assertDoesNotExist()
+
+        rule.runOnUiThread { accessStopId.value = "boarding" }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-access-walk").performScrollTo()
+            .assertTextContains("Lohne", substring = true)
+
+        // The estimate is boarding guidance, not persistent progress guidance.
+        rule.runOnUiThread { armed.value = false }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-access-walk").assertDoesNotExist()
+
+        rule.runOnUiThread {
+            armed.value = true
+            now.longValue = "2026-09-26T08:01:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-access-walk").assertDoesNotExist()
+    }
+
 }
