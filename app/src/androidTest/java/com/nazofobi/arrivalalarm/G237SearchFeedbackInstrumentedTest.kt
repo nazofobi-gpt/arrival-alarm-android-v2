@@ -65,7 +65,7 @@ class G237SearchFeedbackInstrumentedTest {
             message = "Old data: confirm times"
         }
         rule.onNodeWithTag("search-feedback-stale").assertIsDisplayed()
-        rule.onNodeWithTag("search-message").assertTextContains("Old data")
+        rule.onNodeWithTag("search-message").assertTextContains("Old data: confirm times")
 
         rule.runOnIdle {
             kind = SearchFeedbackKind.ERROR
