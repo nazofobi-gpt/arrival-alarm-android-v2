@@ -125,9 +125,16 @@ fun LiveTripPanel(
                     selectedRoute.stops.firstOrNull()?.plannedDeparture,
                     nowEpochSeconds,
                 )?.let { minutes ->
+                    // A countdown without a boarding stop is not actionable.
+                    // Use only the selected route's named origin; do not infer a GPS stop.
+                    val boardingStop = selectedRoute.stops.firstOrNull()?.name
+                        ?.trim()?.takeIf { it.isNotEmpty() }
                     LiveTripFact(
                         label = stringResource(R.string.live_trip_planned_boarding),
-                        value = stringResource(R.string.live_trip_planned_boarding_minutes, minutes),
+                        value = listOfNotNull(
+                            boardingStop,
+                            stringResource(R.string.live_trip_planned_boarding_minutes, minutes),
+                        ).joinToString(" • "),
                         tag = "live-trip-planned-boarding",
                     )
                 }
