@@ -225,6 +225,37 @@ class FirstRunOnboardingAccessibilityTest {
         }
     }
 
+    @Test fun appPermissionQuickSetupOpensOnlyOwnAppDetails() {
+        val intent = onboardingAppPermissionSettingsIntent("com.nazofobi.arrivalalarm")
+        assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, intent.action)
+        assertEquals("package:com.nazofobi.arrivalalarm", intent.data?.toString())
+        assertEquals(null, intent.component)
+    }
+
+    @Test fun permissionReviewIsVisibleButOptionalOnFirstRun() {
+        var continued = false
+        var downloads = 0
+        rule.setContent {
+            MaterialTheme {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    FirstRunOnboarding(
+                        onContinue = { continued = true },
+                        offlineDataState = NationwideDataState.Idle,
+                        onDownloadOfflineData = { downloads++ },
+                    )
+                }
+            }
+        }
+        rule.onNodeWithTag("onboarding-app-permissions")
+            .performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("onboarding-complete")
+            .performScrollTo().performClick()
+        rule.runOnIdle {
+            assertTrue(continued)
+            assertEquals(0, downloads)
+        }
+    }
+
     @Test fun quickSetupUsesOnlySystemAccessibilitySettings() {
         val intent = accessibilityQuickSetupIntent()
         assertEquals(Settings.ACTION_ACCESSIBILITY_SETTINGS, intent.action)
