@@ -28,7 +28,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -78,7 +77,9 @@ fun HomeSearchPanel(
     mode: HomeSearchMode = HomeSearchMode.HOME,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
+    val voiceSearchPrompt = stringResource(R.string.voice_search_prompt)
+    val voiceSearchUnavailable = stringResource(R.string.voice_search_unavailable)
+    val voiceSearchNoMatch = stringResource(R.string.voice_search_no_match)
     var voiceSearchMessage by remember { mutableStateOf<String?>(null) }
     val voiceSearchLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult(),
@@ -94,7 +95,7 @@ fun HomeSearchPanel(
                 onQueryChange(recognizedQuery)
                 voiceSearchMessage = null
             } else {
-                voiceSearchMessage = context.getString(R.string.voice_search_no_match)
+                voiceSearchMessage = voiceSearchNoMatch
             }
         }
         // Cancellation leaves the user's existing query untouched.
@@ -452,16 +453,16 @@ fun HomeSearchPanel(
                                             RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
                                         )
                                         putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
-                                        putExtra(RecognizerIntent.EXTRA_PROMPT, context.getString(R.string.voice_search_prompt))
+                                        putExtra(RecognizerIntent.EXTRA_PROMPT, voiceSearchPrompt)
                                         putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
                                     }
                                     try {
                                         voiceSearchLauncher.launch(intent)
                                         voiceSearchMessage = null
                                     } catch (_: ActivityNotFoundException) {
-                                        voiceSearchMessage = context.getString(R.string.voice_search_unavailable)
+                                        voiceSearchMessage = voiceSearchUnavailable
                                     } catch (_: SecurityException) {
-                                        voiceSearchMessage = context.getString(R.string.voice_search_unavailable)
+                                        voiceSearchMessage = voiceSearchUnavailable
                                     }
                                 },
                                 modifier = Modifier
