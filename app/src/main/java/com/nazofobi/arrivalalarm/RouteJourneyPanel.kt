@@ -1,5 +1,6 @@
 package com.nazofobi.arrivalalarm
 
+import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -378,7 +379,38 @@ private fun RouteOptionCard(
 }
 
 @Composable
+
+/** Explicit route share; no private coordinates, trip IDs or history. */
+internal fun buildRouteShareSummary(
+    option: RouteOption,
+    routeOffline: Boolean,
+    title: String,
+    scheduleNote: String,
+    offlineNote: String,
+    unknownTime: String,
+): String {
+    fun safe(value: String): String =
+        value.replace(Regex("\\p{C}"), " ").trim().take(120)
+
+    val line = listOf(option.line, option.direction)
+        .map(::safe)
+        .filter { it.isNotBlank() }
+        .joinToString(" • ")
+    val departure = routeOptionEvidenceClock(option, departure = true, routeOffline = routeOffline)
+        ?.let(::safe)?.takeIf { it.isNotBlank() } ?: safe(unknownTime)
+    val arrival = routeOptionEvidenceClock(option, departure = false, routeOffline = routeOffline)
+        ?.let(::safe)?.takeIf { it.isNotBlank() } ?: safe(unknownTime)
+    return listOf(
+        safe(title),
+        safe(option.origin.label) + " → " + safe(option.destination.label),
+        line,
+        departure + " → " + arrival,
+        safe(if (routeOffline) offlineNote else scheduleNote),
+    ).filter { it.isNotBlank() }.joinToString("\n")
+}
+
 private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
+    val context = LocalContext.current
     val displayDeparture = routeOptionEvidenceClock(option, departure = true, routeOffline = routeOffline)
         ?: stringResource(R.string.unknown_time)
     val displayArrival = routeOptionEvidenceClock(option, departure = false, routeOffline = routeOffline)
@@ -418,6 +450,35 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
             Text(
                 text = displayDeparture + " → " + displayArrival,
                 style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            OutlinedButton(
+                onClick = {
+                    // User chooses the recipient. Never automatically send a trip.
+                    val sharedText = buildRouteShareSummary(
+                        option = option,
+                        routeOffline = routeOffline,
+                        title = context.getString(R.string.journey_share_title),
+                        scheduleNote = context.getString(R.string.journey_share_schedule_note),
+                        offlineNote = context.getString(R.string.journey_share_offline_note),
+                        unknownTime = context.getString(R.string.unknown_time),
+                    )
+                    val send = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, sharedText)
+                    }
+                    context.startActivity(
+                        Intent.createChooser(send, context.getString(R.string.journey_share_action))
+                    )
+                },
+                modifier = Modifier.heightIn(min = 48.dp).testTag("journey-share-route"),
+            ) {
+                Text(stringResource(R.string.journey_share_action))
+            }
+            Text(
+                text = stringResource(R.string.journey_share_privacy_note),
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 

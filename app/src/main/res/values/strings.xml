@@ -113,6 +113,11 @@
     <string name="route_planned_badge">Planlı saat</string>
     <string name="route_select_action">Bu rotayı seç</string>
     <string name="route_selected_action">Rota seçildi</string>
+    <string name="journey_share_action">Rotayı paylaş</string>
+    <string name="journey_share_title">Varış • Yolculuk özeti</string>
+    <string name="journey_share_schedule_note">Saatler değişebilir; yola çıkmadan önce güncel seferi doğrulayın.</string>
+    <string name="journey_share_offline_note">Çevrimdışı önbellekten planlı saatler; güncel sefer doğrulanmadı.</string>
+    <string name="journey_share_privacy_note">Paylaşım başlangıç/varış adlarını içerir. GPS koordinatları ve yolculuk geçmişi paylaşılmaz.</string>
     <string name="journey_detail_title">Yolculuk Detayı</string>
     <string name="route_live_static">transport.rest / DB profile • canlı/planlı rota</string>
     <string name="route_gtfsrt_fresh">GTFS Deutschland yerel indeks • GTFS-RT canlı</string>

@@ -102,6 +102,11 @@
     <string name="route_planned_badge">Fahrplanzeit</string>
     <string name="route_select_action">Diese Verbindung wählen</string>
     <string name="route_selected_action">Verbindung gewählt</string>
+    <string name="journey_share_action">Route teilen</string>
+    <string name="journey_share_title">Varış • Reiseübersicht</string>
+    <string name="journey_share_schedule_note">Zeiten können sich ändern. Verbindung vor der Fahrt erneut prüfen.</string>
+    <string name="journey_share_offline_note">Planzeiten aus dem Offline-Cache; aktuelle Verbindung nicht bestätigt.</string>
+    <string name="journey_share_privacy_note">Start und Ziel werden geteilt, GPS-Koordinaten und Reiseverlauf nicht.</string>
     <string name="journey_detail_title">Fahrtdetails</string>
     <string name="route_live_static">transport.rest / DB-Profil • Echtzeit/Fahrplan</string>
     <string name="route_live_unavailable">Live-Routenanbieter nicht verfügbar • lokale Daten lieferten keine Verbindung</string>
