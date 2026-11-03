@@ -410,6 +410,11 @@ internal fun buildRouteShareSummary(
 @Composable
 private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
     val context = LocalContext.current
+    val shareTitle = stringResource(R.string.journey_share_title)
+    val shareScheduleNote = stringResource(R.string.journey_share_schedule_note)
+    val shareOfflineNote = stringResource(R.string.journey_share_offline_note)
+    val shareUnknownTime = stringResource(R.string.unknown_time)
+    val shareActionLabel = stringResource(R.string.journey_share_action)
     val displayDeparture = routeOptionEvidenceClock(option, departure = true, routeOffline = routeOffline)
         ?: stringResource(R.string.unknown_time)
     val displayArrival = routeOptionEvidenceClock(option, departure = false, routeOffline = routeOffline)
@@ -458,17 +463,17 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
                     val sharedText = buildRouteShareSummary(
                         option = option,
                         routeOffline = routeOffline,
-                        title = context.getString(R.string.journey_share_title),
-                        scheduleNote = context.getString(R.string.journey_share_schedule_note),
-                        offlineNote = context.getString(R.string.journey_share_offline_note),
-                        unknownTime = context.getString(R.string.unknown_time),
+                        title = shareTitle,
+                        scheduleNote = shareScheduleNote,
+                        offlineNote = shareOfflineNote,
+                        unknownTime = shareUnknownTime,
                     )
                     val send = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
                         putExtra(Intent.EXTRA_TEXT, sharedText)
                     }
                     context.startActivity(
-                        Intent.createChooser(send, context.getString(R.string.journey_share_action))
+                        Intent.createChooser(send, shareActionLabel)
                     )
                 },
                 modifier = Modifier.heightIn(min = 48.dp).testTag("journey-share-route"),
