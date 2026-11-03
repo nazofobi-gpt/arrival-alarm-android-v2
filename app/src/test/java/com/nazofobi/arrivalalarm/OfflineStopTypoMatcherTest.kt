@@ -9,6 +9,8 @@ class OfflineStopTypoMatcherTest {
         assertTrue(OfflineStopTypoMatcher.matchesOneTypo(
             OfflineStopTypoMatcher.tokens("Knowm Good Bahnhof"), "Known Good Bahnhof"))
         assertTrue(OfflineStopTypoMatcher.matchesOneTypo(
+            OfflineStopTypoMatcher.tokens("Xnown Good Bahnhof"), "Known Good Bahnhof"))
+        assertTrue(OfflineStopTypoMatcher.matchesOneTypo(
             OfflineStopTypoMatcher.tokens("Bremne"), "Bremen Hbf"))
         assertTrue(OfflineStopTypoMatcher.matchesOneTypo(
             OfflineStopTypoMatcher.tokens("Breme"), "Bremen Hauptbahnhof"))
