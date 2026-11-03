@@ -7,4 +7,8 @@
     <string name="offline_pack_refresh_wifi">Installierte Verkehrsdaten über WLAN aktualisieren</string>
     <string name="offline_pack_refresh_wifi_note">Die Aktualisierung kann auf WLAN ohne Datenlimit und genügend Akku/Speicher warten; große Downloads sind möglich.</string>
     <string name="offline_pack_refresh_overdue">Letzte Prüfung vor mindestens 7 Tagen; Fahrpläne können sich geändert haben.</string>
+    <string name="offline_pack_refresh_waiting">Aktualisierung wartet; WLAN-, Akku- oder Speicherbedingungen können erforderlich sein.</string>
+    <string name="offline_pack_refresh_running">Installierte Verkehrsdaten werden geprüft oder aktualisiert.</string>
+    <string name="offline_pack_refresh_checked">Die letzte Aktualisierungsprüfung ist beendet; Version und Prüfzeit kontrollieren.</string>
+    <string name="offline_pack_refresh_failed">Aktualisierung nicht abgeschlossen; Netzwerk und Gerätezustand prüfen.</string>
 </resources>

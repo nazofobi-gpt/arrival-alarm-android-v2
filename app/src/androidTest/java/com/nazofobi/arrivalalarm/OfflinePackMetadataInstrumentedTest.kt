@@ -5,6 +5,7 @@ import android.text.format.DateUtils
 import android.text.format.Formatter
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performClick
@@ -14,6 +15,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import androidx.work.WorkInfo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -74,6 +76,7 @@ class OfflinePackMetadataInstrumentedTest {
             )
 
             var manualRefreshClicks = 0
+            val manualWorkState = mutableStateOf<WorkInfo.State?>(null)
             composeRule.setContent {
                 CompositionLocalProvider(LocalContext provides context) {
                     MaterialTheme {
@@ -90,6 +93,7 @@ class OfflinePackMetadataInstrumentedTest {
                             onRetryData = {},
                             onConnectorAction = {},
                             onUpdateInstalledData = { manualRefreshClicks++ },
+                            manualRefreshWorkState = manualWorkState.value,
                         )
                     }
                 }
@@ -99,6 +103,16 @@ class OfflinePackMetadataInstrumentedTest {
                 .assertIsDisplayed()
                 .performClick()
             assertEquals(1, manualRefreshClicks)
+            for ((stateValue, statusLabel) in listOf(
+                WorkInfo.State.ENQUEUED to R.string.offline_pack_refresh_waiting,
+                WorkInfo.State.RUNNING to R.string.offline_pack_refresh_running,
+                WorkInfo.State.SUCCEEDED to R.string.offline_pack_refresh_checked,
+                WorkInfo.State.FAILED to R.string.offline_pack_refresh_failed,
+            )) {
+                composeRule.runOnIdle { manualWorkState.value = stateValue }
+                composeRule.onNodeWithTag("nationwide-index-refresh-status")
+                    .assertTextContains(context.getString(statusLabel))
+            }
 
             val metadataNode = composeRule.onNodeWithTag("offline-pack-metadata")
             metadataNode.assertIsDisplayed().assertTextContains("etag-g185-test", substring = true)

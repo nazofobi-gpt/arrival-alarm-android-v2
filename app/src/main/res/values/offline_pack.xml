@@ -7,4 +7,8 @@
     <string name="offline_pack_refresh_wifi">Yüklü ulaşım verisini Wi-Fi ile güncelle</string>
     <string name="offline_pack_refresh_wifi_note">Güncelleme sınırsız Wi-Fi ve yeterli pil/depolama bekleyebilir; büyük veri indirilebilir.</string>
     <string name="offline_pack_refresh_overdue">Son kontrol en az 7 gün önceydi; seferler değişmiş olabilir.</string>
+    <string name="offline_pack_refresh_waiting">Yenileme isteği bekliyor; Wi-Fi, pil veya depolama koşulları gerekli olabilir.</string>
+    <string name="offline_pack_refresh_running">Yüklü ulaşım verisi kontrol ediliyor veya güncelleniyor.</string>
+    <string name="offline_pack_refresh_checked">Son yenileme kontrolü tamamlandı; veri sürümünü ve kontrol zamanını doğrulayın.</string>
+    <string name="offline_pack_refresh_failed">Yenileme tamamlanamadı; bağlantı ve cihaz koşullarını kontrol edin.</string>
 </resources>

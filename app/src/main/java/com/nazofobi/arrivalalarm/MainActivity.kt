@@ -52,6 +52,9 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Observer
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -275,6 +278,24 @@ fun ArrivalAlarmApp(
     var gtfsConsentStatus by remember { mutableStateOf<String?>(null) }
     var liveNowEpochSeconds by remember { mutableStateOf(System.currentTimeMillis() / 1_000) }
     var readinessRefreshTick by remember { mutableStateOf(0) }
+    // Observe the unique manual WorkManager request only while Settings is visible.
+    // Do not report an import as successful merely because a worker returned success:
+    // it may have skipped a removed pack or received an unchanged HTTP response.
+    var manualRefreshWorkState by remember { mutableStateOf<WorkInfo.State?>(null) }
+    DisposableEffect(activeScreen, context) {
+        if (activeScreen != ArrivalAppScreen.SETTINGS) {
+            onDispose {}
+        } else {
+            val liveData = WorkManager.getInstance(context)
+                .getWorkInfosForUniqueWorkLiveData(NationwideFeedRefreshScheduler.MANUAL_WORK_NAME)
+            val observer = Observer<List<WorkInfo>> { infos ->
+                manualRefreshWorkState = infos.firstOrNull { !it.state.isFinished }?.state
+                    ?: infos.lastOrNull()?.state
+            }
+            liveData.observeForever(observer)
+            onDispose { liveData.removeObserver(observer) }
+        }
+    }
     val routeCache = remember(context) {
         OfflineTransitCache(backingStore = SharedPreferencesTransitCacheStore(context))
     }
@@ -1048,6 +1069,7 @@ fun ArrivalAlarmApp(
                     onUpdateInstalledData = {
                         NationwideFeedRefreshScheduler.requestInstalledPackRefresh(context)
                     },
+                    manualRefreshWorkState = manualRefreshWorkState,
                     onConnectorAction = {
                         if (connectorConnected) disconnectConnector()
                         else beginConnectorAuthorization()

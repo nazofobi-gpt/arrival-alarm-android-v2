@@ -30,11 +30,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.work.WorkInfo
 
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.clickable
@@ -155,6 +158,7 @@ fun SettingsReadinessPanel(
     onRetryData: () -> Unit,
     onConnectorAction: () -> Unit,
     onUpdateInstalledData: () -> Unit = {},
+    manualRefreshWorkState: WorkInfo.State? = null,
     modifier: Modifier = Modifier,
 ) {
     var themeOptionsExpanded by rememberSaveable { mutableStateOf(false) }
@@ -433,6 +437,25 @@ fun SettingsReadinessPanel(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                val refreshStatus = when (manualRefreshWorkState) {
+                    WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED ->
+                        R.string.offline_pack_refresh_waiting
+                    WorkInfo.State.RUNNING -> R.string.offline_pack_refresh_running
+                    WorkInfo.State.SUCCEEDED -> R.string.offline_pack_refresh_checked
+                    WorkInfo.State.FAILED, WorkInfo.State.CANCELLED ->
+                        R.string.offline_pack_refresh_failed
+                    null -> null
+                }
+                if (refreshStatus != null) {
+                    Text(
+                        text = stringResource(refreshStatus),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .testTag("nationwide-index-refresh-status")
+                            .semantics { liveRegion = LiveRegionMode.Polite },
+                    )
+                }
             }
 
             if (shouldOfferNationwideDataRetry(state.dataState)) {

@@ -7,4 +7,8 @@
     <string name="offline_pack_refresh_wifi">Refresh installed transit data over Wi-Fi</string>
     <string name="offline_pack_refresh_wifi_note">Refresh may wait for unmetered Wi-Fi and sufficient battery/storage; a large download may be needed.</string>
     <string name="offline_pack_refresh_overdue">Last check was at least 7 days ago; schedules may have changed.</string>
+    <string name="offline_pack_refresh_waiting">Refresh is waiting; Wi-Fi, battery or storage conditions may be required.</string>
+    <string name="offline_pack_refresh_running">Checking or refreshing installed transit data.</string>
+    <string name="offline_pack_refresh_checked">The last refresh check finished; verify the data version and check time.</string>
+    <string name="offline_pack_refresh_failed">Refresh did not complete; check network and device conditions.</string>
 </resources>
