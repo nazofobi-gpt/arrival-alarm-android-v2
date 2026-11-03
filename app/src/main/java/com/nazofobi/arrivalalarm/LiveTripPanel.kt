@@ -137,6 +137,26 @@ fun LiveTripPanel(
                         ).joinToString(" • "),
                         tag = "live-trip-planned-boarding",
                     )
+                    // Carry the route's existing stop-backed walking estimate into
+                    // active boarding guidance. Never attach it to a different stop,
+                    // an untimed departure, or a journey that has already departed.
+                    val firstStop = selectedRoute.stops.firstOrNull()
+                    selectedRoute.accessWalking?.takeIf { leg ->
+                        leg.walkSeconds > 0 &&
+                            leg.stopId.isNotBlank() &&
+                            leg.stopId == firstStop?.id &&
+                            leg.stopName.isNotBlank()
+                    }?.let { leg ->
+                        val walkMinutes = ((leg.walkSeconds.toLong() + 59L) / 60L).toInt()
+                        Text(
+                            text = stringResource(
+                                R.string.route_walk_access_detail, leg.stopName, walkMinutes,
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.testTag("live-trip-access-walk"),
+                        )
+                    }
                 }
             }
 
