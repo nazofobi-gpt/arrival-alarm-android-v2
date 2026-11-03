@@ -65,16 +65,9 @@ object NationwideFeedRefreshScheduler {
             .build()
 
     fun requestInstalledPackRefresh(context: Context) {
-        // The UI already gates this to Ready; independently enforce the same rule
-        // before dispatching work to avoid an unintentional first full-feed download.
-        val index = NationwideTransitIndex(context.applicationContext)
-        val ready = try {
-            index.isReady() && index.stopCount() > 0
-        } finally {
-            index.close()
-        }
-        if (!ready) return
-
+        // The Settings UI only enables this action for an installed, nonempty index.
+        // The worker re-checks the index before any download. Do not block the UI
+        // thread with an SQLite read; a vanished pack safely yields a no-op worker.
         WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
             MANUAL_WORK_NAME,
             ExistingWorkPolicy.KEEP,
