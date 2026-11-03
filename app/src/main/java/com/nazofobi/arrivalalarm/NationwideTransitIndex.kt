@@ -247,9 +247,26 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             .split(Regex("[^\\p{L}\\p{N}]+"))
             .filter { it.isNotBlank() }
         if (tokens.isEmpty()) return emptyList()
-        val match = tokens.joinToString(" ") { "$it*" }
+
+        // Preserve exact FTS prefix matching and its existing result order.
+        val direct = searchFts(tokens.joinToString(" ") { "$it*" }, boundedLimit)
+        if (direct.isNotEmpty()) return direct
+
+        // Only an empty literal lookup may try a single-typo fallback.
+        // The three-character anchor keeps the SQLite query indexed; its 400-row
+        // hard cap prevents a nationwide scan for a vague or malformed query.
+        val normalized = OfflineStopTypoMatcher.tokens(query)
+        if (!OfflineStopTypoMatcher.eligible(normalized)) return emptyList()
+        val anchored = searchFts(normalized.first().take(3) + "*", 400)
+        return anchored.asSequence()
+            .filter { OfflineStopTypoMatcher.matchesOneTypo(normalized, it.name) }
+            .take(boundedLimit)
+            .toList()
+    }
+
+    private fun searchFts(match: String, limit: Int): List<CatalogStop> {
         val sql = "SELECT s.id,s.name,s.lat,s.lon FROM stop_search f JOIN stops s ON s.id=f.stop_id WHERE stop_search MATCH ? LIMIT ?"
-        return readableDatabase.rawQuery(sql, arrayOf(match, boundedLimit.toString())).use { c ->
+        return readableDatabase.rawQuery(sql, arrayOf(match, limit.toString())).use { c ->
             buildList {
                 while (c.moveToNext()) add(CatalogStop(c.getString(0), PROVIDER_ID, c.getString(1), c.getDouble(2), c.getDouble(3)))
             }
