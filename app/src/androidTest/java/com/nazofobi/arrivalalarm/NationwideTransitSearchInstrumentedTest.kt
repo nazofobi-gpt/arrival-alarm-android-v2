@@ -123,6 +123,43 @@ class NationwideTransitSearchInstrumentedTest {
         }
     }
 
+    @Test fun firstTokenTypoRecoversSpecificStopBeyondGenericStationCandidateCap() {
+        context.deleteDatabase("nationwide_transit.db")
+        val feed = File(context.cacheDir, "g237-specific-suffix.zip")
+        writeFeed(feed, extraStops = buildString {
+            // 500 generic Bahnhof entries appear before the real target in FTS.
+            // Searching only "bahnhof*" hits LIMIT 400 without reaching it.
+            for (i in 0 until 500) appendLine("decoy-$i,FixtureCity$i Bahnhof,52.2,8.2")
+            appendLine("rare-target,Trueplace Good Bahnhof,52.4,8.4")
+        })
+        val index = NationwideTransitIndex(context)
+        try {
+            index.importFeed(feed.toURI().toURL().toString()) { }
+            assertEquals(
+                502,
+                scalarInt(
+                    index.readableDatabase,
+                    "SELECT COUNT(*) FROM stop_search WHERE stop_search MATCH ?",
+                    arrayOf("bahnhof*"),
+                ),
+            )
+            assertEquals(
+                listOf("rare-target"),
+                index.search("Xrueplace Good Bahnhof", 5).map { it.id },
+            )
+            // Existing literal precedence, two-typo rejection and output caps.
+            assertEquals(
+                listOf("rare-target"),
+                index.search("Trueplace Good Bahnhof", 5).map { it.id },
+            )
+            assertTrue(index.search("Xrueplace Gooo Bahnhof", 5).isEmpty())
+            assertTrue(index.search("Xrueplace Good Bahnhof", 0).isEmpty())
+        } finally {
+            index.close()
+            feed.delete()
+        }
+    }
+
     @Test fun invalidStopCoordinatesNeverEnterTheSearchIndex() {
         context.deleteDatabase("nationwide_transit.db")
         val feed = File(context.cacheDir, "g185-invalid-geo.zip")

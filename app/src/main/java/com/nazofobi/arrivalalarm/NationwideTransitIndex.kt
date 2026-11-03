@@ -285,17 +285,17 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             .toList()
         if (firstPass.isNotEmpty()) return firstPass
 
-        // A typo among the first three letters cannot match the first FTS
-        // anchor. For multi-word queries only, try ONE different, unmodified
-        // long token as an indexed anchor; never scan the whole stop table.
-        // Candidate caps and the strict one-typo matcher still apply.
-        val secondaryAnchor = normalized.drop(1)
-            .filter { token ->
+        // When the FIRST token begins with a typo, anchor all unchanged
+        // suffix tokens together. A single generic "Bahnhof*" term can
+        // exceed the 400-candidate cap before the correct stop is reached.
+        // Keep the indexed query, long ASCII anchor requirement, and strict
+        // one-typo verification; do not expand the nationwide scan budget.
+        val suffixTokens = tokens.drop(1)
+        if (suffixTokens.none { token ->
                 token.length >= 5 && token.all { it in 'a'..'z' || it in '0'..'9' }
-            }
-            .maxByOrNull(String::length)
-            ?: return emptyList()
-        return searchFts(secondaryAnchor + "*", 400).asSequence()
+            }) return emptyList()
+        val secondaryAnchor = suffixTokens.joinToString(" ") { "$it*" }
+        return searchFts(secondaryAnchor, 400).asSequence()
             .filter { OfflineStopTypoMatcher.matchesOneTypo(normalized, it.name) }
             .take(boundedLimit)
             .toList()
