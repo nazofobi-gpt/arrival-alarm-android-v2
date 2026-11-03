@@ -47,6 +47,12 @@ class NationwideTransitSearchInstrumentedTest {
         )
         assertEquals(listOf("known-good"), index.search("Known Good Bahnhof", 5).map { it.id })
         assertEquals(listOf("known-good"), index.search("known good bahn", 5).map { it.id })
+        // End-to-end offline SQLite FTS: an exact miss may recover one typo,
+        // but never show a fabricated match for a second wrong token.
+        assertEquals(listOf("known-good"), index.search("Knowm Good Bahnhof", 5).map { it.id })
+        assertEquals(listOf("known-good"), index.search("Known Gooo Bahnhof", 5).map { it.id })
+        assertTrue(index.search("Knowm Gooo Bahnhof", 5).isEmpty())
+        assertTrue(index.search("Knowm Good Bahnhof", 0).isEmpty())
 
         // Negative SQLite LIMIT means "unbounded": public search must reject it.
         assertTrue(index.search("Fixture Stop", -1).isEmpty())
