@@ -282,6 +282,7 @@ fun ArrivalAlarmApp(
     // Do not report an import as successful merely because a worker returned success:
     // it may have skipped a removed pack or received an unchanged HTTP response.
     var manualRefreshWorkState by remember { mutableStateOf<WorkInfo.State?>(null) }
+    val offlineRefreshCompletionGate = remember { OfflineRefreshCompletionGate() }
     DisposableEffect(activeScreen, context) {
         if (activeScreen != ArrivalAppScreen.SETTINGS) {
             onDispose {}
@@ -289,8 +290,15 @@ fun ArrivalAlarmApp(
             val liveData = WorkManager.getInstance(context)
                 .getWorkInfosForUniqueWorkLiveData(NationwideFeedRefreshScheduler.MANUAL_WORK_NAME)
             val observer = Observer<List<WorkInfo>> { infos ->
-                manualRefreshWorkState = infos.firstOrNull { !it.state.isFinished }?.state
-                    ?: infos.lastOrNull()?.state
+                val observedWork = infos.firstOrNull { !it.state.isFinished }
+                    ?: infos.lastOrNull()
+                manualRefreshWorkState = observedWork?.state
+                if (offlineRefreshCompletionGate.shouldReload(observedWork?.id, observedWork?.state)) {
+                    // The refresh worker updates SQLite, not this Compose snapshot.
+                    // Re-read only after a new successful work ID, including the no-pack
+                    // case (Idle); never infer that success means new feed contents.
+                    dataState = transit.currentState()
+                }
             }
             liveData.observeForever(observer)
             onDispose { liveData.removeObserver(observer) }
