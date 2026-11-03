@@ -274,6 +274,7 @@
     <string name="active_tracking_channel_name">Aktive Ankunftsverfolgung</string>
     <string name="arrival_alerts_channel_name">Ankunftswarnungen</string>
     <string name="active_tracking_title">Ankunftsalarm aktiv</string>
+    <string name="active_tracking_named_title">Ankunftsalarm: %1$s</string>
     <string name="active_tracking_degraded">Standort ungenau; Alarm aktiv, neues GPS-Signal abwarten</string>
     <string name="active_tracking_in_progress">Standort wird verfolgt</string>
     <string name="active_tracking_distance">Noch etwa %1$d m bis zum Ziel</string>

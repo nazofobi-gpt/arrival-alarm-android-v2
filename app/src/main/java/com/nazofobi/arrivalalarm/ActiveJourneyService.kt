@@ -388,9 +388,25 @@ class ActiveJourneyService : Service(), LocationListener {
             distanceMeters == null -> getString(R.string.active_tracking_in_progress)
             else -> getString(R.string.active_tracking_distance, distanceMeters.roundToInt())
         }
-        return notificationBuilder(TRACKING_CHANNEL_ID)
+        // A persisted label is display-only and bound to the exact armed coordinates.
+        // Keep the public lock-screen view generic: stops may reveal private places.
+        val destinationName = ArrivalTargetLabelStore(this)
+            .labelFor(graph.controller.state.destination)
+        val publicNotification = notificationBuilder(TRACKING_CHANNEL_ID)
             .setContentTitle(getString(R.string.active_tracking_title))
+            .setContentText(getString(R.string.active_tracking_in_progress))
+            .setSmallIcon(android.R.drawable.ic_dialog_map)
+            .setOngoing(true)
+            .setCategory(Notification.CATEGORY_SERVICE)
+            .build()
+        val title = destinationName?.let {
+            getString(R.string.active_tracking_named_title, it)
+        } ?: getString(R.string.active_tracking_title)
+        return notificationBuilder(TRACKING_CHANNEL_ID)
+            .setContentTitle(title)
             .setContentText(text)
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setPublicVersion(publicNotification)
             .setSmallIcon(android.R.drawable.ic_dialog_map)
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)

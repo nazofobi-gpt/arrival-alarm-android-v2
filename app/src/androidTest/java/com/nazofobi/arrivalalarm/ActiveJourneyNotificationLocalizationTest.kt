@@ -26,6 +26,12 @@ class ActiveJourneyNotificationLocalizationTest {
         assertEquals("Varış alarmı etkin", tr.getString(R.string.active_tracking_title))
         assertEquals("Ankunftsalarm aktiv", de.getString(R.string.active_tracking_title))
         assertEquals("Arrival alarm active", en.getString(R.string.active_tracking_title))
+        assertEquals("Varış alarmı: Hauptbahnhof",
+            tr.getString(R.string.active_tracking_named_title, "Hauptbahnhof"))
+        assertEquals("Ankunftsalarm: Hauptbahnhof",
+            de.getString(R.string.active_tracking_named_title, "Hauptbahnhof"))
+        assertEquals("Arrival alarm: Hauptbahnhof",
+            en.getString(R.string.active_tracking_named_title, "Hauptbahnhof"))
 
         assertEquals("Hedefe yaklaşık 250 m kaldı", tr.getString(R.string.active_tracking_distance, 250))
         assertEquals("Noch etwa 250 m bis zum Ziel", de.getString(R.string.active_tracking_distance, 250))
