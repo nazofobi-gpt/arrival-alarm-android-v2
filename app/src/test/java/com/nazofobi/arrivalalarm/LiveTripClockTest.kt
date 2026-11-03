@@ -2,6 +2,8 @@ package com.nazofobi.arrivalalarm
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LiveTripClockTest {
@@ -88,6 +90,21 @@ class LiveTripClockTest {
         }
         assertNull(scheduledBoardingMinutesRemaining("2026-10-25T02:30:00+01:00", 0L))
         assertNull(scheduledBoardingMinutesRemaining("2026-10-25T02:30:00+01:00", Long.MAX_VALUE))
+    }
+
+    @Test fun walkingWindowRiskUsesOnlyValidScheduledClocks() {
+        val departure = "2026-09-26T08:00:00+02:00"
+        val tenMinutesPrior = "2026-09-26T07:50:00+02:00".toTransitEpochSecondsOrNull()!!
+        val fiveMinutesPrior = "2026-09-26T07:55:00+02:00".toTransitEpochSecondsOrNull()!!
+        val departed = "2026-09-26T08:01:00+02:00".toTransitEpochSecondsOrNull()!!
+        assertFalse(plannedWalkingExceedsBoardingWindow(departure, 301, tenMinutesPrior))
+        assertTrue(plannedWalkingExceedsBoardingWindow(departure, 301, fiveMinutesPrior))
+        assertFalse(plannedWalkingExceedsBoardingWindow(departure, 300, fiveMinutesPrior))
+        assertFalse(plannedWalkingExceedsBoardingWindow(departure, 301, departed))
+        assertFalse(plannedWalkingExceedsBoardingWindow(null, 301, fiveMinutesPrior))
+        assertFalse(plannedWalkingExceedsBoardingWindow("invalid", 301, fiveMinutesPrior))
+        assertFalse(plannedWalkingExceedsBoardingWindow(departure, 0, fiveMinutesPrior))
+        assertFalse(plannedWalkingExceedsBoardingWindow(departure, 301, 0))
     }
 
 }
