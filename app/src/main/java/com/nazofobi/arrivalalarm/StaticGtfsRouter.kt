@@ -34,8 +34,13 @@ data class StaticTransitJourney(
     val egress: StaticRouterAccess,
     val legs: List<StaticTransitLeg>,
     val arrivalEpochMillis: Long,
+    /** Estimated walking between distinct transfer stops; same-stop wait time is excluded. */
+    val transferWalkingSeconds: Long = 0L,
 ) {
+    init { require(transferWalkingSeconds >= 0L) }
     val transferCount: Int get() = (legs.size - 1).coerceAtLeast(0)
+    val totalWalkingSeconds: Long get() =
+        access.walkSeconds.toLong() + egress.walkSeconds.toLong() + transferWalkingSeconds
 }
 
 sealed interface StaticRouterResult {
@@ -216,6 +221,8 @@ class StaticGtfsRouter(
                     serviceDate = serviceDate,
                     destinationByStop = destinationByStop,
                     priorLegs = emptyList(),
+                    transferWalkingSeconds = 0L,
+                    maxWalkingSeconds = maxWalkingSeconds,
                     remainingTransfers = maxAllowedTransfers ?: maxTransfers,
                     minTransferSeconds = minTransferSeconds ?: 0,
                     visitedTripIds = emptySet(),
@@ -232,12 +239,12 @@ class StaticGtfsRouter(
         val deduped = found
             .filter { journey ->
                 maxWalkingSeconds == null ||
-                    journey.access.walkSeconds.toLong() + journey.egress.walkSeconds.toLong() <=
-                    maxWalkingSeconds.toLong()
+                    journey.totalWalkingSeconds <= maxWalkingSeconds.toLong()
             }
             .sortedWith(
                 compareBy<StaticTransitJourney> { it.arrivalEpochMillis }
                     .thenBy { it.transferCount }
+                    .thenBy { it.totalWalkingSeconds }
                     .thenBy { it.id },
             )
             .distinctBy { it.id }
@@ -251,6 +258,7 @@ class StaticGtfsRouter(
         val stopSequence: Int,
         val shiftSeconds: Int,
         val remainingTransfers: Int,
+        val transferWalkingSeconds: Long,
     )
 
     private class SearchBudget(
@@ -284,12 +292,17 @@ class StaticGtfsRouter(
         serviceDate: GtfsServiceDate,
         destinationByStop: Map<String, StaticRouterAccess>,
         priorLegs: List<StaticTransitLeg>,
+        transferWalkingSeconds: Long,
+        maxWalkingSeconds: Int?,
         remainingTransfers: Int,
         minTransferSeconds: Int,
         visitedTripIds: Set<String>,
         bestBoardByState: MutableMap<SearchStateKey, Long>,
         budget: SearchBudget,
     ): List<StaticTransitJourney> {
+        if (maxWalkingSeconds != null &&
+            access.walkSeconds.toLong() + transferWalkingSeconds > maxWalkingSeconds.toLong()
+        ) return emptyList()
         if (!budget.claimState()) return emptyList()
         val candidate = instance.candidate
         if (candidate.trip.id in visitedTripIds) return emptyList()
@@ -334,7 +347,7 @@ class StaticGtfsRouter(
 
             if (allowsScheduledDropOff(alight)) {
                 destinationByStop[alight.stopId]?.let { egress ->
-                    journeys += journey(access, egress, legs)
+                    journeys += journey(access, egress, legs, transferWalkingSeconds)
                 }
             }
 
@@ -346,7 +359,9 @@ class StaticGtfsRouter(
                 destinationByStop = destinationByStop,
             ).forEach { continuation ->
                 if (continuation.first.tripId !in visited) {
-                    journeys += journey(access, continuation.second, legs + continuation.first)
+                    journeys += journey(
+                        access, continuation.second, legs + continuation.first, transferWalkingSeconds,
+                    )
                 }
             }
 
@@ -354,6 +369,13 @@ class StaticGtfsRouter(
             val rules = transferRulesFor(alight.stopId)
             val targets = transferTargets(alight.stopId, rules)
             for (target in targets) {
+                // A transfer between different stops consumes walking time. A
+                // same-stop safety buffer is dwell time, not walking.
+                val nextTransferWalkingSeconds = transferWalkingSeconds +
+                    if (target.stopId == alight.stopId) 0L else target.walkSeconds.toLong()
+                if (maxWalkingSeconds != null &&
+                    access.walkSeconds.toLong() + nextTransferWalkingSeconds > maxWalkingSeconds.toLong()
+                ) continue
                 val earliestTransferReady = arrival + max(target.walkSeconds, minTransferSeconds) * 1_000L
                 val earliestTransferSeconds =
                     serviceSeconds(earliestTransferReady, serviceDate) ?: continue
@@ -393,6 +415,7 @@ class StaticGtfsRouter(
                         stopSequence = next.stopSequence,
                         shiftSeconds = nextInstance.shiftSeconds,
                         remainingTransfers = remainingTransfers - 1,
+                        transferWalkingSeconds = nextTransferWalkingSeconds,
                     )
                     val bestKnown = bestBoardByState[state]
                     if (bestKnown != null && bestKnown <= transferReady) continue
@@ -406,6 +429,8 @@ class StaticGtfsRouter(
                         serviceDate = serviceDate,
                         destinationByStop = destinationByStop,
                         priorLegs = legs,
+                        transferWalkingSeconds = nextTransferWalkingSeconds,
+                        maxWalkingSeconds = maxWalkingSeconds,
                         remainingTransfers = remainingTransfers - 1,
                         minTransferSeconds = minTransferSeconds,
                         visitedTripIds = visited,
@@ -820,6 +845,7 @@ class StaticGtfsRouter(
         access: StaticRouterAccess,
         egress: StaticRouterAccess,
         legs: List<StaticTransitLeg>,
+        transferWalkingSeconds: Long,
     ): StaticTransitJourney {
         val arrival = legs.last().arrivalEpochMillis + egress.walkSeconds * 1_000L
         val id = buildString {
@@ -830,7 +856,7 @@ class StaticGtfsRouter(
             }
             append(egress.stopId)
         }
-        return StaticTransitJourney(id, access, egress, legs, arrival)
+        return StaticTransitJourney(id, access, egress, legs, arrival, transferWalkingSeconds)
     }
 
     private fun serviceSeconds(epochMillis: Long, serviceDate: GtfsServiceDate): Int? {

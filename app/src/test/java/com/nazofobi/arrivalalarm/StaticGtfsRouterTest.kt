@@ -253,6 +253,43 @@ class StaticGtfsRouterTest {
             is StaticRouterResult.NoPath)
     }
 
+    @Test fun walkingBudgetIncludesWalkBetweenTransferStopsBeforeCandidateCap() {
+        val x = stop("X", lat = 52.0, lon = 8.0)
+        val y = stop("Y", lat = 52.001, lon = 8.0)
+        val data = baseTransferData(targetStop = "Y", secondDeparture = "10:10:00").copy(
+            stops = mapOf("X" to x, "Y" to y),
+            nearby = listOf(GtfsScheduleNearbyStop(y, 100)),
+        )
+        val router = StaticGtfsRouter(
+            data, zone, implicitTransferSeconds = 60,
+            maxImplicitTransferRadiusMeters = 300, implicitWalkingMetersPerSecond = 1.0,
+        )
+        val origin = listOf(StaticRouterAccess("A", 720))
+        val destination = listOf(StaticRouterAccess("B", 180))
+        val unrestricted = router.route(origin, destination, date, at("09:45:00"))
+        val journey = (unrestricted as StaticRouterResult.Journeys).journeys.single()
+        assertEquals(listOf("T1", "T2"), journey.legs.map { it.tripId })
+        assertEquals(100L, journey.transferWalkingSeconds)
+        assertEquals(1_000L, journey.totalWalkingSeconds)
+        assertTrue(router.route(
+            origin, destination, date, at("09:45:00"), maxWalkingSeconds = 900,
+        ) is StaticRouterResult.NoPath)
+        val atBoundary = router.route(
+            origin, destination, date, at("09:45:00"), maxWalkingSeconds = 1_000,
+        ) as StaticRouterResult.Journeys
+        assertEquals(1_000L, atBoundary.journeys.single().totalWalkingSeconds)
+    }
+
+    @Test fun sameStopTransferWaitIsNotMisclassifiedAsWalking() {
+        val result = StaticGtfsRouter(baseTransferData(), zone, implicitTransferSeconds = 120)
+            .route(
+                listOf(StaticRouterAccess("A")), listOf(StaticRouterAccess("B")),
+                date, at("09:55:00"), maxWalkingSeconds = 0,
+            ) as StaticRouterResult.Journeys
+        assertEquals(0L, result.journeys.single().transferWalkingSeconds)
+        assertEquals(0L, result.journeys.single().totalWalkingSeconds)
+    }
+
     @Test fun implicitSameStopTransferWorksWithoutTransfersFile() {
         val data = baseTransferData()
         val result = StaticGtfsRouter(data, zone, implicitTransferSeconds = 120).route(

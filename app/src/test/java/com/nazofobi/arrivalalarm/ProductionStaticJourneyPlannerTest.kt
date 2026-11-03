@@ -51,6 +51,27 @@ class ProductionStaticJourneyPlannerTest {
         assertNull(withoutWalk.egressWalking)
     }
 
+    @Test
+    fun walkingTotalIncludesTransfersButKeepsAccessAndEgressBreakdown() {
+        val data = FakeRouteOptionData(
+            routes = emptyMap(), trips = emptyMap(), stops = emptyMap(), stopTimes = emptyMap(),
+        )
+        val route = StaticTransitJourney(
+            id = "transfer-walk",
+            access = StaticRouterAccess("A", 60),
+            egress = StaticRouterAccess("B", 120),
+            legs = emptyList(),
+            arrivalEpochMillis = at("08:00:00"),
+            transferWalkingSeconds = 125L,
+        )
+        val option = StaticRouteOptionMapper(data, zone).map(
+            route, MapPoint(0.0, 0.0, "Start"), MapPoint(0.0, 0.0, "Ziel"), date, 1L,
+        )
+        assertEquals(6, option.walkingMinutes)
+        assertEquals(60, option.accessWalking?.walkSeconds)
+        assertEquals(120, option.egressWalking?.walkSeconds)
+    }
+
     private val zone = TimeZone.getTimeZone("Europe/Berlin")
     private val date = GtfsServiceDate(2026, 10, 4)
 
