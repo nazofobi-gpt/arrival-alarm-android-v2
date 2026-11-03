@@ -4,4 +4,7 @@
     <string name="offline_pack_size_unknown">size unknown</string>
     <string name="offline_pack_version_unknown">version unknown</string>
     <string name="offline_pack_updated_unknown">update time unknown</string>
+    <string name="offline_pack_refresh_wifi">Refresh installed transit data over Wi-Fi</string>
+    <string name="offline_pack_refresh_wifi_note">Refresh may wait for unmetered Wi-Fi and sufficient battery/storage; a large download may be needed.</string>
+    <string name="offline_pack_refresh_overdue">Last check was at least 7 days ago; schedules may have changed.</string>
 </resources>
