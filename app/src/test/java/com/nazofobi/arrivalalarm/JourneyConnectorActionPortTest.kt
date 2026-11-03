@@ -460,4 +460,69 @@ class JourneyConnectorActionPortTest {
         assertEquals(54.0, external.destination?.latitude ?: -1.0, 0.0001)
     }
 
+
+    @Test fun deviceSideTargetEditInvalidatesStaleTripAndBumpsVersion() {
+        val route = RouteOption(
+            id = "route-re9",
+            origin = MapPoint(52.66, 8.23, "Lohne"),
+            destination = MapPoint(53.08, 8.81, "Bremen Hbf"),
+            line = "RE 9",
+            direction = "Bremen",
+            departure = "08:00",
+            arrival = "09:00",
+            walkingMinutes = 0,
+            transfers = 0,
+        )
+        val controller = JourneyController()
+        val port = JourneyConnectorActionPort(
+            controller = controller,
+            routeResolver = { id -> route.takeIf { it.id == id } },
+            nowEpochSeconds = { 90_000L },
+        )
+        assertTrue(port.setOrigin(route.origin).applied)
+        assertTrue(port.setDestination(route.destination).applied)
+        assertTrue(port.selectJourney(route.id).applied)
+        val before = port.readSnapshot()
+        assertEquals("RE 9", before.activeTrip?.line)
+
+        // The user changes destination through the real local controller, not
+        // a connector command. Its old route must disappear from remote reads.
+        controller.selectDestination(GeoPoint(54.0, 10.0))
+        val changed = port.readSnapshot()
+        assertEquals(null, changed.activeTrip)
+        assertEquals("Varış", changed.destination?.name)
+        assertEquals(54.0, changed.destination?.latitude ?: -1.0, 0.0001)
+        assertTrue(changed.stateVersion > before.stateVersion)
+
+        // Returning to the previous coordinates does not revive an old label
+        // or silently select the previous transit journey.
+        controller.selectDestination(GeoPoint(53.08, 8.81))
+        val returned = port.readSnapshot()
+        assertEquals(null, returned.activeTrip)
+        assertEquals("Varış", returned.destination?.name)
+        assertTrue(returned.stateVersion > changed.stateVersion)
+        assertTrue(port.selectJourney(route.id).applied)
+        assertEquals("RE 9", port.readSnapshot().activeTrip?.line)
+    }
+
+    @Test fun selectingTripWithoutGpsPointsDoesNotDiscardThatSelection() {
+        val route = RouteOption(
+            id = "route-standalone",
+            origin = MapPoint(52.66, 8.23, "Lohne"),
+            destination = MapPoint(53.08, 8.81, "Bremen Hbf"),
+            line = "RE 9",
+            direction = "Bremen",
+            departure = "08:00",
+            arrival = "09:00",
+            walkingMinutes = 0,
+            transfers = 0,
+        )
+        val port = JourneyConnectorActionPort(
+            controller = JourneyController(),
+            routeResolver = { id -> route.takeIf { it.id == id } },
+        )
+        assertTrue(port.selectJourney(route.id).applied)
+        assertEquals(route.id, port.readSnapshot().activeTrip?.routeId)
+    }
+
 }
