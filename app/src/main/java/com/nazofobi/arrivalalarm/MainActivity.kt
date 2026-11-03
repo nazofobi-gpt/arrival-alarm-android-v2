@@ -201,6 +201,7 @@ fun ArrivalAlarmApp(
     var searchResults by remember { mutableStateOf(emptyList<TransitLocationResult>()) }
     var searchSource by remember { mutableStateOf<String?>(null) }
     var searchMessage by remember { mutableStateOf<String?>(null) }
+    var searchFeedbackKind by remember { mutableStateOf(SearchFeedbackKind.ERROR) }
     var searchRequestId by remember { mutableStateOf(0L) }
     var searchHealth by remember(dataState) { mutableStateOf(TransitFunctionHealth.UNVERIFIED) }
     var selectingOrigin by remember { mutableStateOf(controller.state.start == null) }
@@ -587,6 +588,7 @@ fun ArrivalAlarmApp(
                 searchHealth = TransitFunctionHealth.UNVERIFIED
                 searchResults = emptyList()
                 searchSource = null
+                searchFeedbackKind = SearchFeedbackKind.ERROR
                 searchMessage = context.getString(R.string.search_query_too_long)
             }
             return
@@ -617,18 +619,21 @@ fun ArrivalAlarmApp(
                     searchHealth = TransitFunctionHealth.DEGRADED
                     searchResults = resolution.values
                     searchSource = resolution.sourceLabel
+                    searchFeedbackKind = SearchFeedbackKind.STALE_DATA
                     searchMessage = context.getString(R.string.lookup_stale_results)
                 }
                 is NationwideLookupResolution.NoResult -> {
                     searchHealth = TransitFunctionHealth.UNVERIFIED
                     searchResults = emptyList()
                     searchSource = resolution.sourceLabel
+                    searchFeedbackKind = SearchFeedbackKind.NO_RESULTS
                     searchMessage = context.getString(R.string.no_stop_found)
                 }
                 is NationwideLookupResolution.ProviderUnavailable -> {
                     searchHealth = TransitFunctionHealth.FAILED
                     searchResults = emptyList()
                     searchSource = resolution.sourceLabel
+                    searchFeedbackKind = SearchFeedbackKind.ERROR
                     searchMessage = context.getString(R.string.lookup_provider_unavailable)
                 }
             }
@@ -896,6 +901,7 @@ fun ArrivalAlarmApp(
         if (!isSupportedSearchQuery(q)) {
             searchQueryRequestGate.reset()
             if (q.length > MAX_SEARCH_QUERY_LENGTH) {
+                searchFeedbackKind = SearchFeedbackKind.ERROR
                 searchMessage = context.getString(R.string.search_query_too_long)
             }
             return@LaunchedEffect
@@ -1363,6 +1369,7 @@ fun ArrivalAlarmApp(
                         searchResults = searchResults,
                         searchSource = searchSource,
                         searchMessage = searchMessage,
+                        searchFeedbackKind = searchFeedbackKind,
                         locationMessage = locationMessage,
                         origin = origin,
                         destination = destination,
