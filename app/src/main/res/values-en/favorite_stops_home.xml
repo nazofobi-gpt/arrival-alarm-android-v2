@@ -1,0 +1,7 @@
+<resources>
+    <string name="home_favorite_stops_title">Favorite stops</string>
+    <string name="home_favorite_stops_empty">No favorite stops yet. Add a stop from Search.</string>
+    <string name="home_favorite_stops_search">Find a stop</string>
+    <string name="home_favorite_stops_unavailable">Saved stops are not available in the current transit data. Refresh data or search again.</string>
+    <string name="home_favorite_stops_departures">Open departures for %1$s</string>
+</resources>

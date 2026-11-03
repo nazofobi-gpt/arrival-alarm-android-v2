@@ -1,0 +1,7 @@
+<resources>
+    <string name="home_favorite_stops_title">Favorisierte Haltestellen</string>
+    <string name="home_favorite_stops_empty">Noch keine Favoriten. Füge eine Haltestelle über die Suche hinzu.</string>
+    <string name="home_favorite_stops_search">Haltestelle suchen</string>
+    <string name="home_favorite_stops_unavailable">Gespeicherte Haltestellen fehlen in den aktuellen Verkehrsdaten. Aktualisiere die Daten oder suche erneut.</string>
+    <string name="home_favorite_stops_departures">Abfahrten: %1$s</string>
+</resources>
