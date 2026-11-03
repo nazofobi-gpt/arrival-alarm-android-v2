@@ -95,6 +95,12 @@ class JourneyConnectorActionPort(
 
     @Synchronized
     override fun selectJourney(routeId: String): ConnectorActionOutcome {
+        // An active GPS alarm remains bound to its original trip until explicit cancellation.
+        if (controller.state.phase == JourneyPhase.ARMED ||
+            controller.state.phase == JourneyPhase.ARRIVED
+        ) {
+            return ConnectorActionOutcome(false, "Aktif alarmı önce iptal edin")
+        }
         val route = routeResolver(routeId)
             ?: return ConnectorActionOutcome(false, "Rota artık mevcut değil; güncel rota seçilmeli")
         val currentOrigin = origin ?: route.origin.toConnectorStop()
