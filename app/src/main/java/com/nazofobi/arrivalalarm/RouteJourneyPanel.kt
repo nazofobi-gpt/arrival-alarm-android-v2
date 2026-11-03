@@ -253,6 +253,31 @@ fun RouteJourneyPanel(
                 )
             } else {
                 JourneyDetailCard(selected, routeOffline = routeOffline)
+                // Offer only distinct, source-timed future services for the same
+                // origin, destination, line and direction. Never create a
+                // departure from a display-only clock or a cancelled trip.
+                val alternatives = actionableAlternateDepartures(
+                    selected = selected,
+                    candidates = routeOptions,
+                    nowEpochMillis = System.currentTimeMillis(),
+                )
+                if (alternatives.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.alternate_departures, alternatives.size),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.testTag("journey-alternative-departures"),
+                    )
+                    alternatives.forEachIndexed { index, option ->
+                        RouteOptionCard(
+                            option = option,
+                            selected = false,
+                            routeOffline = routeOffline,
+                            onSelect = { onSelectRoute(option) },
+                            selectTestTag = "journey-alternative-select-$index",
+                            modifier = Modifier.testTag("journey-alternative-$index"),
+                        )
+                    }
+                }
             }
 
             JourneyAlarmControls(
@@ -262,6 +287,41 @@ fun RouteJourneyPanel(
             )
         }
     }
+}
+
+
+/**
+ * Actionable later departures for an already selected route. A formatted clock
+ * is not sufficient proof of an actual departure: absolute scheduled time and
+ * the provider route identity must be present. Reuse the existing route-select
+ * callback so the journey controller still validates every selection.
+ */
+internal fun actionableAlternateDepartures(
+    selected: RouteOption,
+    candidates: List<RouteOption>,
+    nowEpochMillis: Long,
+    limit: Int = 3,
+): List<RouteOption> {
+    val selectedDeparture = selected.departureEpochMillis ?: return emptyList()
+    if (limit !in 1..6) return emptyList()
+    return candidates.asSequence()
+        .filter { candidate ->
+            candidate.id != selected.id &&
+                candidate.line == selected.line &&
+                candidate.direction == selected.direction &&
+                candidate.origin.latitude == selected.origin.latitude &&
+                candidate.origin.longitude == selected.origin.longitude &&
+                candidate.destination.latitude == selected.destination.latitude &&
+                candidate.destination.longitude == selected.destination.longitude &&
+                candidate.realtime?.cancelledTripIds.isNullOrEmpty() &&
+                candidate.departureEpochMillis?.let { departure ->
+                    departure > nowEpochMillis && departure != selectedDeparture
+                } == true
+        }
+        .distinctBy { it.id to it.departureEpochMillis }
+        .sortedBy { it.departureEpochMillis }
+        .take(limit)
+        .toList()
 }
 
 @Composable
