@@ -406,14 +406,31 @@ class ActiveJourneyService : Service(), LocationListener {
     }
 
     private fun postArrivalNotification() {
+        // Named destinations survive process recreation, but the name is never
+        // trusted unless it belongs to the exact currently armed target.
+        val destinationName = ArrivalTargetLabelStore(this)
+            .labelFor(graph.controller.state.destination)
+        val visibleBody = destinationName?.let {
+            getString(R.string.arrival_notification_named_body, it)
+        } ?: getString(R.string.arrival_notification_body)
+        // The public lock-screen version never exposes a potentially private
+        // stop, saved place, home or workplace label.
+        val publicNotification = notificationBuilder(ARRIVAL_CHANNEL_ID)
+            .setContentTitle(getString(R.string.arrival_notification_title))
+            .setContentText(getString(R.string.arrival_notification_body))
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setCategory(Notification.CATEGORY_ALARM)
+            .build()
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(
             ARRIVAL_NOTIFICATION_ID,
             notificationBuilder(ARRIVAL_CHANNEL_ID)
                 .setContentTitle(getString(R.string.arrival_notification_title))
-                .setContentText(getString(R.string.arrival_notification_body))
+                .setContentText(visibleBody)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setAutoCancel(true)
+                .setVisibility(Notification.VISIBILITY_PRIVATE)
+                .setPublicVersion(publicNotification)
                 .setCategory(Notification.CATEGORY_ALARM)
                 .setContentIntent(openAppPendingIntent())
                 .build(),

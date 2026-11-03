@@ -129,6 +129,7 @@ fun ArrivalAlarmApp(
     val uiContext = LocalContext.current
     val context = uiContext.applicationContext
     val graph = remember(context) { ArrivalAlarmRuntimeGraph.get(context) }
+    val arrivalTargetLabelStore = remember(context) { ArrivalTargetLabelStore(context) }
     val controller = graph.controller
     val connectorPort = graph.connectorPort
     val connectorRuntimeCoordinator = graph.connectorRuntimeCoordinator
@@ -214,7 +215,8 @@ fun ArrivalAlarmApp(
     var destination by remember(controller) {
         mutableStateOf(
             controller.state.destination?.let {
-                MapPoint(it.latitude, it.longitude, context.getString(R.string.restored_destination))
+                MapPoint(it.latitude, it.longitude,
+                    arrivalTargetLabelStore.labelFor(it) ?: context.getString(R.string.restored_destination))
             }
         )
     }
@@ -400,6 +402,7 @@ fun ArrivalAlarmApp(
         nearbySource = null
         origin = point
         destination = null
+        arrivalTargetLabelStore.clear()
         destinationStopId = null
         departureBoardStop = null
         routeOptions = emptyList()
@@ -514,6 +517,9 @@ fun ArrivalAlarmApp(
         stationRequestGate.invalidate()
         routeBusy = false
         destination = point
+        // Persist only a user-validated selection, bound to its exact coordinates.
+        // A stale or corrupt name never changes the underlying armed alarm target.
+        arrivalTargetLabelStore.save(point)
         destinationStopId = stopId
         departureBoardStop = null
         routeOffline = false
@@ -733,7 +739,9 @@ fun ArrivalAlarmApp(
                             it.stopId == fresh.selection.alarmTarget.stopId
                     }
                     origin = MapPoint(start.latitude, start.longitude, boardingStop.name)
-                    destination = MapPoint(target.latitude, target.longitude, alarmStop.name)
+                    val confirmedAlarmPoint = MapPoint(target.latitude, target.longitude, alarmStop.name)
+                    destination = confirmedAlarmPoint
+                    arrivalTargetLabelStore.save(confirmedAlarmPoint)
                     destinationStopId = alarmStop.stopId
                     selectedRouteId = null
                     confirmedTripLiveRoute = liveOption

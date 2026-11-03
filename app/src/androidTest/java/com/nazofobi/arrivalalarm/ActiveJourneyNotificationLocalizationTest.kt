@@ -34,6 +34,12 @@ class ActiveJourneyNotificationLocalizationTest {
         assertEquals("Varış noktasına ulaşıldı", tr.getString(R.string.arrival_notification_title))
         assertEquals("Ziel erreicht", de.getString(R.string.arrival_notification_title))
         assertEquals("Destination reached", en.getString(R.string.arrival_notification_title))
+        assertEquals("Hedef: Hauptbahnhof. Varış alarmı tamamlandı.",
+            tr.getString(R.string.arrival_notification_named_body, "Hauptbahnhof"))
+        assertEquals("Ziel: Hauptbahnhof. Ankunftsalarm abgeschlossen.",
+            de.getString(R.string.arrival_notification_named_body, "Hauptbahnhof"))
+        assertEquals("Destination: Hauptbahnhof. Arrival alarm completed.",
+            en.getString(R.string.arrival_notification_named_body, "Hauptbahnhof"))
 
         assertEquals("Varış alarmını iptal et", tr.getString(R.string.cancel_alarm))
         assertEquals("Ankunftsalarm deaktivieren", de.getString(R.string.cancel_alarm))
