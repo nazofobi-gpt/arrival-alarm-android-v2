@@ -47,6 +47,16 @@ class NationwideTransitSearchInstrumentedTest {
         )
         assertEquals(listOf("known-good"), index.search("Known Good Bahnhof", 5).map { it.id })
         assertEquals(listOf("known-good"), index.search("known good bahn", 5).map { it.id })
+        // End-to-end offline SQLite FTS: an exact miss may recover one typo,
+        // but never show a fabricated match for a second wrong token.
+        assertEquals(listOf("known-good"), index.search("Knowm Good Bahnhof", 5).map { it.id })
+        assertEquals(listOf("known-good"), index.search("Known Gooo Bahnhof", 5).map { it.id })
+        // A typo in the very first character misses the primary FTS anchor.
+        // The secondary indexed word must recover one typo, but not two.
+        assertEquals(listOf("known-good"), index.search("Xnown Good Bahnhof", 5).map { it.id })
+        assertTrue(index.search("Xnown Gooo Bahnhof", 5).isEmpty())
+        assertTrue(index.search("Knowm Gooo Bahnhof", 5).isEmpty())
+        assertTrue(index.search("Knowm Good Bahnhof", 0).isEmpty())
 
         // Negative SQLite LIMIT means "unbounded": public search must reject it.
         assertTrue(index.search("Fixture Stop", -1).isEmpty())
@@ -83,6 +93,71 @@ class NationwideTransitSearchInstrumentedTest {
 
         index.close()
         assertTrue(feed.delete())
+    }
+
+    @Test fun placeQualifiedHbfAliasesSearchRealOfflineStopsWithoutChangingLiteralResults() {
+        context.deleteDatabase("nationwide_transit.db")
+        val feed = File(context.cacheDir, "g237-hbf-alias.zip")
+        writeFeed(
+            feed,
+            extraStops = """
+                alias-full,Teststadt Hauptbahnhof,52.2,8.1
+                alias-short,Literalstadt Hbf,52.3,8.2
+            """.trimIndent() + "\n",
+        )
+        val index = NationwideTransitIndex(context)
+        try {
+            index.importFeed(feed.toURI().toURL().toString()) { }
+            // Both aliases use a bounded indexed FTS query after a literal miss.
+            assertEquals(listOf("alias-full"), index.search("Teststadt Hbf", 5).map { it.id })
+            assertEquals(listOf("alias-short"), index.search("Literalstadt Hauptbahnhof", 5).map { it.id })
+            // A literal query must retain exact precedence and existing order.
+            assertEquals(listOf("alias-short"), index.search("Literalstadt Hbf", 5).map { it.id })
+            // No invented stop, unbounded output or automatic selection.
+            assertTrue(index.search("Nowhere Hbf", 5).isEmpty())
+            assertTrue(index.search("Teststadt Hbf", 0).isEmpty())
+            assertTrue(index.search("Teststadt Hbf", -1).isEmpty())
+        } finally {
+            index.close()
+            feed.delete()
+        }
+    }
+
+    @Test fun firstTokenTypoRecoversSpecificStopBeyondGenericStationCandidateCap() {
+        context.deleteDatabase("nationwide_transit.db")
+        val feed = File(context.cacheDir, "g237-specific-suffix.zip")
+        writeFeed(feed, extraStops = buildString {
+            // 500 generic Bahnhof entries appear before the real target in FTS.
+            // Searching only "bahnhof*" hits LIMIT 400 without reaching it.
+            for (i in 0 until 500) appendLine("decoy-$i,FixtureCity$i Bahnhof,52.2,8.2")
+            appendLine("rare-target,Trueplace Good Bahnhof,52.4,8.4")
+        })
+        val index = NationwideTransitIndex(context)
+        try {
+            index.importFeed(feed.toURI().toURL().toString()) { }
+            assertEquals(
+                502,
+                scalarInt(
+                    index.readableDatabase,
+                    "SELECT COUNT(*) FROM stop_search WHERE stop_search MATCH ?",
+                    arrayOf("bahnhof*"),
+                ),
+            )
+            assertEquals(
+                listOf("rare-target"),
+                index.search("Xrueplace Good Bahnhof", 5).map { it.id },
+            )
+            // Existing literal precedence, two-typo rejection and output caps.
+            assertEquals(
+                listOf("rare-target"),
+                index.search("Trueplace Good Bahnhof", 5).map { it.id },
+            )
+            assertTrue(index.search("Xrueplace Gooo Bahnhof", 5).isEmpty())
+            assertTrue(index.search("Xrueplace Good Bahnhof", 0).isEmpty())
+        } finally {
+            index.close()
+            feed.delete()
+        }
     }
 
     @Test fun invalidStopCoordinatesNeverEnterTheSearchIndex() {

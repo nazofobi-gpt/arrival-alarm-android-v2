@@ -247,9 +247,63 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             .split(Regex("[^\\p{L}\\p{N}]+"))
             .filter { it.isNotBlank() }
         if (tokens.isEmpty()) return emptyList()
-        val match = tokens.joinToString(" ") { "$it*" }
+
+        // Preserve exact FTS prefix matching and its existing result order.
+        val direct = searchFts(tokens.joinToString(" ") { "$it*" }, boundedLimit)
+        if (direct.isNotEmpty()) return direct
+
+        // Common German station names may use "Hbf" or "Hauptbahnhof" in the
+        // official GTFS feed. Only after a literal miss, use one indexed alias
+        // query with another specific place token. Never select a stop for the
+        // user, scan the entire index, or broaden a single-word "Hbf" search.
+        val aliasPosition = tokens.indexOfFirst { it == "hbf" || it == "hauptbahnhof" }
+        if (
+            tokens.size in 2..4 &&
+            aliasPosition >= 0 &&
+            tokens.count { it == "hbf" || it == "hauptbahnhof" } == 1 &&
+            tokens.indices.any { it != aliasPosition && tokens[it].length >= 4 }
+        ) {
+            val alternateTokens = tokens.toMutableList()
+            alternateTokens[aliasPosition] =
+                if (tokens[aliasPosition] == "hbf") "hauptbahnhof" else "hbf"
+            val aliasResults = searchFts(
+                alternateTokens.joinToString(" ") { "$it*" },
+                boundedLimit,
+            )
+            if (aliasResults.isNotEmpty()) return aliasResults
+        }
+
+        // Only an empty literal lookup may try a single-typo fallback.
+        // The three-character anchor keeps the SQLite query indexed; its 400-row
+        // hard cap prevents a nationwide scan for a vague or malformed query.
+        val normalized = OfflineStopTypoMatcher.tokens(query)
+        if (!OfflineStopTypoMatcher.eligible(normalized)) return emptyList()
+        val anchored = searchFts(normalized.first().take(3) + "*", 400)
+        val firstPass = anchored.asSequence()
+            .filter { OfflineStopTypoMatcher.matchesOneTypo(normalized, it.name) }
+            .take(boundedLimit)
+            .toList()
+        if (firstPass.isNotEmpty()) return firstPass
+
+        // When the FIRST token begins with a typo, anchor all unchanged
+        // suffix tokens together. A single generic "Bahnhof*" term can
+        // exceed the 400-candidate cap before the correct stop is reached.
+        // Keep the indexed query, long ASCII anchor requirement, and strict
+        // one-typo verification; do not expand the nationwide scan budget.
+        val suffixTokens = tokens.drop(1)
+        if (suffixTokens.none { token ->
+                token.length >= 5 && token.all { it in 'a'..'z' || it in '0'..'9' }
+            }) return emptyList()
+        val secondaryAnchor = suffixTokens.joinToString(" ") { "$it*" }
+        return searchFts(secondaryAnchor, 400).asSequence()
+            .filter { OfflineStopTypoMatcher.matchesOneTypo(normalized, it.name) }
+            .take(boundedLimit)
+            .toList()
+    }
+
+    private fun searchFts(match: String, limit: Int): List<CatalogStop> {
         val sql = "SELECT s.id,s.name,s.lat,s.lon FROM stop_search f JOIN stops s ON s.id=f.stop_id WHERE stop_search MATCH ? LIMIT ?"
-        return readableDatabase.rawQuery(sql, arrayOf(match, boundedLimit.toString())).use { c ->
+        return readableDatabase.rawQuery(sql, arrayOf(match, limit.toString())).use { c ->
             buildList {
                 while (c.moveToNext()) add(CatalogStop(c.getString(0), PROVIDER_ID, c.getString(1), c.getDouble(2), c.getDouble(3)))
             }
