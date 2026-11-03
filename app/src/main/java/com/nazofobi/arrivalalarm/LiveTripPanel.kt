@@ -156,6 +156,24 @@ fun LiveTripPanel(
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
                             modifier = Modifier.testTag("live-trip-access-walk"),
                         )
+                        // Compare only the selected stop's *planned* access walk and
+                        // scheduled boarding window; this is not a live GPS reachability claim.
+                        if (plannedWalkingExceedsBoardingWindow(
+                                firstStop?.plannedDeparture,
+                                leg.walkSeconds.toLong(),
+                                nowEpochSeconds,
+                            )
+                        ) {
+                            Text(
+                                text = stringResource(
+                                    R.string.live_trip_boarding_walk_window_warning,
+                                    walkMinutes,
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.testTag("live-trip-boarding-walk-risk"),
+                            )
+                        }
                     }
                 }
             }
@@ -406,6 +424,24 @@ internal fun scheduledBoardingMinutesRemaining(
     val seconds = departure - nowEpochSeconds
     if (seconds <= 0L || seconds > 86_400L) return null
     return (seconds + 59L) / 60L
+}
+
+/**
+ * Compare the scheduled boarding window with an already validated, stop-matched
+ * planned walking leg. A warning is not a live distance or a guaranteed miss.
+ * Missing/malformed/past provider clocks and unknown device time fail closed.
+ */
+internal fun plannedWalkingExceedsBoardingWindow(
+    plannedDeparture: String?,
+    walkSeconds: Long,
+    nowEpochSeconds: Long,
+): Boolean {
+    if (walkSeconds <= 0L || nowEpochSeconds !in 946_684_800L..253_402_300_799L) {
+        return false
+    }
+    val departure = plannedDeparture.toTransitEpochSecondsOrNull() ?: return false
+    val secondsRemaining = departure - nowEpochSeconds
+    return secondsRemaining in 1L..86_400L && walkSeconds > secondsRemaining
 }
 
 /** Strict absolute-time countdown; no GPS vehicle-position inference. */
