@@ -23,7 +23,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -31,6 +33,13 @@ import androidx.compose.ui.unit.dp
 enum class HomeSearchMode {
     HOME,
     SEARCH,
+}
+
+/** Distinguishes valid empty search from stale data and an actual lookup failure. */
+enum class SearchFeedbackKind {
+    NO_RESULTS,
+    STALE_DATA,
+    ERROR,
 }
 
 @Composable
@@ -41,6 +50,7 @@ fun HomeSearchPanel(
     searchResults: List<TransitLocationResult>,
     searchSource: String?,
     searchMessage: String?,
+    searchFeedbackKind: SearchFeedbackKind = SearchFeedbackKind.ERROR,
     locationMessage: String?,
     origin: MapPoint?,
     destination: MapPoint?,
@@ -437,13 +447,28 @@ fun HomeSearchPanel(
                             modifier = Modifier.testTag("search-source"),
                         )
                     }
-                    searchMessage?.let {
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.testTag("search-message"),
-                        )
+                    searchMessage?.let { message ->
+                        val feedbackColor = when (searchFeedbackKind) {
+                            SearchFeedbackKind.NO_RESULTS -> MaterialTheme.colorScheme.onSurfaceVariant
+                            SearchFeedbackKind.STALE_DATA -> MaterialTheme.colorScheme.tertiary
+                            SearchFeedbackKind.ERROR -> MaterialTheme.colorScheme.error
+                        }
+                        val feedbackTag = when (searchFeedbackKind) {
+                            SearchFeedbackKind.NO_RESULTS -> "search-feedback-empty"
+                            SearchFeedbackKind.STALE_DATA -> "search-feedback-stale"
+                            SearchFeedbackKind.ERROR -> "search-feedback-error"
+                        }
+                        // Preserve the existing search-message tag for UI clients.
+                        Column(modifier = Modifier.testTag(feedbackTag)) {
+                            Text(
+                                text = message,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = feedbackColor,
+                                modifier = Modifier
+                                    .testTag("search-message")
+                                    .semantics { liveRegion = LiveRegionMode.Polite },
+                            )
+                        }
                     }
 
                     searchResults.take(12).forEachIndexed { index, result ->
