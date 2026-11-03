@@ -261,7 +261,7 @@ export function createArrivalAlarmMcpServer({
     {
       title: "Get arrival alarm state",
       description:
-        "Read whether the Arrival Alarm app currently has an armed arrival alarm and its remaining distance when available.",
+        "Read whether an arrival alarm is armed, its verified destination (null if not armed or unknown), and remaining distance when available. Do not infer a target from stale trip data.",
       inputSchema: {},
       annotations: readAnnotations,
       securitySchemes: readSecuritySchemes,
