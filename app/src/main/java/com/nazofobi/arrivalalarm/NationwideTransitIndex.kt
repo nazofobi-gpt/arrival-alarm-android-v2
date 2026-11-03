@@ -252,6 +252,27 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         val direct = searchFts(tokens.joinToString(" ") { "$it*" }, boundedLimit)
         if (direct.isNotEmpty()) return direct
 
+        // Common German station names may use "Hbf" or "Hauptbahnhof" in the
+        // official GTFS feed. Only after a literal miss, use one indexed alias
+        // query with another specific place token. Never select a stop for the
+        // user, scan the entire index, or broaden a single-word "Hbf" search.
+        val aliasPosition = tokens.indexOfFirst { it == "hbf" || it == "hauptbahnhof" }
+        if (
+            tokens.size in 2..4 &&
+            aliasPosition >= 0 &&
+            tokens.count { it == "hbf" || it == "hauptbahnhof" } == 1 &&
+            tokens.indices.any { it != aliasPosition && tokens[it].length >= 4 }
+        ) {
+            val alternateTokens = tokens.toMutableList()
+            alternateTokens[aliasPosition] =
+                if (tokens[aliasPosition] == "hbf") "hauptbahnhof" else "hbf"
+            val aliasResults = searchFts(
+                alternateTokens.joinToString(" ") { "$it*" },
+                boundedLimit,
+            )
+            if (aliasResults.isNotEmpty()) return aliasResults
+        }
+
         // Only an empty literal lookup may try a single-typo fallback.
         // The three-character anchor keeps the SQLite query indexed; its 400-row
         // hard cap prevents a nationwide scan for a vague or malformed query.
