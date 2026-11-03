@@ -154,6 +154,7 @@ fun SettingsReadinessPanel(
     onOpenAppSettings: () -> Unit,
     onRetryData: () -> Unit,
     onConnectorAction: () -> Unit,
+    onUpdateInstalledData: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var themeOptionsExpanded by rememberSaveable { mutableStateOf(false) }
@@ -415,6 +416,23 @@ fun SettingsReadinessPanel(
                 ) {
                     Text(stringResource(R.string.readiness_open_device_location_settings))
                 }
+            }
+
+            if (hasUsableNationwideIndex(state.dataState)) {
+                OutlinedButton(
+                    onClick = onUpdateInstalledData,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("nationwide-index-refresh-now"),
+                ) {
+                    Text(stringResource(R.string.offline_pack_refresh_wifi))
+                }
+                Text(
+                    text = stringResource(R.string.offline_pack_refresh_wifi_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             if (shouldOfferNationwideDataRetry(state.dataState)) {
