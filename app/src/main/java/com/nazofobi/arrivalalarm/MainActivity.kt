@@ -1045,6 +1045,9 @@ fun ArrivalAlarmApp(
                     onRetryData = {
                         transit.ensureNationwideIndex { dataState = it }
                     },
+                    onUpdateInstalledData = {
+                        NationwideFeedRefreshScheduler.requestInstalledPackRefresh(context)
+                    },
                     onConnectorAction = {
                         if (connectorConnected) disconnectConnector()
                         else beginConnectorAuthorization()
