@@ -1842,6 +1842,14 @@ fun ArrivalAlarmApp(
                     },
                     modifier = Modifier.heightIn(min = 48.dp).testTag("guidance-route-refresh"),
                 ) { Text(stringResource(R.string.guidance_refresh_route)) }
+                // A manual, non-durable speech preview is available before selecting any route.
+                // During active tracking it cannot QUEUE_FLUSH an arrival announcement.
+                GuidanceVoicePreviewPanel(
+                    speaker = guidanceSpeaker,
+                    language = guidanceLanguage,
+                    isJourneyArmed = journey.phase == JourneyPhase.ARMED,
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 destination?.let { target ->
                     Button(
                         onClick = {

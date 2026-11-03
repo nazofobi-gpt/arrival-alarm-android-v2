@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="guidance_voice_preview_action">Seçili dilde sesi dene</string>
+    <string name="guidance_voice_preview_requested">Ses isteği TTS motoruna gönderildi. Ses duyulmadıysa cihaz sesini ve TTS ayarlarını kontrol edin.</string>
+    <string name="guidance_voice_preview_unavailable">Ses denemesi başlatılamadı. Cihazın TTS motorunu ve ses ayarlarını kontrol edin.</string>
+    <string name="guidance_voice_preview_tracking_disabled">Aktif varış takibi sırasında ses denemesi kapalıdır.</string>
+    <string name="guidance_voice_preview_note">Bu deneme varış alarmını kurmaz veya tetiklemez; gerçek cihaz alarm testinin yerine geçmez.</string>
+</resources>

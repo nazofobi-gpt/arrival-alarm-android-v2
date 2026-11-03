@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="guidance_voice_preview_action">Stimme in gewählter Sprache testen</string>
+    <string name="guidance_voice_preview_requested">Die Sprachanfrage wurde an die TTS-Engine übergeben. Falls nichts hörbar ist, Lautstärke und TTS-Einstellungen prüfen.</string>
+    <string name="guidance_voice_preview_unavailable">Der Sprachtest konnte nicht gestartet werden. Bitte TTS-Engine und Toneinstellungen prüfen.</string>
+    <string name="guidance_voice_preview_tracking_disabled">Während einer aktiven Ankunftsüberwachung ist der Sprachtest deaktiviert.</string>
+    <string name="guidance_voice_preview_note">Dieser Test aktiviert oder löst keinen Ankunftsalarm aus und ersetzt keinen echten Gerätetest.</string>
+</resources>

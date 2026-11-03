@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="guidance_voice_preview_action">Test voice in selected language</string>
+    <string name="guidance_voice_preview_requested">Speech request sent to the TTS engine. If you hear nothing, check device volume and TTS settings.</string>
+    <string name="guidance_voice_preview_unavailable">Could not start the voice test. Check the device TTS engine and audio settings.</string>
+    <string name="guidance_voice_preview_tracking_disabled">Voice testing is disabled while arrival tracking is active.</string>
+    <string name="guidance_voice_preview_note">This test does not arm or trigger an arrival alarm and does not replace a real-device alarm test.</string>
+</resources>
