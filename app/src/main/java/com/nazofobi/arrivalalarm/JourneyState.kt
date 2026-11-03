@@ -91,6 +91,12 @@ class JourneyController(
 
     @Synchronized
     fun selectStart(point: GeoPoint) {
+        // Replanning must not silently disarm a running foreground arrival alarm.
+        // Only the explicit cancellation path may release its tracking lifecycle.
+        if (state.phase == JourneyPhase.ARMED) {
+            update(state.copy(error = "Aktif alarmı önce iptal edin"))
+            return
+        }
         if (!point.isValidCoordinate()) {
             update(state.copy(error = "Geçersiz başlangıç konumu"))
             return
@@ -101,6 +107,10 @@ class JourneyController(
 
     @Synchronized
     fun selectDestination(point: GeoPoint) {
+        if (state.phase == JourneyPhase.ARMED) {
+            update(state.copy(error = "Aktif alarmı önce iptal edin"))
+            return
+        }
         val start = state.start ?: run {
             update(state.copy(error = "Önce başlangıç seçilmeli"))
             return
