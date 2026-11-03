@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="readiness_theme_options_expanded">Designoptionen geöffnet</string>
+    <string name="readiness_theme_options_collapsed">Designoptionen geschlossen</string>
+</resources>

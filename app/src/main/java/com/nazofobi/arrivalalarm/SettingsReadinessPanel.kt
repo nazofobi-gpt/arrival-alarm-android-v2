@@ -30,9 +30,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -157,6 +160,11 @@ fun SettingsReadinessPanel(
     modifier: Modifier = Modifier,
 ) {
     var themeOptionsExpanded by rememberSaveable { mutableStateOf(false) }
+    val themeOptionsState = if (themeOptionsExpanded) {
+        stringResource(R.string.readiness_theme_options_expanded)
+    } else {
+        stringResource(R.string.readiness_theme_options_collapsed)
+    }
     val connectorReady = hasVerifiedConnectorConnection(state.connectorConfigured, state.connectorConnected)
     val context = LocalContext.current
     // Returning from the device-wide location switch must refresh live readiness;
@@ -192,7 +200,8 @@ fun SettingsReadinessPanel(
                 text = readinessSummaryText(state.overallLevel),
                 style = MaterialTheme.typography.bodyLarge,
                 color = readinessColor(state.overallLevel),
-                modifier = Modifier.testTag("readiness-summary"),
+                modifier = Modifier.testTag("readiness-summary")
+                    .semantics { liveRegion = LiveRegionMode.Polite },
             )
 
             HorizontalDivider()
@@ -201,7 +210,8 @@ fun SettingsReadinessPanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 56.dp)
-                    .clickable { themeOptionsExpanded = !themeOptionsExpanded }
+                    .clickable(role = Role.Button) { themeOptionsExpanded = !themeOptionsExpanded }
+                    .semantics { stateDescription = themeOptionsState }
                     .testTag("theme-mode-picker"),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
