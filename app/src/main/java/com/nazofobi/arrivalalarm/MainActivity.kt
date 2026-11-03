@@ -987,6 +987,13 @@ fun ArrivalAlarmApp(
                         },
                         guidanceLanguage = guidanceLanguage,
                         onGuidanceLanguageChange = { selectGuidanceLanguage(it) },
+                        journeyPermissionsGranted = remember(readinessRefreshTick) {
+                            ActiveJourneyPermissions.hasRuntimeGrants(context)
+                        },
+                        onRequestJourneyPermissions = {
+                            readinessPermissionLauncher.launch(ActiveJourneyPermissions.runtimePermissions())
+                        },
+                        onRefreshPermissionStatus = { refreshReadiness() },
                         onContinue = {
                             if (onboardingReplay) {
                                 onboardingReplay = false

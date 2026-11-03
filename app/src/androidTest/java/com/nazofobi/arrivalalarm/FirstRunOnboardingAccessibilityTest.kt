@@ -256,6 +256,69 @@ class FirstRunOnboardingAccessibilityTest {
         }
     }
 
+    @Test fun alarmPermissionOptInIsExplicitAndDoesNotStartJourney() {
+        var permissionRequests = 0
+        var continued = false
+        var grants by mutableStateOf(false)
+        rule.setContent {
+            MaterialTheme {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    FirstRunOnboarding(
+                        onContinue = { continued = true },
+                        offlineDataState = NationwideDataState.Idle,
+                        onDownloadOfflineData = {},
+                        journeyPermissionsGranted = grants,
+                        onRequestJourneyPermissions = { permissionRequests++ },
+                    )
+                }
+            }
+        }
+        rule.onNodeWithTag("onboarding-alarm-permission-status")
+            .performScrollTo().assertIsDisplayed()
+        rule.runOnIdle {
+            assertEquals(0, permissionRequests)
+            assertTrue(!continued)
+        }
+        rule.onNodeWithTag("onboarding-request-alarm-permissions")
+            .performScrollTo().performClick()
+        rule.runOnIdle {
+            assertEquals(1, permissionRequests)
+            assertTrue(!continued)
+            grants = true
+        }
+        rule.onNodeWithTag("onboarding-alarm-permission-status").assertIsDisplayed()
+        rule.onNodeWithTag("onboarding-request-alarm-permissions").assertDoesNotExist()
+    }
+
+    @Test fun alarmPermissionOptInCanBeSkippedWithoutAnyRequest() {
+        var permissionRequests = 0
+        var continued = false
+        rule.setContent {
+            MaterialTheme {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    FirstRunOnboarding(
+                        onContinue = { continued = true },
+                        offlineDataState = NationwideDataState.Idle,
+                        onDownloadOfflineData = {},
+                        onRequestJourneyPermissions = { permissionRequests++ },
+                    )
+                }
+            }
+        }
+        rule.onNodeWithTag("onboarding-complete").performScrollTo().performClick()
+        rule.runOnIdle {
+            assertTrue(continued)
+            assertEquals(0, permissionRequests)
+        }
+    }
+
+    @Test fun firstRunAlarmRequestNeverIncludesBackgroundLocation() {
+        val permissions = ActiveJourneyPermissions.runtimePermissions().toSet()
+        assertTrue(android.Manifest.permission.ACCESS_COARSE_LOCATION in permissions)
+        assertTrue(android.Manifest.permission.ACCESS_FINE_LOCATION in permissions)
+        assertTrue(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION !in permissions)
+    }
+
     @Test fun quickSetupUsesOnlySystemAccessibilitySettings() {
         val intent = accessibilityQuickSetupIntent()
         assertEquals(Settings.ACTION_ACCESSIBILITY_SETTINGS, intent.action)

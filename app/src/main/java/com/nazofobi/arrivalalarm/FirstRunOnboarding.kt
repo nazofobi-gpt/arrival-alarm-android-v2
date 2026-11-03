@@ -3,6 +3,9 @@ package com.nazofobi.arrivalalarm
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +26,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
@@ -42,9 +47,22 @@ fun FirstRunOnboarding(
     guidanceLanguage: GuidanceLanguage = GuidanceLanguage.TURKISH,
     onGuidanceLanguageChange: (GuidanceLanguage) -> Unit = {},
     onDismissReplay: (() -> Unit)? = null,
+    journeyPermissionsGranted: Boolean = false,
+    onRequestJourneyPermissions: (() -> Unit)? = null,
+    onRefreshPermissionStatus: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    // Refresh permission grants after returning from Android Settings or a permission dialog.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val latestRefresh by rememberUpdatedState(onRefreshPermissionStatus)
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) latestRefresh()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -275,6 +293,30 @@ fun FirstRunOnboarding(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
+                    // Explicit opt-in; reuse the existing alarm permission contract but never arm.
+                    if (onRequestJourneyPermissions != null) {
+                        Text(
+                            text = stringResource(
+                                if (journeyPermissionsGranted)
+                                    R.string.onboarding_alarm_permissions_granted
+                                else R.string.onboarding_alarm_permissions_missing,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.testTag("onboarding-alarm-permission-status"),
+                        )
+                        if (!journeyPermissionsGranted) {
+                            OutlinedButton(
+                                onClick = onRequestJourneyPermissions,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("onboarding-request-alarm-permissions"),
+                            ) {
+                                Text(stringResource(R.string.onboarding_request_alarm_permissions))
+                            }
+                        }
+                    }
                     OutlinedButton(
                         onClick = {
                             context.startActivity(onboardingAppPermissionSettingsIntent(context.packageName))
