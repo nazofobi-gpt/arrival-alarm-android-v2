@@ -1,9 +1,14 @@
 package com.nazofobi.arrivalalarm
 
+import android.content.Intent
+import android.content.IntentFilter
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -49,6 +54,27 @@ class RouteShareUiInstrumentedTest {
     @Test fun shareIsAvailableOnlyForActualSelectedRoute() {
         render(option.id)
         rule.onNodeWithTag("journey-share-route").assertExists()
+    }
+
+    @Test fun shareButtonLaunchesAndroidChooser() {
+        render(option.id)
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        // Intercept the OS chooser rather than presenting a system dialog in this UI test.
+        val monitor = instrumentation.addMonitor(
+            IntentFilter(Intent.ACTION_CHOOSER),
+            null,
+            true,
+        )
+        try {
+            rule.onNodeWithTag("journey-share-route").performClick()
+            rule.waitForIdle()
+            assertTrue(
+                "Sharing the selected route must launch an explicit chooser",
+                instrumentation.checkMonitorHit(monitor, 1),
+            )
+        } finally {
+            instrumentation.removeMonitor(monitor)
+        }
     }
 
     @Test fun noSelectionHasNoShareSideEffect() {
