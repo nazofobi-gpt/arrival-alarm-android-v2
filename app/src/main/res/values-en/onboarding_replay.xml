@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="onboarding_replay_action">Review the setup guide</string>
+    <string name="onboarding_replay_back">Back to settings</string>
+    <string name="onboarding_replay_unavailable">The guide is unavailable during an active journey or arrival alarm.</string>
+</resources>

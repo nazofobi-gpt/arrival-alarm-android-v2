@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="onboarding_offline_title">Deutschlanddaten offline (optional)</string>
+    <string name="onboarding_offline_body">Das deutschlandweite Haltestellen- und Fahrplandatenpaket kann groß sein. Laden Sie es bei Bedarf über WLAN herunter, um die Offline-Suche und lokale Routenplanung zu ermöglichen. Sie können diesen Schritt überspringen und den Download später unter Einstellungen starten.</string>
+    <string name="onboarding_offline_idle">Noch nicht heruntergeladen. Der Download startet nur nach Ihrer Auswahl.</string>
+    <string name="onboarding_offline_download">Offline-Daten herunterladen</string>
+    <string name="onboarding_offline_loading">Daten werden vorbereitet. Sie können währenddessen fortfahren.</string>
+    <string name="onboarding_offline_ready">Der Offline-Haltestellenindex ist bereit.</string>
+    <string name="onboarding_offline_error">Daten konnten nicht geladen werden. Erneut versuchen oder überspringen.</string>
+    <string name="onboarding_offline_retry">Download erneut versuchen</string>
+</resources>

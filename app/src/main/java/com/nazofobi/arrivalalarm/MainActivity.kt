@@ -118,6 +118,17 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/** Never replace live/alarmed journey controls with the welcome guide. */
+internal fun canReplayOnboarding(phase: JourneyPhase): Boolean =
+    phase != JourneyPhase.ARMED && phase != JourneyPhase.ARRIVED
+
+/** A restored or newly armed arrival alarm must never be obscured by setup. */
+internal fun shouldShowOnboarding(
+    isComplete: Boolean,
+    replayRequested: Boolean,
+    phase: JourneyPhase,
+): Boolean = canReplayOnboarding(phase) && (!isComplete || replayRequested)
+
 @Composable
 fun ArrivalAlarmApp(
     oauthCallbackUri: String? = null,
@@ -176,7 +187,11 @@ fun ArrivalAlarmApp(
     var onboardingComplete by remember {
         mutableStateOf(appPreferences.getBoolean("onboarding_complete", false))
     }
+    // Replay is UI-only: never clear the persisted first-run completion flag.
+    var onboardingReplay by rememberSaveable { mutableStateOf(false) }
     var activeScreen by rememberSaveable { mutableStateOf(ArrivalAppScreen.HOME) }
+    // Reevaluate on every phase transition, before any navigation or guide is composed.
+    val showOnboarding = shouldShowOnboarding(onboardingComplete, onboardingReplay, journey.phase)
     var dataState by remember { mutableStateOf(transit.currentState()) }
     var query by remember { mutableStateOf("") }
     // Changing the active catalog must also invalidate remembered query deduplication.
@@ -802,6 +817,13 @@ fun ArrivalAlarmApp(
         refreshReadiness()
     }
 
+    LaunchedEffect(journey.phase) {
+        if (!canReplayOnboarding(journey.phase)) {
+            onboardingReplay = false
+            activeScreen = ArrivalAppScreen.LIVE
+        }
+    }
+
     LaunchedEffect(journey.phase, selectedRouteId) {
         liveNowEpochSeconds = System.currentTimeMillis() / 1_000
         if (journey.phase == JourneyPhase.ARMED) {
@@ -922,7 +944,7 @@ fun ArrivalAlarmApp(
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
-            if (onboardingComplete) {
+            if (!showOnboarding) {
                 ArrivalBottomNavigation(
                     current = activeScreen,
                     onSelect = { requested ->
@@ -957,19 +979,43 @@ fun ArrivalAlarmApp(
                         .testTag("adaptive-content"),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                if (!onboardingComplete) {
+                if (showOnboarding) {
                     FirstRunOnboarding(
-                        onContinue = {
-                            appPreferences.edit()
-                                .putBoolean("onboarding_complete", true)
-                                .apply()
-                            onboardingComplete = true
-                            activeScreen = ArrivalAppScreen.HOME
+                        offlineDataState = dataState,
+                        onDownloadOfflineData = {
+                            transit.ensureNationwideIndex { dataState = it }
                         },
+                        guidanceLanguage = guidanceLanguage,
+                        onGuidanceLanguageChange = { selectGuidanceLanguage(it) },
+                        journeyPermissionsGranted = remember(readinessRefreshTick) {
+                            ActiveJourneyPermissions.hasRuntimeGrants(context)
+                        },
+                        onRequestJourneyPermissions = {
+                            readinessPermissionLauncher.launch(ActiveJourneyPermissions.runtimePermissions())
+                        },
+                        onRefreshPermissionStatus = { refreshReadiness() },
+                        onContinue = {
+                            if (onboardingReplay) {
+                                onboardingReplay = false
+                                activeScreen = ArrivalAppScreen.SETTINGS
+                            } else {
+                                appPreferences.edit()
+                                    .putBoolean("onboarding_complete", true)
+                                    .apply()
+                                onboardingComplete = true
+                                activeScreen = ArrivalAppScreen.HOME
+                            }
+                        },
+                        onDismissReplay = if (onboardingReplay) {
+                            {
+                                onboardingReplay = false
+                                activeScreen = ArrivalAppScreen.SETTINGS
+                            }
+                        } else null,
                     )
                 }
 
-                if (onboardingComplete) {
+                if (!showOnboarding) {
                 Text(
                     stringResource(R.string.app_name),
                     style = MaterialTheme.typography.titleLarge,
@@ -1042,6 +1088,12 @@ fun ArrivalAlarmApp(
                         )
                     },
                     onOpenAppSettings = { openArrivalAlarmAppSettings(context) },
+                    onReplayOnboarding = {
+                        if (canReplayOnboarding(journey.phase)) {
+                            onboardingReplay = true
+                        }
+                    },
+                    onboardingReplayAvailable = canReplayOnboarding(journey.phase),
                     onRetryData = {
                         transit.ensureNationwideIndex { dataState = it }
                     },

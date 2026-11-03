@@ -290,4 +290,7 @@
     <string name="pin_line_at_stop">Bu durakta hattı sabitle</string>
     <string name="unpin_line_at_stop">Bu durakta sabitlemeyi kaldır</string>
     <string name="pin_line_local_only">Hat bu durakta yalnızca cihaza kaydedildi; bildirimler etkin değil.</string>
+    <string name="onboarding_alarm_permissions_missing">Varış alarmı için konum ve bildirim izinlerini şimdi isteyebilir veya daha sonra alarmı açarken verebilirsiniz.</string>
+    <string name="onboarding_alarm_permissions_granted">Varış alarmının uygulama izinleri verildi. Cihaz konum servisi ayrıca kontrol edilir.</string>
+    <string name="onboarding_request_alarm_permissions">Konum ve bildirim izinlerini iste</string>
 </resources>

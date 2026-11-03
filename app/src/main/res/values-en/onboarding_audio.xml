@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="onboarding_audio_title">Announcements and audio setup</string>
+    <string name="onboarding_audio_body">Choose the announcement language before your first journey. Your selection is saved for future trips.</string>
+    <string name="onboarding_bluetooth_action">Pair Bluetooth headphones or a speaker</string>
+    <string name="onboarding_bluetooth_note">Android manages Bluetooth connections and audio output. Pairing is optional; this app never connects devices automatically.</string>
+</resources>

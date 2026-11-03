@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="onboarding_audio_title">Anons ve ses hazırlığı</string>
+    <string name="onboarding_audio_body">İlk yolculuğunuzdan önce anons dilini seçebilirsiniz. Seçim sonraki yolculuklar için kaydedilir.</string>
+    <string name="onboarding_bluetooth_action">Bluetooth kulaklık veya hoparlör eşleştir</string>
+    <string name="onboarding_bluetooth_note">Bluetooth bağlantısı ve ses çıkışı Android tarafından yönetilir. Eşleştirme isteğe bağlıdır; uygulama otomatik bağlantı kurmaz.</string>
+</resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="onboarding_audio_title">Ansagen und Audio einrichten</string>
+    <string name="onboarding_audio_body">Wählen Sie vor Ihrer ersten Fahrt die Ansagesprache. Die Auswahl wird für weitere Fahrten gespeichert.</string>
+    <string name="onboarding_bluetooth_action">Bluetooth-Kopfhörer oder Lautsprecher koppeln</string>
+    <string name="onboarding_bluetooth_note">Android verwaltet die Bluetooth-Verbindung und Audioausgabe. Die Kopplung ist optional; die App verbindet Geräte nicht automatisch.</string>
+</resources>

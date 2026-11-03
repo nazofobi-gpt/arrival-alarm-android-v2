@@ -282,4 +282,7 @@
     <string name="pin_line_at_stop">Pin line at this stop</string>
     <string name="unpin_line_at_stop">Unpin line at this stop</string>
     <string name="pin_line_local_only">Saved locally for this stop; alerts are not enabled.</string>
+    <string name="onboarding_alarm_permissions_missing">You can grant location and notification permissions now or later when enabling an arrival alarm.</string>
+    <string name="onboarding_alarm_permissions_granted">Arrival alarm app permissions are granted. Device location services are checked separately.</string>
+    <string name="onboarding_request_alarm_permissions">Request location and notification permissions</string>
 </resources>

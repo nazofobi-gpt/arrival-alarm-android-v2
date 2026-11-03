@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="onboarding_replay_action">Kurulum rehberini yeniden görüntüle</string>
+    <string name="onboarding_replay_back">Ayarlara dön</string>
+    <string name="onboarding_replay_unavailable">Aktif yolculuk veya varış alarmı sırasında rehber açılmaz.</string>
+</resources>

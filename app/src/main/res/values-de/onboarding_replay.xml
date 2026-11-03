@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="onboarding_replay_action">Einführung erneut ansehen</string>
+    <string name="onboarding_replay_back">Zurück zu den Einstellungen</string>
+    <string name="onboarding_replay_unavailable">Während einer aktiven Fahrt oder eines Ankunftsalarms ist die Einführung nicht verfügbar.</string>
+</resources>

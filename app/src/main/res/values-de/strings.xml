@@ -282,4 +282,7 @@
     <string name="pin_line_at_stop">Linie an dieser Haltestelle anheften</string>
     <string name="unpin_line_at_stop">Linie hier lösen</string>
     <string name="pin_line_local_only">Für diese Haltestelle lokal gespeichert; keine Benachrichtigungen aktiviert.</string>
+    <string name="onboarding_alarm_permissions_missing">Sie können Standort- und Benachrichtigungsrechte jetzt oder später beim Aktivieren des Ankunftsalarms erteilen.</string>
+    <string name="onboarding_alarm_permissions_granted">App-Berechtigungen für den Ankunftsalarm sind erteilt. Der Standortdienst des Geräts wird separat geprüft.</string>
+    <string name="onboarding_request_alarm_permissions">Standort- und Benachrichtigungsrechte anfordern</string>
 </resources>

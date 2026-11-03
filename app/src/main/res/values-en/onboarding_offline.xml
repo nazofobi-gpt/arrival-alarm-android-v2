@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="onboarding_offline_title">Germany offline data (optional)</string>
+    <string name="onboarding_offline_body">The nationwide stops and timetable pack can be large. Choose to download it over Wi-Fi for offline search and local route planning. You can skip this step and start the download later from Settings.</string>
+    <string name="onboarding_offline_idle">Not downloaded yet. Download starts only when you choose it.</string>
+    <string name="onboarding_offline_download">Download offline data</string>
+    <string name="onboarding_offline_loading">Preparing data. You can continue while it downloads.</string>
+    <string name="onboarding_offline_ready">The offline stop index is ready.</string>
+    <string name="onboarding_offline_error">Data could not be loaded. Retry or skip this step.</string>
+    <string name="onboarding_offline_retry">Retry download</string>
+</resources>
