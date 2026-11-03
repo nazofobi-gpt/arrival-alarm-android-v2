@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import android.content.Intent
+import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -274,6 +275,17 @@ fun FirstRunOnboarding(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
+                    OutlinedButton(
+                        onClick = {
+                            context.startActivity(onboardingAppPermissionSettingsIntent(context.packageName))
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("onboarding-app-permissions"),
+                    ) {
+                        Text(stringResource(R.string.readiness_open_app_settings))
+                    }
                     Text(
                         text = stringResource(R.string.onboarding_background_note),
                         style = MaterialTheme.typography.bodySmall,
@@ -307,6 +319,11 @@ fun FirstRunOnboarding(
         }
     }
 }
+
+/** Explicit first-run permission review remains in Android's app-specific settings. */
+internal fun onboardingAppPermissionSettingsIntent(packageName: String): Intent =
+    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+        Uri.fromParts("package", packageName, null))
 
 /** Open the user's own device accessibility controls; no setting is changed by the app. */
 internal fun accessibilityQuickSetupIntent(): Intent =
