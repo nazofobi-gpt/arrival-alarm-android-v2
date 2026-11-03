@@ -663,20 +663,36 @@ class LiveTripPanelTest {
         rule.onNodeWithTag("live-trip-access-walk")
             .assertTextContains("6", substring = true)
 
+        // Ten minutes remain at 07:50: the 301-second planned walk fits.
+        rule.onNodeWithTag("live-trip-boarding-walk-risk").assertDoesNotExist()
+        rule.runOnUiThread {
+            now.longValue = "2026-09-26T07:55:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        // Five minutes remain; only the selected boarding stop's planned walk
+        // exceeds the scheduled window. No GPS reachability is inferred.
+        rule.onNodeWithTag("live-trip-boarding-walk-risk").performScrollTo()
+            .assertTextContains("6", substring = true)
+
         // A stale or wrong boarding stop must never inherit another stop's walk.
         rule.runOnUiThread { accessStopId.value = "different-stop" }
         rule.waitForIdle()
         rule.onNodeWithTag("live-trip-access-walk").assertDoesNotExist()
+        rule.onNodeWithTag("live-trip-boarding-walk-risk").assertDoesNotExist()
 
         rule.runOnUiThread { accessStopId.value = "boarding" }
         rule.waitForIdle()
         rule.onNodeWithTag("live-trip-access-walk").performScrollTo()
             .assertTextContains("Lohne", substring = true)
 
+        rule.onNodeWithTag("live-trip-boarding-walk-risk").performScrollTo()
+            .assertTextContains("6", substring = true)
+
         // The estimate is boarding guidance, not persistent progress guidance.
         rule.runOnUiThread { armed.value = false }
         rule.waitForIdle()
         rule.onNodeWithTag("live-trip-access-walk").assertDoesNotExist()
+        rule.onNodeWithTag("live-trip-boarding-walk-risk").assertDoesNotExist()
 
         rule.runOnUiThread {
             armed.value = true
@@ -684,6 +700,7 @@ class LiveTripPanelTest {
         }
         rule.waitForIdle()
         rule.onNodeWithTag("live-trip-access-walk").assertDoesNotExist()
+        rule.onNodeWithTag("live-trip-boarding-walk-risk").assertDoesNotExist()
     }
 
 }
