@@ -28,6 +28,7 @@ class RouteShareSummaryTest {
             "Verify service before travel",
             "Offline timetable; current service not verified",
             "Unknown",
+            "Walking ${option.walkingMinutes} min • Transfers ${option.transfers}",
         )
 
     @Test fun selectedRouteHasNamedEndpointsAndDisclosure() {
@@ -36,6 +37,17 @@ class RouteShareSummaryTest {
         assertTrue(summary.contains("RE 9 • Bremen"))
         assertTrue(summary.contains("10:02 → 11:05"))
         assertTrue(summary.contains("Verify service before travel"))
+    }
+
+    @Test fun shareIncludesWalkingAndTransfersForConnectingJourney() {
+        val summary = share(route().copy(walkingMinutes = 17, transfers = 2))
+        assertTrue(summary.contains("Walking 17 min • Transfers 2"))
+        assertTrue(summary.contains("Lohne → Bremen Hbf"))
+    }
+
+    @Test fun directJourneyIncludesZeroTransfersWithoutInventingChanges() {
+        val summary = share()
+        assertTrue(summary.contains("Walking 0 min • Transfers 0"))
     }
 
     @Test fun offlineOutputUsesPlannedStopClocks() {
