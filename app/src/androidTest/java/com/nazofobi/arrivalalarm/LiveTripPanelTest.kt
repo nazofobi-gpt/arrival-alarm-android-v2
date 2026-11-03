@@ -293,7 +293,11 @@ class LiveTripPanelTest {
                 )
             }
         }
-        rule.onNodeWithTag("live-trip-planned-boarding").assertTextContains("5", substring = true)
+        // A rider must know which real route stop the countdown belongs to.
+        rule.onNodeWithTag("live-trip-planned-boarding")
+            .assertTextContains("Lohne", substring = true)
+        rule.onNodeWithTag("live-trip-planned-boarding")
+            .assertTextContains("5", substring = true)
         rule.runOnUiThread {
             now.longValue = "2026-09-26T08:01:00+02:00".toTransitEpochSecondsOrNull()!!
         }
