@@ -282,12 +282,16 @@
     <string name="active_tracking_channel_name">Aktif varış takibi</string>
     <string name="arrival_alerts_channel_name">Varış uyarıları</string>
     <string name="active_tracking_title">Varış alarmı etkin</string>
+    <string name="active_tracking_named_title">Varış alarmı: %1$s</string>
     <string name="active_tracking_degraded">Konum doğruluğu yetersiz; alarm etkin, yeni GPS bekleniyor</string>
     <string name="active_tracking_in_progress">Konum takip ediliyor</string>
     <string name="active_tracking_distance">Hedefe yaklaşık %1$d m kaldı</string>
     <string name="arrival_notification_title">Varış noktasına ulaşıldı</string>
     <string name="arrival_notification_body">Varış alarmı tamamlandı.</string>
+    <string name="arrival_notification_named_body">Hedef: %1$s. Varış alarmı tamamlandı.</string>
     <string name="pin_line_at_stop">Bu durakta hattı sabitle</string>
     <string name="unpin_line_at_stop">Bu durakta sabitlemeyi kaldır</string>
     <string name="pin_line_local_only">Hat bu durakta yalnızca cihaza kaydedildi; bildirimler etkin değil.</string>
+    <string name="guidance_arrival_voice_label">Sesli varış anonsu</string>
+    <string name="guidance_arrival_voice_description">Yalnızca varış doğrulandığında konuşur; varsayılan kapalıdır. Ses çıkışı cihaz ve Bluetooth ayarlarına bağlıdır.</string>
 </resources>

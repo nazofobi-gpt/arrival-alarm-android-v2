@@ -274,12 +274,16 @@
     <string name="active_tracking_channel_name">Aktive Ankunftsverfolgung</string>
     <string name="arrival_alerts_channel_name">Ankunftswarnungen</string>
     <string name="active_tracking_title">Ankunftsalarm aktiv</string>
+    <string name="active_tracking_named_title">Ankunftsalarm: %1$s</string>
     <string name="active_tracking_degraded">Standort ungenau; Alarm aktiv, neues GPS-Signal abwarten</string>
     <string name="active_tracking_in_progress">Standort wird verfolgt</string>
     <string name="active_tracking_distance">Noch etwa %1$d m bis zum Ziel</string>
     <string name="arrival_notification_title">Ziel erreicht</string>
     <string name="arrival_notification_body">Ankunftsalarm abgeschlossen.</string>
+    <string name="arrival_notification_named_body">Ziel: %1$s. Ankunftsalarm abgeschlossen.</string>
     <string name="pin_line_at_stop">Linie an dieser Haltestelle anheften</string>
     <string name="unpin_line_at_stop">Linie hier lösen</string>
     <string name="pin_line_local_only">Für diese Haltestelle lokal gespeichert; keine Benachrichtigungen aktiviert.</string>
+    <string name="guidance_arrival_voice_label">Sprachansage bei Ankunft</string>
+    <string name="guidance_arrival_voice_description">Spricht nur nach bestätigter Ankunft. Standardmäßig aus; Audioausgabe hängt von Gerät und Bluetooth ab.</string>
 </resources>

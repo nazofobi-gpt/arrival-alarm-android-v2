@@ -19,6 +19,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -129,6 +130,7 @@ fun ArrivalAlarmApp(
     val uiContext = LocalContext.current
     val context = uiContext.applicationContext
     val graph = remember(context) { ArrivalAlarmRuntimeGraph.get(context) }
+    val arrivalTargetLabelStore = remember(context) { ArrivalTargetLabelStore(context) }
     val controller = graph.controller
     val connectorPort = graph.connectorPort
     val connectorRuntimeCoordinator = graph.connectorRuntimeCoordinator
@@ -214,7 +216,8 @@ fun ArrivalAlarmApp(
     var destination by remember(controller) {
         mutableStateOf(
             controller.state.destination?.let {
-                MapPoint(it.latitude, it.longitude, context.getString(R.string.restored_destination))
+                MapPoint(it.latitude, it.longitude,
+                    arrivalTargetLabelStore.labelFor(it) ?: context.getString(R.string.restored_destination))
             }
         )
     }
@@ -284,6 +287,12 @@ fun ArrivalAlarmApp(
             GuidanceLanguage.fromLocaleTag(
                 guidancePreferences.getString("preferred_locale", null),
             )
+        )
+    }
+    var arrivalVoiceEnabled by remember {
+        mutableStateOf(
+            runCatching { guidancePreferences.getBoolean("arrival_voice_enabled", false) }
+                .getOrDefault(false)
         )
     }
     var inferenceEnabled by remember { mutableStateOf(false) }
@@ -400,6 +409,7 @@ fun ArrivalAlarmApp(
         nearbySource = null
         origin = point
         destination = null
+        arrivalTargetLabelStore.clear()
         destinationStopId = null
         departureBoardStop = null
         routeOptions = emptyList()
@@ -514,6 +524,9 @@ fun ArrivalAlarmApp(
         stationRequestGate.invalidate()
         routeBusy = false
         destination = point
+        // Persist only a user-validated selection, bound to its exact coordinates.
+        // A stale or corrupt name never changes the underlying armed alarm target.
+        arrivalTargetLabelStore.save(point)
         destinationStopId = stopId
         departureBoardStop = null
         routeOffline = false
@@ -733,7 +746,9 @@ fun ArrivalAlarmApp(
                             it.stopId == fresh.selection.alarmTarget.stopId
                     }
                     origin = MapPoint(start.latitude, start.longitude, boardingStop.name)
-                    destination = MapPoint(target.latitude, target.longitude, alarmStop.name)
+                    val confirmedAlarmPoint = MapPoint(target.latitude, target.longitude, alarmStop.name)
+                    destination = confirmedAlarmPoint
+                    arrivalTargetLabelStore.save(confirmedAlarmPoint)
                     destinationStopId = alarmStop.stopId
                     selectedRouteId = null
                     confirmedTripLiveRoute = liveOption
@@ -1830,6 +1845,33 @@ fun ArrivalAlarmApp(
                         )
                     }
                 }
+                Row(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.guidance_arrival_voice_label),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = arrivalVoiceEnabled,
+                        onCheckedChange = { enabled ->
+                            // Opt-in remains disabled on legacy installs. The background
+                            // service independently re-reads this preference on arrival.
+                            arrivalVoiceEnabled = enabled
+                            guidancePreferences.edit()
+                                .putBoolean("arrival_voice_enabled", enabled)
+                                .apply()
+                        },
+                        modifier = Modifier.testTag("guidance-arrival-voice-switch"),
+                    )
+                }
+                Text(
+                    stringResource(R.string.guidance_arrival_voice_description),
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 Button(
                     onClick = { guidancePermissionLauncher.launch(AndroidGuidancePermissions.runtimePermissions()) },
                     modifier = Modifier.heightIn(min = 48.dp).testTag("guidance-permissions"),

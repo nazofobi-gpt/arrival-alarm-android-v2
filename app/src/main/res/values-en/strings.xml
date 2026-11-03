@@ -274,12 +274,16 @@
     <string name="active_tracking_channel_name">Active arrival tracking</string>
     <string name="arrival_alerts_channel_name">Arrival alerts</string>
     <string name="active_tracking_title">Arrival alarm active</string>
+    <string name="active_tracking_named_title">Arrival alarm: %1$s</string>
     <string name="active_tracking_degraded">Location accuracy low; alarm active, waiting for GPS</string>
     <string name="active_tracking_in_progress">Tracking location</string>
     <string name="active_tracking_distance">About %1$d m to your destination</string>
     <string name="arrival_notification_title">Destination reached</string>
     <string name="arrival_notification_body">Arrival alarm completed.</string>
+    <string name="arrival_notification_named_body">Destination: %1$s. Arrival alarm completed.</string>
     <string name="pin_line_at_stop">Pin line at this stop</string>
     <string name="unpin_line_at_stop">Unpin line at this stop</string>
     <string name="pin_line_local_only">Saved locally for this stop; alerts are not enabled.</string>
+    <string name="guidance_arrival_voice_label">Speak on arrival</string>
+    <string name="guidance_arrival_voice_description">Speaks only after confirmed arrival. Off by default; audio output depends on device and Bluetooth.</string>
 </resources>

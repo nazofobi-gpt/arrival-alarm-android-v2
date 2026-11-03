@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import android.Manifest
+import android.annotation.TargetApi
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -110,6 +111,8 @@ class ActiveJourneyService : Service(), LocationListener {
         }
     }
     @Volatile private var arrivalHandled = false
+    private var serviceDestroyed = false
+    private var arrivalVoicePlayer: AndroidArrivalVoicePlayer? = null
     private var locationRegistered = false
     private var registeredProvider: String? = null
 
@@ -241,9 +244,26 @@ class ActiveJourneyService : Service(), LocationListener {
             arrivalHandled = true
             removeLocationUpdates()
             completionExecutor.execute {
-                graph.connectorRuntimeCoordinator.syncNow()
-                postArrivalNotification()
-                stopSelf()
+                // Connector synchronization is best-effort; a network error must never
+                // suppress the locally confirmed arrival notification.
+                runCatching { graph.connectorRuntimeCoordinator.syncNow() }
+                mainHandler.post {
+                    if (!serviceDestroyed) {
+                        runCatching { postArrivalNotification() }
+                        val voiceRequest = arrivalVoiceRequest()
+                        if (voiceRequest == null) {
+                            stopSelf()
+                        } else {
+                            // Keep the existing location FGS alive only for this bounded
+                            // user-opted-in utterance; speech failure falls back to notification.
+                            arrivalVoicePlayer = AndroidArrivalVoicePlayer(
+                                this@ActiveJourneyService,
+                                voiceRequest,
+                                onFinished = { stopSelf() },
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -263,6 +283,9 @@ class ActiveJourneyService : Service(), LocationListener {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        serviceDestroyed = true
+        arrivalVoicePlayer?.cancel()
+        arrivalVoicePlayer = null
         graph.connectorPort.resetArrivalConfirmation()
         mainHandler.removeCallbacks(stateMonitor)
         if (providerReceiverRegistered) {
@@ -388,9 +411,25 @@ class ActiveJourneyService : Service(), LocationListener {
             distanceMeters == null -> getString(R.string.active_tracking_in_progress)
             else -> getString(R.string.active_tracking_distance, distanceMeters.roundToInt())
         }
-        return notificationBuilder(TRACKING_CHANNEL_ID)
+        // A persisted label is display-only and bound to the exact armed coordinates.
+        // Keep the public lock-screen view generic: stops may reveal private places.
+        val destinationName = ArrivalTargetLabelStore(this)
+            .labelFor(graph.controller.state.destination)
+        val publicNotification = notificationBuilder(TRACKING_CHANNEL_ID)
             .setContentTitle(getString(R.string.active_tracking_title))
+            .setContentText(getString(R.string.active_tracking_in_progress))
+            .setSmallIcon(android.R.drawable.ic_dialog_map)
+            .setOngoing(true)
+            .setCategory(Notification.CATEGORY_SERVICE)
+            .build()
+        val title = destinationName?.let {
+            getString(R.string.active_tracking_named_title, it)
+        } ?: getString(R.string.active_tracking_title)
+        return notificationBuilder(TRACKING_CHANNEL_ID)
+            .setContentTitle(title)
             .setContentText(text)
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setPublicVersion(publicNotification)
             .setSmallIcon(android.R.drawable.ic_dialog_map)
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
@@ -405,19 +444,63 @@ class ActiveJourneyService : Service(), LocationListener {
             .build()
     }
 
-    private fun postArrivalNotification() {
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(
-            ARRIVAL_NOTIFICATION_ID,
-            notificationBuilder(ARRIVAL_CHANNEL_ID)
-                .setContentTitle(getString(R.string.arrival_notification_title))
-                .setContentText(getString(R.string.arrival_notification_body))
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setAutoCancel(true)
-                .setCategory(Notification.CATEGORY_ALARM)
-                .setContentIntent(openAppPendingIntent())
-                .build(),
+    private fun arrivalVoiceRequest(): ArrivalVoiceRequest? {
+        // An opt-in from Settings is required; legacy installs remain silent.
+        val preferences = getSharedPreferences("guidance_state", Context.MODE_PRIVATE)
+        val enabled = try {
+            preferences.getBoolean("arrival_voice_enabled", false)
+        } catch (_: RuntimeException) {
+            false
+        }
+        if (!enabled) return null
+        val language = try {
+            preferences.getString("preferred_locale", null)
+        } catch (_: RuntimeException) {
+            null
+        }
+        // The optional local name is usable only for the exact validated target.
+        val label = ArrivalTargetLabelStore(this).labelFor(graph.controller.state.destination)
+        return ArrivalVoicePolicy.select(
+            enabled = enabled,
+            arrived = graph.controller.state.phase == JourneyPhase.ARRIVED,
+            preferredLocale = language,
+            verifiedDestinationLabel = label,
+            genericText = getString(R.string.arrival_notification_body),
+            namedText = { getString(R.string.arrival_notification_named_body, it) },
         )
+    }
+
+    private fun postArrivalNotification() {
+        // Named destinations survive process recreation, but the name is never
+        // trusted unless it belongs to the exact currently armed target.
+        val destinationName = ArrivalTargetLabelStore(this)
+            .labelFor(graph.controller.state.destination)
+        val visibleBody = destinationName?.let {
+            getString(R.string.arrival_notification_named_body, it)
+        } ?: getString(R.string.arrival_notification_body)
+        // The public lock-screen version never exposes a potentially private
+        // stop, saved place, home or workplace label.
+        val publicNotification = notificationBuilder(ARRIVAL_CHANNEL_ID)
+            .setContentTitle(getString(R.string.arrival_notification_title))
+            .setContentText(getString(R.string.arrival_notification_body))
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setCategory(Notification.CATEGORY_ALARM)
+            .build()
+        val arrivalBuilder = notificationBuilder(ARRIVAL_CHANNEL_ID)
+            .setContentTitle(getString(R.string.arrival_notification_title))
+            .setContentText(visibleBody)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setAutoCancel(true)
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setPublicVersion(publicNotification)
+            .setCategory(Notification.CATEGORY_ALARM)
+            .setContentIntent(openAppPendingIntent())
+        // Before Android O, the notification owns its vibration rather than a channel.
+        if (Build.VERSION.SDK_INT < 26) {
+            arrivalBuilder.setVibrate(arrivalVibrationPattern())
+        }
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(ARRIVAL_NOTIFICATION_ID, arrivalBuilder.build())
     }
 
     private fun notificationBuilder(channelId: String): Notification.Builder =
@@ -452,13 +535,9 @@ class ActiveJourneyService : Service(), LocationListener {
                 NotificationManager.IMPORTANCE_LOW,
             )
         )
-        manager.createNotificationChannel(
-            NotificationChannel(
-                ARRIVAL_CHANNEL_ID,
-                getString(R.string.arrival_alerts_channel_name),
-                NotificationManager.IMPORTANCE_HIGH,
-            )
-        )
+        // Channel vibration is OS-managed. Do not use direct Vibrator calls that
+        // bypass the user's notification and Do-Not-Disturb preferences.
+        manager.createNotificationChannel(arrivalNotificationChannel(this))
     }
 
     companion object {
@@ -468,6 +547,21 @@ class ActiveJourneyService : Service(), LocationListener {
         const val SERVICE_RUNTIME_OWNER = "active-journey-service"
         private const val TRACKING_CHANNEL_ID = "arrival_tracking"
         private const val ARRIVAL_CHANNEL_ID = "arrival_alerts"
+
+        // A short, nonrepeating tactile arrival cue. Android 26+ enforces channel
+        // settings and DND; prior releases use this for the final notification only.
+        internal fun arrivalVibrationPattern(): LongArray = longArrayOf(0L, 200L, 100L, 260L)
+
+        @TargetApi(Build.VERSION_CODES.O)
+        internal fun arrivalNotificationChannel(context: Context): NotificationChannel =
+            NotificationChannel(
+                ARRIVAL_CHANNEL_ID,
+                context.getString(R.string.arrival_alerts_channel_name),
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                enableVibration(true)
+                vibrationPattern = arrivalVibrationPattern()
+            }
         private const val TRACKING_NOTIFICATION_ID = 4101
         private const val ARRIVAL_NOTIFICATION_ID = 4102
         private const val CANCEL_REQUEST_CODE = 4103
