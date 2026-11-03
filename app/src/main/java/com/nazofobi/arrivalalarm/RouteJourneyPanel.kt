@@ -378,8 +378,6 @@ private fun RouteOptionCard(
     }
 }
 
-@Composable
-
 /** Explicit route share; no private coordinates, trip IDs or history. */
 internal fun buildRouteShareSummary(
     option: RouteOption,
@@ -409,6 +407,7 @@ internal fun buildRouteShareSummary(
     ).filter { it.isNotBlank() }.joinToString("\n")
 }
 
+@Composable
 private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
     val context = LocalContext.current
     val displayDeparture = routeOptionEvidenceClock(option, departure = true, routeOffline = routeOffline)
