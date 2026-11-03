@@ -4,4 +4,7 @@
     <string name="offline_pack_size_unknown">boyut bilinmiyor</string>
     <string name="offline_pack_version_unknown">sürüm bilinmiyor</string>
     <string name="offline_pack_updated_unknown">güncelleme zamanı bilinmiyor</string>
+    <string name="offline_pack_refresh_wifi">Yüklü ulaşım verisini Wi-Fi ile güncelle</string>
+    <string name="offline_pack_refresh_wifi_note">Güncelleme sınırsız Wi-Fi ve yeterli pil/depolama bekleyebilir; büyük veri indirilebilir.</string>
+    <string name="offline_pack_refresh_overdue">Son kontrol en az 7 gün önceydi; seferler değişmiş olabilir.</string>
 </resources>
