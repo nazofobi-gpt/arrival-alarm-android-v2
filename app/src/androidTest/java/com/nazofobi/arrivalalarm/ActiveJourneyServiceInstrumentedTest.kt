@@ -2,12 +2,15 @@ package com.nazofobi.arrivalalarm
 
 import android.Manifest
 import android.app.Notification
+import android.app.NotificationManager
+import android.content.Context
 import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -34,6 +37,30 @@ class ActiveJourneyServiceInstrumentedTest {
         assertNotNull(notice.contentIntent)
         if (Build.VERSION.SDK_INT >= 26) {
             assertEquals("arrival_alerts", notice.channelId)
+        }
+    }
+
+    @Test fun clearingStaleForcedStopNoticeRemovesOnlyTheOldAlert() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        if (Build.VERSION.SDK_INT >= 33 &&
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            // A real notification assertion requires a runtime grant on the API36 emulator.
+            InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(
+                context.packageName,
+                Manifest.permission.POST_NOTIFICATIONS,
+            )
+        }
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val stoppedId = ActiveJourneyService.TRACKING_STOPPED_NOTIFICATION_ID
+        manager.cancel(stoppedId)
+        try {
+            manager.notify(stoppedId, ActiveJourneyService.trackingStoppedNotification(context))
+            assertTrue(manager.activeNotifications.any { it.id == stoppedId })
+            ActiveJourneyService.clearStoppedTrackingNotification(context)
+            assertFalse(manager.activeNotifications.any { it.id == stoppedId })
+        } finally {
+            manager.cancel(stoppedId)
         }
     }
 
