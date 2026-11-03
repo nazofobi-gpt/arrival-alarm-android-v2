@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun FirstRunOnboarding(
     onContinue: () -> Unit,
+    offlineDataState: NationwideDataState,
+    onDownloadOfflineData: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -124,6 +126,62 @@ fun FirstRunOnboarding(
                             .testTag("onboarding-accessibility-settings"),
                     ) {
                         Text(stringResource(R.string.onboarding_accessibility_action))
+                    }
+                }
+            }
+
+            // An offline index can be large: present a real, explicit choice, never auto-download.
+            val offlineReady = offlineDataState is NationwideDataState.Ready &&
+                offlineDataState.stopCount > 0
+            val offlineLoading = offlineDataState is NationwideDataState.Loading
+            Card(
+                modifier = Modifier.fillMaxWidth().testTag("onboarding-offline-setup"),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.onboarding_offline_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.semantics { heading() },
+                    )
+                    Text(
+                        text = stringResource(R.string.onboarding_offline_body),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    val offlineStatus = when {
+                        offlineReady -> R.string.onboarding_offline_ready
+                        offlineLoading -> R.string.onboarding_offline_loading
+                        offlineDataState is NationwideDataState.Error ->
+                            R.string.onboarding_offline_error
+                        else -> R.string.onboarding_offline_idle
+                    }
+                    Text(
+                        text = stringResource(offlineStatus),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("onboarding-offline-status"),
+                    )
+                    if (!offlineReady && !offlineLoading) {
+                        OutlinedButton(
+                            onClick = onDownloadOfflineData,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("onboarding-offline-download"),
+                        ) {
+                            Text(
+                                stringResource(
+                                    if (offlineDataState is NationwideDataState.Error)
+                                        R.string.onboarding_offline_retry
+                                    else R.string.onboarding_offline_download,
+                                )
+                            )
+                        }
                     }
                 }
             }

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="onboarding_offline_title">Çevrimdışı Almanya verileri (isteğe bağlı)</string>
+    <string name="onboarding_offline_body">Almanya çapındaki durak ve sefer paketi büyük olabilir. İsterseniz Wi-Fi üzerinden indirin; daha sonra çevrimdışı arama ve yerel rota planlaması için kullanılabilir. Şimdi indirmek zorunda değilsiniz; Ayarlar bölümünden daha sonra da başlatabilirsiniz.</string>
+    <string name="onboarding_offline_idle">Henüz indirilmedi. İndirme ancak sizin seçiminizle başlar.</string>
+    <string name="onboarding_offline_download">Çevrimdışı verileri indir</string>
+    <string name="onboarding_offline_loading">Veriler hazırlanıyor. İndirme sırasında devam edebilirsiniz.</string>
+    <string name="onboarding_offline_ready">Çevrimdışı durak indeksi hazır.</string>
+    <string name="onboarding_offline_error">Veriler yüklenemedi. Yeniden deneyebilir veya atlayabilirsiniz.</string>
+    <string name="onboarding_offline_retry">İndirmeyi tekrar dene</string>
+</resources>

@@ -959,6 +959,10 @@ fun ArrivalAlarmApp(
                 ) {
                 if (!onboardingComplete) {
                     FirstRunOnboarding(
+                        offlineDataState = dataState,
+                        onDownloadOfflineData = {
+                            transit.ensureNationwideIndex { dataState = it }
+                        },
                         onContinue = {
                             appPreferences.edit()
                                 .putBoolean("onboarding_complete", true)

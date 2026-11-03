@@ -8,6 +8,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -28,7 +29,11 @@ class FirstRunOnboardingAccessibilityTest {
         rule.setContent {
             MaterialTheme {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    FirstRunOnboarding(onContinue = { continued.value = true })
+                    FirstRunOnboarding(
+                        onContinue = { continued.value = true },
+                        offlineDataState = NationwideDataState.Idle,
+                        onDownloadOfflineData = {},
+                    )
                 }
             }
         }
@@ -39,6 +44,71 @@ class FirstRunOnboardingAccessibilityTest {
         rule.onNodeWithTag("onboarding-complete")
             .performScrollTo().performClick()
         rule.runOnIdle { assertTrue(continued.value) }
+    }
+
+    @Test fun offlineDownloadIsOptionalAndHasLiveRetryAndReadyStates() {
+        var offlineState by androidx.compose.runtime.mutableStateOf<NationwideDataState>(
+            NationwideDataState.Idle
+        )
+        var downloadCalls = 0
+        var continued = false
+        rule.setContent {
+            MaterialTheme {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    FirstRunOnboarding(
+                        onContinue = { continued = true },
+                        offlineDataState = offlineState,
+                        onDownloadOfflineData = { downloadCalls += 1 },
+                    )
+                }
+            }
+        }
+        rule.onNodeWithTag("onboarding-offline-setup").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("onboarding-offline-download").performScrollTo().performClick()
+        rule.runOnIdle { assertEquals(1, downloadCalls) }
+
+        rule.runOnIdle { offlineState = NationwideDataState.Loading("downloading") }
+        rule.onNodeWithTag("onboarding-offline-status").assertIsDisplayed()
+        rule.onNodeWithTag("onboarding-offline-download").assertDoesNotExist()
+
+        rule.runOnIdle { offlineState = NationwideDataState.Error("network unavailable") }
+        rule.onNodeWithTag("onboarding-offline-download").performScrollTo().performClick()
+        rule.runOnIdle { assertEquals(2, downloadCalls) }
+
+        rule.runOnIdle {
+            offlineState = NationwideDataState.Ready(
+                stopCount = 12_345,
+                fetchedAtEpochSeconds = 1L,
+                sourceVersion = "test",
+            )
+        }
+        rule.onNodeWithTag("onboarding-offline-download").assertDoesNotExist()
+        rule.onNodeWithTag("onboarding-complete").performScrollTo().performClick()
+        rule.runOnIdle {
+            assertTrue(continued)
+            assertEquals(2, downloadCalls)
+        }
+    }
+
+    @Test fun offlineDownloadNeverStartsWhenUserSkipsSetup() {
+        var downloadCalls = 0
+        var continued = false
+        rule.setContent {
+            MaterialTheme {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    FirstRunOnboarding(
+                        onContinue = { continued = true },
+                        offlineDataState = NationwideDataState.Idle,
+                        onDownloadOfflineData = { downloadCalls++ },
+                    )
+                }
+            }
+        }
+        rule.onNodeWithTag("onboarding-complete").performScrollTo().performClick()
+        rule.runOnIdle {
+            assertTrue(continued)
+            assertEquals(0, downloadCalls)
+        }
     }
 
     @Test fun quickSetupUsesOnlySystemAccessibilitySettings() {
