@@ -430,4 +430,34 @@ class JourneyConnectorActionPortTest {
         assertEquals(original, controller.state)
     }
 
+
+    @Test fun gpsOnlyAlarmExposesSelectedTargetWithoutInventingTransitTrip() {
+        val controller = JourneyController()
+        val port = JourneyConnectorActionPort(controller, nowEpochSeconds = { 90_000L })
+        assertTrue(port.setOrigin(MapPoint(52.66, 8.23, "Lohne")).applied)
+        assertTrue(port.setDestination(MapPoint(53.08, 8.81, "Bremen Hbf")).applied)
+        assertTrue(port.armArrivalAlarm().applied)
+
+        val gpsOnly = port.readSnapshot()
+        assertEquals(JourneyPhase.ARMED, gpsOnly.journeyPhase)
+        assertEquals(null, gpsOnly.activeTrip)
+        assertEquals("Lohne", gpsOnly.origin?.name)
+        assertEquals("Bremen Hbf", gpsOnly.destination?.name)
+        assertEquals(53.08, gpsOnly.destination?.latitude ?: -1.0, 0.0001)
+
+        assertTrue(port.cancelArrivalAlarm().applied)
+        assertTrue(port.setOrigin(MapPoint(52.70, 8.30, "Yeni başlangıç")).applied)
+        val reset = port.readSnapshot()
+        assertEquals("Yeni başlangıç", reset.origin?.name)
+        assertEquals(null, reset.destination)
+        assertEquals(null, reset.activeTrip)
+
+        // A direct controller mutation must not reuse a stale connector label.
+        assertTrue(port.setDestination(MapPoint(53.0, 9.0, "Hedef 2")).applied)
+        controller.selectDestination(GeoPoint(54.0, 10.0))
+        val external = port.readSnapshot()
+        assertEquals("Varış", external.destination?.name)
+        assertEquals(54.0, external.destination?.latitude ?: -1.0, 0.0001)
+    }
+
 }

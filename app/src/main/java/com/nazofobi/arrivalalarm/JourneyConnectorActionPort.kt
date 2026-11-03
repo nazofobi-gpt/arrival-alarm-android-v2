@@ -36,6 +36,16 @@ class JourneyConnectorActionPort(
         // can still accept a version-matched remote command.
         sourceUpdatedAtEpochSeconds = maxOf(sourceUpdatedAtEpochSeconds, now)
         val state = controller.state
+        // Prefer user-entered labels only while they match the domain controller's
+        // current coordinates; an external UI state change must not leak stale targets.
+        val snapshotOrigin = state.start?.let { point ->
+            origin?.takeIf { it.latitude == point.latitude && it.longitude == point.longitude }
+                ?: ConnectorStopState(name = "Başlangıç", latitude = point.latitude, longitude = point.longitude)
+        }
+        val snapshotDestination = state.destination?.let { point ->
+            destination?.takeIf { it.latitude == point.latitude && it.longitude == point.longitude }
+                ?: ConnectorStopState(name = "Varış", latitude = point.latitude, longitude = point.longitude)
+        }
         val trip = activeTrip?.copy(
             origin = activeTrip?.origin ?: origin,
             destination = activeTrip?.destination ?: destination,
@@ -48,6 +58,8 @@ class JourneyConnectorActionPort(
             source = "arrival-alarm-domain",
             journeyPhase = state.phase,
             activeTrip = trip,
+            origin = snapshotOrigin,
+            destination = snapshotDestination,
             distanceToDestinationMeters = state.distanceMeters,
             alarmArmed = state.phase == JourneyPhase.ARMED,
         )

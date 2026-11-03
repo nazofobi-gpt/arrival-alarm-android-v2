@@ -151,4 +151,30 @@ class ConnectorJsonCodecTest {
         assertTrue(root.getBoolean("duplicate"))
         assertEquals(6, root.getLong("state_version_after"))
     }
+
+    @Test fun gpsOnlySnapshotJsonIncludesNamedTargetAndNeverFabricatesTrip() {
+        val gpsOnly = ArrivalAlarmConnectorSnapshot(
+            stateVersion = 4,
+            capturedAtEpochSeconds = 1_000,
+            sourceUpdatedAtEpochSeconds = 1_000,
+            source = "arrival-alarm-domain",
+            journeyPhase = JourneyPhase.ARMED,
+            origin = ConnectorStopState(name = "Lohne", latitude = 52.66, longitude = 8.23),
+            destination = ConnectorStopState(name = "Bremen Hbf", latitude = 53.08, longitude = 8.81),
+            alarmArmed = true,
+        )
+        val root = JSONObject(ConnectorJsonCodec.encodeSnapshot(gpsOnly))
+        assertFalse(root.has("active_trip"))
+        assertEquals("Lohne", root.getJSONObject("origin").getString("name"))
+        assertEquals("Bremen Hbf", root.getJSONObject("destination").getString("name"))
+        assertEquals(53.08, root.getJSONObject("destination").getDouble("latitude"), 0.0001)
+
+        val empty = JSONObject(ConnectorJsonCodec.encodeSnapshot(
+            gpsOnly.copy(journeyPhase = JourneyPhase.EMPTY, origin = null, destination = null, alarmArmed = false)
+        ))
+        assertFalse(empty.has("origin"))
+        assertFalse(empty.has("destination"))
+        assertFalse(empty.has("active_trip"))
+    }
+
 }

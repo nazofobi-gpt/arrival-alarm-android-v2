@@ -12,6 +12,8 @@ export class GatewayService {
       journey_phase: snapshot.journey_phase,
       source: snapshot.source,
       active_trip: snapshot.active_trip ?? null,
+      origin: snapshot.origin ?? snapshot.active_trip?.origin ?? null,
+      destination: snapshot.destination ?? snapshot.active_trip?.destination ?? null,
       distance_to_destination_meters: snapshot.distance_to_destination_meters ?? null,
     };
   }

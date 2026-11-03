@@ -19,6 +19,8 @@ object ConnectorJsonCodec {
             .put("alarm_armed", value.alarmArmed)
 
         value.distanceToDestinationMeters?.let { root.put("distance_to_destination_meters", it) }
+        value.origin?.let { root.put("origin", encodeStop(it)) }
+        value.destination?.let { root.put("destination", encodeStop(it)) }
         value.activeTrip?.let { root.put("active_trip", encodeTrip(it)) }
         return root.toString()
     }
