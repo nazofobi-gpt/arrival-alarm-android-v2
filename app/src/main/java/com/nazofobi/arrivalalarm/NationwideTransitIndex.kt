@@ -274,7 +274,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             }
             .maxByOrNull(String::length)
             ?: return emptyList()
-        return searchFts("$" + "{secondaryAnchor}*", 400).asSequence()
+        return searchFts(secondaryAnchor + "*", 400).asSequence()
             .filter { OfflineStopTypoMatcher.matchesOneTypo(normalized, it.name) }
             .take(boundedLimit)
             .toList()
