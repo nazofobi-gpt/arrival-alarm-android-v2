@@ -4,4 +4,7 @@
     <string name="offline_pack_size_unknown">Größe unbekannt</string>
     <string name="offline_pack_version_unknown">Version unbekannt</string>
     <string name="offline_pack_updated_unknown">Aktualisierungszeit unbekannt</string>
+    <string name="offline_pack_refresh_wifi">Installierte Verkehrsdaten über WLAN aktualisieren</string>
+    <string name="offline_pack_refresh_wifi_note">Die Aktualisierung kann auf WLAN ohne Datenlimit und genügend Akku/Speicher warten; große Downloads sind möglich.</string>
+    <string name="offline_pack_refresh_overdue">Letzte Prüfung vor mindestens 7 Tagen; Fahrpläne können sich geändert haben.</string>
 </resources>
