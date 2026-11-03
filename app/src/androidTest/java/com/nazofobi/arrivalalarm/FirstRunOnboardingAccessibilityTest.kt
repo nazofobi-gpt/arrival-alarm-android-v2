@@ -174,6 +174,57 @@ class FirstRunOnboardingAccessibilityTest {
         assertEquals(null, intent.component)
     }
 
+    @Test fun replayDismissalPreservesCompletedSetupAndNeverStartsOfflineDownload() {
+        val replayOpen = mutableStateOf(true)
+        var continueCalls = 0
+        var downloads = 0
+        rule.setContent {
+            MaterialTheme {
+                if (replayOpen.value) {
+                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                        FirstRunOnboarding(
+                            onContinue = { continueCalls++ },
+                            onDismissReplay = { replayOpen.value = false },
+                            offlineDataState = NationwideDataState.Idle,
+                            onDownloadOfflineData = { downloads++ },
+                        )
+                    }
+                }
+            }
+        }
+        rule.onNodeWithTag("onboarding-dismiss-replay").performScrollTo().performClick()
+        rule.runOnIdle {
+            assertTrue(!replayOpen.value)
+            assertEquals(0, continueCalls)
+            assertEquals(0, downloads)
+        }
+        rule.onNodeWithTag("first-run-onboarding").assertDoesNotExist()
+    }
+
+    @Test fun replayContinueIsOptionalAndDoesNotTriggerDownloads() {
+        var dismissed = false
+        var continued = false
+        var downloads = 0
+        rule.setContent {
+            MaterialTheme {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    FirstRunOnboarding(
+                        onContinue = { continued = true },
+                        onDismissReplay = { dismissed = true },
+                        offlineDataState = NationwideDataState.Idle,
+                        onDownloadOfflineData = { downloads++ },
+                    )
+                }
+            }
+        }
+        rule.onNodeWithTag("onboarding-complete").performScrollTo().performClick()
+        rule.runOnIdle {
+            assertTrue(continued)
+            assertTrue(!dismissed)
+            assertEquals(0, downloads)
+        }
+    }
+
     @Test fun quickSetupUsesOnlySystemAccessibilitySettings() {
         val intent = accessibilityQuickSetupIntent()
         assertEquals(Settings.ACTION_ACCESSIBILITY_SETTINGS, intent.action)

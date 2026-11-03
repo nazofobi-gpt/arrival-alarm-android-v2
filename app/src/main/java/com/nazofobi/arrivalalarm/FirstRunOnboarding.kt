@@ -40,6 +40,7 @@ fun FirstRunOnboarding(
     onDownloadOfflineData: () -> Unit,
     guidanceLanguage: GuidanceLanguage = GuidanceLanguage.TURKISH,
     onGuidanceLanguageChange: (GuidanceLanguage) -> Unit = {},
+    onDismissReplay: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -279,6 +280,18 @@ fun FirstRunOnboarding(
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier.testTag("onboarding-privacy-note"),
                     )
+                }
+            }
+
+            if (onDismissReplay != null) {
+                OutlinedButton(
+                    onClick = onDismissReplay,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("onboarding-dismiss-replay"),
+                ) {
+                    Text(stringResource(R.string.onboarding_replay_back))
                 }
             }
 

@@ -152,6 +152,8 @@ fun SettingsReadinessPanel(
     onRefreshReadiness: () -> Unit,
     onShareDiagnostics: () -> Unit,
     onOpenAppSettings: () -> Unit,
+    onReplayOnboarding: () -> Unit = {},
+    onboardingReplayAvailable: Boolean = true,
     onRetryData: () -> Unit,
     onConnectorAction: () -> Unit,
     modifier: Modifier = Modifier,
@@ -401,6 +403,24 @@ fun SettingsReadinessPanel(
                     .testTag("readiness-app-settings"),
             ) {
                 Text(stringResource(R.string.readiness_open_app_settings))
+            }
+
+            OutlinedButton(
+                onClick = onReplayOnboarding,
+                enabled = onboardingReplayAvailable,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("settings-replay-onboarding"),
+            ) {
+                Text(stringResource(R.string.onboarding_replay_action))
+            }
+            if (!onboardingReplayAvailable) {
+                Text(
+                    text = stringResource(R.string.onboarding_replay_unavailable),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             // App permissions and the device-wide location switch are independent.
