@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="error_active_alarm_retarget_blocked">Bitte zuerst den aktiven Ankunftsalarm abbrechen und dann eine neue Route wählen.</string>
+</resources>

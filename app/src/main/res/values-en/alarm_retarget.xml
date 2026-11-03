@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="error_active_alarm_retarget_blocked">Cancel the active arrival alarm before choosing a new route.</string>
+</resources>

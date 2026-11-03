@@ -389,6 +389,13 @@ fun ArrivalAlarmApp(
     fun setOrigin(point: MapPoint) {
         // A late device fix must never override a newer manual origin selection.
         currentLocationRequestGate.invalidate()
+        val outcome = connectorPort.setOrigin(point)
+        journey = controller.state
+        if (!outcome.applied) {
+            // Keep the visible origin and active alarm aligned with domain truth.
+            locationMessage = localizedDomainMessage(context, outcome.message)
+            return
+        }
         locationMessage = null
         // Changing origin cancels any pending route and station responses.
         routeRequestGate.invalidate()
@@ -415,8 +422,6 @@ fun ArrivalAlarmApp(
         stationLoading = false
         stationResolved = false
         selectingOrigin = false
-        connectorPort.setOrigin(point)
-        journey = controller.state
         loadNearby(point)
     }
 
@@ -1968,6 +1973,7 @@ internal fun localizedDomainMessage(context: Context, raw: String?): String {
         "Önce başlangıç seçilmeli" -> context.getString(R.string.error_start_required)
         "Başlangıç ve hedef gerekli" -> context.getString(R.string.error_start_destination_required)
         "İptal edilecek kurulu alarm yok" -> context.getString(R.string.error_no_alarm)
+        "Aktif alarmı önce iptal edin" -> context.getString(R.string.error_active_alarm_retarget_blocked)
         "Rota artık mevcut değil; güncel rota seçilmeli" -> context.getString(R.string.error_route_stale)
         "Önce sefer seçilmeli" -> context.getString(R.string.error_trip_required)
         "Kurulu varış alarmı yok" -> context.getString(R.string.error_alarm_missing)

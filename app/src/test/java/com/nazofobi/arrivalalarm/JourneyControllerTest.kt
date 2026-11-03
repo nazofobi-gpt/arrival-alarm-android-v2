@@ -76,6 +76,8 @@ class JourneyControllerTest {
         c.onDistanceChanged(600.0)
         assertEquals(600.0, c.state.distanceMeters)
 
+        // A new target requires the real cancellation path first.
+        c.cancelAlarm()
         c.selectDestination(GeoPoint(53.7, 8.3))
         assertEquals(JourneyPhase.DESTINATION_SELECTED, c.state.phase)
         assertEquals(GeoPoint(53.7, 8.3), c.state.destination)
@@ -90,6 +92,45 @@ class JourneyControllerTest {
         c.onDistanceChanged(120.0, fixElapsedRealtimeNanos = 2_000_000_000L)
         assertEquals(JourneyPhase.ARRIVED, c.state.phase)
         assertEquals(120.0, c.state.distanceMeters)
+    }
+
+    @Test fun activeAlarmRejectsRetargetAndRetainsSavedGpsProgressUntilExplicitCancel() {
+        var persisted: JourneyUiState? = null
+        val store = object : JourneyStateStore {
+            override fun load(): JourneyUiState? = persisted
+            override fun save(state: JourneyUiState) { persisted = state }
+        }
+        val c = JourneyController(arrivalRadiusMeters = 250.0, stateStore = store)
+        val originalStart = GeoPoint(53.5, 8.1)
+        val originalTarget = GeoPoint(53.6, 8.2)
+        c.selectStart(originalStart)
+        c.selectDestination(originalTarget)
+        c.arm()
+        c.onDistanceChanged(600.0, fixElapsedRealtimeNanos = 1_000_000_000L)
+
+        c.selectStart(GeoPoint(52.0, 7.0))
+        assertEquals(JourneyPhase.ARMED, c.state.phase)
+        assertEquals(originalStart, c.state.start)
+        assertEquals(originalTarget, c.state.destination)
+        assertEquals(600.0, c.state.distanceMeters ?: -1.0, 0.0)
+        assertNotNull(c.state.error)
+
+        c.selectDestination(GeoPoint(52.1, 7.1))
+        assertEquals(JourneyPhase.ARMED, persisted?.phase)
+        assertEquals(originalTarget, persisted?.destination)
+        assertEquals(600.0, persisted?.distanceMeters ?: -1.0, 0.0)
+        assertNotNull(c.state.error)
+        // A denied retarget must not reset the original alarm's arrival evidence.
+        c.onDistanceChanged(120.0, fixElapsedRealtimeNanos = 2_000_000_000L)
+        c.onDistanceChanged(120.0, fixElapsedRealtimeNanos = 3_000_000_000L)
+        assertEquals(JourneyPhase.ARRIVED, c.state.phase)
+
+        c.cancelAlarm()
+        c.selectStart(GeoPoint(52.0, 7.0))
+        c.selectDestination(GeoPoint(52.1, 7.1))
+        assertEquals(JourneyPhase.DESTINATION_SELECTED, c.state.phase)
+        assertEquals(GeoPoint(52.1, 7.1), c.state.destination)
+        assertNull(c.state.distanceMeters)
     }
 
     @Test fun changingDestinationAfterArrivalRemovesPreviousArrivalDistance() {
