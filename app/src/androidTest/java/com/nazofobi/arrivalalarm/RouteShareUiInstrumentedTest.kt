@@ -1,9 +1,15 @@
 package com.nazofobi.arrivalalarm
 
+import android.content.ActivityNotFoundException
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.IntentFilter
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -29,9 +35,18 @@ class RouteShareUiInstrumentedTest {
         stops = emptyList(),
     )
 
-    private fun render(selectedId: String?) {
+    private fun render(selectedId: String?, failShare: Boolean = false) {
         rule.setContent {
-            MaterialTheme {
+            val baseContext = LocalContext.current
+            val shareContext = remember(baseContext, failShare) {
+                if (failShare) object : ContextWrapper(baseContext) {
+                    override fun startActivity(intent: Intent) {
+                        throw ActivityNotFoundException("No share target")
+                    }
+                } else baseContext
+            }
+            CompositionLocalProvider(LocalContext provides shareContext) {
+                MaterialTheme {
                 RouteJourneyPanel(
                     origin = option.origin,
                     destination = option.destination,
@@ -47,6 +62,7 @@ class RouteShareUiInstrumentedTest {
                     onCancelAlarm = {},
                     mode = RouteJourneyMode.DETAIL,
                 )
+                }
             }
         }
     }
@@ -75,6 +91,13 @@ class RouteShareUiInstrumentedTest {
         } finally {
             instrumentation.removeMonitor(monitor)
         }
+    }
+
+    @Test fun unavailableShareTargetShowsErrorWithoutCrashingOrLeavingJourney() {
+        render(option.id, failShare = true)
+        rule.onNodeWithTag("journey-share-route").performClick()
+        rule.onNodeWithTag("journey-share-error").assertIsDisplayed()
+        rule.onNodeWithTag("journey-detail").assertExists()
     }
 
     @Test fun noSelectionHasNoShareSideEffect() {

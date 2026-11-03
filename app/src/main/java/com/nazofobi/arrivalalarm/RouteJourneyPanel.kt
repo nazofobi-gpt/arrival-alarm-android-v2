@@ -1,5 +1,6 @@
 package com.nazofobi.arrivalalarm
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -422,6 +423,7 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
         option.transfers,
     )
     val shareActionLabel = stringResource(R.string.journey_share_action)
+    var shareLaunchFailed by remember(option.id) { mutableStateOf(false) }
     val displayDeparture = routeOptionEvidenceClock(option, departure = true, routeOffline = routeOffline)
         ?: stringResource(R.string.unknown_time)
     val displayArrival = routeOptionEvidenceClock(option, departure = false, routeOffline = routeOffline)
@@ -480,13 +482,25 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
                         type = "text/plain"
                         putExtra(Intent.EXTRA_TEXT, sharedText)
                     }
-                    context.startActivity(
-                        Intent.createChooser(send, shareActionLabel)
-                    )
+                    shareLaunchFailed = try {
+                        context.startActivity(Intent.createChooser(send, shareActionLabel))
+                        false
+                    } catch (_: ActivityNotFoundException) {
+                        true
+                    } catch (_: SecurityException) {
+                        true
+                    }
                 },
                 modifier = Modifier.heightIn(min = 48.dp).testTag("journey-share-route"),
             ) {
                 Text(stringResource(R.string.journey_share_action))
+            }
+            if (shareLaunchFailed) {
+                Text(
+                    text = stringResource(R.string.journey_share_unavailable),
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("journey-share-error"),
+                )
             }
             Text(
                 text = stringResource(R.string.journey_share_privacy_note),
