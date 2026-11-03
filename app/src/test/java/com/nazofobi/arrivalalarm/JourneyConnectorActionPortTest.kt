@@ -51,6 +51,28 @@ class JourneyConnectorActionPortTest {
         assertFalse(port.readSnapshot().alarmArmed)
     }
 
+    @Test fun connectorRetargetCannotSilentlyDisarmTrackingOrReplaceBoundTrip() {
+        val controller = JourneyController()
+        val port = JourneyConnectorActionPort(controller = controller)
+        val start = MapPoint(53.0, 8.0, "Origin")
+        val target = MapPoint(53.1, 8.1, "Target")
+        assertTrue(port.setOrigin(start).applied)
+        assertTrue(port.setDestination(target).applied)
+        assertTrue(port.armExplicitManualAlarm().applied)
+        val before = port.readSnapshot()
+
+        assertFalse(port.setOrigin(MapPoint(52.0, 7.0, "Other origin")).applied)
+        assertFalse(port.setDestination(MapPoint(52.1, 7.1, "Other target")).applied)
+        val after = port.readSnapshot()
+        assertEquals(JourneyPhase.ARMED, after.journeyPhase)
+        assertTrue(after.alarmArmed)
+        assertEquals(before.activeTrip, after.activeTrip)
+        assertEquals(before.stateVersion, after.stateVersion)
+        assertEquals(target.latitude, controller.state.destination?.latitude ?: -1.0, 0.0)
+        assertTrue(port.cancelArrivalAlarm().applied)
+        assertTrue(port.setOrigin(MapPoint(52.0, 7.0, "Other origin")).applied)
+    }
+
     @Test fun tripProgressIsReadableForConversationalQuestions() {
         val controller = JourneyController()
         val route = RouteOption(
