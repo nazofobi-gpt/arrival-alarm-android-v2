@@ -181,9 +181,52 @@ class G170NearbyVisualInstrumentedTest {
         captureScreenshot("/sdcard/Download/arrival-alarm-ui-qa/g170-lohne-nearby.png")
     }
 
+
+    @Test
+    fun nearbyExpansionRevealsAndSelectsNinthRealStopWithoutChangingFirstEight() {
+        val candidates = (0 until 12).map { index ->
+            NearbyStop(
+                CatalogStop(
+                    id = "station-$index",
+                    providerId = "gtfs",
+                    name = "Station $index",
+                    latitude = 52.665 + index * 0.0001,
+                    longitude = 8.237,
+                ),
+                50 + index,
+            )
+        }
+        var selected: String? = null
+        setNearbyContent(
+            nearby = candidates,
+            favoriteStopIds = emptySet(),
+            onNearbyStopSelected = { selected = it.stop.id },
+        )
+
+        assertTrue(rule.onAllNodesWithTag("nearby-stop-8").fetchSemanticsNodes().isEmpty())
+        rule.onNodeWithTag("nearby-show-more-toggle")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+
+        rule.onNodeWithTag("nearby-stop-8")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .assertTextContains("Station 8", substring = true)
+            .performClick()
+        rule.runOnIdle { assertEquals("station-8", selected) }
+
+        rule.onNodeWithTag("nearby-show-more-toggle")
+            .performScrollTo()
+            .performClick()
+        assertTrue(rule.onAllNodesWithTag("nearby-stop-8").fetchSemanticsNodes().isEmpty())
+        rule.onNodeWithTag("nearby-stop-0").performScrollTo().assertIsDisplayed()
+    }
+
     private fun setNearbyContent(
         nearby: List<NearbyStop>,
         favoriteStopIds: Set<String>,
+        onNearbyStopSelected: (NearbyStop) -> Unit = {},
     ) {
         rule.setContent {
             MaterialTheme {
@@ -215,7 +258,7 @@ class G170NearbyVisualInstrumentedTest {
                         onMapStopSelected = {},
                         onMapPointSelected = {},
                         onMapError = {},
-                        onNearbyStopSelected = {},
+                        onNearbyStopSelected = onNearbyStopSelected,
                         mode = HomeSearchMode.HOME,
                     )
                 }
