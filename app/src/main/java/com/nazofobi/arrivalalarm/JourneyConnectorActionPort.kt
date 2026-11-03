@@ -26,16 +26,30 @@ class JourneyConnectorActionPort(
     private var selectedRoute: RouteOption? = null
     private var activeTrip: ConnectorTripState? = null
     private var selectedTripArmValidationRequired = selectedTripArmValidationRequired
+    private var lastObservedStart = controller.state.start
+    private var lastObservedDestination = controller.state.destination
 
     @Synchronized
     override fun readSnapshot(): ArrivalAlarmConnectorSnapshot {
         val now = nowEpochSeconds()
+        val state = controller.state
+        // Local UI edits can bypass this connector adapter. Invalidate any old
+        // selected trip and labels rather than presenting them for the new target.
+        if (state.start != lastObservedStart || state.destination != lastObservedDestination) {
+            origin = state.start?.let {
+                ConnectorStopState(name = "Başlangıç", latitude = it.latitude, longitude = it.longitude)
+            }
+            destination = state.destination?.let {
+                ConnectorStopState(name = "Varış", latitude = it.latitude, longitude = it.longitude)
+            }
+            selectedRoute = null
+            activeTrip = null
+            markChanged()
+        }
         refreshTimedTripProgress(now)
         // Reading the local controller is an authoritative device-side observation.
-        // Refresh freshness without changing stateVersion so an idle-but-connected app
-        // can still accept a version-matched remote command.
+        // Refresh freshness without changing stateVersion for an unchanged state.
         sourceUpdatedAtEpochSeconds = maxOf(sourceUpdatedAtEpochSeconds, now)
-        val state = controller.state
         // Prefer user-entered labels only while they match the domain controller's
         // current coordinates; an external UI state change must not leak stale targets.
         val snapshotOrigin = state.start?.let { point ->
@@ -338,6 +352,8 @@ class JourneyConnectorActionPort(
     }
 
     private fun markChanged() {
+        lastObservedStart = controller.state.start
+        lastObservedDestination = controller.state.destination
         stateVersion += 1
         sourceUpdatedAtEpochSeconds = nowEpochSeconds()
     }
