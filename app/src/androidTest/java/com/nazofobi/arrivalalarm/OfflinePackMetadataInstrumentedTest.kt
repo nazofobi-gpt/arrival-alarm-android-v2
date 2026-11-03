@@ -1,14 +1,19 @@
 package com.nazofobi.arrivalalarm
 
 import android.content.ContextWrapper
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import android.text.format.DateUtils
 import android.text.format.Formatter
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -80,6 +85,9 @@ class OfflinePackMetadataInstrumentedTest {
             composeRule.setContent {
                 CompositionLocalProvider(LocalContext provides context) {
                     MaterialTheme {
+                        // Match the production Settings screen: the readiness card is
+                        // inside a vertically scrollable viewport, not an unscrollable fixture.
+                        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                         SettingsReadinessPanel(
                             state = state,
                             connectorBusy = false,
@@ -95,11 +103,13 @@ class OfflinePackMetadataInstrumentedTest {
                             onUpdateInstalledData = { manualRefreshClicks++ },
                             manualRefreshWorkState = manualWorkState.value,
                         )
+                        }
                     }
                 }
             }
 
             composeRule.onNodeWithTag("nationwide-index-refresh-now")
+                .performScrollTo()
                 .assertIsDisplayed()
                 .performClick()
             assertEquals(1, manualRefreshClicks)
@@ -115,7 +125,9 @@ class OfflinePackMetadataInstrumentedTest {
             }
 
             val metadataNode = composeRule.onNodeWithTag("offline-pack-metadata")
-            metadataNode.assertIsDisplayed().assertTextContains("etag-g185-test", substring = true)
+            metadataNode.performScrollTo()
+                .assertIsDisplayed()
+                .assertTextContains("etag-g185-test", substring = true)
             fun normalizeWhitespace(value: String): String = value
                 .replace('\u00A0', ' ')
                 .replace('\u202F', ' ')
