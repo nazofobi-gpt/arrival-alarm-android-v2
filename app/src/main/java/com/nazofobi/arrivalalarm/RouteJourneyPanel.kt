@@ -386,6 +386,7 @@ internal fun buildRouteShareSummary(
     scheduleNote: String,
     offlineNote: String,
     unknownTime: String,
+    walkingTransferSummary: String,
 ): String {
     fun safe(value: String): String =
         value.replace(Regex("\\p{C}"), " ").trim().take(120)
@@ -402,6 +403,7 @@ internal fun buildRouteShareSummary(
         safe(title),
         safe(option.origin.label) + " → " + safe(option.destination.label),
         line,
+        safe(walkingTransferSummary),
         departure + " → " + arrival,
         safe(if (routeOffline) offlineNote else scheduleNote),
     ).filter { it.isNotBlank() }.joinToString("\n")
@@ -414,6 +416,11 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
     val shareScheduleNote = stringResource(R.string.journey_share_schedule_note)
     val shareOfflineNote = stringResource(R.string.journey_share_offline_note)
     val shareUnknownTime = stringResource(R.string.unknown_time)
+    val shareWalkingTransfers = stringResource(
+        R.string.route_walk_transfer_format,
+        option.walkingMinutes,
+        option.transfers,
+    )
     val shareActionLabel = stringResource(R.string.journey_share_action)
     val displayDeparture = routeOptionEvidenceClock(option, departure = true, routeOffline = routeOffline)
         ?: stringResource(R.string.unknown_time)
@@ -467,6 +474,7 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
                         scheduleNote = shareScheduleNote,
                         offlineNote = shareOfflineNote,
                         unknownTime = shareUnknownTime,
+                        walkingTransferSummary = shareWalkingTransfers,
                     )
                     val send = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
