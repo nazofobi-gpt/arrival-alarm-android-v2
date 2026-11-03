@@ -218,7 +218,8 @@ export function createArrivalAlarmMcpServer({
       title: "Get current journey",
       description:
         "Read the connected Arrival Alarm app's current journey, route and destination state. " +
-        "Use for questions such as which trip the user is on or where they are going.",
+        "GPS-only alarms include typed origin/destination without a selected transit trip. " +
+        "Use for questions such as which trip the user is on or where they are going; do not invent a trip.",
       inputSchema: {},
       annotations: readAnnotations,
       securitySchemes: readSecuritySchemes,
@@ -260,7 +261,7 @@ export function createArrivalAlarmMcpServer({
     {
       title: "Get arrival alarm state",
       description:
-        "Read whether the Arrival Alarm app currently has an armed arrival alarm and its remaining distance when available.",
+        "Read whether an arrival alarm is armed, its verified destination (null if not armed or unknown), and remaining distance when available. Do not infer a target from stale trip data.",
       inputSchema: {},
       annotations: readAnnotations,
       securitySchemes: readSecuritySchemes,

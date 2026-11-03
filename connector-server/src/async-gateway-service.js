@@ -12,6 +12,8 @@ export class AsyncGatewayService {
       journey_phase: snapshot.journey_phase,
       source: snapshot.source,
       active_trip: snapshot.active_trip ?? null,
+      origin: snapshot.origin ?? snapshot.active_trip?.origin ?? null,
+      destination: snapshot.destination ?? snapshot.active_trip?.destination ?? null,
       distance_to_destination_meters: snapshot.distance_to_destination_meters ?? null,
     };
   }
@@ -60,6 +62,9 @@ export class AsyncGatewayService {
       stale: this.#isStale(snapshot),
       journey_phase: snapshot.journey_phase,
       alarm_armed: Boolean(snapshot.alarm_armed),
+      // A selected but unarmed destination is not an active alarm target.
+      // Use only the validated current device snapshot, not a legacy trip label.
+      destination: snapshot.alarm_armed ? (snapshot.destination ?? null) : null,
       distance_to_destination_meters: snapshot.distance_to_destination_meters ?? null,
     };
   }

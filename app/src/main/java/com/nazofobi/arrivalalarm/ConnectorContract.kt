@@ -44,6 +44,9 @@ data class ArrivalAlarmConnectorSnapshot(
     val source: String,
     val journeyPhase: JourneyPhase,
     val activeTrip: ConnectorTripState? = null,
+    // GPS-only alarms have a user-selected origin/target even without a transit trip.
+    val origin: ConnectorStopState? = null,
+    val destination: ConnectorStopState? = null,
     val distanceToDestinationMeters: Double? = null,
     val alarmArmed: Boolean = false,
 ) {
