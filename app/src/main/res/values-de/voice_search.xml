@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="voice_search_action">Sprachsuche</string>
+    <string name="voice_search_prompt">Haltestelle, Adresse, Linie oder Fahrt sprechen</string>
+    <string name="voice_search_unavailable">Sprachsuche ist auf diesem Gerät nicht verfügbar. Sie können die Suche eintippen.</string>
+    <string name="voice_search_no_match">Kein gültiger Suchtext erkannt. Erneut versuchen oder eintippen.</string>
+</resources>
