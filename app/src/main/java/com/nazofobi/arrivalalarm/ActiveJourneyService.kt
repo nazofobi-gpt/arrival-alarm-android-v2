@@ -171,6 +171,9 @@ class ActiveJourneyService : Service(), LocationListener {
             }
             return START_NOT_STICKY
         }
+        // The prior forced-stop alert becomes stale only after foreground tracking starts.
+        // A failed start must retain its actionable stop notice.
+        runCatching { clearStoppedTrackingNotification(this) }
         // Provider registration can fail after the initial availability check.
         // Keep the armed foreground journey alive and retry through the existing
         // state monitor, but stop promptly if grants are revoked or the trip ends.
@@ -484,7 +487,7 @@ class ActiveJourneyService : Service(), LocationListener {
         private const val ARRIVAL_CHANNEL_ID = "arrival_alerts"
         private const val TRACKING_NOTIFICATION_ID = 4101
         private const val ARRIVAL_NOTIFICATION_ID = 4102
-        private const val TRACKING_STOPPED_NOTIFICATION_ID = 4104
+        internal const val TRACKING_STOPPED_NOTIFICATION_ID = 4104
         private const val CANCEL_REQUEST_CODE = 4103
         private const val MIN_UPDATE_MILLIS = 10_000L
         private const val MIN_UPDATE_METERS = 25f
@@ -492,6 +495,12 @@ class ActiveJourneyService : Service(), LocationListener {
 
         internal fun cancellationIntent(context: Context): Intent =
             Intent(context, ActiveJourneyService::class.java).setAction(ACTION_CANCEL)
+
+        /** Remove a stale forced-stop alert only after tracking has restarted. */
+        internal fun clearStoppedTrackingNotification(context: Context) {
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.cancel(TRACKING_STOPPED_NOTIFICATION_ID)
+        }
 
         /** Destination-free notice that remains after the forced tracking stop. */
         internal fun trackingStoppedNotification(context: Context): Notification {
