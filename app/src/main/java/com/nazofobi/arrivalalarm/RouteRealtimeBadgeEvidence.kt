@@ -31,3 +31,34 @@ internal fun routeHasVerifiedRealtimeCancellation(
         state = state,
         suppliedDelta = suppliedCancellation,
     )
+
+
+/**
+ * A visible stop deviation needs the SAME stop event's planned and observed
+ * instants plus fresh matched online evidence. Minutes are rounded only for
+ * display; unknown, on-time (<30 s), implausible (>24 h) and malformed times
+ * produce no label. This is a timetable delta, not a vehicle location.
+ */
+internal fun verifiedStopTimeDeviationMinutes(
+    routeOffline: Boolean,
+    state: RouteRealtimeState?,
+    actualIso: String?,
+    plannedIso: String?,
+): Int? {
+    if (!routeHasVerifiedRealtimeDelta(
+            routeOffline = routeOffline,
+            state = state,
+            suppliedDelta = actualIso != null && plannedIso != null,
+        )
+    ) return null
+    val actual = actualIso.toTransitEpochSecondsOrNull() ?: return null
+    val planned = plannedIso.toTransitEpochSecondsOrNull() ?: return null
+    val deltaSeconds = actual - planned
+    if (deltaSeconds !in -86_400L..86_400L) return null
+    val roundedMinutes = if (deltaSeconds >= 0L) {
+        (deltaSeconds + 30L) / 60L
+    } else {
+        -((-deltaSeconds + 30L) / 60L)
+    }
+    return roundedMinutes.toInt().takeIf { it != 0 }
+}

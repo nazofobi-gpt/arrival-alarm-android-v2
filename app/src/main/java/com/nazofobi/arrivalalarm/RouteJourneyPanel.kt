@@ -253,6 +253,31 @@ fun RouteJourneyPanel(
                 )
             } else {
                 JourneyDetailCard(selected, routeOffline = routeOffline)
+                // Offer only distinct, source-timed future services for the same
+                // origin, destination, line and direction. Never create a
+                // departure from a display-only clock or a cancelled trip.
+                val alternatives = actionableAlternateDepartures(
+                    selected = selected,
+                    candidates = routeOptions,
+                    nowEpochMillis = System.currentTimeMillis(),
+                )
+                if (alternatives.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.alternate_departures, alternatives.size),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.testTag("journey-alternative-departures"),
+                    )
+                    alternatives.forEachIndexed { index, option ->
+                        RouteOptionCard(
+                            option = option,
+                            selected = false,
+                            routeOffline = routeOffline,
+                            onSelect = { onSelectRoute(option) },
+                            selectTestTag = "journey-alternative-select-$index",
+                            modifier = Modifier.testTag("journey-alternative-$index"),
+                        )
+                    }
+                }
             }
 
             JourneyAlarmControls(
@@ -262,6 +287,41 @@ fun RouteJourneyPanel(
             )
         }
     }
+}
+
+
+/**
+ * Actionable later departures for an already selected route. A formatted clock
+ * is not sufficient proof of an actual departure: absolute scheduled time and
+ * the provider route identity must be present. Reuse the existing route-select
+ * callback so the journey controller still validates every selection.
+ */
+internal fun actionableAlternateDepartures(
+    selected: RouteOption,
+    candidates: List<RouteOption>,
+    nowEpochMillis: Long,
+    limit: Int = 3,
+): List<RouteOption> {
+    val selectedDeparture = selected.departureEpochMillis ?: return emptyList()
+    if (limit !in 1..6) return emptyList()
+    return candidates.asSequence()
+        .filter { candidate ->
+            candidate.id != selected.id &&
+                candidate.line == selected.line &&
+                candidate.direction == selected.direction &&
+                candidate.origin.latitude == selected.origin.latitude &&
+                candidate.origin.longitude == selected.origin.longitude &&
+                candidate.destination.latitude == selected.destination.latitude &&
+                candidate.destination.longitude == selected.destination.longitude &&
+                candidate.realtime?.cancelledTripIds.isNullOrEmpty() &&
+                candidate.departureEpochMillis?.let { departure ->
+                    departure > nowEpochMillis && departure != selectedDeparture
+                } == true
+        }
+        .distinctBy { it.id to it.departureEpochMillis }
+        .sortedBy { it.departureEpochMillis }
+        .take(limit)
+        .toList()
 }
 
 @Composable
@@ -494,6 +554,22 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
                         state = option.realtime?.state,
                         suppliedDelta = hasRealtimeDelta(stop),
                     )
+                    // A departure delta must never be paired with a planned arrival.
+                    val (observedStopTime, plannedStopTime) = when {
+                        stop.departure != null && stop.plannedDeparture != null ->
+                            stop.departure to stop.plannedDeparture
+                        stop.arrival != null && stop.plannedArrival != null ->
+                            stop.arrival to stop.plannedArrival
+                        else -> null to null
+                    }
+                    val stopDeviation = if (option.realtime?.cancelledTripIds.isNullOrEmpty()) {
+                        verifiedStopTimeDeviationMinutes(
+                            routeOffline = routeOffline,
+                            state = option.realtime?.state,
+                            actualIso = observedStopTime,
+                            plannedIso = plannedStopTime,
+                        )
+                    } else null
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -543,6 +619,18 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
                                 text = stringResource(R.string.route_realtime_badge),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.secondary,
+                            )
+                        }
+                        stopDeviation?.let { minutes ->
+                            Text(
+                                text = if (minutes > 0) {
+                                    stringResource(R.string.route_stop_delay_minutes, minutes)
+                                } else {
+                                    stringResource(R.string.route_stop_early_minutes, -minutes)
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.testTag("journey-stop-deviation-" + index),
                             )
                         }
                     }

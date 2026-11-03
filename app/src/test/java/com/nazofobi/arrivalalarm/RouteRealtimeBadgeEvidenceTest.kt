@@ -1,5 +1,7 @@
 package com.nazofobi.arrivalalarm
 
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -87,4 +89,40 @@ class RouteRealtimeBadgeEvidenceTest {
         assertFalse(routeHasVerifiedRealtimeCancellation(false, RouteRealtimeState.FRESH_MATCHED, false))
         assertTrue(routeHasVerifiedRealtimeCancellation(false, RouteRealtimeState.FRESH_MATCHED, true))
     }
+    @Test fun routeDetailShowsOnlyFreshMatchedStopDeviations() {
+        val planned = "2026-11-02T18:00:00+01:00"
+        val delayed = "2026-11-02T18:05:20+01:00"
+        val early = "2026-11-02T17:57:00+01:00"
+        assertEquals(5, verifiedStopTimeDeviationMinutes(false, RouteRealtimeState.FRESH_MATCHED, delayed, planned))
+        assertEquals(-3, verifiedStopTimeDeviationMinutes(false, RouteRealtimeState.FRESH_MATCHED, early, planned))
+        // Equal instants with different offsets cannot invent a delay.
+        assertNull(verifiedStopTimeDeviationMinutes(
+            false, RouteRealtimeState.FRESH_MATCHED,
+            "2026-11-02T17:00:00Z", planned,
+        ))
+    }
+
+    @Test fun routeDetailNeverShowsStaleOfflineOrUnmatchedDeviation() {
+        val planned = "2026-11-02T18:00:00Z"
+        val observed = "2026-11-02T18:08:00Z"
+        for (state in listOf<RouteRealtimeState?>(
+            null, RouteRealtimeState.STALE, RouteRealtimeState.UNAVAILABLE,
+            RouteRealtimeState.FRESH_NO_MATCH,
+        )) {
+            assertNull(verifiedStopTimeDeviationMinutes(false, state, observed, planned))
+        }
+        assertNull(verifiedStopTimeDeviationMinutes(true, RouteRealtimeState.FRESH_MATCHED, observed, planned))
+        assertNull(verifiedStopTimeDeviationMinutes(false, RouteRealtimeState.FRESH_MATCHED, null, planned))
+        assertNull(verifiedStopTimeDeviationMinutes(false, RouteRealtimeState.FRESH_MATCHED, observed, null))
+    }
+
+    @Test fun malformedImplausibleAndSubminuteStopDeltasAreNotDisplayed() {
+        val planned = "2026-11-02T18:00:00Z"
+        val fresh = RouteRealtimeState.FRESH_MATCHED
+        assertNull(verifiedStopTimeDeviationMinutes(false, fresh, "2026-11-02T18:00:20Z", planned))
+        assertNull(verifiedStopTimeDeviationMinutes(false, fresh, "2026-11-04T19:00:00Z", planned))
+        assertNull(verifiedStopTimeDeviationMinutes(false, fresh, "not-a-time", planned))
+        assertNull(verifiedStopTimeDeviationMinutes(false, fresh, "2026-11-02T18:02:00Z", "-00:00"))
+    }
+
 }
