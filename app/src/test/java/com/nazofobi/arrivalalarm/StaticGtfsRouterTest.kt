@@ -160,6 +160,136 @@ class StaticGtfsRouterTest {
         assertTrue(data.candidateQueryCount > 0)
     }
 
+    @Test fun oneTransferPreferenceFiltersDuringGtfsSearchBeforeResultCap() {
+        val data = FakeData(
+            candidates = mapOf(
+                "A" to listOf(candidate("T1", "R1", "S", 1, "10:00:00")),
+                "X" to listOf(
+                    candidate("T2", "R2", "S", 1, "10:08:00"),
+                    candidate("T4", "R4", "S", 1, "10:17:00"),
+                ),
+                "Y" to listOf(candidate("T3", "R3", "S", 1, "10:15:00")),
+            ),
+            times = mapOf(
+                "T1" to listOf(st("T1", 1, "A", "10:00:00"), st("T1", 2, "X", "10:05:00")),
+                "T2" to listOf(st("T2", 1, "X", "10:08:00"), st("T2", 2, "Y", "10:12:00")),
+                "T3" to listOf(st("T3", 1, "Y", "10:15:00"), st("T3", 2, "B", "10:20:00")),
+                "T4" to listOf(st("T4", 1, "X", "10:17:00"), st("T4", 2, "B", "10:25:00")),
+            ),
+        )
+        val router = StaticGtfsRouter(data, zone, maxJourneys = 1)
+        val origins = listOf(StaticRouterAccess("A"))
+        val destinations = listOf(StaticRouterAccess("B"))
+        val regular = router.route(origins, destinations, date, at("09:55:00"))
+        assertEquals(
+            listOf("T1", "T2", "T3"),
+            (regular as StaticRouterResult.Journeys).journeys.single().legs.map { it.tripId },
+        )
+        val filtered = router.route(
+            origins, destinations, date, at("09:55:00"), maxAllowedTransfers = 1,
+        )
+        assertEquals(
+            listOf("T1", "T4"),
+            (filtered as StaticRouterResult.Journeys).journeys.single().legs.map { it.tripId },
+        )
+        assertTrue(
+            router.route(origins, destinations, date, at("09:55:00"), maxAllowedTransfers = -1)
+                is StaticRouterResult.NoPath,
+        )
+    }
+
+    @Test fun directOnlyPreferenceFindsLaterDirectTrainBeforeResultCap() {
+        val data = FakeData(
+            candidates = mapOf(
+                "A" to listOf(
+                    candidate("FEED", "R1", "S", 1, "10:00:00"),
+                    candidate("DIRECT", "R3", "S", 1, "10:02:00"),
+                ),
+                "X" to listOf(candidate("CONNECT", "R2", "S", 1, "10:08:00")),
+            ),
+            times = mapOf(
+                "FEED" to listOf(st("FEED", 1, "A", "10:00:00"),
+                    st("FEED", 2, "X", "10:04:00")),
+                "CONNECT" to listOf(st("CONNECT", 1, "X", "10:08:00"),
+                    st("CONNECT", 2, "B", "10:18:00")),
+                "DIRECT" to listOf(st("DIRECT", 1, "A", "10:02:00"),
+                    st("DIRECT", 2, "B", "10:30:00")),
+            ),
+        )
+        val router = StaticGtfsRouter(data, zone, maxJourneys = 1)
+        val origin = listOf(StaticRouterAccess("A"))
+        val destination = listOf(StaticRouterAccess("B"))
+        val unrestricted = router.route(origin, destination, date, at("09:55:00"))
+        assertEquals(
+            listOf("FEED", "CONNECT"),
+            (unrestricted as StaticRouterResult.Journeys).journeys.single().legs.map { it.tripId },
+        )
+        val directOnly = router.route(
+            origin, destination, date, at("09:55:00"), maxAllowedTransfers = 0,
+        )
+        assertEquals(
+            listOf("DIRECT"),
+            (directOnly as StaticRouterResult.Journeys).journeys.single().legs.map { it.tripId },
+        )
+    }
+
+    @Test fun fiveMinuteTransferBudgetChoosesLaterSafeConnectionBeforeResultCap() {
+        val data = baseTransferData(
+            extraCandidate = candidate("T3", "R3", "S", 1, "10:12:00"),
+            extraTrip = listOf(st("T3", 1, "X", "10:12:00"), st("T3", 2, "B", "10:24:00")),
+        )
+        val router = StaticGtfsRouter(data, zone, maxJourneys = 1)
+        val from = listOf(StaticRouterAccess("A"))
+        val to = listOf(StaticRouterAccess("B"))
+        val default = router.route(from, to, date, at("09:55:00"))
+        assertEquals(listOf("T1", "T2"),
+            (default as StaticRouterResult.Journeys).journeys.single().legs.map { it.tripId })
+        val buffered = router.route(from, to, date, at("09:55:00"), minTransferSeconds = 300)
+        assertEquals(listOf("T1", "T3"),
+            (buffered as StaticRouterResult.Journeys).journeys.single().legs.map { it.tripId })
+        assertTrue(router.route(from, to, date, at("09:55:00"), minTransferSeconds = -1)
+            is StaticRouterResult.NoPath)
+        assertTrue(router.route(from, to, date, at("09:55:00"), minTransferSeconds = 1_801)
+            is StaticRouterResult.NoPath)
+    }
+
+    @Test fun walkingBudgetIncludesWalkBetweenTransferStopsBeforeCandidateCap() {
+        val x = stop("X", lat = 52.0, lon = 8.0)
+        val y = stop("Y", lat = 52.001, lon = 8.0)
+        val data = baseTransferData(targetStop = "Y", secondDeparture = "10:10:00").copy(
+            stops = mapOf("X" to x, "Y" to y),
+            nearby = listOf(GtfsScheduleNearbyStop(y, 100)),
+        )
+        val router = StaticGtfsRouter(
+            data, zone, implicitTransferSeconds = 60,
+            maxImplicitTransferRadiusMeters = 300, implicitWalkingMetersPerSecond = 1.0,
+        )
+        val origin = listOf(StaticRouterAccess("A", 720))
+        val destination = listOf(StaticRouterAccess("B", 180))
+        val unrestricted = router.route(origin, destination, date, at("09:45:00"))
+        val journey = (unrestricted as StaticRouterResult.Journeys).journeys.single()
+        assertEquals(listOf("T1", "T2"), journey.legs.map { it.tripId })
+        assertEquals(100L, journey.transferWalkingSeconds)
+        assertEquals(1_000L, journey.totalWalkingSeconds)
+        assertTrue(router.route(
+            origin, destination, date, at("09:45:00"), maxWalkingSeconds = 900,
+        ) is StaticRouterResult.NoPath)
+        val atBoundary = router.route(
+            origin, destination, date, at("09:45:00"), maxWalkingSeconds = 1_000,
+        ) as StaticRouterResult.Journeys
+        assertEquals(1_000L, atBoundary.journeys.single().totalWalkingSeconds)
+    }
+
+    @Test fun sameStopTransferWaitIsNotMisclassifiedAsWalking() {
+        val result = StaticGtfsRouter(baseTransferData(), zone, implicitTransferSeconds = 120)
+            .route(
+                listOf(StaticRouterAccess("A")), listOf(StaticRouterAccess("B")),
+                date, at("09:55:00"), maxWalkingSeconds = 0,
+            ) as StaticRouterResult.Journeys
+        assertEquals(0L, result.journeys.single().transferWalkingSeconds)
+        assertEquals(0L, result.journeys.single().totalWalkingSeconds)
+    }
+
     @Test fun implicitSameStopTransferWorksWithoutTransfersFile() {
         val data = baseTransferData()
         val result = StaticGtfsRouter(data, zone, implicitTransferSeconds = 120).route(

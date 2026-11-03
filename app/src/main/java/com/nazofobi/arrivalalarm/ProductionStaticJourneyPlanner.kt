@@ -51,8 +51,8 @@ internal class StaticRouteOptionMapper(
      * Add two non-negative GTFS walking durations without Int overflow.
      * Times are approximate provider walk estimates, never measured geometry.
      */
-    private fun totalWalkingMinutes(accessSeconds: Int, egressSeconds: Int): Int {
-        val sum = accessSeconds.toLong() + egressSeconds.toLong()
+    private fun totalWalkingMinutes(accessSeconds: Int, egressSeconds: Int, transferSeconds: Long): Int {
+        val sum = accessSeconds.toLong() + egressSeconds.toLong() + transferSeconds
         return ((sum + 59L) / 60L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
     }
 
@@ -100,7 +100,9 @@ internal class StaticRouteOptionMapper(
             direction = direction,
             departure = journey.legs.firstOrNull()?.departureEpochMillis?.let(::clock).orEmpty(),
             arrival = clock(journey.arrivalEpochMillis),
-            walkingMinutes = totalWalkingMinutes(journey.access.walkSeconds, journey.egress.walkSeconds),
+            walkingMinutes = totalWalkingMinutes(
+                journey.access.walkSeconds, journey.egress.walkSeconds, journey.transferWalkingSeconds,
+            ),
             transfers = journey.transferCount,
             tripIds = journey.legs.map { it.tripId },
             stops = routeStops,
@@ -332,12 +334,17 @@ class ProductionStaticJourneyPlanner(
         destination: MapPoint,
         limit: Int = 3,
         maxWalkingMinutes: Int? = null,
+        maxTransfers: Int? = null,
+        minTransferSeconds: Int? = null,
     ): LocalStaticJourneyOutcome {
         if (!validTransitJourneyCoordinates(origin.latitude, origin.longitude) ||
             !validTransitJourneyCoordinates(destination.latitude, destination.longitude)
         ) return LocalStaticJourneyOutcome.NoPath
         val boundedLimit = boundedStaticJourneyOptionLimit(limit)
-        if (boundedLimit == 0 || (maxWalkingMinutes != null && maxWalkingMinutes < 0)) {
+        if (boundedLimit == 0 || (maxWalkingMinutes != null && maxWalkingMinutes < 0) ||
+            (maxTransfers != null && maxTransfers !in 0..3) ||
+            (minTransferSeconds != null && minTransferSeconds !in 0..1_800)
+        ) {
             return LocalStaticJourneyOutcome.NoPath
         }
         val maxWalkingSeconds = maxWalkingMinutes
@@ -388,6 +395,8 @@ class ProductionStaticJourneyPlanner(
                         serviceDate = serviceDate,
                         departureEpochMillis = departureMillis,
                         maxWalkingSeconds = maxWalkingSeconds,
+                        maxAllowedTransfers = maxTransfers,
+                        minTransferSeconds = minTransferSeconds,
                     )
                 ) {
                     is StaticRouterResult.Journeys -> result.journeys.forEach { journey ->

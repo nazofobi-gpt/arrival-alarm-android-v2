@@ -52,7 +52,15 @@ class ArrivalUiPreferences(context: Context) {
         prefs.edit().putBoolean(KEY_MAX_WALKING_15_MINUTES, enabled).apply()
     }
 
+    fun loadMinTransferFiveMinutes(): Boolean =
+        runCatching { prefs.getBoolean(KEY_MIN_TRANSFER_FIVE_MINUTES, false) }.getOrDefault(false)
+
+    fun saveMinTransferFiveMinutes(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_MIN_TRANSFER_FIVE_MINUTES, enabled).apply()
+    }
+
     companion object {
+        const val KEY_MIN_TRANSFER_FIVE_MINUTES = "min_transfer_five_minutes"
         const val KEY_AT_MOST_ONE_TRANSFER = "at_most_one_transfer"
         const val KEY_MAX_WALKING_15_MINUTES = "max_walking_15_minutes"
         const val KEY_THEME_MODE = "theme_mode"

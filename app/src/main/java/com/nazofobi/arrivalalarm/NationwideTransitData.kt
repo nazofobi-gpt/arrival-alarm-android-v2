@@ -557,6 +557,14 @@ class NationwideTransitGateway(
             staticJourneyPlanner.plan(
                 origin, destination, limit,
                 maxWalkingMinutes = if (routePreferences.loadMaxWalking15Minutes()) 15 else null,
+                // Direct-only must constrain GTFS search before the result cap; otherwise
+                // an earlier connecting itinerary can hide a later direct train.
+                maxTransfers = when {
+                    routePreferences.loadDirectOnlyRoutes() -> 0
+                    routePreferences.loadAtMostOneTransfer() -> 1
+                    else -> null
+                },
+                minTransferSeconds = if (routePreferences.loadMinTransferFiveMinutes()) 300 else null,
             )
         }.getOrDefault(LocalStaticJourneyOutcome.Unavailable)
 
@@ -568,6 +576,13 @@ class NationwideTransitGateway(
         }
         if (localOutcome == LocalStaticJourneyOutcome.SameOrigin) {
             return NationwideJourneyResolution.NoRoute(localOutcome)
+        }
+        // Live fallback does not prove the required connection intervals.
+        if (routePreferences.loadMinTransferFiveMinutes()) {
+            return NationwideJourneyResolution.ProviderUnavailable(
+                localOutcome = localOutcome,
+                message = appContext.getString(R.string.route_min_transfer_5_unavailable),
+            )
         }
 
         val live = runCatching {

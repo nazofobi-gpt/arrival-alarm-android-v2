@@ -65,6 +65,9 @@ fun RouteJourneyPanel(
     var maxWalking15Minutes by rememberSaveable {
         mutableStateOf(preferences.loadMaxWalking15Minutes())
     }
+    var minTransferFiveMinutes by rememberSaveable {
+        mutableStateOf(preferences.loadMinTransferFiveMinutes())
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -152,6 +155,8 @@ fun RouteJourneyPanel(
                     onClick = {
                         directOnly = !directOnly
                         preferences.saveDirectOnlyRoutes(directOnly)
+                        // Refresh the candidate search itself, not only the already-capped cards.
+                        onRefreshRoutes()
                     },
                     label = { Text(stringResource(R.string.route_direct_only_filter)) },
                     modifier = Modifier
@@ -186,6 +191,9 @@ fun RouteJourneyPanel(
                     onClick = {
                         atMostOneTransfer = !atMostOneTransfer
                         preferences.saveAtMostOneTransfer(atMostOneTransfer)
+                        // Requery the bounded GTFS router: local card filtering alone
+                        // can discard the only available one-transfer candidate.
+                        onRefreshRoutes()
                     },
                     label = { Text(stringResource(R.string.route_at_most_one_transfer_filter)) },
                     modifier = Modifier
@@ -205,6 +213,18 @@ fun RouteJourneyPanel(
                     modifier = Modifier
                         .heightIn(min = 48.dp)
                         .testTag("route-max-walking-15-filter"),
+                )
+
+                FilterChip(
+                    selected = minTransferFiveMinutes,
+                    onClick = {
+                        minTransferFiveMinutes = !minTransferFiveMinutes
+                        preferences.saveMinTransferFiveMinutes(minTransferFiveMinutes)
+                        onRefreshRoutes()
+                    },
+                    label = { Text(stringResource(R.string.route_min_transfer_5_filter)) },
+                    modifier = Modifier.heightIn(min = 48.dp)
+                        .testTag("route-min-transfer-5-filter"),
                 )
 
                 visibleOptions.take(6).forEachIndexed { index, option ->
@@ -233,6 +253,31 @@ fun RouteJourneyPanel(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.testTag("route-results-empty"),
                     )
+                    // A restrictive saved preference may hide every route. Offer a
+                    // one-step recovery and regenerate candidates before the result cap.
+                    if (directOnly || atMostOneTransfer || maxWalking15Minutes || minTransferFiveMinutes) {
+                        OutlinedButton(
+                            onClick = {
+                                directOnly = false
+                                atMostOneTransfer = false
+                                maxWalking15Minutes = false
+                                minTransferFiveMinutes = false
+                                fewerTransfersFirst = false
+                                shorterWalkingFirst = false
+                                preferences.saveDirectOnlyRoutes(false)
+                                preferences.saveAtMostOneTransfer(false)
+                                preferences.saveMaxWalking15Minutes(false)
+                                preferences.saveMinTransferFiveMinutes(false)
+                                preferences.saveFewerTransfersFirst(false)
+                                preferences.saveShorterWalkingFirst(false)
+                                onRefreshRoutes()
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                .testTag("route-filter-reset"),
+                        ) {
+                            Text(stringResource(R.string.route_filter_reset_and_search))
+                        }
+                    }
                 }
             }
         } else {

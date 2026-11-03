@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="route_min_transfer_5_filter">Lokale GTFS: mind. 5 Min. Umstieg</string>
+    <string name="route_min_transfer_5_unavailable">Der 5-Minuten-Umstiegspuffer konnte mit lokalen GTFS-Daten nicht geprüft werden. Filter entfernen und erneut suchen.</string>
+</resources>
