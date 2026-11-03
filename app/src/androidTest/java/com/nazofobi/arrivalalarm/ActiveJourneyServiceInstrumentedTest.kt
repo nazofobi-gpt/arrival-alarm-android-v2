@@ -2,6 +2,7 @@ package com.nazofobi.arrivalalarm
 
 import android.Manifest
 import android.app.Notification
+import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.ComponentName
@@ -52,6 +53,16 @@ class ActiveJourneyServiceInstrumentedTest {
             )
         }
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        // Service.onCreate normally creates this channel; the test posts directly.
+        if (Build.VERSION.SDK_INT >= 26) {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    "arrival_alerts",
+                    context.getString(R.string.arrival_alerts_channel_name),
+                    NotificationManager.IMPORTANCE_HIGH,
+                ),
+            )
+        }
         val stoppedId = ActiveJourneyService.TRACKING_STOPPED_NOTIFICATION_ID
         manager.cancel(stoppedId)
         try {
