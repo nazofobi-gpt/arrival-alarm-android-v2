@@ -276,6 +276,8 @@
     <string name="active_tracking_title">Arrival alarm active</string>
     <string name="active_tracking_degraded">Location accuracy low; alarm active, waiting for GPS</string>
     <string name="active_tracking_in_progress">Tracking location</string>
+    <string name="active_tracking_stopped_title">Arrival alarm stopped</string>
+    <string name="active_tracking_stopped_body">Location services or required permission were lost. Restore access and arm the alarm again.</string>
     <string name="active_tracking_distance">About %1$d m to your destination</string>
     <string name="arrival_notification_title">Destination reached</string>
     <string name="arrival_notification_body">Arrival alarm completed.</string>

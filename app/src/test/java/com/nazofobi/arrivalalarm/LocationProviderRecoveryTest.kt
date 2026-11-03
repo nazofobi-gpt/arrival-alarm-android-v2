@@ -6,6 +6,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LocationProviderRecoveryTest {
+    @Test fun forcedDisarmNotifiesOnlyWhileArmedAndNotificationsRemainAllowed() {
+        assertTrue(LocationProviderRecovery.shouldNotifyForcedDisarm(JourneyPhase.ARMED, true))
+        assertFalse(LocationProviderRecovery.shouldNotifyForcedDisarm(JourneyPhase.ARMED, false))
+        assertFalse(LocationProviderRecovery.shouldNotifyForcedDisarm(JourneyPhase.ARRIVED, true))
+        assertFalse(LocationProviderRecovery.shouldNotifyForcedDisarm(JourneyPhase.EMPTY, true))
+    }
+
     @Test fun rejectedForegroundPromotionDisarmsOnlyArmedJourney() {
         assertEquals(
             LocationProviderRecovery.Decision.DISARM_AND_STOP,

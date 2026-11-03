@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import android.Manifest
+import android.app.Notification
 import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
@@ -9,12 +10,33 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ActiveJourneyServiceInstrumentedTest {
+    @Test fun forcedTrackingStopNoticeHasNoPrivateDestinationAndOpensTheApp() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val notice = ActiveJourneyService.trackingStoppedNotification(context)
+        assertEquals(
+            context.getString(R.string.active_tracking_stopped_title),
+            notice.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString(),
+        )
+        assertEquals(
+            context.getString(R.string.active_tracking_stopped_body),
+            notice.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
+        )
+        assertEquals(Notification.CATEGORY_ERROR, notice.category)
+        assertEquals(Notification.VISIBILITY_PUBLIC, notice.visibility)
+        assertFalse(notice.flags and Notification.FLAG_ONGOING_EVENT != 0)
+        assertNotNull(notice.contentIntent)
+        if (Build.VERSION.SDK_INT >= 26) {
+            assertEquals("arrival_alerts", notice.channelId)
+        }
+    }
+
     @Test fun cancellationActionTargetsTheNonExportedTrackingService() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val intent = ActiveJourneyService.cancellationIntent(context)
