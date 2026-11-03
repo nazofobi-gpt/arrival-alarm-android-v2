@@ -51,6 +51,10 @@ class NationwideTransitSearchInstrumentedTest {
         // but never show a fabricated match for a second wrong token.
         assertEquals(listOf("known-good"), index.search("Knowm Good Bahnhof", 5).map { it.id })
         assertEquals(listOf("known-good"), index.search("Known Gooo Bahnhof", 5).map { it.id })
+        // A typo in the very first character misses the primary FTS anchor.
+        // The secondary indexed word must recover one typo, but not two.
+        assertEquals(listOf("known-good"), index.search("Xnown Good Bahnhof", 5).map { it.id })
+        assertTrue(index.search("Xnown Gooo Bahnhof", 5).isEmpty())
         assertTrue(index.search("Knowm Gooo Bahnhof", 5).isEmpty())
         assertTrue(index.search("Knowm Good Bahnhof", 0).isEmpty())
 
