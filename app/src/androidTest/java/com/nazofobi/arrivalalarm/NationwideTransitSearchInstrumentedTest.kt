@@ -95,6 +95,34 @@ class NationwideTransitSearchInstrumentedTest {
         assertTrue(feed.delete())
     }
 
+    @Test fun placeQualifiedHbfAliasesSearchRealOfflineStopsWithoutChangingLiteralResults() {
+        context.deleteDatabase("nationwide_transit.db")
+        val feed = File(context.cacheDir, "g237-hbf-alias.zip")
+        writeFeed(
+            feed,
+            extraStops = """
+                alias-full,Teststadt Hauptbahnhof,52.2,8.1
+                alias-short,Literalstadt Hbf,52.3,8.2
+            """.trimIndent() + "\n",
+        )
+        val index = NationwideTransitIndex(context)
+        try {
+            index.importFeed(feed.toURI().toURL().toString()) { }
+            // Both aliases use a bounded indexed FTS query after a literal miss.
+            assertEquals(listOf("alias-full"), index.search("Teststadt Hbf", 5).map { it.id })
+            assertEquals(listOf("alias-short"), index.search("Literalstadt Hauptbahnhof", 5).map { it.id })
+            // A literal query must retain exact precedence and existing order.
+            assertEquals(listOf("alias-short"), index.search("Literalstadt Hbf", 5).map { it.id })
+            // No invented stop, unbounded output or automatic selection.
+            assertTrue(index.search("Nowhere Hbf", 5).isEmpty())
+            assertTrue(index.search("Teststadt Hbf", 0).isEmpty())
+            assertTrue(index.search("Teststadt Hbf", -1).isEmpty())
+        } finally {
+            index.close()
+            feed.delete()
+        }
+    }
+
     @Test fun invalidStopCoordinatesNeverEnterTheSearchIndex() {
         context.deleteDatabase("nationwide_transit.db")
         val feed = File(context.cacheDir, "g185-invalid-geo.zip")
