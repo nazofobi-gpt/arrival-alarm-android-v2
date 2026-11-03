@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import android.Manifest
+import android.annotation.TargetApi
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -485,20 +486,21 @@ class ActiveJourneyService : Service(), LocationListener {
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setCategory(Notification.CATEGORY_ALARM)
             .build()
+        val arrivalBuilder = notificationBuilder(ARRIVAL_CHANNEL_ID)
+            .setContentTitle(getString(R.string.arrival_notification_title))
+            .setContentText(visibleBody)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setAutoCancel(true)
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setPublicVersion(publicNotification)
+            .setCategory(Notification.CATEGORY_ALARM)
+            .setContentIntent(openAppPendingIntent())
+        // Before Android O, the notification owns its vibration rather than a channel.
+        if (Build.VERSION.SDK_INT < 26) {
+            arrivalBuilder.setVibrate(arrivalVibrationPattern())
+        }
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(
-            ARRIVAL_NOTIFICATION_ID,
-            notificationBuilder(ARRIVAL_CHANNEL_ID)
-                .setContentTitle(getString(R.string.arrival_notification_title))
-                .setContentText(visibleBody)
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setAutoCancel(true)
-                .setVisibility(Notification.VISIBILITY_PRIVATE)
-                .setPublicVersion(publicNotification)
-                .setCategory(Notification.CATEGORY_ALARM)
-                .setContentIntent(openAppPendingIntent())
-                .build(),
-        )
+        manager.notify(ARRIVAL_NOTIFICATION_ID, arrivalBuilder.build())
     }
 
     private fun notificationBuilder(channelId: String): Notification.Builder =
@@ -533,13 +535,9 @@ class ActiveJourneyService : Service(), LocationListener {
                 NotificationManager.IMPORTANCE_LOW,
             )
         )
-        manager.createNotificationChannel(
-            NotificationChannel(
-                ARRIVAL_CHANNEL_ID,
-                getString(R.string.arrival_alerts_channel_name),
-                NotificationManager.IMPORTANCE_HIGH,
-            )
-        )
+        // Channel vibration is OS-managed. Do not use direct Vibrator calls that
+        // bypass the user's notification and Do-Not-Disturb preferences.
+        manager.createNotificationChannel(arrivalNotificationChannel(this))
     }
 
     companion object {
@@ -549,6 +547,21 @@ class ActiveJourneyService : Service(), LocationListener {
         const val SERVICE_RUNTIME_OWNER = "active-journey-service"
         private const val TRACKING_CHANNEL_ID = "arrival_tracking"
         private const val ARRIVAL_CHANNEL_ID = "arrival_alerts"
+
+        // A short, nonrepeating tactile arrival cue. Android 26+ enforces channel
+        // settings and DND; prior releases use this for the final notification only.
+        internal fun arrivalVibrationPattern(): LongArray = longArrayOf(0L, 200L, 100L, 260L)
+
+        @TargetApi(Build.VERSION_CODES.O)
+        internal fun arrivalNotificationChannel(context: Context): NotificationChannel =
+            NotificationChannel(
+                ARRIVAL_CHANNEL_ID,
+                context.getString(R.string.arrival_alerts_channel_name),
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                enableVibration(true)
+                vibrationPattern = arrivalVibrationPattern()
+            }
         private const val TRACKING_NOTIFICATION_ID = 4101
         private const val ARRIVAL_NOTIFICATION_ID = 4102
         private const val CANCEL_REQUEST_CODE = 4103
