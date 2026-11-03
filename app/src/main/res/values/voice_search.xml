@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="voice_search_action">Sesle ara</string>
+    <string name="voice_search_prompt">Durak, adres, hat veya sefer söyleyin</string>
+    <string name="voice_search_unavailable">Bu cihazda sesli arama kullanılamıyor. Yazarak arayabilirsiniz.</string>
+    <string name="voice_search_no_match">Geçerli bir sesli arama metni alınamadı. Yeniden deneyin veya yazın.</string>
+</resources>

@@ -1,5 +1,11 @@
 package com.nazofobi.arrivalalarm
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.speech.RecognizerIntent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,6 +16,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -22,11 +30,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import java.util.Locale
 
 enum class HomeSearchMode {
     HOME,
@@ -68,6 +79,31 @@ fun HomeSearchPanel(
     mode: HomeSearchMode = HomeSearchMode.HOME,
     modifier: Modifier = Modifier,
 ) {
+    val voiceSearchPrompt = stringResource(R.string.voice_search_prompt)
+    val voiceSearchUnavailable = stringResource(R.string.voice_search_unavailable)
+    val voiceSearchNoMatch = stringResource(R.string.voice_search_no_match)
+    var voiceSearchMessage by remember { mutableStateOf<String?>(null) }
+    val voiceSearchLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val candidates = runCatching {
+                result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            }.getOrNull()
+            val recognizedQuery = acceptedVoiceSearchQuery(candidates)
+            if (recognizedQuery != null) {
+                // A speech result is query text only: never select a stop or arm an alarm.
+                // MainActivity's existing debounced lookup observes this change.
+                onQueryChange(recognizedQuery)
+                voiceSearchMessage = null
+            } else {
+                voiceSearchMessage = voiceSearchNoMatch
+            }
+        }
+        // Cancellation leaves the user's existing query untouched.
+    }
+    val voiceSearchLabel = stringResource(R.string.voice_search_action)
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -410,7 +446,47 @@ fun HomeSearchPanel(
                             .fillMaxWidth()
                             .testTag("catalog-search"),
                         singleLine = true,
+                        trailingIcon = {
+                            IconButton(
+                                onClick = {
+                                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                        putExtra(
+                                            RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                                            RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+                                        )
+                                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
+                                        putExtra(RecognizerIntent.EXTRA_PROMPT, voiceSearchPrompt)
+                                        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                                    }
+                                    try {
+                                        voiceSearchLauncher.launch(intent)
+                                        voiceSearchMessage = null
+                                    } catch (_: ActivityNotFoundException) {
+                                        voiceSearchMessage = voiceSearchUnavailable
+                                    } catch (_: SecurityException) {
+                                        voiceSearchMessage = voiceSearchUnavailable
+                                    }
+                                },
+                                modifier = Modifier
+                                    .semantics { contentDescription = voiceSearchLabel }
+                                    .testTag("catalog-voice-search"),
+                            ) {
+                                Icon(
+                                painter = painterResource(R.drawable.ic_voice_search),
+                                contentDescription = null,
+                            )
+                            }
+                        },
                     )
+
+                    voiceSearchMessage?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.testTag("catalog-voice-search-status"),
+                        )
+                    }
 
                     Button(
                         onClick = onSearch,

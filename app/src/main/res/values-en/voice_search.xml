@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="voice_search_action">Voice search</string>
+    <string name="voice_search_prompt">Say a stop, address, line or trip</string>
+    <string name="voice_search_unavailable">Voice search is unavailable on this device. You can still type a search.</string>
+    <string name="voice_search_no_match">No valid search text was recognized. Try again or type your search.</string>
+</resources>
