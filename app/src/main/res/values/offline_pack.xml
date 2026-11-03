@@ -11,4 +11,6 @@
     <string name="offline_pack_refresh_running">Yüklü ulaşım verisi kontrol ediliyor veya güncelleniyor.</string>
     <string name="offline_pack_refresh_checked">Son yenileme kontrolü tamamlandı; veri sürümünü ve kontrol zamanını doğrulayın.</string>
     <string name="offline_pack_refresh_failed">Yenileme tamamlanamadı; bağlantı ve cihaz koşullarını kontrol edin.</string>
+    <string name="offline_pack_refresh_cancel">Yenilemeyi iptal et</string>
+    <string name="offline_pack_refresh_cancelled">Yenileme iptal edildi; zamanlanmış güncellemeler etkilenmez.</string>
 </resources>

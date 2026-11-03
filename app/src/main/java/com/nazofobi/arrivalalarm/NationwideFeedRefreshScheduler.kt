@@ -75,6 +75,12 @@ object NationwideFeedRefreshScheduler {
         )
     }
 
+    /** Cancel only the manual one-shot request; keep the periodic refresh intact. */
+    fun cancelInstalledPackRefresh(context: Context) {
+        WorkManager.getInstance(context.applicationContext)
+            .cancelUniqueWork(MANUAL_WORK_NAME)
+    }
+
     fun ensureScheduled(context: Context) {
         WorkManager.getInstance(context.applicationContext)
             .enqueueUniquePeriodicWork(

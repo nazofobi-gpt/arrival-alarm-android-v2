@@ -158,6 +158,7 @@ fun SettingsReadinessPanel(
     onRetryData: () -> Unit,
     onConnectorAction: () -> Unit,
     onUpdateInstalledData: () -> Unit = {},
+    onCancelInstalledDataUpdate: () -> Unit = {},
     manualRefreshWorkState: WorkInfo.State? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -423,14 +424,29 @@ fun SettingsReadinessPanel(
             }
 
             if (hasUsableNationwideIndex(state.dataState)) {
+                val refreshActive = manualRefreshWorkState == WorkInfo.State.ENQUEUED ||
+                    manualRefreshWorkState == WorkInfo.State.BLOCKED ||
+                    manualRefreshWorkState == WorkInfo.State.RUNNING
                 OutlinedButton(
                     onClick = onUpdateInstalledData,
+                    enabled = !refreshActive,
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp)
                         .testTag("nationwide-index-refresh-now"),
                 ) {
                     Text(stringResource(R.string.offline_pack_refresh_wifi))
+                }
+                if (refreshActive) {
+                    OutlinedButton(
+                        onClick = onCancelInstalledDataUpdate,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("nationwide-index-refresh-cancel"),
+                    ) {
+                        Text(stringResource(R.string.offline_pack_refresh_cancel))
+                    }
                 }
                 Text(
                     text = stringResource(R.string.offline_pack_refresh_wifi_note),
@@ -442,8 +458,8 @@ fun SettingsReadinessPanel(
                         R.string.offline_pack_refresh_waiting
                     WorkInfo.State.RUNNING -> R.string.offline_pack_refresh_running
                     WorkInfo.State.SUCCEEDED -> R.string.offline_pack_refresh_checked
-                    WorkInfo.State.FAILED, WorkInfo.State.CANCELLED ->
-                        R.string.offline_pack_refresh_failed
+                    WorkInfo.State.FAILED -> R.string.offline_pack_refresh_failed
+                    WorkInfo.State.CANCELLED -> R.string.offline_pack_refresh_cancelled
                     null -> null
                 }
                 if (refreshStatus != null) {

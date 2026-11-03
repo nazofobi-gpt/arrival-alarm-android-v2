@@ -12,6 +12,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.assertTextContains
@@ -81,6 +83,7 @@ class OfflinePackMetadataInstrumentedTest {
             )
 
             var manualRefreshClicks = 0
+            var manualCancelClicks = 0
             val manualWorkState = mutableStateOf<WorkInfo.State?>(null)
             composeRule.setContent {
                 CompositionLocalProvider(LocalContext provides context) {
@@ -101,6 +104,7 @@ class OfflinePackMetadataInstrumentedTest {
                             onRetryData = {},
                             onConnectorAction = {},
                             onUpdateInstalledData = { manualRefreshClicks++ },
+                            onCancelInstalledDataUpdate = { manualCancelClicks++ },
                             manualRefreshWorkState = manualWorkState.value,
                         )
                         }
@@ -123,6 +127,18 @@ class OfflinePackMetadataInstrumentedTest {
                 composeRule.onNodeWithTag("nationwide-index-refresh-status")
                     .assertTextContains(context.getString(statusLabel))
             }
+
+            composeRule.runOnIdle { manualWorkState.value = WorkInfo.State.ENQUEUED }
+            composeRule.onNodeWithTag("nationwide-index-refresh-now")
+                .performScrollTo().assertIsNotEnabled()
+            composeRule.onNodeWithTag("nationwide-index-refresh-cancel")
+                .performScrollTo().assertIsDisplayed().performClick()
+            assertEquals(1, manualCancelClicks)
+            composeRule.runOnIdle { manualWorkState.value = WorkInfo.State.CANCELLED }
+            composeRule.onNodeWithTag("nationwide-index-refresh-status")
+                .assertTextContains(context.getString(R.string.offline_pack_refresh_cancelled))
+            composeRule.onNodeWithTag("nationwide-index-refresh-now")
+                .performScrollTo().assertIsEnabled()
 
             val metadataNode = composeRule.onNodeWithTag("offline-pack-metadata")
             metadataNode.performScrollTo()

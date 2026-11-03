@@ -11,4 +11,6 @@
     <string name="offline_pack_refresh_running">Installierte Verkehrsdaten werden geprüft oder aktualisiert.</string>
     <string name="offline_pack_refresh_checked">Die letzte Aktualisierungsprüfung ist beendet; Version und Prüfzeit kontrollieren.</string>
     <string name="offline_pack_refresh_failed">Aktualisierung nicht abgeschlossen; Netzwerk und Gerätezustand prüfen.</string>
+    <string name="offline_pack_refresh_cancel">Aktualisierung abbrechen</string>
+    <string name="offline_pack_refresh_cancelled">Aktualisierung abgebrochen; planmäßige Aktualisierungen bleiben aktiv.</string>
 </resources>

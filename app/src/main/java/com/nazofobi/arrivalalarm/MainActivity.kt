@@ -1077,6 +1077,9 @@ fun ArrivalAlarmApp(
                     onUpdateInstalledData = {
                         NationwideFeedRefreshScheduler.requestInstalledPackRefresh(context)
                     },
+                    onCancelInstalledDataUpdate = {
+                        NationwideFeedRefreshScheduler.cancelInstalledPackRefresh(context)
+                    },
                     manualRefreshWorkState = manualRefreshWorkState,
                     onConnectorAction = {
                         if (connectorConnected) disconnectConnector()

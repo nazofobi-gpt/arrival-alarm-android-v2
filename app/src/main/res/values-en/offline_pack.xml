@@ -11,4 +11,6 @@
     <string name="offline_pack_refresh_running">Checking or refreshing installed transit data.</string>
     <string name="offline_pack_refresh_checked">The last refresh check finished; verify the data version and check time.</string>
     <string name="offline_pack_refresh_failed">Refresh did not complete; check network and device conditions.</string>
+    <string name="offline_pack_refresh_cancel">Cancel refresh</string>
+    <string name="offline_pack_refresh_cancelled">Refresh cancelled; scheduled updates are unaffected.</string>
 </resources>
