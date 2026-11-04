@@ -499,6 +499,7 @@ class LiveTripPanelTest {
         )
         val offline = mutableStateOf(false)
         val armed = mutableStateOf(true)
+        val nextStopName = mutableStateOf("Diepholz")
         val route = RouteOption(
             id = "next-stop-eta",
             realtime = RouteRealtimeInfo(state = RouteRealtimeState.FRESH_MATCHED),
@@ -533,7 +534,11 @@ class LiveTripPanelTest {
             MaterialTheme {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     LiveTripPanel(
-                        selectedRoute = route,
+                        selectedRoute = route.copy(
+                            stops = route.stops.map { stop ->
+                                if (stop.id == "middle") stop.copy(name = nextStopName.value) else stop
+                            },
+                        ),
                         journey = JourneyUiState(
                             phase = if (armed.value) JourneyPhase.ARMED
                                 else JourneyPhase.DESTINATION_SELECTED,
@@ -572,6 +577,17 @@ class LiveTripPanelTest {
             .assertTextContains("Diepholz", substring = true)
         rule.onNodeWithTag("live-trip-next-stop-countdown")
             .assertTextContains("10", substring = true)
+        // Invalid or invisible next-stop identity must not become a spoken ETA.
+        rule.runOnUiThread { nextStopName.value = "" }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-next-stop-countdown").assertDoesNotExist()
+        rule.runOnUiThread { nextStopName.value = "\u200BDiepholz" }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-next-stop-countdown").assertDoesNotExist()
+        rule.runOnUiThread { nextStopName.value = "Diepholz" }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-next-stop-countdown").performScrollTo()
+            .assertTextContains("Diepholz", substring = true)
         // Countdown remains readable well before the stop but must not speak
         // every minute; only imminent stop guidance becomes a polite live region.
         rule.runOnUiThread {
