@@ -1,5 +1,11 @@
 package com.nazofobi.arrivalalarm
 
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+import java.text.DateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.TimeZone
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -49,9 +55,13 @@ fun RouteJourneyPanel(
     onCancelAlarm: () -> Unit,
     mode: RouteJourneyMode = RouteJourneyMode.RESULTS,
     modifier: Modifier = Modifier,
+    selectedDepartureEpochMillis: Long? = null,
+    onDepartureTimeChange: (Long?) -> Unit = {},
 ) {
     val context = LocalContext.current
     val preferences = remember(context) { ArrivalUiPreferences(context) }
+    val berlinZone = remember { TimeZone.getTimeZone("Europe/Berlin") }
+    var departureTimeInvalid by rememberSaveable { mutableStateOf(false) }
     var directOnly by rememberSaveable { mutableStateOf(preferences.loadDirectOnlyRoutes()) }
     var fewerTransfersFirst by rememberSaveable {
         mutableStateOf(preferences.loadFewerTransfersFirst())
@@ -105,6 +115,90 @@ fun RouteJourneyPanel(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
+                        val displayedDeparture = selectedDepartureEpochMillis?.let { epoch ->
+                            DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).apply {
+                                timeZone = berlinZone
+                            }.format(Date(epoch))
+                        }
+                        Text(
+                            text = if (displayedDeparture == null) {
+                                stringResource(R.string.future_route_depart_now)
+                            } else {
+                                stringResource(R.string.future_route_departure_selected, displayedDeparture)
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.testTag("route-departure-time"),
+                        )
+                        OutlinedButton(
+                            enabled = !routeBusy,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                .testTag("route-departure-pick"),
+                            onClick = {
+                                val calendar = Calendar.getInstance(berlinZone)
+                                DatePickerDialog(
+                                    context,
+                                    { _, year, month, day ->
+                                        val selected = Calendar.getInstance(berlinZone).apply {
+                                            set(Calendar.YEAR, year)
+                                            set(Calendar.MONTH, month)
+                                            set(Calendar.DAY_OF_MONTH, day)
+                                            set(Calendar.SECOND, 0)
+                                            set(Calendar.MILLISECOND, 0)
+                                        }
+                                        TimePickerDialog(
+                                            context,
+                                            { _, hour, minute ->
+                                                selected.set(Calendar.HOUR_OF_DAY, hour)
+                                                selected.set(Calendar.MINUTE, minute)
+                                                val epoch = selected.timeInMillis
+                                                val civilTimeMatches = selected.get(Calendar.YEAR) == year &&
+                                                    selected.get(Calendar.MONTH) == month &&
+                                                    selected.get(Calendar.DAY_OF_MONTH) == day &&
+                                                    selected.get(Calendar.HOUR_OF_DAY) == hour &&
+                                                    selected.get(Calendar.MINUTE) == minute
+                                                if (civilTimeMatches && supportedFutureDeparture(
+                                                        System.currentTimeMillis(), epoch,
+                                                    )
+                                                ) {
+                                                    departureTimeInvalid = false
+                                                    onDepartureTimeChange(epoch)
+                                                } else {
+                                                    departureTimeInvalid = true
+                                                }
+                                            },
+                                            calendar.get(Calendar.HOUR_OF_DAY),
+                                            calendar.get(Calendar.MINUTE),
+                                            true,
+                                        ).show()
+                                    },
+                                    calendar.get(Calendar.YEAR),
+                                    calendar.get(Calendar.MONTH),
+                                    calendar.get(Calendar.DAY_OF_MONTH),
+                                ).show()
+                            },
+                        ) {
+                            Text(stringResource(R.string.future_route_pick_departure))
+                        }
+                        if (selectedDepartureEpochMillis != null) {
+                            OutlinedButton(
+                                enabled = !routeBusy,
+                                onClick = {
+                                    departureTimeInvalid = false
+                                    onDepartureTimeChange(null)
+                                },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                    .testTag("route-departure-now"),
+                            ) {
+                                Text(stringResource(R.string.future_route_depart_now))
+                            }
+                        }
+                        if (departureTimeInvalid) {
+                            Text(
+                                stringResource(R.string.future_route_invalid_time),
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.testTag("route-departure-error"),
+                            )
+                        }
                         routeStatus?.let {
                             Text(
                                 text = it,
