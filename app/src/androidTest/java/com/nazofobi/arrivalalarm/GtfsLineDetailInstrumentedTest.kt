@@ -70,7 +70,7 @@ class GtfsLineDetailInstrumentedTest {
         db.execSQL("INSERT OR REPLACE INTO metadata(key,value) VALUES('ready','1')")
         db.execSQL("INSERT OR REPLACE INTO metadata(key,value) VALUES('source_version','test-gtfs-v1')")
         assertNull(loadGtfsLineDetail(context, "R", "old-feed-version"))
-        assertEquals(2, loadGtfsLineDetail(context, "R", "test-gtfs-v1")?.directions?.size)
+        assertEquals(3, loadGtfsLineDetail(context, "R", "test-gtfs-v1")?.directions?.size)
         index.close()
     }
 
