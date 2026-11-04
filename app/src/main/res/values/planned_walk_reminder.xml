@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="route_walk_reminder_set">Tahmini yürüyüş başlangıcı hatırlatıcısını etkinleştir</string>
+    <string name="route_walk_reminder_other_route">Başka bir rota için yürüyüş hatırlatıcısı etkin. Önce mevcut hatırlatıcıyı iptal edin; yeni rota eskisini sessizce değiştirmez.</string>
     <string name="route_walk_reminder_cancel">Yürüyüş hatırlatıcısını iptal et</string>
     <string name="route_walk_reminder_disclaimer">Yalnızca isteğe bağlı Android bildirimi. Doze, pil kısıtları veya kapalı bildirim izni teslimi geciktirebilir ya da engelleyebilir. Kesin alarm değildir. Güvenlik payı değişirse mevcut hatırlatıcı otomatik güncellenmez.</string>
     <string name="route_walk_reminder_queued">Hatırlatıcı sıraya alındı; bildirim zamanı garanti değildir.</string>

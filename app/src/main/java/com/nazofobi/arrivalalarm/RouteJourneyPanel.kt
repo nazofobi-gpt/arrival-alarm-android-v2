@@ -768,12 +768,20 @@ internal fun PlannedWalkStartNotice(
             PlannedWalkReminderScheduler(context.applicationContext)
         }
         var pending by remember(option.id) {
-            mutableStateOf(scheduler.isScheduledForRoute(option.id))
+            mutableStateOf(scheduler.scheduledRouteId() != null)
         }
         var cancelBusy by remember(option.id) { mutableStateOf(false) }
         var cancelFailed by remember(option.id) { mutableStateOf(false) }
         val cancelScope = rememberCoroutineScope()
         if (pending) {
+            if (!scheduler.isScheduledForRoute(option.id)) {
+                Text(
+                    text = stringResource(R.string.route_walk_reminder_other_route),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("route-walk-reminder-other-route"),
+                )
+            }
             OutlinedButton(
                 onClick = {
                     if (!cancelBusy) {
@@ -782,7 +790,7 @@ internal fun PlannedWalkStartNotice(
                             val succeeded = withContext(Dispatchers.IO) {
                                 scheduler.cancel()
                             }
-                            pending = scheduler.isScheduledForRoute(option.id)
+                            pending = scheduler.scheduledRouteId() != null
                             cancelFailed = !succeeded
                             cancelBusy = false
                         }
@@ -893,7 +901,7 @@ internal fun PlannedWalkStartNotice(
     }
     val reminderScope = rememberCoroutineScope()
     var reminderScheduled by remember(option.id) {
-        mutableStateOf(reminderScheduler.isScheduledForRoute(option.id))
+        mutableStateOf(reminderScheduler.scheduledRouteId() != null)
     }
     var reminderActionFailed by remember(option.id) { mutableStateOf(false) }
     var reminderBusy by remember(option.id) { mutableStateOf(false) }
@@ -901,6 +909,16 @@ internal fun PlannedWalkStartNotice(
         option, displayNowMillis, safetyBufferMinutes,
     )
     if (reminderScheduled || reminderDelay != null) {
+        // A previous route's reminder must be disclosed and cancelled explicitly;
+        // never silently replace it when a different journey is selected.
+        if (reminderScheduled && !reminderScheduler.isScheduledForRoute(option.id)) {
+            Text(
+                text = stringResource(R.string.route_walk_reminder_other_route),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("route-walk-reminder-other-route"),
+            )
+        }
         OutlinedButton(
             onClick = {
                 if (!reminderBusy) {
@@ -911,7 +929,7 @@ internal fun PlannedWalkStartNotice(
                             if (cancel) reminderScheduler.cancel()
                             else reminderScheduler.schedule(option, safetyBufferMinutes)
                         }
-                        reminderScheduled = reminderScheduler.isScheduledForRoute(option.id)
+                        reminderScheduled = reminderScheduler.scheduledRouteId() != null
                         reminderActionFailed = !worked
                         reminderBusy = false
                     }

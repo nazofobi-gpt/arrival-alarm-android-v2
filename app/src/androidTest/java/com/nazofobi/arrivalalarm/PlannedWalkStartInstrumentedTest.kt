@@ -240,5 +240,40 @@ class PlannedWalkStartInstrumentedTest {
         rule.onNodeWithTag("route-walk-reminder-toggle").assertExists()
         rule.onNodeWithTag("route-walk-reminder-note").assertExists()
     }
+ 
+    @Test fun pendingOtherRouteReminderCanBeCancelledWithoutCurrentGtfsEvidence() {
+        val preferences = androidx.test.platform.app.InstrumentationRegistry
+            .getInstrumentation().targetContext.getSharedPreferences(
+                PlannedWalkReminderScheduler.PREFS, android.content.Context.MODE_PRIVATE)
+        preferences.edit().putString(PlannedWalkReminderScheduler.KEY_TOKEN, "other-route-fixture")
+            .putString(PlannedWalkReminderScheduler.KEY_ROUTE, "previous-route").commit()
+        try {
+            show(null, 600)
+            rule.onNodeWithTag("route-walk-reminder-other-route").assertExists()
+            rule.onNodeWithTag("route-walk-reminder-toggle").assertTextContains(
+                androidx.test.platform.app.InstrumentationRegistry
+                    .getInstrumentation().targetContext.getString(
+                        R.string.route_walk_reminder_cancel), substring = true)
+        } finally {
+            preferences.edit().clear().commit()
+        }
+    }
 
+    @Test fun plannedNextRouteDoesNotSilentlyReplacePreviousReminder() {
+        val preferences = androidx.test.platform.app.InstrumentationRegistry
+            .getInstrumentation().targetContext.getSharedPreferences(
+                PlannedWalkReminderScheduler.PREFS, android.content.Context.MODE_PRIVATE)
+        preferences.edit().putString(PlannedWalkReminderScheduler.KEY_TOKEN, "other-route-fixture")
+            .putString(PlannedWalkReminderScheduler.KEY_ROUTE, "previous-route").commit()
+        try {
+            show("2099-11-04T10:30:00+01:00", 600)
+            rule.onNodeWithTag("route-walk-reminder-other-route").assertExists()
+            rule.onNodeWithTag("route-walk-reminder-toggle").assertTextContains(
+                androidx.test.platform.app.InstrumentationRegistry
+                    .getInstrumentation().targetContext.getString(
+                        R.string.route_walk_reminder_cancel), substring = true)
+        } finally {
+            preferences.edit().clear().commit()
+        }
+    }
 }

@@ -39,10 +39,14 @@ internal fun plannedWalkReminderDelayMillis(
 internal class PlannedWalkReminderScheduler(private val context: Context) {
     private val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    /** The one opt-in reminder may belong to a previously selected route. */
+    fun scheduledRouteId(): String? =
+        preferences.getString(KEY_ROUTE, null)?.takeIf {
+            it.isNotBlank() && !preferences.getString(KEY_TOKEN, null).isNullOrEmpty()
+        }
+
     fun isScheduledForRoute(routeId: String): Boolean =
-        routeId.isNotBlank() &&
-            preferences.getString(KEY_ROUTE, null) == routeId &&
-            !preferences.getString(KEY_TOKEN, null).isNullOrEmpty()
+        routeId.isNotBlank() && scheduledRouteId() == routeId
 
     /** Call on an IO dispatcher: enqueue completion is awaited before claiming success. */
     fun schedule(option: RouteOption, bufferMinutes: Int): Boolean {
