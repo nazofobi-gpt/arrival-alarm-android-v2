@@ -11,6 +11,11 @@ package com.nazofobi.arrivalalarm
  */
 private const val MAX_ROUTE_DEPARTURE_EPOCH_MILLIS = 253_402_300_799_999L
 
+/** Persisted future/arrival-by choices must never resurrect a depart-now cache entry. */
+internal fun shouldRestoreDepartNowCache(
+    selectedDepartureEpochMillis: Long?, selectedArrivalDeadlineEpochMillis: Long?,
+): Boolean = selectedDepartureEpochMillis == null && selectedArrivalDeadlineEpochMillis == null
+
 // Provider route, trip and stop identifiers must all be usable UI/identity keys.
 // Reject invisible controls even when both snapshots repeat the same bad value.
 private fun isUsableIdentityKey(value: String?): Boolean =

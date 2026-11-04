@@ -1,10 +1,23 @@
 package com.nazofobi.arrivalalarm
 
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class RouteRefreshSelectionTest {
+    @Test
+    fun restoredTimeQualifiedRouteNeverUsesDepartNowEndpointCache() {
+        assertTrue(shouldRestoreDepartNowCache(null, null))
+        assertFalse(shouldRestoreDepartNowCache(1_800_000_000_000L, null))
+        assertFalse(shouldRestoreDepartNowCache(null, 1_800_000_000_000L))
+        assertFalse(shouldRestoreDepartNowCache(1_800_000_000_000L, 1_800_000_000_001L))
+        // Even a stale selection must fail closed, not expose an unrelated cached trip.
+        assertFalse(shouldRestoreDepartNowCache(-1L, null))
+    }
+
+
     private val origin = MapPoint(52.663, 8.233, "Lohne")
     private val destination = MapPoint(53.079, 8.801, "Bremen")
     private val stops = listOf(

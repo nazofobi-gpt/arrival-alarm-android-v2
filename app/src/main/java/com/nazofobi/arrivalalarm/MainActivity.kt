@@ -865,14 +865,21 @@ fun ArrivalAlarmApp(
         }
         if (restoredOrigin != null && restoredDestination != null && routeOptions.isEmpty()) {
             val key = routeKey(restoredOrigin, restoredDestination)
-            val cached = routeCache.routeOptions(key)
+            // The cache is keyed only by endpoints and contains depart-now routes.
+            // A restored future/arrival-by selection needs a fresh date-qualified search.
+            val cached = if (shouldRestoreDepartNowCache(
+                    selectedDepartureEpochMillis, selectedArrivalDeadlineEpochMillis,
+                )) routeCache.routeOptions(key) else emptyList()
             if (cached.isNotEmpty()) {
                 routeOffline = true
                 routeOptions = cached
                 graph.routeRegistry.replace(cached)
                 routeStatus = context.getString(R.string.route_offline_fallback)
             } else {
-                loadRoutes(restoredOrigin, restoredDestination)
+                loadRoutes(
+                    restoredOrigin, restoredDestination,
+                    selectedDepartureEpochMillis, selectedArrivalDeadlineEpochMillis,
+                )
             }
         }
     }
