@@ -30,6 +30,7 @@ class PlannedWalkStartInstrumentedTest {
         bufferMinutesForTest: Int? = 0,
         walkingStopId: String = "stop-1",
         notificationPermissionReadyForTest: Boolean? = true,
+        notificationChannelMutedForTest: Boolean? = null,
         notificationSettingsLauncher: ((Intent) -> Boolean)? = null,
         calendarLauncher: ((Intent) -> Boolean)? = null,
     ) {
@@ -55,6 +56,7 @@ class PlannedWalkStartInstrumentedTest {
                     directionsLauncher = directionsLauncher,
                     bufferMinutesForTest = bufferMinutesForTest,
                     notificationPermissionReadyForTest = notificationPermissionReadyForTest,
+                    notificationChannelMutedForTest = notificationChannelMutedForTest,
                     notificationSettingsLauncher = notificationSettingsLauncher,
                 )
             }
@@ -442,4 +444,41 @@ class PlannedWalkStartInstrumentedTest {
         rule.onNodeWithTag("route-walk-reminder-toggle").assertIsNotEnabled()
     }
 
+    @Test fun mutedChannelDisablesOptInAndOpensChannelSpecificAndroidSettings() {
+        var observed: Intent? = null
+        show("2099-11-04T10:30:00+01:00", 600,
+            notificationPermissionReadyForTest = true,
+            notificationChannelMutedForTest = true,
+            notificationSettingsLauncher = { observed = it; true })
+        rule.onNodeWithTag("route-walk-reminder-notifications-disabled").assertExists()
+        rule.onNodeWithTag("route-walk-reminder-toggle").assertIsNotEnabled()
+        rule.onNodeWithTag("route-walk-reminder-settings").performClick()
+        rule.runOnIdle {
+            val intent = requireNotNull(observed)
+            assertEquals(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS, intent.action)
+            assertEquals(PlannedWalkReminderScheduler.CHANNEL,
+                intent.getStringExtra(Settings.EXTRA_CHANNEL_ID))
+            assertEquals(
+                androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+                    .targetContext.packageName,
+                intent.getStringExtra(Settings.EXTRA_APP_PACKAGE),
+            )
+        }
+    }
+
+    @Test fun onlyMutedAndroidChannelIsRejectedWhenAppWideNotificationsAreOn() {
+        val context = androidx.test.platform.app.InstrumentationRegistry
+            .getInstrumentation().targetContext
+        val manager = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE)
+            as android.app.NotificationManager
+        val channelId = "walk_reminder_ci_muted_" + System.nanoTime()
+        try {
+            assertTrue(!PlannedWalkReminderScheduler.notificationChannelMuted(context, channelId))
+            manager.createNotificationChannel(android.app.NotificationChannel(
+                channelId, "Walk reminder CI", android.app.NotificationManager.IMPORTANCE_NONE))
+            assertTrue(PlannedWalkReminderScheduler.notificationChannelMuted(context, channelId))
+        } finally {
+            manager.deleteNotificationChannel(channelId)
+        }
+    }
 }

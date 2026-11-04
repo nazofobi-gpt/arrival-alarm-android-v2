@@ -838,6 +838,7 @@ internal fun PlannedWalkStartNotice(
     directionsLauncher: ((Intent) -> Boolean)? = null,
     notificationPermissionReadyForTest: Boolean? = null,
     notificationSettingsLauncher: ((Intent) -> Boolean)? = null,
+    notificationChannelMutedForTest: Boolean? = null,
 ) {
     val context = LocalContext.current
     val preferences = remember(context) {
@@ -992,15 +993,21 @@ internal fun PlannedWalkStartNotice(
     }
     val reminderScope = rememberCoroutineScope()
     // A denied notification permission needs explicit recovery, not a false schedule.
-    var notificationsReady by remember(option.id, notificationPermissionReadyForTest) {
-        mutableStateOf(notificationPermissionReadyForTest
-            ?: PlannedWalkReminderScheduler.notificationPermissionGranted(context))
+    var notificationsReady by remember(
+        option.id, notificationPermissionReadyForTest, notificationChannelMutedForTest,
+    ) {
+        mutableStateOf(
+            (notificationPermissionReadyForTest
+                ?: PlannedWalkReminderScheduler.notificationPermissionGranted(context)) &&
+                notificationChannelMutedForTest != true,
+        )
     }
     val notificationSettingsResult = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) {
-        notificationsReady = notificationPermissionReadyForTest
-            ?: PlannedWalkReminderScheduler.notificationPermissionGranted(context)
+        notificationsReady = (notificationPermissionReadyForTest
+            ?: PlannedWalkReminderScheduler.notificationPermissionGranted(context)) &&
+            notificationChannelMutedForTest != true
     }
     var notificationSettingsFailed by remember(option.id) { mutableStateOf(false) }
     var reminderScheduled by remember(option.id) {
@@ -1032,7 +1039,14 @@ internal fun PlannedWalkStartNotice(
             OutlinedButton(
                 onClick = {
                     // Opening Settings is explicit; returning never auto-schedules.
-                    val settings = if (Build.VERSION.SDK_INT >= 26) {
+                    val settings = if (Build.VERSION.SDK_INT >= 26 &&
+                        (notificationChannelMutedForTest
+                            ?: PlannedWalkReminderScheduler.notificationChannelMuted(context))
+                    ) {
+                        Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            .putExtra(Settings.EXTRA_CHANNEL_ID, PlannedWalkReminderScheduler.CHANNEL)
+                    } else if (Build.VERSION.SDK_INT >= 26) {
                         Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                             .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
                     } else {

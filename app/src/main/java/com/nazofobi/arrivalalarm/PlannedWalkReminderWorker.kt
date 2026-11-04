@@ -117,7 +117,17 @@ internal class PlannedWalkReminderScheduler(private val context: Context) {
                 PackageManager.PERMISSION_GRANTED) return false
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE)
                 as? NotificationManager ?: return false
-            return Build.VERSION.SDK_INT < 24 || manager.areNotificationsEnabled()
+            if (Build.VERSION.SDK_INT >= 24 && !manager.areNotificationsEnabled()) return false
+            return !notificationChannelMuted(context)
+        }
+
+        /** Android may mute just this channel while the app-wide notification permission stays ON. */
+        fun notificationChannelMuted(context: Context, channelId: String = CHANNEL): Boolean {
+            if (Build.VERSION.SDK_INT < 26) return false
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE)
+                as? NotificationManager ?: return false
+            return manager.getNotificationChannel(channelId)?.importance ==
+                NotificationManager.IMPORTANCE_NONE
         }
     }
 }
