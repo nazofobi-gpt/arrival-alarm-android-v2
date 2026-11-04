@@ -11,5 +11,5 @@
     <string name="route_walk_reminder_details">Saved walking reminder: %1$s — %2$s (local time; notification delivery is not guaranteed).</string>
     <string name="route_walk_reminder_notifications_disabled">Notifications are off. A reminder cannot be scheduled. Open the app settings to enable them.</string>
     <string name="route_walk_reminder_open_notification_settings">Open notification settings</string>
-    <string name="route_walk_reminder_settings_failure">Could not open notification settings. Check this app's notifications in Android settings.</string>
+    <string name="route_walk_reminder_settings_failure">Could not open notification settings. Check notifications for this app in Android settings.</string>
 </resources>
