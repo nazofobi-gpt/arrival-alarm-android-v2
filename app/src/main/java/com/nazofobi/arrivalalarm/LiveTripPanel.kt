@@ -283,7 +283,8 @@ fun LiveTripPanel(
                     (progress.current != null &&
                         progress.current !== selectedRoute.stops.firstOrNull())) &&
                 progress.next != null &&
-                progress.next !== target
+                progress.next !== target &&
+                isActionableTransitLabel(progress.next.name)
             ) {
                 destinationArrivalCountdown(
                     actualArrival = progress.next.arrival,
@@ -298,7 +299,7 @@ fun LiveTripPanel(
                             else R.string.live_trip_next_stop_scheduled_countdown,
                         ),
                         value = listOf(
-                            progress.next.name,
+                            progress.next.name.trim(),
                             stringResource(R.string.live_trip_planned_boarding_minutes, countdown.minutes),
                         ).joinToString(" • "),
                         tag = "live-trip-next-stop-countdown",
@@ -472,12 +473,15 @@ internal fun boardingCheckEligible(
     if (phase != JourneyPhase.ARMED ||
         minutesUntilDeparture == null || minutesUntilDeparture !in 1L..15L
     ) return false
-    return listOf(line, direction, stopName).all { value ->
-        value != null && value.isNotBlank() && value.length <= 120 &&
-            value.none { ch ->
-                Character.isISOControl(ch) ||
-                    Character.getType(ch) == Character.FORMAT.toInt()
-            }
+    return listOf(line, direction, stopName).all(::isActionableTransitLabel)
+}
+
+/** Never speak an empty, invisible, control-bearing or implausibly long stop label. */
+internal fun isActionableTransitLabel(value: String?): Boolean {
+    if (value == null || value.isBlank() || value.trim().length > 120) return false
+    return value.none { ch ->
+        Character.isISOControl(ch) ||
+            Character.getType(ch) == Character.FORMAT.toInt()
     }
 }
 
