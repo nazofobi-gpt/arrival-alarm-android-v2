@@ -12,4 +12,5 @@
     <string name="gtfs_line_search_stops">Haltestelle in dieser Richtung suchen</string>
     <string name="gtfs_line_no_matching_stops">Keine passende Haltestelle in dieser beispielhaften Fahrt.</string>
     <string name="gtfs_line_open_stop_departures">Abfahrten an %1$s anzeigen</string>
+    <string name="gtfs_line_refine_stop_search">Schränken Sie die Haltestellensuche ein, um weitere Treffer zu sehen.</string>
 </resources>

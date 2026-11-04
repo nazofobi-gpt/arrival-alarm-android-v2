@@ -151,6 +151,38 @@ class GtfsLineDetailInstrumentedTest {
         composeRule.onNodeWithTag("gtfs-line-stops-1")
             .assertTextContains("1. Gamma", substring = true)
     }
+    @Test fun sameNamedDistinctGtfsStopsRemainIndividuallySelectable() {
+        val preview = GtfsLineDetail(
+            lineName = "RE1",
+            directions = listOf(
+                GtfsLineDirection(
+                    "Central", listOf("Central", "Central", "Other"), false,
+                    stops = listOf(
+                        GtfsLineStop("platform-A", "Central"),
+                        GtfsLineStop("platform-B", "Central"),
+                        GtfsLineStop("other", "Other"),
+                    ),
+                ),
+            ),
+            additionalDirectionsOmitted = false,
+            sourceVersion = "test-gtfs-v1",
+        )
+        var selectedStopId: String? = null
+        composeRule.setContent {
+            MaterialTheme {
+                GtfsLineDetailDialog(
+                    lineLabel = "RE1", detail = preview, loading = false,
+                    onOpenDepartures = { selectedStopId = it }, onDismiss = {},
+                )
+            }
+        }
+        composeRule.onNodeWithTag("gtfs-line-stop-filter").performTextInput("Central")
+        composeRule.onNodeWithTag("gtfs-line-open-departures").assertDoesNotExist()
+        composeRule.onNodeWithTag("gtfs-line-open-departures-0").assertExists()
+        composeRule.onNodeWithTag("gtfs-line-open-departures-1").assertExists().performClick()
+        composeRule.runOnIdle { assertEquals("platform-B", selectedStopId) }
+    }
+
     @Test fun uniquelyFilteredGtfsStopOpensSourceBoundDepartureBoardOnlyOnTap() {
         val preview = GtfsLineDetail(
             lineName = "RE1",

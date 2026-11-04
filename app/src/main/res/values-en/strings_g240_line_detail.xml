@@ -12,4 +12,5 @@
     <string name="gtfs_line_search_stops">Search stops in this direction</string>
     <string name="gtfs_line_no_matching_stops">No matching stop in this representative trip.</string>
     <string name="gtfs_line_open_stop_departures">Show departures at %1$s</string>
+    <string name="gtfs_line_refine_stop_search">Refine the stop search to see more matching stops.</string>
 </resources>

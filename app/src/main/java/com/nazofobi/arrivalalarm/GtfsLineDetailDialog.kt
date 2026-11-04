@@ -106,19 +106,31 @@ internal fun GtfsLineDetailDialog(
                                 modifier = Modifier.testTag("gtfs-line-stops-$activeIndex"),
                             )
                         }
-                        // Opening a station board is an explicit browse action, never an alarm.
-                        // Require an unambiguous, source-backed stop ID from the selected direction.
-                        val singleMatch = matchingStopIndexes.singleOrNull()
-                            ?.takeIf { needle.isNotEmpty() }
-                            ?.let { activeDirection.stops.getOrNull(it) }
-                            ?.takeIf { it.id.isNotBlank() }
-                        if (singleMatch != null) {
+                        // Identically named platforms and repeated stops must remain selectable
+                        // by source identity. Browsing departures never arms a journey or alarm.
+                        // Bound rendered choices so a broad query cannot expand the dialog without limit.
+                        val matchingBoardStops = if (needle.isNotEmpty()) {
+                            matchingStopIndexes.mapNotNull { index ->
+                                activeDirection.stops.getOrNull(index)
+                                    ?.takeIf { it.id.isNotBlank() }
+                                    ?.let { index to it }
+                            }.distinctBy { (_, stop) -> stop.id }
+                        } else emptyList()
+                        matchingBoardStops.take(MAX_LINE_BOARD_CHOICES).forEach { (index, stop) ->
+                            val unique = matchingBoardStops.size == 1
                             TextButton(
-                                onClick = { onOpenDepartures(singleMatch.id) },
-                                modifier = Modifier.testTag("gtfs-line-open-departures"),
+                                onClick = { onOpenDepartures(stop.id) },
+                                modifier = Modifier.testTag(
+                                    if (unique) "gtfs-line-open-departures"
+                                    else "gtfs-line-open-departures-$index"
+                                ),
                             ) {
-                                Text(stringResource(R.string.gtfs_line_open_stop_departures, singleMatch.name))
+                                val label = if (unique) stop.name else "${index + 1}. ${stop.name}"
+                                Text(stringResource(R.string.gtfs_line_open_stop_departures, label))
                             }
+                        }
+                        if (matchingBoardStops.size > MAX_LINE_BOARD_CHOICES) {
+                            Text(stringResource(R.string.gtfs_line_refine_stop_search))
                         }
                         if (activeDirection.stopsTruncated) {
                             Text(stringResource(R.string.gtfs_line_stops_limited))
@@ -137,3 +149,5 @@ internal fun GtfsLineDetailDialog(
         },
     )
 }
+
+private const val MAX_LINE_BOARD_CHOICES = 8
