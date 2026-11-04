@@ -1,0 +1,10 @@
+<resources>
+    <string name="future_route_depart_now">Depart now</string>
+    <string name="future_route_pick_departure">Choose departure date and time</string>
+    <string name="future_route_departure_selected">Planned departure (Berlin): %1$s</string>
+    <string name="future_route_invalid_time">Choose a valid departure within the next 7 days.</string>
+    <string name="future_route_static_only">Future departure: local GTFS timetable only; live predictions are not applied.</string>
+    <string name="future_route_not_found">No scheduled route at that time. Try another departure time.</string>
+    <string name="future_route_offline_required">Current offline transit data must be installed for future departures.</string>
+    <string name="future_route_unavailable">Future departure routing is unavailable.</string>
+</resources>

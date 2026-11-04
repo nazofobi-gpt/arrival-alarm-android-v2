@@ -26,6 +26,36 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
     }
 
     @Test
+    fun futureDepartureSelectsScheduledTripWithoutRealtimeOrLiveFallback() {
+        seedReadyGraph(includeTrip = true)
+        var liveCalls = 0
+        var realtimeCalls = 0
+        val gateway = NationwideTransitGateway(
+            context = context,
+            nowMillis = { at("07:40:00") },
+            liveJourneyLoader = { _, _, _ -> liveCalls++; error("future must not use live") },
+            realtimeFetch = { realtimeCalls++; realtimeUnavailable() },
+        )
+        try {
+            val origin = MapPoint(52.665, 8.237, "Lohne")
+            val destination = MapPoint(52.700, 8.400, "Achim")
+            val available = gateway.resolveFutureJourneyOptions(origin, destination, at("07:55:00"))
+            assertTrue(available is NationwideJourneyResolution.Results)
+            assertEquals(
+                listOf("T1"),
+                (available as NationwideJourneyResolution.Results).options.single().tripIds,
+            )
+            assertTrue(gateway.resolveFutureJourneyOptions(
+                origin, destination, at("08:05:00"),
+            ) is NationwideJourneyResolution.NoRoute)
+            assertEquals(0, liveCalls)
+            assertEquals(0, realtimeCalls)
+        } finally {
+            gateway.close()
+        }
+    }
+
+    @Test
     fun journeyOptionsUsesLocalStaticGraphWithoutCallingLiveProvider() {
         seedReadyGraph(includeTrip = true)
         var liveCalls = 0
