@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="arrival_alert_preview_action">Test arrival notification</string>
+    <string name="arrival_alert_preview_submitted">Test notification submitted to Android. Visibility and vibration depend on device settings.</string>
+    <string name="arrival_alert_preview_quiet_warning">Arrival notification channel is quiet or vibration is off. You may miss the test; check channel settings.</string>
+    <string name="arrival_alert_preview_unavailable">Could not send test notification. Check notification permission and device settings.</string>
+    <string name="arrival_alert_preview_title">TEST — Arrival notification</string>
+    <string name="arrival_alert_preview_body">This is only a test. No arrival alarm was armed.</string>
+    <string name="arrival_alert_preview_open_settings">Open notification settings</string>
+    <string name="arrival_alert_preview_dismiss_action">Dismiss test notification</string>
+    <string name="arrival_alert_preview_dismiss_requested">Request to dismiss the test notification sent to Android.</string>
+    <string name="arrival_alert_preview_dismiss_unavailable">Could not dismiss test notification. Check notification settings.</string>
+</resources>
