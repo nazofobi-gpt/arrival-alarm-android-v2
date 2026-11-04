@@ -57,6 +57,8 @@ fun RouteJourneyPanel(
     modifier: Modifier = Modifier,
     selectedDepartureEpochMillis: Long? = null,
     onDepartureTimeChange: (Long?) -> Unit = {},
+    selectedArrivalDeadlineEpochMillis: Long? = null,
+    onArrivalDeadlineChange: (Long?) -> Unit = {},
 ) {
     val context = LocalContext.current
     val preferences = remember(context) { ArrivalUiPreferences(context) }
@@ -122,7 +124,9 @@ fun RouteJourneyPanel(
                         }
                         Text(
                             text = if (displayedDeparture == null) {
-                                stringResource(R.string.future_route_depart_now)
+                                if (selectedArrivalDeadlineEpochMillis != null)
+                                    stringResource(R.string.arrival_by_mode_label)
+                                else stringResource(R.string.future_route_depart_now)
                             } else {
                                 stringResource(R.string.future_route_departure_selected, displayedDeparture)
                             },
@@ -198,6 +202,77 @@ fun RouteJourneyPanel(
                                 color = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.testTag("route-departure-error"),
                             )
+                        }
+                        val arrivalDeadlineLabel = selectedArrivalDeadlineEpochMillis?.let { epoch ->
+                            DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).apply {
+                                timeZone = berlinZone
+                            }.format(Date(epoch))
+                        }
+                        if (arrivalDeadlineLabel != null) {
+                            Text(
+                                text = stringResource(R.string.arrival_by_selected, arrivalDeadlineLabel),
+                                modifier = Modifier.testTag("route-arrival-deadline"),
+                            )
+                        }
+                        OutlinedButton(
+                            enabled = !routeBusy,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                .testTag("route-arrival-pick"),
+                            onClick = {
+                                val calendar = Calendar.getInstance(berlinZone)
+                                DatePickerDialog(
+                                    context,
+                                    { _, year, month, day ->
+                                        val selected = Calendar.getInstance(berlinZone).apply {
+                                            set(Calendar.YEAR, year)
+                                            set(Calendar.MONTH, month)
+                                            set(Calendar.DAY_OF_MONTH, day)
+                                            set(Calendar.SECOND, 0)
+                                            set(Calendar.MILLISECOND, 0)
+                                        }
+                                        TimePickerDialog(
+                                            context,
+                                            { _, hour, minute ->
+                                                selected.set(Calendar.HOUR_OF_DAY, hour)
+                                                selected.set(Calendar.MINUTE, minute)
+                                                val epoch = selected.timeInMillis
+                                                val civilTimeMatches = selected.get(Calendar.YEAR) == year &&
+                                                    selected.get(Calendar.MONTH) == month &&
+                                                    selected.get(Calendar.DAY_OF_MONTH) == day &&
+                                                    selected.get(Calendar.HOUR_OF_DAY) == hour &&
+                                                    selected.get(Calendar.MINUTE) == minute
+                                                if (civilTimeMatches && supportedFutureDeparture(
+                                                        System.currentTimeMillis(), epoch,
+                                                    )
+                                                ) {
+                                                    departureTimeInvalid = false
+                                                    onArrivalDeadlineChange(epoch)
+                                                } else {
+                                                    departureTimeInvalid = true
+                                                }
+                                            },
+                                            calendar.get(Calendar.HOUR_OF_DAY),
+                                            calendar.get(Calendar.MINUTE),
+                                            true,
+                                        ).show()
+                                    },
+                                    calendar.get(Calendar.YEAR),
+                                    calendar.get(Calendar.MONTH),
+                                    calendar.get(Calendar.DAY_OF_MONTH),
+                                ).show()
+                            },
+                        ) {
+                            Text(stringResource(R.string.arrival_by_pick))
+                        }
+                        if (selectedArrivalDeadlineEpochMillis != null) {
+                            OutlinedButton(
+                                enabled = !routeBusy,
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                    .testTag("route-arrival-clear"),
+                                onClick = { onArrivalDeadlineChange(null) },
+                            ) {
+                                Text(stringResource(R.string.arrival_by_reset))
+                            }
                         }
                         routeStatus?.let {
                             Text(

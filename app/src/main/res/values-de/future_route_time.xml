@@ -7,4 +7,10 @@
     <string name="future_route_not_found">Keine planmäßige Verbindung zur gewählten Zeit. Andere Zeit versuchen.</string>
     <string name="future_route_offline_required">Für zukünftige Abfahrten müssen aktuelle Offline-Fahrplandaten installiert sein.</string>
     <string name="future_route_unavailable">Routensuche für zukünftige Abfahrten nicht verfügbar.</string>
+    <string name="arrival_by_mode_label">Späteste Ankunft wählen</string>
+    <string name="arrival_by_selected">Späteste Ankunft (Berlin): %1$s</string>
+    <string name="arrival_by_pick">Ankunftsdatum und späteste Uhrzeit wählen</string>
+    <string name="arrival_by_reset">Jetzt abfahren</string>
+    <string name="arrival_by_static_only">Späteste Ankunft: lokaler GTFS-Fahrplan für 24 Stunden, ohne Echtzeitprognose.</string>
+    <string name="arrival_by_not_found">Keine planmäßige Verbindung bis zu dieser Ankunftszeit. Andere Zeit versuchen.</string>
 </resources>

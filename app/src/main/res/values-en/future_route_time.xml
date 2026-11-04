@@ -7,4 +7,10 @@
     <string name="future_route_not_found">No scheduled route at that time. Try another departure time.</string>
     <string name="future_route_offline_required">Current offline transit data must be installed for future departures.</string>
     <string name="future_route_unavailable">Future departure routing is unavailable.</string>
+    <string name="arrival_by_mode_label">Choose an arrival deadline</string>
+    <string name="arrival_by_selected">Arrive by (Berlin): %1$s</string>
+    <string name="arrival_by_pick">Choose arrival date and latest time</string>
+    <string name="arrival_by_reset">Depart now</string>
+    <string name="arrival_by_static_only">Arrive by: local GTFS timetable over the preceding 24 hours, without realtime predictions.</string>
+    <string name="arrival_by_not_found">No scheduled route arrives by that time. Try a different deadline.</string>
 </resources>

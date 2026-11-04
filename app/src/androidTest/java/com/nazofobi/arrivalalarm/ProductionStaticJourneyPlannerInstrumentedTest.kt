@@ -56,6 +56,55 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
     }
 
     @Test
+    fun arriveBySelectsLatestFeasibleScheduledTripAndRejectsLateTrips() {
+        seedReadyGraph(includeTrip = true)
+        val index = NationwideTransitIndex(context)
+        index.writableDatabase.execSQL(
+            "INSERT INTO trips(trip_id,route_id,service_id,headsign,direction_id) " +
+                "VALUES('T2','R1','S','Achim',0)",
+        )
+        index.writableDatabase.execSQL(
+            "INSERT INTO stop_times(trip_id,stop_sequence,stop_id,arrival_time,departure_time,pickup_type,drop_off_type) " +
+                "VALUES('T2',1,'A','08:20:00','08:20:00',0,0)",
+        )
+        index.writableDatabase.execSQL(
+            "INSERT INTO stop_times(trip_id,stop_sequence,stop_id,arrival_time,departure_time,pickup_type,drop_off_type) " +
+                "VALUES('T2',2,'B','08:40:00','08:40:00',0,0)",
+        )
+        index.close()
+        var liveCalls = 0
+        var realtimeCalls = 0
+        val gateway = NationwideTransitGateway(
+            context = context,
+            nowMillis = { at("07:40:00") },
+            liveJourneyLoader = { _, _, _ -> liveCalls++; error("no live arrive-by") },
+            realtimeFetch = { realtimeCalls++; realtimeUnavailable() },
+        )
+        try {
+            val origin = MapPoint(52.665, 8.237, "Lohne")
+            val destination = MapPoint(52.700, 8.400, "Achim")
+            val early = gateway.resolveArrivalByJourneyOptions(origin, destination, at("08:35:00"))
+            assertTrue(early is NationwideJourneyResolution.Results)
+            assertEquals(listOf("T1"), (early as NationwideJourneyResolution.Results).options.first().tripIds)
+            assertTrue(early.options.all { it.arrivalEpochMillis!! <= at("08:35:00") })
+            val later = gateway.resolveArrivalByJourneyOptions(origin, destination, at("08:45:00"))
+            assertTrue(later is NationwideJourneyResolution.Results)
+            assertEquals(listOf("T2"), (later as NationwideJourneyResolution.Results).options.first().tripIds)
+            assertTrue(later.options.all { it.arrivalEpochMillis!! <= at("08:45:00") })
+            assertTrue(gateway.resolveArrivalByJourneyOptions(
+                origin, destination, at("08:10:00"),
+            ) is NationwideJourneyResolution.NoRoute)
+            assertTrue(gateway.resolveArrivalByJourneyOptions(
+                MapPoint(Double.NaN, 8.237, "Invalid"), destination, at("08:45:00"),
+            ) is NationwideJourneyResolution.NoRoute)
+            assertEquals(0, liveCalls)
+            assertEquals(0, realtimeCalls)
+        } finally {
+            gateway.close()
+        }
+    }
+
+    @Test
     fun journeyOptionsUsesLocalStaticGraphWithoutCallingLiveProvider() {
         seedReadyGraph(includeTrip = true)
         var liveCalls = 0
