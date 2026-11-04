@@ -434,6 +434,7 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
                     modifier = Modifier.testTag("route-walk-access"),
                 )
             }
+            PlannedWalkStartNotice(option)
             option.egressWalking?.takeIf { it.walkSeconds > 0 }?.let { leg ->
                 val roundedMinutes = ((leg.walkSeconds.toLong() + 59L) / 60L).toInt()
                 Text(
@@ -730,3 +731,25 @@ internal fun routeClock(value: String?): String? {
 private fun hasRealtimeDelta(stop: RouteStop): Boolean =
     routeHasUsableRealtimeDelta(stop.arrival, stop.plannedArrival) ||
         routeHasUsableRealtimeDelta(stop.departure, stop.plannedDeparture)
+
+/** Informational source-backed walking start: no reminder or notification is armed. */
+@Composable
+internal fun PlannedWalkStartNotice(option: RouteOption) {
+    val startEpoch = plannedWalkStartEpochMillis(option) ?: return
+    val clock = remember(startEpoch) {
+        java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
+            .format(java.util.Date(startEpoch))
+    }
+    Text(
+        text = stringResource(R.string.route_planned_walk_start, clock),
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.testTag("route-planned-walk-start"),
+    )
+    Text(
+        text = stringResource(R.string.route_planned_walk_start_disclaimer),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.testTag("route-planned-walk-start-note"),
+    )
+}

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="route_planned_walk_start">Durağa yürüyüş için planlanan çıkış: %1$s</string>
+    <string name="route_planned_walk_start_disclaimer">Yürüyüş süresi kuş uçuşu mesafeye dayalı tahmindir. Yaya rotası veya otomatik hatırlatıcı değildir.</string>
+</resources>

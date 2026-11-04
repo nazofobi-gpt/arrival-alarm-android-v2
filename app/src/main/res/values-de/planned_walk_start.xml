@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="route_planned_walk_start">Voraussichtlicher Aufbruch zu Fuß: %1$s</string>
+    <string name="route_planned_walk_start_disclaimer">Die Gehzeit ist aus der Luftlinie geschätzt. Keine Fußwegnavigation oder automatische Erinnerung.</string>
+</resources>
