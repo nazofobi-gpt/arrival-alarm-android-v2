@@ -771,9 +771,12 @@ internal fun PlannedWalkStartNotice(
     val displayNowMillis = nowMillisForTest ?: liveNowMillis
     var launchFailed by remember(option.id, startEpoch) { mutableStateOf(false) }
     var directionsFailed by remember(option.id, startEpoch) { mutableStateOf(false) }
+    // A time alone is ambiguous for overnight and next-day trips. Format the
+    // verified instant in the device's local calendar, including its date.
     val clock = remember(startEpoch) {
-        java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
-            .format(java.util.Date(startEpoch))
+        java.text.DateFormat.getDateTimeInstance(
+            java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT,
+        ).format(java.util.Date(startEpoch))
     }
     OutlinedButton(
         onClick = {

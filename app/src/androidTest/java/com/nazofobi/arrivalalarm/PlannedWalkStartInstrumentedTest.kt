@@ -4,6 +4,7 @@ import android.content.Intent
 import android.provider.CalendarContract
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -51,6 +52,17 @@ class PlannedWalkStartInstrumentedTest {
                 )
             }
         }
+    }
+
+    @Test fun overnightWalkStartShowsTheCalendarDateNotOnlyTheClock() {
+        // First boarding stop leaves after midnight in the source's +01:00 offset;
+        // the suggested walk begins on the preceding local calendar day.
+        show("2099-11-05T00:10:00+01:00", 600)
+        val expected = java.text.DateFormat.getDateTimeInstance(
+            java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT,
+        ).format(java.util.Date(java.time.Instant.parse("2099-11-04T23:00:00Z").toEpochMilli()))
+        rule.onNodeWithTag("route-planned-walk-start")
+            .assertTextContains(expected, substring = true)
     }
 
     @Test fun plannedEvidenceShowsWalkingStartWithSourceDisclosure() {
