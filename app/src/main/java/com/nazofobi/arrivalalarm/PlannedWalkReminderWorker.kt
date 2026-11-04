@@ -36,6 +36,8 @@ internal fun plannedWalkReminderDelayMillis(
     return delay.takeIf { it in 60_000L..604_800_000L }
 }
 
+internal data class PlannedWalkReminderDetails(val stopName: String, val startMillis: Long)
+
 internal class PlannedWalkReminderScheduler(private val context: Context) {
     private val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -47,6 +49,19 @@ internal class PlannedWalkReminderScheduler(private val context: Context) {
 
     fun isScheduledForRoute(routeId: String): Boolean =
         routeId.isNotBlank() && scheduledRouteId() == routeId
+
+    /** Details are shown only when atomically bound to the current opt-in token. */
+    fun scheduledDetails(): PlannedWalkReminderDetails? {
+        val token = preferences.getString(KEY_TOKEN, null)?.takeIf { it.isNotBlank() }
+            ?: return null
+        if (scheduledRouteId() == null ||
+            preferences.getString(KEY_DETAILS_TOKEN, null) != token) return null
+        val start = preferences.getLong(KEY_START, -1L).takeIf { it > 0L }
+            ?: return null
+        val stop = preferences.getString(KEY_STOP, null)?.trim()
+            ?.takeIf { it.isNotBlank() && it.length <= 80 } ?: return null
+        return PlannedWalkReminderDetails(stop, start)
+    }
 
     /** Call on an IO dispatcher: enqueue completion is awaited before claiming success. */
     fun schedule(option: RouteOption, bufferMinutes: Int): Boolean {
@@ -68,6 +83,8 @@ internal class PlannedWalkReminderScheduler(private val context: Context) {
                     .putString(KEY_TOKEN, token)
                     .putString(KEY_ROUTE, option.id)
                     .putLong(KEY_START, start)
+                    .putString(KEY_STOP, stop)
+                    .putString(KEY_DETAILS_TOKEN, token)
                     .commit()) {
                 WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
                 false
@@ -78,7 +95,8 @@ internal class PlannedWalkReminderScheduler(private val context: Context) {
     /** Invalidate the persisted token *before* asking WorkManager to cancel. */
     fun cancel(): Boolean {
         if (!preferences.edit().remove(KEY_TOKEN).remove(KEY_ROUTE)
-                .remove(KEY_START).commit()) return false
+                .remove(KEY_START).remove(KEY_STOP).remove(KEY_DETAILS_TOKEN)
+                .commit()) return false
         WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
         return true
     }
@@ -90,6 +108,7 @@ internal class PlannedWalkReminderScheduler(private val context: Context) {
         const val KEY_ROUTE = "route_id"
         const val KEY_START = "start"
         const val KEY_STOP = "stop_name"
+        const val KEY_DETAILS_TOKEN = "details_token"
         const val CHANNEL = "planned_walk_estimate_v1"
 
         fun notificationPermissionGranted(context: Context): Boolean {
@@ -173,6 +192,8 @@ class PlannedWalkReminderWorker(context: Context, params: WorkerParameters) : Wo
             .remove(PlannedWalkReminderScheduler.KEY_TOKEN)
             .remove(PlannedWalkReminderScheduler.KEY_ROUTE)
             .remove(PlannedWalkReminderScheduler.KEY_START)
+            .remove(PlannedWalkReminderScheduler.KEY_STOP)
+            .remove(PlannedWalkReminderScheduler.KEY_DETAILS_TOKEN)
             .commit()
     }
 }

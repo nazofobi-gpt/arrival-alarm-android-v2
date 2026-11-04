@@ -278,6 +278,22 @@ fun RouteJourneyPanel(
     }
 }
 
+/** Display the persisted scheduled stop/time, never a recomputed time from a new route. */
+@Composable
+private fun StoredWalkReminderDetails(scheduler: PlannedWalkReminderScheduler) {
+    val details = scheduler.scheduledDetails() ?: return
+    val clock = remember(details.startMillis) {
+        java.text.DateFormat.getDateTimeInstance(
+            java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT,
+        ).format(java.util.Date(details.startMillis))
+    }
+    Text(
+        text = stringResource(R.string.route_walk_reminder_details, details.stopName, clock),
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.testTag("route-walk-reminder-details"),
+    )
+}
+
 /**
  * An opt-in reminder must not become impossible to revoke when a route card is
  * unavailable. This is status + explicit cancellation only; never arms a job.
@@ -306,6 +322,7 @@ private fun PendingWalkReminderWithoutRoute() {
                 text = stringResource(R.string.route_walk_reminder_queued),
                 style = MaterialTheme.typography.bodyMedium,
             )
+            StoredWalkReminderDetails(scheduler)
             Text(
                 text = stringResource(R.string.route_walk_reminder_disclaimer),
                 style = MaterialTheme.typography.labelSmall,
@@ -849,6 +866,7 @@ internal fun PlannedWalkStartNotice(
                     modifier = Modifier.testTag("route-walk-reminder-other-route"),
                 )
             }
+            StoredWalkReminderDetails(scheduler)
             OutlinedButton(
                 onClick = {
                     if (!cancelBusy) {
@@ -1023,6 +1041,7 @@ internal fun PlannedWalkStartNotice(
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.testTag("route-walk-reminder-queued"),
             )
+            StoredWalkReminderDetails(reminderScheduler)
         }
         if (reminderActionFailed) {
             Text(

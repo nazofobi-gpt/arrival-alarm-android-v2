@@ -8,4 +8,5 @@
     <string name="route_walk_reminder_failure">Hatırlatıcı değiştirilemedi. Bildirim ayarlarını kontrol edin.</string>
     <string name="route_walk_reminder_notification_title">Tahmini yürüyüşe başlama zamanı</string>
     <string name="route_walk_reminder_notification_body">Bağlantı geçerliyse %1$s yönüne yürüyün. Gerçek sefer durumunu tekrar kontrol edin.</string>
+    <string name="route_walk_reminder_details">Kaydedilen yürüyüş hatırlatıcısı: %1$s — %2$s (yerel saat; bildirim teslimi garanti değildir).</string>
 </resources>

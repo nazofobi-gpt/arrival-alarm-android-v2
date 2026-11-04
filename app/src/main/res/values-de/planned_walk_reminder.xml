@@ -8,4 +8,5 @@
     <string name="route_walk_reminder_failure">Erinnerung konnte nicht geändert werden. Benachrichtigungen prüfen.</string>
     <string name="route_walk_reminder_notification_title">Geschätzte Zeit zum Losgehen</string>
     <string name="route_walk_reminder_notification_body">Geh ggf. in Richtung %1$s. Prüfe die tatsächliche Verbindung erneut.</string>
+    <string name="route_walk_reminder_details">Gespeicherte Geherinnerung: %1$s — %2$s (Ortszeit; Zustellung nicht garantiert).</string>
 </resources>

@@ -313,6 +313,71 @@ class PlannedWalkStartInstrumentedTest {
         }
     }
 
+
+    @Test fun queuedReminderShowsSavedStopAndTimeEvenWithoutRouteResults() {
+        val context = androidx.test.platform.app.InstrumentationRegistry
+            .getInstrumentation().targetContext
+        val preferences = context.getSharedPreferences(
+            PlannedWalkReminderScheduler.PREFS, android.content.Context.MODE_PRIVATE)
+        preferences.edit().clear()
+            .putString(PlannedWalkReminderScheduler.KEY_TOKEN, "saved-details-token")
+            .putString(PlannedWalkReminderScheduler.KEY_DETAILS_TOKEN, "saved-details-token")
+            .putString(PlannedWalkReminderScheduler.KEY_ROUTE, "previous-gtfs-trip")
+            .putString(PlannedWalkReminderScheduler.KEY_STOP, "Lohne")
+            .putLong(PlannedWalkReminderScheduler.KEY_START,
+                java.time.Instant.parse("2099-11-04T09:20:00Z").toEpochMilli())
+            .commit()
+        try {
+            rule.setContent {
+                MaterialTheme {
+                    RouteJourneyPanel(
+                        origin = null, destination = null, routeOptions = emptyList(),
+                        routeBusy = false, routeStatus = null, routeOffline = true,
+                        selectedRouteId = null, journey = JourneyUiState(),
+                        onRefreshRoutes = {}, onSelectRoute = {},
+                        onArmAlarm = {}, onCancelAlarm = {},
+                    )
+                }
+            }
+            rule.onNodeWithTag("route-walk-reminder-global-cancel").assertExists()
+            rule.onNodeWithTag("route-walk-reminder-details")
+                .assertTextContains("Lohne", substring = true)
+        } finally {
+            preferences.edit().clear().commit()
+        }
+    }
+
+    @Test fun staleOrLegacyDetailsAreNotAttributedToAnotherReminder() {
+        val context = androidx.test.platform.app.InstrumentationRegistry
+            .getInstrumentation().targetContext
+        val preferences = context.getSharedPreferences(
+            PlannedWalkReminderScheduler.PREFS, android.content.Context.MODE_PRIVATE)
+        preferences.edit().clear()
+            .putString(PlannedWalkReminderScheduler.KEY_TOKEN, "new-reminder-token")
+            .putString(PlannedWalkReminderScheduler.KEY_DETAILS_TOKEN, "previous-token")
+            .putString(PlannedWalkReminderScheduler.KEY_ROUTE, "new-gtfs-trip")
+            .putString(PlannedWalkReminderScheduler.KEY_STOP, "Old Stop")
+            .putLong(PlannedWalkReminderScheduler.KEY_START,
+                java.time.Instant.parse("2099-11-04T09:20:00Z").toEpochMilli())
+            .commit()
+        try {
+            rule.setContent {
+                MaterialTheme {
+                    RouteJourneyPanel(
+                        origin = null, destination = null, routeOptions = emptyList(),
+                        routeBusy = false, routeStatus = null, routeOffline = true,
+                        selectedRouteId = null, journey = JourneyUiState(),
+                        onRefreshRoutes = {}, onSelectRoute = {},
+                        onArmAlarm = {}, onCancelAlarm = {},
+                    )
+                }
+            }
+            rule.onNodeWithTag("route-walk-reminder-global-cancel").assertExists()
+            rule.onNodeWithTag("route-walk-reminder-details").assertDoesNotExist()
+        } finally {
+            preferences.edit().clear().commit()
+        }
+    }
     @Test fun absentWalkReminderNeverInventsGlobalCancelAction() {
         val context = androidx.test.platform.app.InstrumentationRegistry
             .getInstrumentation().targetContext

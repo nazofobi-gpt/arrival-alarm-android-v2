@@ -8,4 +8,5 @@
     <string name="route_walk_reminder_failure">Reminder could not be changed. Check notification settings.</string>
     <string name="route_walk_reminder_notification_title">Estimated time to start walking</string>
     <string name="route_walk_reminder_notification_body">Walk toward %1$s if your departure is still valid. Recheck real service status.</string>
+    <string name="route_walk_reminder_details">Saved walking reminder: %1$s — %2$s (local time; notification delivery is not guaranteed).</string>
 </resources>
