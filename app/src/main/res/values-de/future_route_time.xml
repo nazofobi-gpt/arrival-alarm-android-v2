@@ -13,4 +13,5 @@
     <string name="arrival_by_reset">Jetzt abfahren</string>
     <string name="arrival_by_static_only">Späteste Ankunft: lokaler GTFS-Fahrplan für 24 Stunden, ohne Echtzeitprognose.</string>
     <string name="arrival_by_not_found">Keine planmäßige Verbindung bis zu dieser Ankunftszeit. Andere Zeit versuchen.</string>
+    <string name="future_route_ambiguous_time">Diese Uhrzeit kommt bei der Zeitumstellung zweimal vor. Wählen Sie den gewünschten UTC-Offset.</string>
 </resources>

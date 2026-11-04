@@ -13,4 +13,5 @@
     <string name="arrival_by_reset">Depart now</string>
     <string name="arrival_by_static_only">Arrive by: local GTFS timetable over the preceding 24 hours, without realtime predictions.</string>
     <string name="arrival_by_not_found">No scheduled route arrives by that time. Try a different deadline.</string>
+    <string name="future_route_ambiguous_time">This clock time occurs twice during the daylight-saving change. Choose the intended UTC offset.</string>
 </resources>

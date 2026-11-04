@@ -3,14 +3,17 @@ package com.nazofobi.arrivalalarm
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import java.text.DateFormat
+import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
+import java.util.Locale
 import java.util.TimeZone
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -19,6 +22,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,6 +68,9 @@ fun RouteJourneyPanel(
     val preferences = remember(context) { ArrivalUiPreferences(context) }
     val berlinZone = remember { TimeZone.getTimeZone("Europe/Berlin") }
     var departureTimeInvalid by rememberSaveable { mutableStateOf(false) }
+    // A clock hour occurs twice on Berlin's autumn DST transition; never pick an offset silently.
+    var pendingAmbiguousTimes by remember { mutableStateOf<List<Long>>(emptyList()) }
+    var pendingAmbiguousArrival by remember { mutableStateOf(false) }
     var directOnly by rememberSaveable { mutableStateOf(preferences.loadDirectOnlyRoutes()) }
     var fewerTransfersFirst by rememberSaveable {
         mutableStateOf(preferences.loadFewerTransfersFirst())
@@ -82,6 +89,40 @@ fun RouteJourneyPanel(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        if (pendingAmbiguousTimes.isNotEmpty()) {
+            AlertDialog(
+                onDismissRequest = { pendingAmbiguousTimes = emptyList() },
+                title = { Text(stringResource(R.string.future_route_ambiguous_time)) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        pendingAmbiguousTimes.forEachIndexed { index, epoch ->
+                            val displayed = SimpleDateFormat("HH:mm XXX", Locale.ROOT).apply {
+                                timeZone = berlinZone
+                            }.format(Date(epoch))
+                            OutlinedButton(
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                    .testTag("route-dst-option-${index + 1}"),
+                                onClick = {
+                                    pendingAmbiguousTimes = emptyList()
+                                    if (supportedFutureDeparture(System.currentTimeMillis(), epoch)) {
+                                        departureTimeInvalid = false
+                                        if (pendingAmbiguousArrival) onArrivalDeadlineChange(epoch)
+                                        else onDepartureTimeChange(epoch)
+                                    } else {
+                                        departureTimeInvalid = true
+                                    }
+                                },
+                            ) { Text(displayed) }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { pendingAmbiguousTimes = emptyList() }) {
+                        Text(stringResource(android.R.string.cancel))
+                    }
+                },
+            )
+        }
         if (mode == RouteJourneyMode.RESULTS) {
             Text(
                 text = stringResource(R.string.route_results_title),
@@ -142,32 +183,25 @@ fun RouteJourneyPanel(
                                 DatePickerDialog(
                                     context,
                                     { _, year, month, day ->
-                                        val selected = Calendar.getInstance(berlinZone).apply {
-                                            set(Calendar.YEAR, year)
-                                            set(Calendar.MONTH, month)
-                                            set(Calendar.DAY_OF_MONTH, day)
-                                            set(Calendar.SECOND, 0)
-                                            set(Calendar.MILLISECOND, 0)
-                                        }
                                         TimePickerDialog(
                                             context,
                                             { _, hour, minute ->
-                                                selected.set(Calendar.HOUR_OF_DAY, hour)
-                                                selected.set(Calendar.MINUTE, minute)
-                                                val epoch = selected.timeInMillis
-                                                val civilTimeMatches = selected.get(Calendar.YEAR) == year &&
-                                                    selected.get(Calendar.MONTH) == month &&
-                                                    selected.get(Calendar.DAY_OF_MONTH) == day &&
-                                                    selected.get(Calendar.HOUR_OF_DAY) == hour &&
-                                                    selected.get(Calendar.MINUTE) == minute
-                                                if (civilTimeMatches && supportedFutureDeparture(
-                                                        System.currentTimeMillis(), epoch,
-                                                    )
-                                                ) {
-                                                    departureTimeInvalid = false
-                                                    onDepartureTimeChange(epoch)
-                                                } else {
-                                                    departureTimeInvalid = true
+                                                val choices = berlinCivilTimeCandidates(
+                                                    year, month, day, hour, minute,
+                                                ).filter {
+                                                    supportedFutureDeparture(System.currentTimeMillis(), it)
+                                                }
+                                                when (choices.size) {
+                                                    0 -> departureTimeInvalid = true
+                                                    1 -> {
+                                                        departureTimeInvalid = false
+                                                        onDepartureTimeChange(choices.single())
+                                                    }
+                                                    else -> {
+                                                        departureTimeInvalid = false
+                                                        pendingAmbiguousArrival = false
+                                                        pendingAmbiguousTimes = choices
+                                                    }
                                                 }
                                             },
                                             calendar.get(Calendar.HOUR_OF_DAY),
@@ -223,32 +257,25 @@ fun RouteJourneyPanel(
                                 DatePickerDialog(
                                     context,
                                     { _, year, month, day ->
-                                        val selected = Calendar.getInstance(berlinZone).apply {
-                                            set(Calendar.YEAR, year)
-                                            set(Calendar.MONTH, month)
-                                            set(Calendar.DAY_OF_MONTH, day)
-                                            set(Calendar.SECOND, 0)
-                                            set(Calendar.MILLISECOND, 0)
-                                        }
                                         TimePickerDialog(
                                             context,
                                             { _, hour, minute ->
-                                                selected.set(Calendar.HOUR_OF_DAY, hour)
-                                                selected.set(Calendar.MINUTE, minute)
-                                                val epoch = selected.timeInMillis
-                                                val civilTimeMatches = selected.get(Calendar.YEAR) == year &&
-                                                    selected.get(Calendar.MONTH) == month &&
-                                                    selected.get(Calendar.DAY_OF_MONTH) == day &&
-                                                    selected.get(Calendar.HOUR_OF_DAY) == hour &&
-                                                    selected.get(Calendar.MINUTE) == minute
-                                                if (civilTimeMatches && supportedFutureDeparture(
-                                                        System.currentTimeMillis(), epoch,
-                                                    )
-                                                ) {
-                                                    departureTimeInvalid = false
-                                                    onArrivalDeadlineChange(epoch)
-                                                } else {
-                                                    departureTimeInvalid = true
+                                                val choices = berlinCivilTimeCandidates(
+                                                    year, month, day, hour, minute,
+                                                ).filter {
+                                                    supportedFutureDeparture(System.currentTimeMillis(), it)
+                                                }
+                                                when (choices.size) {
+                                                    0 -> departureTimeInvalid = true
+                                                    1 -> {
+                                                        departureTimeInvalid = false
+                                                        onArrivalDeadlineChange(choices.single())
+                                                    }
+                                                    else -> {
+                                                        departureTimeInvalid = false
+                                                        pendingAmbiguousArrival = true
+                                                        pendingAmbiguousTimes = choices
+                                                    }
                                                 }
                                             },
                                             calendar.get(Calendar.HOUR_OF_DAY),

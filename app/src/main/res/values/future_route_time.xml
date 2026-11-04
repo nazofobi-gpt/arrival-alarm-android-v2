@@ -13,4 +13,5 @@
     <string name="arrival_by_reset">Şimdi hareket et</string>
     <string name="arrival_by_static_only">En geç varış: son 24 saat içindeki yerel GTFS tarifesi; canlı tahmin uygulanmaz.</string>
     <string name="arrival_by_not_found">Seçilen saate kadar varan tarifeli bağlantı bulunamadı. Başka saat deneyin.</string>
+    <string name="future_route_ambiguous_time">Bu saat, yaz/kış saati değişiminde iki kez yaşanır. İstediğiniz UTC ofsetini seçin.</string>
 </resources>
