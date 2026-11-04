@@ -240,7 +240,7 @@ class GtfsLineDetailInstrumentedTest {
         composeRule.onNodeWithTag("gtfs-line-open-departures-4").assertExists()
         composeRule.onNodeWithTag("gtfs-line-open-departures-0").assertExists().performClick()
         composeRule.runOnIdle { assertEquals("id-1", selectedStopId) }
-        composeRule.onNodeWithTag("gtfs-line-open-departures-8").assertExists().performClick()
+        composeRule.onNodeWithTag("gtfs-line-open-departures-8").assertExists().performScrollTo().performClick()
         composeRule.runOnIdle { assertEquals("id-9", selectedStopId) }
         composeRule.onNodeWithTag("gtfs-line-stop-filter").performTextInput("Stop-5")
         composeRule.onNodeWithTag("gtfs-line-open-departures").assertExists().performClick()
