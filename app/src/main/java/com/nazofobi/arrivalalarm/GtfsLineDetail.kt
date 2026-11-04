@@ -45,6 +45,9 @@ internal fun inspectGtfsLineDetail(index: NationwideTransitIndex, routeId: Strin
     // sample, never as the entire route topology.
     // Prefer a trip with at least two scheduled stops; a partial first trip must
     // not hide an otherwise valid direction from the line details.
+    // GTFS permits null/blank headsign and direction IDs. Group on the same
+    // normalized keys we render, otherwise duplicate anonymous directions can
+    // consume the bounded variant slots and hide a genuinely different route.
     val candidates = index.readableDatabase.rawQuery(
         """
         SELECT MIN(t.trip_id), COALESCE(TRIM(t.headsign), ''), COALESCE(t.direction_id, -1)
@@ -56,8 +59,8 @@ internal fun inspectGtfsLineDetail(index: NationwideTransitIndex, routeId: Strin
               ORDER BY st.stop_sequence
               LIMIT 1 OFFSET 1
           )
-        GROUP BY t.direction_id, TRIM(t.headsign)
-        ORDER BY t.direction_id, TRIM(t.headsign)
+        GROUP BY COALESCE(t.direction_id, -1), COALESCE(TRIM(t.headsign), '')
+        ORDER BY COALESCE(t.direction_id, -1), COALESCE(TRIM(t.headsign), '')
         LIMIT ?
         """.trimIndent(),
         arrayOf(routeId, (MAX_LINE_VARIANTS + 1).toString()),
