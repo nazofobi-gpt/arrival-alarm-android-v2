@@ -2,4 +2,7 @@
 <resources>
     <string name="route_planned_walk_start">Planned time to start walking: %1$s</string>
     <string name="route_planned_walk_start_disclaimer">Walking time is estimated from straight-line distance. Not walking directions or an automatic reminder.</string>
+    <string name="route_planned_walk_calendar_action">Add walking time to calendar</string>
+    <string name="route_planned_walk_calendar_title">Walk from %1$s toward %2$s</string>
+    <string name="route_planned_walk_calendar_failure">Calendar could not be opened. No event was saved.</string>
 </resources>

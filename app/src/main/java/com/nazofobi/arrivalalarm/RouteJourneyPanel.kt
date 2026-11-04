@@ -1,5 +1,6 @@
 package com.nazofobi.arrivalalarm
 
+import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -733,9 +734,15 @@ private fun hasRealtimeDelta(stop: RouteStop): Boolean =
         routeHasUsableRealtimeDelta(stop.departure, stop.plannedDeparture)
 
 /** Informational source-backed walking start: no reminder or notification is armed. */
+/** An optional user-confirmed Calendar draft; never silently arms an event or reminder. */
 @Composable
-internal fun PlannedWalkStartNotice(option: RouteOption) {
+internal fun PlannedWalkStartNotice(
+    option: RouteOption,
+    calendarLauncher: ((Intent) -> Boolean)? = null,
+) {
+    val context = LocalContext.current
     val startEpoch = plannedWalkStartEpochMillis(option) ?: return
+    var launchFailed by remember(option.id, startEpoch) { mutableStateOf(false) }
     val clock = remember(startEpoch) {
         java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
             .format(java.util.Date(startEpoch))
@@ -752,4 +759,38 @@ internal fun PlannedWalkStartNotice(option: RouteOption) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.testTag("route-planned-walk-start-note"),
     )
+    if (startEpoch > System.currentTimeMillis()) {
+        OutlinedButton(
+            onClick = {
+                val draft = plannedWalkCalendarDraftIntent(
+                    option = option,
+                    nowMillis = System.currentTimeMillis(),
+                    title = context.getString(
+                        R.string.route_planned_walk_calendar_title,
+                        option.origin.label,
+                        option.destination.label,
+                    ),
+                    description = context.getString(R.string.route_planned_walk_start_disclaimer),
+                )
+                launchFailed = when {
+                    draft == null -> true
+                    calendarLauncher != null -> !calendarLauncher(draft)
+                    else -> !runCatching { context.startActivity(draft); true }
+                        .getOrDefault(false)
+                }
+            },
+            modifier = Modifier.heightIn(min = 48.dp)
+                .testTag("route-planned-walk-calendar"),
+        ) {
+            Text(stringResource(R.string.route_planned_walk_calendar_action))
+        }
+        if (launchFailed) {
+            Text(
+                text = stringResource(R.string.route_planned_walk_calendar_failure),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.testTag("route-planned-walk-calendar-failure"),
+            )
+        }
+    }
 }

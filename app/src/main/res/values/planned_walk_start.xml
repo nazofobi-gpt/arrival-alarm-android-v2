@@ -2,4 +2,7 @@
 <resources>
     <string name="route_planned_walk_start">Durağa yürüyüş için planlanan çıkış: %1$s</string>
     <string name="route_planned_walk_start_disclaimer">Yürüyüş süresi kuş uçuşu mesafeye dayalı tahmindir. Yaya rotası veya otomatik hatırlatıcı değildir.</string>
+    <string name="route_planned_walk_calendar_action">Takvimde yürüyüş zamanı öner</string>
+    <string name="route_planned_walk_calendar_title">%1$s → %2$s: durağa yürüyüş</string>
+    <string name="route_planned_walk_calendar_failure">Takvim açılamadı. Etkinlik kaydedilmedi.</string>
 </resources>

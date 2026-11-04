@@ -2,4 +2,7 @@
 <resources>
     <string name="route_planned_walk_start">Voraussichtlicher Aufbruch zu Fuß: %1$s</string>
     <string name="route_planned_walk_start_disclaimer">Die Gehzeit ist aus der Luftlinie geschätzt. Keine Fußwegnavigation oder automatische Erinnerung.</string>
+    <string name="route_planned_walk_calendar_action">Gehzeit im Kalender vormerken</string>
+    <string name="route_planned_walk_calendar_title">Fußweg von %1$s Richtung %2$s</string>
+    <string name="route_planned_walk_calendar_failure">Kalender konnte nicht geöffnet werden. Kein Termin wurde gespeichert.</string>
 </resources>
