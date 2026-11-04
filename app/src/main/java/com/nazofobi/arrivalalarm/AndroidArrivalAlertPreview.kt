@@ -35,6 +35,17 @@ internal object AndroidArrivalAlertPreview {
         false
     }
 
+    /** Withdraw only the test notification, never the real arrival alarm. */
+    fun dismiss(context: Context): Boolean = try {
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.cancel(NOTIFICATION_ID)
+        true
+    } catch (_: SecurityException) {
+        false
+    } catch (_: RuntimeException) {
+        false
+    }
+
     fun post(context: Context): Boolean {
         if (Build.VERSION.SDK_INT >= 33 &&
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
