@@ -240,9 +240,12 @@ class PlannedWalkReminderDelayTest {
         val start = Instant.parse("2026-11-04T09:20:00Z").toEpochMilli()
         assertEquals(60_000L, plannedWalkReminderDelayMillis(option, start - 60_000L))
         assertEquals(86_400_000L, plannedWalkReminderDelayMillis(option, start - 86_400_000L))
+        // Seven-day future GTFS planning must also allow explicit reminders.
+        assertEquals(86_400_001L, plannedWalkReminderDelayMillis(option, start - 86_400_001L))
+        assertEquals(604_800_000L, plannedWalkReminderDelayMillis(option, start - 604_800_000L))
         assertNull(plannedWalkReminderDelayMillis(option, start))
         assertNull(plannedWalkReminderDelayMillis(option, start - 59_999L))
-        assertNull(plannedWalkReminderDelayMillis(option, start - 86_400_001L))
+        assertNull(plannedWalkReminderDelayMillis(option, start - 604_800_001L))
     }
 
     @Test fun missingOrMismatchedGtfsFirstStopCannotSchedule() {
