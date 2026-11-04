@@ -35,8 +35,11 @@ class GtfsLineDetailInstrumentedTest {
         db.execSQL("INSERT INTO stops(id,name,lat,lon) VALUES('B','Beta',52.1,8.1)")
         db.execSQL("INSERT INTO stops(id,name,lat,lon) VALUES('C','Gamma',52.2,8.2)")
         db.execSQL("INSERT INTO routes(route_id,short_name,route_type) VALUES('R','RE1',2)")
+        // T0 sorts ahead of T1 but has only one stop; a valid T1 must still represent Beta.
+        db.execSQL("INSERT INTO trips(trip_id,route_id,service_id,headsign,direction_id) VALUES('T0','R','S','Beta',0)")
         db.execSQL("INSERT INTO trips(trip_id,route_id,service_id,headsign,direction_id) VALUES('T1','R','S','Beta',0)")
         db.execSQL("INSERT INTO trips(trip_id,route_id,service_id,headsign,direction_id) VALUES('T2','R','S','Alpha',1)")
+        db.execSQL("INSERT INTO stop_times(trip_id,stop_sequence,stop_id) VALUES('T0',1,'A')")
         db.execSQL("INSERT INTO stop_times(trip_id,stop_sequence,stop_id) VALUES('T1',20,'B')")
         db.execSQL("INSERT INTO stop_times(trip_id,stop_sequence,stop_id) VALUES('T1',10,'A')")
         db.execSQL("INSERT INTO stop_times(trip_id,stop_sequence,stop_id) VALUES('T2',1,'C')")

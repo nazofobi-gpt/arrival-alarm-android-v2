@@ -43,13 +43,21 @@ internal fun inspectGtfsLineDetail(index: NationwideTransitIndex, routeId: Strin
     // One deterministic representative per direction+headsign. A later feed can
     // include other stop patterns with the same headsign; describe this as a
     // sample, never as the entire route topology.
+    // Prefer a trip with at least two scheduled stops; a partial first trip must
+    // not hide an otherwise valid direction from the line details.
     val candidates = index.readableDatabase.rawQuery(
         """
-        SELECT MIN(trip_id), COALESCE(TRIM(headsign), ''), COALESCE(direction_id, -1)
-        FROM trips
-        WHERE route_id = ?
-        GROUP BY direction_id, TRIM(headsign)
-        ORDER BY direction_id, TRIM(headsign)
+        SELECT MIN(t.trip_id), COALESCE(TRIM(t.headsign), ''), COALESCE(t.direction_id, -1)
+        FROM trips t
+        WHERE t.route_id = ?
+          AND EXISTS (
+              SELECT 1 FROM stop_times st
+              WHERE st.trip_id = t.trip_id
+              ORDER BY st.stop_sequence
+              LIMIT 1 OFFSET 1
+          )
+        GROUP BY t.direction_id, TRIM(t.headsign)
+        ORDER BY t.direction_id, TRIM(t.headsign)
         LIMIT ?
         """.trimIndent(),
         arrayOf(routeId, (MAX_LINE_VARIANTS + 1).toString()),
