@@ -2,6 +2,7 @@ package com.nazofobi.arrivalalarm
 
 import android.Manifest
 import android.app.Notification
+import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
@@ -11,6 +12,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -27,6 +29,21 @@ class AndroidArrivalAlertPreviewInstrumentedTest {
         assertEquals(context.packageName, intent.getStringExtra(Settings.EXTRA_APP_PACKAGE))
         assertEquals(null, intent.data)
         assertEquals(null, intent.component)
+    }
+
+    @Test fun quietOrNonVibratingChannelWarnsWithoutChangingPreferences() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val normal = ArrivalAlertNotificationChannel.newChannel(context)
+        assertFalse(AndroidArrivalAlertPreview.isQuietChannel(normal))
+        val quiet = NotificationChannel("quiet-test", "quiet-test", NotificationManager.IMPORTANCE_LOW)
+        quiet.enableVibration(false)
+        assertTrue(AndroidArrivalAlertPreview.isQuietChannel(quiet))
+        val highButNoVibration = NotificationChannel(
+            "silent-haptics-test", "silent-haptics-test", NotificationManager.IMPORTANCE_HIGH,
+        )
+        highButNoVibration.enableVibration(false)
+        assertTrue(AndroidArrivalAlertPreview.isQuietChannel(highButNoVibration))
+        assertTrue(AndroidArrivalAlertPreview.isQuietChannel(null))
     }
 
     @Test fun newArrivalChannelHasHapticsWithoutChangingExistingUserSettings() {

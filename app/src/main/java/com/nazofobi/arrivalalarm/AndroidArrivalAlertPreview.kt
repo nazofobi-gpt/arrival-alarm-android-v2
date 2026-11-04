@@ -16,6 +16,24 @@ internal object AndroidArrivalAlertPreview {
     internal const val CHANNEL_ID = ArrivalAlertNotificationChannel.ID
     internal const val NOTIFICATION_ID = 4111
 
+    /** Quiet or non-vibrating channels cannot be assumed to deliver noticeable alerts. */
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.O)
+    internal fun isQuietChannel(channel: android.app.NotificationChannel?): Boolean =
+        channel == null ||
+            channel.importance < NotificationManager.IMPORTANCE_DEFAULT ||
+            !channel.shouldVibrate()
+
+    /** Read only: do not modify user-owned channel preferences. */
+    internal fun channelNeedsAttention(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < 26) return false
+        return try {
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            isQuietChannel(manager.getNotificationChannel(CHANNEL_ID))
+        } catch (_: RuntimeException) {
+            true
+        }
+    }
+
     /** Only the user's explicit recovery tap opens this app's OS notification settings. */
     internal fun settingsIntent(context: Context): Intent =
         if (Build.VERSION.SDK_INT >= 26) {

@@ -60,10 +60,12 @@ internal fun GuidanceVoicePreviewPanel(
     onTestArrivalAlert: () -> Boolean = { false },
     onOpenNotificationSettings: (() -> Unit)? = null,
     onDismissArrivalAlert: (() -> Boolean)? = null,
+    onCheckAlertChannelQuiet: (() -> Boolean)? = null,
 ) {
     val context = LocalContext.current
     var alertPreviewResult by remember { mutableStateOf<Boolean?>(null) }
     var dismissResult by remember { mutableStateOf<Boolean?>(null) }
+    var alertChannelQuiet by remember { mutableStateOf(false) }
     var lastAttemptAccepted by remember(language) { mutableStateOf<Boolean?>(null) }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         OutlinedButton(
@@ -86,6 +88,10 @@ internal fun GuidanceVoicePreviewPanel(
             onClick = {
                 dismissResult = null
                 alertPreviewResult = onTestArrivalAlert()
+                alertChannelQuiet = if (alertPreviewResult == true) {
+                    try { onCheckAlertChannelQuiet?.invoke() == true }
+                    catch (_: RuntimeException) { true }
+                } else false
             },
             enabled = !isJourneyAudioActive,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
@@ -101,13 +107,23 @@ internal fun GuidanceVoicePreviewPanel(
                 modifier = Modifier.testTag("arrival-notification-preview-status"),
             )
         }
+        if (alertPreviewResult == true && alertChannelQuiet && !isJourneyAudioActive) {
+            Text(
+                text = stringResource(R.string.arrival_alert_preview_quiet_warning),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.testTag("arrival-notification-quiet-warning"),
+            )
+        }
         if (alertPreviewResult == true && !isJourneyAudioActive) {
             OutlinedButton(
                 onClick = {
                     val dismiss = onDismissArrivalAlert
                         ?: { AndroidArrivalAlertPreview.dismiss(context) }
                     dismissResult = dismiss()
-                    if (dismissResult == true) alertPreviewResult = null
+                    if (dismissResult == true) {
+                        alertPreviewResult = null
+                        alertChannelQuiet = false
+                    }
                 },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                     .testTag("arrival-notification-dismiss"),
@@ -125,7 +141,7 @@ internal fun GuidanceVoicePreviewPanel(
                 modifier = Modifier.testTag("arrival-notification-dismiss-status"),
             )
         }
-        if (alertPreviewResult == false && !isJourneyAudioActive) {
+        if ((alertPreviewResult == false || alertChannelQuiet) && !isJourneyAudioActive) {
             // Android can deny a preview when permission or the channel is blocked.
             // Offer user-driven recovery without opening Settings on our own.
             OutlinedButton(

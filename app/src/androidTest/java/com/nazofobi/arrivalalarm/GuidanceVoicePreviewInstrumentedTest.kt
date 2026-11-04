@@ -175,6 +175,31 @@ class GuidanceVoicePreviewInstrumentedTest {
         assertEquals(1, dismisses)
     }
 
+    @Test fun quietChannelWarnsAndSettingsRequireAnExplicitTap() {
+        var opened = 0
+        rule.setContent {
+            MaterialTheme {
+                GuidanceVoicePreviewPanel(
+                    speaker = object : GuidanceSpeaker {
+                        override fun speak(utterance: GuidanceUtterance) = true
+                    },
+                    language = GuidanceLanguage.GERMAN,
+                    isJourneyAudioActive = false,
+                    onTestArrivalAlert = { true },
+                    onCheckAlertChannelQuiet = { true },
+                    onOpenNotificationSettings = { opened++ },
+                )
+            }
+        }
+        rule.onNodeWithTag("arrival-notification-quiet-warning").assertDoesNotExist()
+        rule.onNodeWithTag("arrival-notification-preview").performClick()
+        rule.onNodeWithTag("arrival-notification-quiet-warning").assertExists()
+        rule.onNodeWithTag("arrival-notification-settings").assertExists()
+        assertEquals(0, opened)
+        rule.onNodeWithTag("arrival-notification-settings").performClick()
+        assertEquals(1, opened)
+    }
+
     @Test fun unavailableTtsShowsFailureWithoutSavingGuidance() {
         val speaker = object : GuidanceSpeaker {
             override fun speak(utterance: GuidanceUtterance): Boolean = false
