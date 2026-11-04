@@ -109,7 +109,11 @@ internal fun GtfsLineDetailDialog(
                         // Identically named platforms and repeated stops must remain selectable
                         // by source identity. Browsing departures never arms a journey or alarm.
                         // Bound rendered choices so a broad query cannot expand the dialog without limit.
-                        val matchingBoardStops = if (needle.isNotEmpty()) {
+                        // Small direction lists are immediately actionable. Long lists still
+                        // require an explicit filter to bound the number of choices.
+                        val matchingBoardStops = if (
+                            needle.isNotEmpty() || activeDirection.stops.size <= MAX_LINE_BOARD_CHOICES
+                        ) {
                             matchingStopIndexes.mapNotNull { index ->
                                 activeDirection.stops.getOrNull(index)
                                     ?.takeIf { it.id.isNotBlank() }
