@@ -107,6 +107,16 @@ class LiveTripClockTest {
         assertFalse(plannedWalkingExceedsBoardingWindow(departure, 301, 0))
     }
 
+    @Test fun intermediateStopNameMustBeSafeBeforeShowingOrSpeakingEta() {
+        assertTrue(isActionableTransitLabel("Diepholz"))
+        assertTrue(isActionableTransitLabel("  Diepholz  "))
+        listOf<String?>(null, "", "   ", "\u200BDiepholz", "Die\npholz",
+            "\u007fDiepholz", "X".repeat(121)).forEach { bad ->
+            assertFalse("Unsafe next stop must not be announced: $bad",
+                isActionableTransitLabel(bad))
+        }
+    }
+
     @Test fun boardingIdentityRequiresImminentArmedAndSourceNamedTrip() {
         assertTrue(boardingCheckEligible(JourneyPhase.ARMED, 10L, "RE 9", "Bremen Hbf", "Lohne"))
         assertTrue(boardingCheckEligible(JourneyPhase.ARMED, 15L, "RE 9", "Bremen Hbf", "Lohne"))
