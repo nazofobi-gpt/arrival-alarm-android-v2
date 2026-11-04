@@ -76,6 +76,40 @@ class AndroidArrivalAlertPreviewInstrumentedTest {
                 context.getString(R.string.arrival_alert_preview_title),
                 notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString(),
             )
+            // Cancel the explicit test notification but preserve another ID on
+            // the shared arrival channel, as would be required for a real alarm.
+            val otherId = 47112
+            manager.notify(
+                otherId,
+                Notification.Builder(context, AndroidArrivalAlertPreview.CHANNEL_ID)
+                    .setSmallIcon(android.R.drawable.ic_dialog_info)
+                    .setContentTitle("unrelated-notification")
+                    .build(),
+            )
+            try {
+                val siblingDeadline = android.os.SystemClock.elapsedRealtime() + 5_000L
+                while (manager.activeNotifications.none { it.id == otherId } &&
+                    android.os.SystemClock.elapsedRealtime() < siblingDeadline) {
+                    android.os.SystemClock.sleep(100L)
+                }
+                assertTrue("Other notification must exist before cancellation",
+                    manager.activeNotifications.any { it.id == otherId })
+                assertTrue(AndroidArrivalAlertPreview.dismiss(context))
+                val removeDeadline = android.os.SystemClock.elapsedRealtime() + 5_000L
+                while (manager.activeNotifications.any {
+                    it.id == AndroidArrivalAlertPreview.NOTIFICATION_ID
+                } && android.os.SystemClock.elapsedRealtime() < removeDeadline) {
+                    android.os.SystemClock.sleep(100L)
+                }
+                assertTrue("Only the preview may be withdrawn",
+                    manager.activeNotifications.none {
+                        it.id == AndroidArrivalAlertPreview.NOTIFICATION_ID
+                    })
+                assertTrue("Other notification must survive",
+                    manager.activeNotifications.any { it.id == otherId })
+            } finally {
+                manager.cancel(otherId)
+            }
         } finally {
             manager.cancel(AndroidArrivalAlertPreview.NOTIFICATION_ID)
         }
