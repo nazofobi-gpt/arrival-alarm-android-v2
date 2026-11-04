@@ -1,0 +1,84 @@
+package com.nazofobi.arrivalalarm
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+
+@Composable
+internal fun GtfsLineDetailDialog(
+    lineLabel: String,
+    detail: GtfsLineDetail?,
+    loading: Boolean,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testTag("gtfs-line-detail-dialog"),
+        title = {
+            Text(stringResource(R.string.gtfs_line_detail_title, detail?.lineName ?: lineLabel))
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .heightIn(max = 480.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.gtfs_line_static_disclaimer),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                when {
+                    loading -> Text(stringResource(R.string.gtfs_line_loading))
+                    detail == null || detail.directions.isEmpty() ->
+                        Text(stringResource(R.string.gtfs_line_unavailable))
+                    else -> {
+                        detail.directions.forEachIndexed { index, direction ->
+                            Text(
+                                text = stringResource(
+                                    R.string.gtfs_line_direction,
+                                    index + 1,
+                                    direction.headsign.ifBlank {
+                                        stringResource(R.string.gtfs_line_unknown_direction)
+                                    },
+                                ),
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.testTag("gtfs-line-direction-$index"),
+                            )
+                            Text(
+                                direction.stopNames.mapIndexed { position, name ->
+                                    "${position + 1}. $name"
+                                }.joinToString("\n"),
+                                modifier = Modifier.testTag("gtfs-line-stops-$index"),
+                            )
+                            if (direction.stopsTruncated) {
+                                Text(stringResource(R.string.gtfs_line_stops_limited))
+                            }
+                        }
+                        if (detail.additionalDirectionsOmitted) {
+                            Text(stringResource(R.string.gtfs_line_directions_limited))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.testTag("gtfs-line-close")) {
+                Text(stringResource(R.string.gtfs_line_close))
+            }
+        },
+    )
+}

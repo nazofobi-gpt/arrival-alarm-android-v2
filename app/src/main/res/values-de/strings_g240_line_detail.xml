@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="gtfs_line_detail_title">Liniendetails: %1$s</string>
+    <string name="gtfs_line_static_disclaimer">Nur beispielhafte Richtungen und Haltestellen aus heruntergeladenen GTFS-Fahrplandaten. Nicht alle Fahrtvarianten, aktiven Fahrzeuge, Live-Positionen oder Meldungen sind bestätigt. Hier wird kein Alarm aktiviert.</string>
+    <string name="gtfs_line_loading">Haltestellen werden geladen…</string>
+    <string name="gtfs_line_unavailable">Für diese Linie ist keine verifizierte lokale GTFS-Haltestellenfolge verfügbar.</string>
+    <string name="gtfs_line_direction">Richtung %1$d: %2$s</string>
+    <string name="gtfs_line_unknown_direction">Richtung unbekannt</string>
+    <string name="gtfs_line_stops_limited">Weitere Haltestellen dieser langen Fahrt werden nicht angezeigt.</string>
+    <string name="gtfs_line_directions_limited">Weitere Fahrplanrichtungen werden nicht angezeigt.</string>
+    <string name="gtfs_line_close">Schließen</string>
+</resources>

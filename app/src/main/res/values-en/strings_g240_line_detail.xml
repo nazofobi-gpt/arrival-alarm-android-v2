@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="gtfs_line_detail_title">%1$s line details</string>
+    <string name="gtfs_line_static_disclaimer">Representative directions and stops from downloaded static GTFS only. Not all service variants, active vehicles, live positions or alerts are verified. Viewing this does not arm an alarm.</string>
+    <string name="gtfs_line_loading">Loading line stops…</string>
+    <string name="gtfs_line_unavailable">No verified local GTFS stop sequence is available for this line.</string>
+    <string name="gtfs_line_direction">Direction %1$d: %2$s</string>
+    <string name="gtfs_line_unknown_direction">Direction unknown</string>
+    <string name="gtfs_line_stops_limited">Further stops on this long trip are not shown.</string>
+    <string name="gtfs_line_directions_limited">Additional timetable directions are not shown.</string>
+    <string name="gtfs_line_close">Close</string>
+</resources>

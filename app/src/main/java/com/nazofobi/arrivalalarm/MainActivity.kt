@@ -202,6 +202,11 @@ fun ArrivalAlarmApp(
     var searchSource by remember { mutableStateOf<String?>(null) }
     var searchMessage by remember { mutableStateOf<String?>(null) }
     var searchRequestId by remember { mutableStateOf(0L) }
+    // A line search result opens read-only GTFS directions without selecting a trip or alarm.
+    val lineDetailRequestGate = remember { LatestRequestGate() }
+    var selectedLineResult by remember { mutableStateOf<TransitLocationResult?>(null) }
+    var lineDetail by remember { mutableStateOf<GtfsLineDetail?>(null) }
+    var lineDetailBusy by remember { mutableStateOf(false) }
     var searchHealth by remember(dataState) { mutableStateOf(TransitFunctionHealth.UNVERIFIED) }
     var selectingOrigin by remember { mutableStateOf(controller.state.start == null) }
     var origin by remember(controller) {
@@ -1393,11 +1398,27 @@ fun ArrivalAlarmApp(
                         onSearchResultSelected = { result ->
                             when (result.kind) {
                                 TransitLocationKind.LINE -> {
-                                    val completion = result.autocompleteText?.trim().orEmpty()
-                                    if (completion.length >= 2) {
-                                        query = completion
-                                        searchRequestId += 1
-                                        runSearch(completion, recordRecent = true)
+                                    selectedLineResult = result
+                                    lineDetail = null
+                                    val routeId = result.routeId
+                                    val sourceVersion =
+                                        (dataState as? NationwideDataState.Ready)?.sourceVersion
+                                    val token = lineDetailRequestGate.begin()
+                                    if (routeId != null && sourceVersion != null) {
+                                        lineDetailBusy = true
+                                        coroutineScope.launch {
+                                            val loaded = withContext(Dispatchers.IO) {
+                                                runCatching {
+                                                    loadGtfsLineDetail(context, routeId, sourceVersion)
+                                                }.getOrNull()
+                                            }
+                                            lineDetailRequestGate.commitIfCurrent(token) {
+                                                lineDetail = loaded
+                                                lineDetailBusy = false
+                                            }
+                                        }
+                                    } else {
+                                        lineDetailBusy = false
                                     }
                                 }
                                 TransitLocationKind.TRIP -> {
@@ -1945,6 +1966,19 @@ fun ArrivalAlarmApp(
                 }
             }
         }
+    }
+    selectedLineResult?.let { selected ->
+        GtfsLineDetailDialog(
+            lineLabel = selected.label,
+            detail = lineDetail,
+            loading = lineDetailBusy,
+            onDismiss = {
+                lineDetailRequestGate.invalidate()
+                selectedLineResult = null
+                lineDetail = null
+                lineDetailBusy = false
+            },
+        )
     }
 }
 

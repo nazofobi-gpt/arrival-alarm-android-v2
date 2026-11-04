@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="gtfs_line_detail_title">%1$s hat ayrıntıları</string>
+    <string name="gtfs_line_static_disclaimer">Yalnızca indirilen GTFS çizelgesinden örnek yön ve durak sıraları. Tüm sefer varyantları, aktif araçlar, canlı konum ve uyarılar doğrulanmadı. Bu ekran alarm kurmaz.</string>
+    <string name="gtfs_line_loading">Hat durakları yükleniyor…</string>
+    <string name="gtfs_line_unavailable">Bu hat için doğrulanmış yerel GTFS durak sırası bulunamadı.</string>
+    <string name="gtfs_line_direction">Yön %1$d: %2$s</string>
+    <string name="gtfs_line_unknown_direction">Yön bilgisi yok</string>
+    <string name="gtfs_line_stops_limited">Uzun seferin kalan durakları gösterilmedi.</string>
+    <string name="gtfs_line_directions_limited">Diğer çizelge yönleri burada gösterilmedi.</string>
+    <string name="gtfs_line_close">Kapat</string>
+</resources>
