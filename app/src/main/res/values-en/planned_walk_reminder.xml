@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="route_walk_reminder_set">Enable approximate walking-start reminder</string>
+    <string name="route_walk_reminder_cancel">Cancel walking-start reminder</string>
+    <string name="route_walk_reminder_disclaimer">Opt-in Android notification only. Doze, battery controls or disabled notifications can delay or prevent delivery. Not a guaranteed alarm. Changing the buffer does not reschedule an existing reminder.</string>
+    <string name="route_walk_reminder_queued">Reminder queued; delivery time is not guaranteed.</string>
+    <string name="route_walk_reminder_failure">Reminder could not be changed. Check notification settings.</string>
+    <string name="route_walk_reminder_notification_title">Estimated time to start walking</string>
+    <string name="route_walk_reminder_notification_body">Walk toward %1$s if your departure is still valid. Recheck real service status.</string>
+</resources>

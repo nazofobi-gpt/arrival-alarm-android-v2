@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="route_walk_reminder_set">Ungefähre Erinnerung zum Losgehen aktivieren</string>
+    <string name="route_walk_reminder_cancel">Erinnerung zum Losgehen löschen</string>
+    <string name="route_walk_reminder_disclaimer">Nur eine freiwillige Android-Benachrichtigung. Energiesparen, Doze oder fehlende Berechtigung können sie verzögern oder verhindern. Kein garantierter Alarm. Eine Änderung des Zeitpuffers verschiebt eine bestehende Erinnerung nicht.</string>
+    <string name="route_walk_reminder_queued">Erinnerung vorgemerkt; die Zustellzeit ist nicht garantiert.</string>
+    <string name="route_walk_reminder_failure">Erinnerung konnte nicht geändert werden. Benachrichtigungen prüfen.</string>
+    <string name="route_walk_reminder_notification_title">Geschätzte Zeit zum Losgehen</string>
+    <string name="route_walk_reminder_notification_body">Geh ggf. in Richtung %1$s. Prüfe die tatsächliche Verbindung erneut.</string>
+</resources>

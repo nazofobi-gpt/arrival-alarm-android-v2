@@ -233,4 +233,12 @@ class PlannedWalkStartInstrumentedTest {
         rule.onNodeWithTag("route-walk-directions").assertDoesNotExist()
     }
 
+
+    @Test fun explicitReminderChoiceAndBestEffortDisclosureAppearOnlyWithEvidence() {
+        val start = java.time.Instant.parse("2099-11-04T09:20:00Z").toEpochMilli()
+        show("2099-11-04T10:30:00+01:00", 600, nowMillisForTest = start - 600_000L)
+        rule.onNodeWithTag("route-walk-reminder-toggle").assertExists()
+        rule.onNodeWithTag("route-walk-reminder-note").assertExists()
+    }
+
 }

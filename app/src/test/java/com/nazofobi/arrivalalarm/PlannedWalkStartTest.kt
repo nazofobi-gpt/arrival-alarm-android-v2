@@ -223,3 +223,41 @@ class PlannedWalkDirectionsTest {
         assertNull(plannedWalkDirectionsUrl(o.copy(stops = listOf(o.stops[0].copy(plannedDeparture = null)))))
     }
 }
+
+/** One-shot background reminder is deliberately approximate and opt-in. */
+class PlannedWalkReminderDelayTest {
+    private val option = RouteOption(
+        id = "trip", origin = MapPoint(52.67, 8.24, "Lohne"),
+        destination = MapPoint(53.08, 8.81, "Bremen"), line = "RE",
+        direction = "Bremen", departure = "10:30", arrival = "11:30",
+        walkingMinutes = 10, transfers = 0,
+        stops = listOf(RouteStop(id = "stop", name = "Lohne",
+            plannedDeparture = "2026-11-04T10:30:00+01:00")),
+        accessWalking = RouteWalkingLegEvidence("stop", "Lohne", 600),
+    )
+
+    @Test fun onlyFutureBoundedScheduledEvidenceCanQueue() {
+        val start = Instant.parse("2026-11-04T09:20:00Z").toEpochMilli()
+        assertEquals(60_000L, plannedWalkReminderDelayMillis(option, start - 60_000L))
+        assertEquals(86_400_000L, plannedWalkReminderDelayMillis(option, start - 86_400_000L))
+        assertNull(plannedWalkReminderDelayMillis(option, start))
+        assertNull(plannedWalkReminderDelayMillis(option, start - 59_999L))
+        assertNull(plannedWalkReminderDelayMillis(option, start - 86_400_001L))
+    }
+
+    @Test fun missingOrMismatchedGtfsFirstStopCannotSchedule() {
+        val now = Instant.parse("2026-11-04T09:18:00Z").toEpochMilli()
+        assertNull(plannedWalkReminderDelayMillis(option.copy(accessWalking = null), now))
+        assertNull(plannedWalkReminderDelayMillis(option.copy(
+            accessWalking = RouteWalkingLegEvidence("wrong", "Wrong", 600)), now))
+        assertNull(plannedWalkReminderDelayMillis(option.copy(
+            stops = listOf(option.stops.first().copy(plannedDeparture = "10:30"))), now))
+        assertNull(plannedWalkReminderDelayMillis(option, Long.MIN_VALUE))
+    }
+
+    @Test fun explicitOffsetAndBufferControlScheduledInstantNotRealtime() {
+        val start = Instant.parse("2026-11-04T09:20:00Z").toEpochMilli()
+        assertEquals(600_000L, plannedWalkReminderDelayMillis(option, start - 900_000L, 5))
+        assertNull(plannedWalkReminderDelayMillis(option, start - 900_000L, 100))
+    }
+}

@@ -20,6 +20,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -30,6 +31,9 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class RouteJourneyMode {
     RESULTS,
@@ -834,6 +838,68 @@ internal fun PlannedWalkStartNotice(
             modifier = Modifier.testTag("route-walk-departure-passed"),
         )
         null -> Unit
+    }
+    // Opt-in, best-effort WorkManager notification; never a guaranteed wake-up alarm.
+    // An existing reminder is still cancellable if a later buffer choice changed.
+    val reminderScheduler = remember(context) {
+        PlannedWalkReminderScheduler(context.applicationContext)
+    }
+    val reminderScope = rememberCoroutineScope()
+    var reminderScheduled by remember(option.id) {
+        mutableStateOf(reminderScheduler.isScheduledForRoute(option.id))
+    }
+    var reminderActionFailed by remember(option.id) { mutableStateOf(false) }
+    var reminderBusy by remember(option.id) { mutableStateOf(false) }
+    val reminderDelay = plannedWalkReminderDelayMillis(
+        option, displayNowMillis, safetyBufferMinutes,
+    )
+    if (reminderScheduled || reminderDelay != null) {
+        OutlinedButton(
+            onClick = {
+                if (!reminderBusy) {
+                    reminderBusy = true
+                    val cancel = reminderScheduled
+                    reminderScope.launch {
+                        val worked = withContext(Dispatchers.IO) {
+                            if (cancel) reminderScheduler.cancel()
+                            else reminderScheduler.schedule(option, safetyBufferMinutes)
+                        }
+                        reminderScheduled = reminderScheduler.isScheduledForRoute(option.id)
+                        reminderActionFailed = !worked
+                        reminderBusy = false
+                    }
+                }
+            },
+            enabled = !reminderBusy,
+            modifier = Modifier.heightIn(min = 48.dp)
+                .testTag("route-walk-reminder-toggle"),
+        ) {
+            Text(stringResource(
+                if (reminderScheduled) R.string.route_walk_reminder_cancel
+                else R.string.route_walk_reminder_set,
+            ))
+        }
+        Text(
+            text = stringResource(R.string.route_walk_reminder_disclaimer),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.testTag("route-walk-reminder-note"),
+        )
+        if (reminderScheduled) {
+            Text(
+                text = stringResource(R.string.route_walk_reminder_queued),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.testTag("route-walk-reminder-queued"),
+            )
+        }
+        if (reminderActionFailed) {
+            Text(
+                text = stringResource(R.string.route_walk_reminder_failure),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.testTag("route-walk-reminder-failure"),
+            )
+        }
     }
     val directionsUrl = plannedWalkDirectionsUrl(option)
     if (directionsUrl != null &&
