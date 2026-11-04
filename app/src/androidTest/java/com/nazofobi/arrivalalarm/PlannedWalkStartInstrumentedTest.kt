@@ -19,8 +19,8 @@ class PlannedWalkStartInstrumentedTest {
 
     private fun show(
         planned: String?, walking: Int?,
-        calendarLauncher: ((Intent) -> Boolean)? = null,
         nowMillisForTest: Long? = null,
+        calendarLauncher: ((Intent) -> Boolean)? = null,
     ) {
         rule.setContent {
             MaterialTheme {
