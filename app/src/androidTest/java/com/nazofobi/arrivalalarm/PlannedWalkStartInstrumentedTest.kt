@@ -73,10 +73,14 @@ class PlannedWalkStartInstrumentedTest {
         rule.onNodeWithTag("route-walk-start-passed").assertDoesNotExist()
     }
 
-    @Test fun elapsedOrMissingWalkDoesNotShowCountdown() {
+    @Test fun elapsedWalkDoesNotShowCountdown() {
         val start = java.time.Instant.parse("2099-11-04T09:20:00Z").toEpochMilli()
         show("2099-11-04T10:30:00+01:00", 600, nowMillisForTest = start)
         rule.onNodeWithTag("route-walk-minutes-remaining").assertDoesNotExist()
+    }
+
+    @Test fun missingEvidenceDoesNotShowCountdown() {
+        val start = java.time.Instant.parse("2099-11-04T09:20:00Z").toEpochMilli()
         show(null, 600, nowMillisForTest = start - 60_000L)
         rule.onNodeWithTag("route-walk-minutes-remaining").assertDoesNotExist()
     }
