@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.assertTextContains
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -231,11 +232,11 @@ class GtfsLineDetailInstrumentedTest {
         composeRule.onNodeWithTag("gtfs-line-open-departures").assertDoesNotExist()
         composeRule.onNodeWithTag("gtfs-line-open-departures-4").assertExists()
         composeRule.onNodeWithTag("gtfs-line-open-departures-7").assertDoesNotExist()
-        composeRule.onNodeWithTag("gtfs-line-next-intermediate").assertExists().performClick()
+        composeRule.onNodeWithTag("gtfs-line-next-intermediate").assertExists().performScrollTo().performClick()
         composeRule.onNodeWithTag("gtfs-line-open-departures-7").assertExists().performClick()
         composeRule.runOnIdle { assertEquals("id-8", selectedStopId) }
         composeRule.onNodeWithTag("gtfs-line-open-departures-4").assertDoesNotExist()
-        composeRule.onNodeWithTag("gtfs-line-previous-intermediate").assertExists().performClick()
+        composeRule.onNodeWithTag("gtfs-line-previous-intermediate").assertExists().performScrollTo().performClick()
         composeRule.onNodeWithTag("gtfs-line-open-departures-4").assertExists()
         composeRule.onNodeWithTag("gtfs-line-open-departures-0").assertExists().performClick()
         composeRule.runOnIdle { assertEquals("id-1", selectedStopId) }
