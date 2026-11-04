@@ -90,6 +90,10 @@ class ProductionStaticJourneyPlannerInstrumentedTest {
             val later = gateway.resolveArrivalByJourneyOptions(origin, destination, at("08:45:00"))
             assertTrue(later is NationwideJourneyResolution.Results)
             assertEquals(listOf("T2"), (later as NationwideJourneyResolution.Results).options.first().tripIds)
+            // Earlier on-time departure must stay selectable, not disappear when
+            // searching for the latest feasible train under the arrival deadline.
+            assertEquals(2, later.options.size)
+            assertEquals(listOf("T1"), later.options[1].tripIds)
             assertTrue(later.options.all { it.arrivalEpochMillis!! <= at("08:45:00") })
             assertTrue(gateway.resolveArrivalByJourneyOptions(
                 origin, destination, at("08:10:00"),
