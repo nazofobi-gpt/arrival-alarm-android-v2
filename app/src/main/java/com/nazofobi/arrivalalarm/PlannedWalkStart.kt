@@ -19,3 +19,20 @@ internal fun plannedWalkStartEpochMillis(option: RouteOption): Long? {
         )
     }.getOrNull()
 }
+
+/** Planned-only estimate; no inference about realtime vehicle location or actual walk speed. */
+internal enum class PlannedWalkWarning { WALK_START_PASSED, PLANNED_DEPARTURE_PASSED }
+
+/** Null when source time or access-walk evidence is absent or still in the future. */
+internal fun plannedWalkWarning(option: RouteOption, nowMillis: Long): PlannedWalkWarning? {
+    val start = plannedWalkStartEpochMillis(option) ?: return null
+    val seconds = option.accessWalking?.walkSeconds ?: return null
+    val plannedDeparture = runCatching {
+        Math.addExact(start, Math.multiplyExact(seconds.toLong(), 1_000L))
+    }.getOrNull() ?: return null
+    return when {
+        nowMillis >= plannedDeparture -> PlannedWalkWarning.PLANNED_DEPARTURE_PASSED
+        nowMillis >= start -> PlannedWalkWarning.WALK_START_PASSED
+        else -> null
+    }
+}

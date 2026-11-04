@@ -5,4 +5,6 @@
     <string name="route_planned_walk_calendar_action">Gehzeit im Kalender vormerken</string>
     <string name="route_planned_walk_calendar_title">Fußweg von %1$s Richtung %2$s</string>
     <string name="route_planned_walk_calendar_failure">Kalender konnte nicht geöffnet werden. Kein Termin wurde gespeichert.</string>
+    <string name="route_planned_walk_late_warning">Die geschätzte Aufbruchzeit zu Fuß ist vorbei. Das Erreichen dieser planmäßigen Abfahrt ist nicht gesichert.</string>
+    <string name="route_planned_walk_departure_passed">Die erste planmäßige Abfahrtszeit ist vorbei. Echtzeitstatus und spätere Fahrten prüfen.</string>
 </resources>

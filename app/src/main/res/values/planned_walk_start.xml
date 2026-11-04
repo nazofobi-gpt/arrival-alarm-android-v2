@@ -5,4 +5,6 @@
     <string name="route_planned_walk_calendar_action">Takvimde yürüyüş zamanı öner</string>
     <string name="route_planned_walk_calendar_title">%1$s → %2$s: durağa yürüyüş</string>
     <string name="route_planned_walk_calendar_failure">Takvim açılamadı. Etkinlik kaydedilmedi.</string>
+    <string name="route_planned_walk_late_warning">Tahmini yürüyüş başlangıcı geçti. Bu planlanan kalkışa yetişmeniz garanti değil.</string>
+    <string name="route_planned_walk_departure_passed">Planlanan ilk kalkış saati geçti. Canlı durumu ve sonraki seferleri kontrol edin.</string>
 </resources>

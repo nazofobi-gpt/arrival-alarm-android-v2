@@ -5,4 +5,6 @@
     <string name="route_planned_walk_calendar_action">Add walking time to calendar</string>
     <string name="route_planned_walk_calendar_title">Walk from %1$s toward %2$s</string>
     <string name="route_planned_walk_calendar_failure">Calendar could not be opened. No event was saved.</string>
+    <string name="route_planned_walk_late_warning">The estimated walking start time has passed. Reaching this scheduled departure is not guaranteed.</string>
+    <string name="route_planned_walk_departure_passed">The first scheduled departure time has passed. Check live status and later services.</string>
 </resources>

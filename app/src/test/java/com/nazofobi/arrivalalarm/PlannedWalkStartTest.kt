@@ -63,3 +63,47 @@ class PlannedWalkStartTest {
         assertNull(plannedWalkStartEpochMillis(option(walkSeconds = 14401)))
     }
 }
+
+// Negative evidence and boundary tests for JNY-003: planned times, not realtime claims.
+class PlannedWalkWarningTest {
+    private fun option(planned: String? = "2026-11-04T10:30:00+01:00", seconds: Int? = 600) =
+        RouteOption(
+            id = "trip",
+            origin = MapPoint(52.67, 8.24, "Lohne"),
+            destination = MapPoint(53.08, 8.81, "Bremen"),
+            line = "RE", direction = "Bremen", departure = "10:30", arrival = "11:00",
+            walkingMinutes = 10, transfers = 0,
+            stops = listOf(RouteStop(id = "stop", name = "Lohne", plannedDeparture = planned)),
+            accessWalking = seconds?.let { RouteWalkingLegEvidence("stop", "Lohne", it) },
+        )
+
+    @Test fun noWarningBeforeEstimatedStart() {
+        assertNull(plannedWalkWarning(option(), Instant.parse("2026-11-04T09:19:59Z").toEpochMilli()))
+    }
+    @Test fun warnAtEstimatedWalkStart() {
+        assertEquals(
+            PlannedWalkWarning.WALK_START_PASSED,
+            plannedWalkWarning(option(), Instant.parse("2026-11-04T09:20:00Z").toEpochMilli()),
+        )
+    }
+    @Test fun warnWhenPlannedDeparturePasses() {
+        assertEquals(
+            PlannedWalkWarning.PLANNED_DEPARTURE_PASSED,
+            plannedWalkWarning(option(), Instant.parse("2026-11-04T09:30:00Z").toEpochMilli()),
+        )
+    }
+    @Test fun absentEvidenceFailsClosed() {
+        val now = Instant.parse("2026-11-04T10:00:00Z").toEpochMilli()
+        assertNull(plannedWalkWarning(option(planned = null), now))
+        assertNull(plannedWalkWarning(option(seconds = null), now))
+        assertNull(plannedWalkWarning(option(planned = "10:30"), now))
+        assertNull(plannedWalkWarning(option(seconds = 14_401), now))
+    }
+    @Test fun explicitDstOffsetUsesActualInstant() {
+        assertEquals(
+            PlannedWalkWarning.WALK_START_PASSED,
+            plannedWalkWarning(option(planned = "2026-10-25T02:30:00+01:00"),
+                Instant.parse("2026-10-25T01:20:00Z").toEpochMilli()),
+        )
+    }
+}

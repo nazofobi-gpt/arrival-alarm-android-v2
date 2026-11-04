@@ -20,6 +20,7 @@ class PlannedWalkStartInstrumentedTest {
     private fun show(
         planned: String?, walking: Int?,
         calendarLauncher: ((Intent) -> Boolean)? = null,
+        nowMillisForTest: Long? = null,
     ) {
         rule.setContent {
             MaterialTheme {
@@ -37,6 +38,7 @@ class PlannedWalkStartInstrumentedTest {
                         },
                     ),
                     calendarLauncher = calendarLauncher,
+                    nowMillisForTest = nowMillisForTest,
                 )
             }
         }
@@ -95,5 +97,23 @@ class PlannedWalkStartInstrumentedTest {
         show("2099-11-04T10:30:00+01:00", 600) { false }
         rule.onNodeWithTag("route-planned-walk-calendar").performClick()
         rule.onNodeWithTag("route-planned-walk-calendar-failure").assertExists()
+    }
+    @Test fun showsWarningAfterPlannedWalkStart() {
+        show("2099-11-04T10:30:00+01:00", 600,
+            nowMillisForTest = java.time.Instant.parse("2099-11-04T09:20:00Z").toEpochMilli())
+        rule.onNodeWithTag("route-walk-start-passed").assertExists()
+        rule.onNodeWithTag("route-walk-departure-passed").assertDoesNotExist()
+    }
+    @Test fun showsDifferentWarningAfterPlannedDeparture() {
+        show("2099-11-04T10:30:00+01:00", 600,
+            nowMillisForTest = java.time.Instant.parse("2099-11-04T09:30:00Z").toEpochMilli())
+        rule.onNodeWithTag("route-walk-departure-passed").assertExists()
+        rule.onNodeWithTag("route-walk-start-passed").assertDoesNotExist()
+    }
+    @Test fun noWarningBeforeStartOrWithoutEvidence() {
+        show("2099-11-04T10:30:00+01:00", 600,
+            nowMillisForTest = java.time.Instant.parse("2099-11-04T09:19:59Z").toEpochMilli())
+        rule.onNodeWithTag("route-walk-start-passed").assertDoesNotExist()
+        rule.onNodeWithTag("route-walk-departure-passed").assertDoesNotExist()
     }
 }

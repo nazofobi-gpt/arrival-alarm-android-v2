@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -739,9 +740,22 @@ private fun hasRealtimeDelta(stop: RouteStop): Boolean =
 internal fun PlannedWalkStartNotice(
     option: RouteOption,
     calendarLauncher: ((Intent) -> Boolean)? = null,
+    nowMillisForTest: Long? = null,
 ) {
     val context = LocalContext.current
     val startEpoch = plannedWalkStartEpochMillis(option) ?: return
+    var liveNowMillis by remember(option.id, startEpoch) {
+        mutableStateOf(System.currentTimeMillis())
+    }
+    LaunchedEffect(option.id, startEpoch, nowMillisForTest) {
+        if (nowMillisForTest == null) {
+            while (true) {
+                liveNowMillis = System.currentTimeMillis()
+                kotlinx.coroutines.delay(30_000L)
+            }
+        }
+    }
+    val displayNowMillis = nowMillisForTest ?: liveNowMillis
     var launchFailed by remember(option.id, startEpoch) { mutableStateOf(false) }
     val clock = remember(startEpoch) {
         java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
@@ -759,7 +773,22 @@ internal fun PlannedWalkStartNotice(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.testTag("route-planned-walk-start-note"),
     )
-    if (startEpoch > System.currentTimeMillis()) {
+    when (plannedWalkWarning(option, displayNowMillis)) {
+        PlannedWalkWarning.WALK_START_PASSED -> Text(
+            text = stringResource(R.string.route_planned_walk_late_warning),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.testTag("route-walk-start-passed"),
+        )
+        PlannedWalkWarning.PLANNED_DEPARTURE_PASSED -> Text(
+            text = stringResource(R.string.route_planned_walk_departure_passed),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.testTag("route-walk-departure-passed"),
+        )
+        null -> Unit
+    }
+    if (startEpoch > displayNowMillis) {
         val calendarTitle = stringResource(
             R.string.route_planned_walk_calendar_title,
             option.origin.label,
