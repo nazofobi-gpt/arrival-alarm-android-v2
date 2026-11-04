@@ -122,6 +122,8 @@ internal fun GtfsTripConsentPanel(
                     stringResource(R.string.gtfs_consent_boarding, boarding.name),
                     modifier = Modifier.testTag("gtfs-consent-boarding"),
                 )
+                // Explicit, source-backed read-only itinerary; does not select or arm an alarm.
+                GtfsTripStopSequencePanel(detail = detail, boarding = boarding)
                 Text(stringResource(R.string.gtfs_consent_choose_destination))
 
                 Column {
@@ -285,6 +287,7 @@ internal fun GtfsConfirmedTripSummary(
                 stringResource(R.string.gtfs_confirmed_planned_stops_until_alarm, plannedStopCount),
                 modifier = Modifier.testTag("gtfs-confirmed-planned-stop-count"),
             )
+            GtfsTripStopSequencePanel(detail = detail, boarding = boarding)
             Text(
                 stringResource(R.string.gtfs_consent_no_automatic_alarm),
                 style = MaterialTheme.typography.bodySmall,

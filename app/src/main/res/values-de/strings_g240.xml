@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="g240_trip_stops_show">Alle Halte anzeigen (%1$d)</string>
+    <string name="g240_trip_stops_hide">Haltestellenliste ausblenden (%1$d)</string>
+    <string name="g240_trip_stops_scheduled_only">Es werden nur belegte GTFS-Fahrplanzeiten und planmäßige Gleise gezeigt; Echtzeitänderungen sind nicht bestätigt.</string>
+    <string name="g240_trip_stop_arrival">Planmäßige Ankunft: %1$s</string>
+    <string name="g240_trip_stop_departure">Planmäßige Abfahrt: %1$s</string>
+    <string name="g240_trip_stop_platform">Planmäßiges Gleis: %1$s</string>
+    <string name="g240_trip_stop_boarding">Einstiegshaltestelle</string>
+</resources>
