@@ -56,6 +56,7 @@ class ActiveJourneyServiceInstrumentedTest {
         val requested = info.requestedPermissions.orEmpty().toSet()
 
         assertTrue(Manifest.permission.FOREGROUND_SERVICE_LOCATION in requested)
+        assertTrue(Manifest.permission.VIBRATE in requested)
         assertFalse(Manifest.permission.ACCESS_BACKGROUND_LOCATION in requested)
     }
 }

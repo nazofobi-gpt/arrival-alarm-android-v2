@@ -3,7 +3,6 @@ package com.nazofobi.arrivalalarm
 import android.Manifest
 import android.app.Notification
 import android.app.PendingIntent
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
@@ -12,7 +11,7 @@ import android.os.Build
 
 /** Explicit local notification test. Does not start, arm or modify a real journey. */
 internal object AndroidArrivalAlertPreview {
-    internal const val CHANNEL_ID = "arrival_alerts"
+    internal const val CHANNEL_ID = ArrivalAlertNotificationChannel.ID
     internal const val NOTIFICATION_ID = 4111
 
     fun post(context: Context): Boolean {
@@ -24,18 +23,7 @@ internal object AndroidArrivalAlertPreview {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             if (!manager.areNotificationsEnabled()) return false
             if (Build.VERSION.SDK_INT >= 26) {
-                if (manager.getNotificationChannel(CHANNEL_ID) == null) {
-                    manager.createNotificationChannel(
-                        NotificationChannel(
-                            CHANNEL_ID,
-                            context.getString(R.string.arrival_alerts_channel_name),
-                            NotificationManager.IMPORTANCE_HIGH,
-                        ).apply {
-                            enableVibration(true)
-                            vibrationPattern = longArrayOf(0L, 200L, 100L, 260L)
-                        }
-                    )
-                }
+                ArrivalAlertNotificationChannel.ensureExists(context, manager)
                 if (manager.getNotificationChannel(CHANNEL_ID)?.importance ==
                     NotificationManager.IMPORTANCE_NONE
                 ) return false

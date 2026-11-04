@@ -18,6 +18,17 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class AndroidArrivalAlertPreviewInstrumentedTest {
+    @Test fun newArrivalChannelHasHapticsWithoutChangingExistingUserSettings() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val channel = ArrivalAlertNotificationChannel.newChannel(context)
+        assertEquals(AndroidArrivalAlertPreview.CHANNEL_ID, channel.id)
+        assertEquals(NotificationManager.IMPORTANCE_HIGH, channel.importance)
+        assertTrue("Arrival alerts must provide an OS-managed haptic fallback", channel.shouldVibrate())
+        assertTrue(
+            channel.vibrationPattern.contentEquals(longArrayOf(0L, 200L, 100L, 260L))
+        )
+    }
+
     @Test fun explicitPreviewPostsRealLocalNotificationOnArrivalChannel() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

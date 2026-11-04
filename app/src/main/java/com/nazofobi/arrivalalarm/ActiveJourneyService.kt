@@ -452,13 +452,9 @@ class ActiveJourneyService : Service(), LocationListener {
                 NotificationManager.IMPORTANCE_LOW,
             )
         )
-        manager.createNotificationChannel(
-            NotificationChannel(
-                ARRIVAL_CHANNEL_ID,
-                getString(R.string.arrival_alerts_channel_name),
-                NotificationManager.IMPORTANCE_HIGH,
-            )
-        )
+        // A shared definition keeps the real arrival channel in sync with the
+        // user-triggered preview. Never overwrite an existing OS/user channel.
+        ArrivalAlertNotificationChannel.ensureExists(this, manager)
     }
 
     companion object {
