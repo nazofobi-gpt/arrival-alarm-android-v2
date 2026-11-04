@@ -760,7 +760,54 @@ internal fun PlannedWalkStartNotice(
         )
     }
     var bufferSaveFailed by remember(option.id) { mutableStateOf(false) }
-    val startEpoch = plannedWalkStartEpochMillis(option, safetyBufferMinutes) ?: return
+    val startEpoch = plannedWalkStartEpochMillis(option, safetyBufferMinutes)
+    if (startEpoch == null) {
+        // Installed GTFS data can disappear or change after an opt-in reminder was
+        // queued. Keep its cancellation available without inventing a walk time.
+        val scheduler = remember(context) {
+            PlannedWalkReminderScheduler(context.applicationContext)
+        }
+        var pending by remember(option.id) {
+            mutableStateOf(scheduler.isScheduledForRoute(option.id))
+        }
+        var cancelBusy by remember(option.id) { mutableStateOf(false) }
+        var cancelFailed by remember(option.id) { mutableStateOf(false) }
+        val cancelScope = rememberCoroutineScope()
+        if (pending) {
+            OutlinedButton(
+                onClick = {
+                    if (!cancelBusy) {
+                        cancelBusy = true
+                        cancelScope.launch {
+                            val succeeded = withContext(Dispatchers.IO) {
+                                scheduler.cancel()
+                            }
+                            pending = scheduler.isScheduledForRoute(option.id)
+                            cancelFailed = !succeeded
+                            cancelBusy = false
+                        }
+                    }
+                },
+                enabled = !cancelBusy,
+                modifier = Modifier.heightIn(min = 48.dp)
+                    .testTag("route-walk-reminder-toggle"),
+            ) { Text(stringResource(R.string.route_walk_reminder_cancel)) }
+            Text(
+                text = stringResource(R.string.route_walk_reminder_disclaimer),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("route-walk-reminder-note"),
+            )
+            if (cancelFailed) {
+                Text(
+                    text = stringResource(R.string.route_walk_reminder_failure),
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("route-walk-reminder-failure"),
+                )
+            }
+        }
+        return
+    }
     var liveNowMillis by remember(option.id, startEpoch) {
         mutableStateOf(System.currentTimeMillis())
     }
