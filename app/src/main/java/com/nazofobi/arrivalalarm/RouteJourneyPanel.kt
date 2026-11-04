@@ -408,6 +408,7 @@ fun RouteJourneyPanel(
                         option = option,
                         selected = selectedRouteId == option.id,
                         routeOffline = routeOffline,
+                        routeBusy = routeBusy,
                         onSelect = { onSelectRoute(option) },
                         selectTestTag = "route-option-select-" + index,
                         modifier = Modifier.testTag("route-option-" + index),
@@ -465,6 +466,7 @@ private fun RouteOptionCard(
     option: RouteOption,
     selected: Boolean,
     routeOffline: Boolean,
+    routeBusy: Boolean,
     onSelect: () -> Unit,
     selectTestTag: String,
     modifier: Modifier = Modifier,
@@ -555,7 +557,7 @@ private fun RouteOptionCard(
             )
             OutlinedButton(
                 onClick = onSelect,
-                enabled = !selected && !hasVerifiedCancellation,
+                enabled = !routeBusy && !selected && !hasVerifiedCancellation,
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
