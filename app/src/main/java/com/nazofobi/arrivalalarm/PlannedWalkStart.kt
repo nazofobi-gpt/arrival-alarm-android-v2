@@ -36,3 +36,18 @@ internal fun plannedWalkWarning(option: RouteOption, nowMillis: Long): PlannedWa
         else -> null
     }
 }
+
+/** Explicit external walking directions, only for a source-identified first boarding stop.
+ * No user's origin coordinates are included; Google Maps chooses the origin itself.
+ */
+internal fun plannedWalkDirectionsUrl(option: RouteOption): String? {
+    if (plannedWalkStartEpochMillis(option) == null) return null
+    val evidence = option.accessWalking ?: return null
+    val first = option.stops.firstOrNull() ?: return null
+    if (first.id.isNullOrBlank() || first.id != evidence.stopId) return null
+    val lat = first.latitude ?: return null
+    val lon = first.longitude ?: return null
+    if (!lat.isFinite() || !lon.isFinite() ||
+        lat !in -90.0..90.0 || lon !in -180.0..180.0) return null
+    return "https://www.google.com/maps/dir/?api=1&destination=${lat}%2C${lon}&travelmode=walking&dir_action=navigate"
+}

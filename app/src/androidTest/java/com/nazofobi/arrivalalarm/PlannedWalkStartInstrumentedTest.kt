@@ -20,6 +20,9 @@ class PlannedWalkStartInstrumentedTest {
     private fun show(
         planned: String?, walking: Int?,
         nowMillisForTest: Long? = null,
+        stopLatitude: Double? = null,
+        stopLongitude: Double? = null,
+        directionsLauncher: ((Intent) -> Boolean)? = null,
         calendarLauncher: ((Intent) -> Boolean)? = null,
     ) {
         rule.setContent {
@@ -32,13 +35,16 @@ class PlannedWalkStartInstrumentedTest {
                         line = "RE", direction = "Bremen",
                         departure = "10:30", arrival = "11:30", walkingMinutes = 10,
                         transfers = 0,
-                        stops = listOf(RouteStop(id = "stop-1", name = "Lohne", plannedDeparture = planned)),
+                        stops = listOf(RouteStop(id = "stop-1", name = "Lohne",
+                            latitude = stopLatitude, longitude = stopLongitude,
+                            plannedDeparture = planned)),
                         accessWalking = walking?.let {
                             RouteWalkingLegEvidence("stop-1", "Lohne", it)
                         },
                     ),
                     calendarLauncher = calendarLauncher,
                     nowMillisForTest = nowMillisForTest,
+                    directionsLauncher = directionsLauncher,
                 )
             }
         }
@@ -116,4 +122,37 @@ class PlannedWalkStartInstrumentedTest {
         rule.onNodeWithTag("route-walk-start-passed").assertDoesNotExist()
         rule.onNodeWithTag("route-walk-departure-passed").assertDoesNotExist()
     }
+    @Test fun validStopOpensExternalDirectionsOnlyAfterUserTap() {
+        var observed: Intent? = null
+        show("2099-11-04T10:30:00+01:00", 600,
+            stopLatitude = 52.67, stopLongitude = 8.24,
+            directionsLauncher = { observed = it; true })
+        rule.onNodeWithTag("route-walk-directions").assertExists()
+        rule.runOnIdle { assertEquals(null, observed) }
+        rule.onNodeWithTag("route-walk-directions").performClick()
+        rule.runOnIdle {
+            assertEquals(Intent.ACTION_VIEW, requireNotNull(observed).action)
+            assertEquals(
+                "https://www.google.com/maps/dir/?api=1&destination=52.67%2C8.24&travelmode=walking&dir_action=navigate",
+                requireNotNull(observed).data.toString(),
+            )
+        }
+    }
+    @Test fun noStopCoordinateEvidenceHidesDirections() {
+        show("2099-11-04T10:30:00+01:00", 600)
+        rule.onNodeWithTag("route-walk-directions").assertDoesNotExist()
+    }
+    @Test fun failedExternalLaunchIsVisible() {
+        show("2099-11-04T10:30:00+01:00", 600, stopLatitude = 52.67,
+            stopLongitude = 8.24, directionsLauncher = { false })
+        rule.onNodeWithTag("route-walk-directions").performClick()
+        rule.onNodeWithTag("route-walk-directions-failure").assertExists()
+    }
+    @Test fun departedTripHidesDirections() {
+        show("2099-11-04T10:30:00+01:00", 600,
+            nowMillisForTest = java.time.Instant.parse("2099-11-04T09:30:00Z").toEpochMilli(),
+            stopLatitude = 52.67, stopLongitude = 8.24)
+        rule.onNodeWithTag("route-walk-directions").assertDoesNotExist()
+    }
+
 }

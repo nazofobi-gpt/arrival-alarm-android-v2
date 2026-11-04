@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -741,6 +742,7 @@ internal fun PlannedWalkStartNotice(
     option: RouteOption,
     calendarLauncher: ((Intent) -> Boolean)? = null,
     nowMillisForTest: Long? = null,
+    directionsLauncher: ((Intent) -> Boolean)? = null,
 ) {
     val context = LocalContext.current
     val startEpoch = plannedWalkStartEpochMillis(option) ?: return
@@ -757,6 +759,7 @@ internal fun PlannedWalkStartNotice(
     }
     val displayNowMillis = nowMillisForTest ?: liveNowMillis
     var launchFailed by remember(option.id, startEpoch) { mutableStateOf(false) }
+    var directionsFailed by remember(option.id, startEpoch) { mutableStateOf(false) }
     val clock = remember(startEpoch) {
         java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
             .format(java.util.Date(startEpoch))
@@ -787,6 +790,34 @@ internal fun PlannedWalkStartNotice(
             modifier = Modifier.testTag("route-walk-departure-passed"),
         )
         null -> Unit
+    }
+    val directionsUrl = plannedWalkDirectionsUrl(option)
+    if (directionsUrl != null &&
+        plannedWalkWarning(option, displayNowMillis) != PlannedWalkWarning.PLANNED_DEPARTURE_PASSED
+    ) {
+        OutlinedButton(
+            onClick = {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(directionsUrl))
+                directionsFailed = when {
+                    directionsLauncher != null -> !directionsLauncher(intent)
+                    else -> !runCatching { context.startActivity(intent); true }.getOrDefault(false)
+                }
+            },
+            modifier = Modifier.heightIn(min = 48.dp).testTag("route-walk-directions"),
+        ) { Text(stringResource(R.string.route_planned_walk_maps_action)) }
+        Text(
+            text = stringResource(R.string.route_planned_walk_maps_disclaimer),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (directionsFailed) {
+            Text(
+                text = stringResource(R.string.route_planned_walk_maps_failure),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.testTag("route-walk-directions-failure"),
+            )
+        }
     }
     if (startEpoch > displayNowMillis) {
         val calendarTitle = stringResource(

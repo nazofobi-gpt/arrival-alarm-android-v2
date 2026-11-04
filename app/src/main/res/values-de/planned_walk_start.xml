@@ -7,4 +7,7 @@
     <string name="route_planned_walk_calendar_failure">Kalender konnte nicht geöffnet werden. Kein Termin wurde gespeichert.</string>
     <string name="route_planned_walk_late_warning">Die geschätzte Aufbruchzeit zu Fuß ist vorbei. Das Erreichen dieser planmäßigen Abfahrt ist nicht gesichert.</string>
     <string name="route_planned_walk_departure_passed">Die erste planmäßige Abfahrtszeit ist vorbei. Echtzeitstatus und spätere Fahrten prüfen.</string>
+    <string name="route_planned_walk_maps_action">Fußweg zum Einstieg in Google Maps öffnen</string>
+    <string name="route_planned_walk_maps_disclaimer">Google Maps wird extern geöffnet. Fußweg und Dauer können von der Schätzung abweichen; kein Anschluss garantiert.</string>
+    <string name="route_planned_walk_maps_failure">Fußwegkarte konnte nicht geöffnet werden.</string>
 </resources>

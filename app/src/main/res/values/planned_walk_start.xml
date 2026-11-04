@@ -7,4 +7,7 @@
     <string name="route_planned_walk_calendar_failure">Takvim açılamadı. Etkinlik kaydedilmedi.</string>
     <string name="route_planned_walk_late_warning">Tahmini yürüyüş başlangıcı geçti. Bu planlanan kalkışa yetişmeniz garanti değil.</string>
     <string name="route_planned_walk_departure_passed">Planlanan ilk kalkış saati geçti. Canlı durumu ve sonraki seferleri kontrol edin.</string>
+    <string name="route_planned_walk_maps_action">Biniş durağına yaya yolunu haritada aç</string>
+    <string name="route_planned_walk_maps_disclaimer">Harici Google Haritalar açılır. Yaya rotası ve süresi tahminden farklı olabilir; kalkışa yetişme garantisi yoktur.</string>
+    <string name="route_planned_walk_maps_failure">Yürüyüş haritası açılamadı.</string>
 </resources>
