@@ -31,7 +31,9 @@ internal fun plannedWalkReminderDelayMillis(
 ): Long? {
     val target = plannedWalkStartEpochMillis(option, safetyBufferMinutes) ?: return null
     val delay = runCatching { Math.subtractExact(target, nowMillis) }.getOrNull() ?: return null
-    return delay.takeIf { it in 60_000L..86_400_000L }
+    // A selected offline GTFS journey can be planned up to seven days ahead.
+    // WorkManager stays best-effort; a delayed job is discarded at delivery time.
+    return delay.takeIf { it in 60_000L..604_800_000L }
 }
 
 internal class PlannedWalkReminderScheduler(private val context: Context) {
