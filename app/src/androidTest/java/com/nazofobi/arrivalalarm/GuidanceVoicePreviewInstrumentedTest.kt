@@ -77,6 +77,7 @@ class GuidanceVoicePreviewInstrumentedTest {
 
     @Test fun notificationPreviewRequiresTapWithoutSpeechOrJourneyMutation() {
         var posts = 0
+        var dismisses = 0
         var speech = 0
         rule.setContent {
             MaterialTheme {
@@ -90,6 +91,7 @@ class GuidanceVoicePreviewInstrumentedTest {
                     language = GuidanceLanguage.ENGLISH,
                     isJourneyAudioActive = false,
                     onTestArrivalAlert = { posts++; true },
+                    onDismissArrivalAlert = { dismisses++; true },
                 )
             }
         }
@@ -98,6 +100,10 @@ class GuidanceVoicePreviewInstrumentedTest {
         rule.onNodeWithTag("arrival-notification-preview-status").assertExists()
         assertEquals(1, posts)
         rule.onNodeWithTag("arrival-notification-settings").assertDoesNotExist()
+        rule.onNodeWithTag("arrival-notification-dismiss").performClick()
+        rule.onNodeWithTag("arrival-notification-dismiss-status").assertExists()
+        rule.onNodeWithTag("arrival-notification-dismiss").assertDoesNotExist()
+        assertEquals(1, dismisses)
         assertEquals(0, speech)
     }
 
@@ -127,6 +133,7 @@ class GuidanceVoicePreviewInstrumentedTest {
 
     @Test fun activeAlarmDisablesNotificationPreview() {
         var posts = 0
+        var dismisses = 0
         rule.setContent {
             MaterialTheme {
                 GuidanceVoicePreviewPanel(
@@ -136,11 +143,36 @@ class GuidanceVoicePreviewInstrumentedTest {
                     language = GuidanceLanguage.TURKISH,
                     isJourneyAudioActive = true,
                     onTestArrivalAlert = { posts++; true },
+                    onDismissArrivalAlert = { dismisses++; true },
                 )
             }
         }
         rule.onNodeWithTag("arrival-notification-preview").assertIsNotEnabled()
+        rule.onNodeWithTag("arrival-notification-dismiss").assertDoesNotExist()
         assertEquals(0, posts)
+        assertEquals(0, dismisses)
+    }
+
+    @Test fun failedDismissRemainsVisibleAndNeverClaimsSuccess() {
+        var dismisses = 0
+        rule.setContent {
+            MaterialTheme {
+                GuidanceVoicePreviewPanel(
+                    speaker = object : GuidanceSpeaker {
+                        override fun speak(utterance: GuidanceUtterance) = true
+                    },
+                    language = GuidanceLanguage.ENGLISH,
+                    isJourneyAudioActive = false,
+                    onTestArrivalAlert = { true },
+                    onDismissArrivalAlert = { dismisses++; false },
+                )
+            }
+        }
+        rule.onNodeWithTag("arrival-notification-preview").performClick()
+        rule.onNodeWithTag("arrival-notification-dismiss").performClick()
+        rule.onNodeWithTag("arrival-notification-dismiss-status").assertExists()
+        rule.onNodeWithTag("arrival-notification-dismiss").assertExists()
+        assertEquals(1, dismisses)
     }
 
     @Test fun unavailableTtsShowsFailureWithoutSavingGuidance() {
