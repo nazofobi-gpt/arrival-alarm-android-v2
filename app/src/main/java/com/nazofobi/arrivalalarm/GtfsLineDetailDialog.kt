@@ -14,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -34,6 +35,12 @@ internal fun GtfsLineDetailDialog(
         mutableStateOf(0)
     }
     var stopFilter by rememberSaveable(lineLabel, detail?.lineName) { mutableStateOf("") }
+    // Keep page state outside the conditional dialog contents: a recomposition
+    // after clicking Next must not reconstruct page 0 during content replacement.
+    // Reset when the inspected source changes, never when paging the same route.
+    var intermediatePage by rememberSaveable(lineLabel, detail?.lineName, detail?.sourceVersion) {
+        mutableIntStateOf(0)
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag("gtfs-line-detail-dialog"),
@@ -65,7 +72,10 @@ internal fun GtfsLineDetailDialog(
                         detail.directions.forEachIndexed { index, direction ->
                             FilterChip(
                                 selected = activeIndex == index,
-                                onClick = { selectedDirection = index },
+                                onClick = {
+                                    selectedDirection = index
+                                    intermediatePage = 0
+                                },
                                 label = {
                                     Text(
                                         stringResource(
@@ -106,9 +116,6 @@ internal fun GtfsLineDetailDialog(
                                 modifier = Modifier.testTag("gtfs-line-stops-$activeIndex"),
                             )
                         }
-                        var intermediatePage by rememberSaveable(
-                            lineLabel, detail.lineName, detail.sourceVersion, activeIndex,
-                        ) { mutableStateOf(0) }
                         // Identically named platforms and repeated stops must remain selectable
                         // by source identity. Browsing departures never arms a journey or alarm.
                         // Bound rendered choices so a broad query cannot expand the dialog without limit.
