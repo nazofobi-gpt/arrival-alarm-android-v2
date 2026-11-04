@@ -9,4 +9,6 @@
     <string name="gtfs_line_stops_limited">Further stops on this long trip are not shown.</string>
     <string name="gtfs_line_directions_limited">Additional timetable directions are not shown.</string>
     <string name="gtfs_line_close">Close</string>
+    <string name="gtfs_line_search_stops">Search stops in this direction</string>
+    <string name="gtfs_line_no_matching_stops">No matching stop in this representative trip.</string>
 </resources>

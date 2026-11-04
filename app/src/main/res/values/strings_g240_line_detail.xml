@@ -9,4 +9,6 @@
     <string name="gtfs_line_stops_limited">Uzun seferin kalan durakları gösterilmedi.</string>
     <string name="gtfs_line_directions_limited">Diğer çizelge yönleri burada gösterilmedi.</string>
     <string name="gtfs_line_close">Kapat</string>
+    <string name="gtfs_line_search_stops">Bu yöndeki durağı ara</string>
+    <string name="gtfs_line_no_matching_stops">Bu yöndeki örnek seferde eşleşen durak yok.</string>
 </resources>

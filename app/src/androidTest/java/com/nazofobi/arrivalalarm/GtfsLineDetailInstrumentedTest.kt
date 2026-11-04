@@ -5,6 +5,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.assertTextContains
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -117,5 +119,29 @@ class GtfsLineDetailInstrumentedTest {
         composeRule.onNodeWithTag("gtfs-line-stops-0").assertDoesNotExist()
         composeRule.onNodeWithTag("gtfs-line-select-direction-0").performClick()
         composeRule.onNodeWithTag("gtfs-line-stops-0").assertTextContains("Alpha", substring = true)
+    }
+
+    @Test fun filterFindsActualStopAndPreservesSequenceAcrossDirectionChange() {
+        val preview = GtfsLineDetail(
+            lineName = "RE1",
+            directions = listOf(
+                GtfsLineDirection("Beta", listOf("Alpha", "Beta", "Gamma"), false),
+                GtfsLineDirection("Delta", listOf("Gamma", "Delta"), false),
+            ),
+            additionalDirectionsOmitted = false,
+        )
+        composeRule.setContent {
+            MaterialTheme { GtfsLineDetailDialog("RE1", preview, false) {} }
+        }
+        composeRule.onNodeWithTag("gtfs-line-stop-filter").performTextInput("bEtA")
+        composeRule.onNodeWithTag("gtfs-line-stops-0")
+            .assertTextContains("2. Beta", substring = true)
+        composeRule.onNodeWithTag("gtfs-line-select-direction-1").performClick()
+        composeRule.onNodeWithTag("gtfs-line-no-matches").assertExists()
+        composeRule.onNodeWithTag("gtfs-line-stops-1").assertDoesNotExist()
+        composeRule.onNodeWithTag("gtfs-line-stop-filter").performTextClearance()
+        composeRule.onNodeWithTag("gtfs-line-no-matches").assertDoesNotExist()
+        composeRule.onNodeWithTag("gtfs-line-stops-1")
+            .assertTextContains("1. Gamma", substring = true)
     }
 }

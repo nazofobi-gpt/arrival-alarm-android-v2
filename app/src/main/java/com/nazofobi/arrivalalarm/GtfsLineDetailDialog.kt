@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -31,6 +32,7 @@ internal fun GtfsLineDetailDialog(
     var selectedDirection by rememberSaveable(lineLabel, detail?.lineName, detail?.directions?.size) {
         mutableStateOf(0)
     }
+    var stopFilter by rememberSaveable(lineLabel, detail?.lineName) { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag("gtfs-line-detail-dialog"),
@@ -78,12 +80,30 @@ internal fun GtfsLineDetailDialog(
                             )
                         }
                         val activeDirection = detail.directions[activeIndex]
-                        Text(
-                            activeDirection.stopNames.mapIndexed { position, name ->
-                                "${position + 1}. $name"
-                            }.joinToString("\n"),
-                            modifier = Modifier.testTag("gtfs-line-stops-$activeIndex"),
+                        OutlinedTextField(
+                            value = stopFilter,
+                            onValueChange = { stopFilter = it.take(80) },
+                            label = { Text(stringResource(R.string.gtfs_line_search_stops)) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().testTag("gtfs-line-stop-filter"),
                         )
+                        val needle = stopFilter.trim()
+                        val matchingStops = activeDirection.stopNames.mapIndexedNotNull { position, name ->
+                            if (needle.isEmpty() || name.contains(needle, ignoreCase = true)) {
+                                "${position + 1}. $name"
+                            } else null
+                        }
+                        if (matchingStops.isEmpty()) {
+                            Text(
+                                stringResource(R.string.gtfs_line_no_matching_stops),
+                                modifier = Modifier.testTag("gtfs-line-no-matches"),
+                            )
+                        } else {
+                            Text(
+                                matchingStops.joinToString("\n"),
+                                modifier = Modifier.testTag("gtfs-line-stops-$activeIndex"),
+                            )
+                        }
                         if (activeDirection.stopsTruncated) {
                             Text(stringResource(R.string.gtfs_line_stops_limited))
                         }
