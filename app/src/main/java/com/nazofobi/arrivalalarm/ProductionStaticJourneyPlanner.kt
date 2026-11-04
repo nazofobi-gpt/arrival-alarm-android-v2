@@ -420,10 +420,14 @@ class ProductionStaticJourneyPlanner(
                         StaticRouterResult.NoPath, StaticRouterResult.SameOrigin -> emptyList()
                     }
                 }
+            // Preserve earlier deadline-feasible choices as alternatives: the latest
+            // threshold alone can hide a train that leaves sooner but still arrives on time.
+            // Reuse the initial feasibility query instead of repeating its GTFS search.
+            val earliestOptions = eligible(earliest)
             val threshold = latestFeasibleDepartureThreshold(earliest, arrivalDeadlineEpochMillis) {
-                eligible(it).isNotEmpty()
+                if (it == earliest) earliestOptions.isNotEmpty() else eligible(it).isNotEmpty()
             } ?: return LocalStaticJourneyOutcome.NoPath
-            val options = eligible(threshold)
+            val options = (eligible(threshold) + earliestOptions)
                 .sortedWith(
                     compareByDescending<Pair<GtfsServiceDate, StaticTransitJourney>> {
                         it.second.legs.first().departureEpochMillis -
