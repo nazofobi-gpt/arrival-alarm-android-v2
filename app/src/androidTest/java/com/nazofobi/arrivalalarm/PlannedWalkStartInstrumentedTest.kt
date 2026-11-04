@@ -65,6 +65,22 @@ class PlannedWalkStartInstrumentedTest {
             .assertTextContains(expected, substring = true)
     }
 
+    @Test fun upcomingWalkShowsRoundedMinutesButNotLateWarning() {
+        val start = java.time.Instant.parse("2099-11-04T09:20:00Z").toEpochMilli()
+        show("2099-11-04T10:30:00+01:00", 600, nowMillisForTest = start - 1L)
+        rule.onNodeWithTag("route-walk-minutes-remaining")
+            .assertTextContains("1", substring = true)
+        rule.onNodeWithTag("route-walk-start-passed").assertDoesNotExist()
+    }
+
+    @Test fun elapsedOrMissingWalkDoesNotShowCountdown() {
+        val start = java.time.Instant.parse("2099-11-04T09:20:00Z").toEpochMilli()
+        show("2099-11-04T10:30:00+01:00", 600, nowMillisForTest = start)
+        rule.onNodeWithTag("route-walk-minutes-remaining").assertDoesNotExist()
+        show(null, 600, nowMillisForTest = start - 60_000L)
+        rule.onNodeWithTag("route-walk-minutes-remaining").assertDoesNotExist()
+    }
+
     @Test fun plannedEvidenceShowsWalkingStartWithSourceDisclosure() {
         show("2026-11-04T10:30:00+01:00", 600)
         rule.onNodeWithTag("route-planned-walk-start").assertExists()

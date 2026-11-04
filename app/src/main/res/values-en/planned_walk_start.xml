@@ -12,4 +12,5 @@
     <string name="route_planned_walk_maps_failure">Could not open walking directions.</string>
     <string name="route_planned_walk_buffer_action">Extra safety buffer: %1$d min (change)</string>
     <string name="route_planned_walk_buffer_failure">Could not save the safety buffer; the previous choice was kept.</string>
+    <string name="route_planned_walk_remaining_minutes">About %1$d minutes until the estimated walking start.</string>
 </resources>

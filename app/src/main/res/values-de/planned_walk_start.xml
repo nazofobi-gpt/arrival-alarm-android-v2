@@ -12,4 +12,5 @@
     <string name="route_planned_walk_maps_failure">Fußwegkarte konnte nicht geöffnet werden.</string>
     <string name="route_planned_walk_buffer_action">Zusätzlicher Zeitpuffer: %1$d Min. (ändern)</string>
     <string name="route_planned_walk_buffer_failure">Zeitpuffer konnte nicht gespeichert werden. Bisherige Einstellung bleibt erhalten.</string>
+    <string name="route_planned_walk_remaining_minutes">Noch etwa %1$d Minuten bis zum geschätzten Aufbruch zu Fuß.</string>
 </resources>

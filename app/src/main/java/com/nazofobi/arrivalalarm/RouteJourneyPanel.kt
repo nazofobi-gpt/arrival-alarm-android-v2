@@ -813,6 +813,13 @@ internal fun PlannedWalkStartNotice(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.testTag("route-planned-walk-start-note"),
     )
+    plannedWalkMinutesRemaining(option, displayNowMillis, safetyBufferMinutes)?.let { minutes ->
+        Text(
+            text = stringResource(R.string.route_planned_walk_remaining_minutes, minutes),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.testTag("route-walk-minutes-remaining"),
+        )
+    }
     when (plannedWalkWarning(option, displayNowMillis, safetyBufferMinutes)) {
         PlannedWalkWarning.WALK_START_PASSED -> Text(
             text = stringResource(R.string.route_planned_walk_late_warning),

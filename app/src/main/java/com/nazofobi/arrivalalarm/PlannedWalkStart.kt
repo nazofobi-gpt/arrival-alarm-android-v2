@@ -26,6 +26,23 @@ internal fun plannedWalkStartEpochMillis(option: RouteOption, safetyBufferMinute
     }.getOrNull()
 }
 
+/**
+ * Time remaining until the evidenced walk start. The small bounded look-ahead
+ * is for a glanceable in-app countdown, not an alarm or background reminder.
+ * Round upward: one remaining second must not appear as zero minutes.
+ */
+internal fun plannedWalkMinutesRemaining(
+    option: RouteOption,
+    nowMillis: Long,
+    safetyBufferMinutes: Int = 0,
+): Long? {
+    val start = plannedWalkStartEpochMillis(option, safetyBufferMinutes) ?: return null
+    val remainingMillis = runCatching { Math.subtractExact(start, nowMillis) }.getOrNull()
+        ?: return null
+    if (remainingMillis <= 0L || remainingMillis > 180L * 60_000L) return null
+    return (remainingMillis - 1L) / 60_000L + 1L
+}
+
 /** Planned-only estimate; no inference about realtime vehicle location or actual walk speed. */
 internal enum class PlannedWalkWarning { WALK_START_PASSED, PLANNED_DEPARTURE_PASSED }
 

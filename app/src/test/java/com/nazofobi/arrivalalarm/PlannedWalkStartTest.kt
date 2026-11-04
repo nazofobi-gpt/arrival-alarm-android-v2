@@ -100,6 +100,46 @@ class PlannedWalkStartTest {
     }
 }
 
+// Glanceable countdown for source-backed JNY-002: no reminder is armed.
+class PlannedWalkRemainingMinutesTest {
+    private fun option() = RouteOption(
+        id = "trip", origin = MapPoint(52.67, 8.24, "Lohne"),
+        destination = MapPoint(53.08, 8.81, "Bremen"),
+        line = "RE", direction = "Bremen", departure = "10:30", arrival = "11:30",
+        walkingMinutes = 10, transfers = 0,
+        stops = listOf(RouteStop(id = "stop", name = "Lohne",
+            plannedDeparture = "2026-11-04T10:30:00+01:00")),
+        accessWalking = RouteWalkingLegEvidence("stop", "Lohne", 600),
+    )
+
+    @Test fun roundsPartialMinuteUpAndHidesAtWalkStart() {
+        val o = option()
+        val start = Instant.parse("2026-11-04T09:20:00Z").toEpochMilli()
+        assertEquals(1L, plannedWalkMinutesRemaining(o, start - 1L))
+        assertEquals(2L, plannedWalkMinutesRemaining(o, start - 60_001L))
+        assertNull(plannedWalkMinutesRemaining(o, start))
+        assertNull(plannedWalkMinutesRemaining(o, start + 1L))
+    }
+
+    @Test fun respectsUserSafetyBufferAndRejectsUnboundedLookAhead() {
+        val o = option()
+        val start = Instant.parse("2026-11-04T09:20:00Z").toEpochMilli()
+        assertEquals(5L, plannedWalkMinutesRemaining(o, start - 300_000L))
+        assertNull(plannedWalkMinutesRemaining(o, start - 180L * 60_000L - 1L))
+        assertEquals(180L, plannedWalkMinutesRemaining(o, start - 180L * 60_000L))
+        assertNull(plannedWalkMinutesRemaining(o, start - 300_000L, 5))
+    }
+
+    @Test fun missingOrMismatchedBoardingStopAndBadClockFailClosed() {
+        val o = option()
+        val now = Instant.parse("2026-11-04T09:18:00Z").toEpochMilli()
+        assertNull(plannedWalkMinutesRemaining(o.copy(accessWalking = null), now))
+        assertNull(plannedWalkMinutesRemaining(o.copy(accessWalking =
+            RouteWalkingLegEvidence("another-stop", "Other", 600)), now))
+        assertNull(plannedWalkMinutesRemaining(o, Long.MIN_VALUE))
+    }
+}
+
 // Negative evidence and boundary tests for JNY-003: planned times, not realtime claims.
 class PlannedWalkWarningTest {
     private fun option(planned: String? = "2026-11-04T10:30:00+01:00", seconds: Int? = 600) =

@@ -12,4 +12,5 @@
     <string name="route_planned_walk_maps_failure">Yürüyüş haritası açılamadı.</string>
     <string name="route_planned_walk_buffer_action">Ek güvenlik payı: %1$d dk (değiştir)</string>
     <string name="route_planned_walk_buffer_failure">Güvenlik payı kaydedilemedi; önceki tercih korundu.</string>
+    <string name="route_planned_walk_remaining_minutes">Tahmini yürüyüş başlangıcına %1$d dakika kaldı.</string>
 </resources>
