@@ -276,4 +276,63 @@ class PlannedWalkStartInstrumentedTest {
             preferences.edit().clear().commit()
         }
     }
+    @Test fun queuedWalkReminderCanBeCancelledWithNoRouteResults() {
+        val context = androidx.test.platform.app.InstrumentationRegistry
+            .getInstrumentation().targetContext
+        val preferences = context.getSharedPreferences(
+            PlannedWalkReminderScheduler.PREFS, android.content.Context.MODE_PRIVATE)
+        preferences.edit()
+            .putString(PlannedWalkReminderScheduler.KEY_TOKEN, "no-routes-test-token")
+            .putString(PlannedWalkReminderScheduler.KEY_ROUTE, "disappeared-route")
+            .putLong(PlannedWalkReminderScheduler.KEY_START, 4_000_000_000_000L)
+            .commit()
+        try {
+            rule.setContent {
+                MaterialTheme {
+                    RouteJourneyPanel(
+                        origin = null, destination = null, routeOptions = emptyList(),
+                        routeBusy = false, routeStatus = null, routeOffline = true,
+                        selectedRouteId = null, journey = JourneyUiState(),
+                        onRefreshRoutes = {}, onSelectRoute = {},
+                        onArmAlarm = {}, onCancelAlarm = {},
+                    )
+                }
+            }
+            rule.onNodeWithTag("route-results-empty").assertExists()
+            rule.onNodeWithTag("route-walk-reminder-global-cancel").assertExists()
+                .performClick()
+            rule.waitUntil(10_000L) {
+                preferences.getString(PlannedWalkReminderScheduler.KEY_TOKEN, null) == null
+            }
+            rule.onNodeWithTag("route-walk-reminder-global-card").assertDoesNotExist()
+        } finally {
+            preferences.edit()
+                .remove(PlannedWalkReminderScheduler.KEY_TOKEN)
+                .remove(PlannedWalkReminderScheduler.KEY_ROUTE)
+                .remove(PlannedWalkReminderScheduler.KEY_START).commit()
+        }
+    }
+
+    @Test fun absentWalkReminderNeverInventsGlobalCancelAction() {
+        val context = androidx.test.platform.app.InstrumentationRegistry
+            .getInstrumentation().targetContext
+        val preferences = context.getSharedPreferences(
+            PlannedWalkReminderScheduler.PREFS, android.content.Context.MODE_PRIVATE)
+        preferences.edit().remove(PlannedWalkReminderScheduler.KEY_TOKEN)
+            .remove(PlannedWalkReminderScheduler.KEY_ROUTE)
+            .remove(PlannedWalkReminderScheduler.KEY_START).commit()
+        rule.setContent {
+            MaterialTheme {
+                RouteJourneyPanel(
+                    origin = null, destination = null, routeOptions = emptyList(),
+                    routeBusy = false, routeStatus = null, routeOffline = true,
+                    selectedRouteId = null, journey = JourneyUiState(),
+                    onRefreshRoutes = {}, onSelectRoute = {},
+                    onArmAlarm = {}, onCancelAlarm = {},
+                )
+            }
+        }
+        rule.onNodeWithTag("route-walk-reminder-global-card").assertDoesNotExist()
+    }
+
 }

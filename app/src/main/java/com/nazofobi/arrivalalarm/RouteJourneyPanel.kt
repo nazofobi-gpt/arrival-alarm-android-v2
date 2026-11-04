@@ -77,6 +77,13 @@ fun RouteJourneyPanel(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // A previously queued walk reminder must remain cancellable when
+        // routes disappear, filters hide every option, or the selection is lost.
+        // A selected journey already has its own reminder control below.
+        if (mode == RouteJourneyMode.RESULTS ||
+            selectedRouteId == null || routeOptions.none { it.id == selectedRouteId }) {
+            PendingWalkReminderWithoutRoute()
+        }
         if (mode == RouteJourneyMode.RESULTS) {
             Text(
                 text = stringResource(R.string.route_results_title),
@@ -267,6 +274,66 @@ fun RouteJourneyPanel(
                 onArmAlarm = onArmAlarm,
                 onCancelAlarm = onCancelAlarm,
             )
+        }
+    }
+}
+
+/**
+ * An opt-in reminder must not become impossible to revoke when a route card is
+ * unavailable. This is status + explicit cancellation only; never arms a job.
+ */
+@Composable
+private fun PendingWalkReminderWithoutRoute() {
+    val context = LocalContext.current
+    val scheduler = remember(context) {
+        PlannedWalkReminderScheduler(context.applicationContext)
+    }
+    var queuedRoute by remember(context) { mutableStateOf(scheduler.scheduledRouteId()) }
+    var cancelBusy by remember { mutableStateOf(false) }
+    var cancelFailed by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    if (queuedRoute == null) return
+
+    Card(
+        modifier = Modifier.fillMaxWidth().testTag("route-walk-reminder-global-card"),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.route_walk_reminder_queued),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = stringResource(R.string.route_walk_reminder_disclaimer),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = {
+                    if (!cancelBusy) {
+                        cancelBusy = true
+                        scope.launch {
+                            val succeeded = withContext(Dispatchers.IO) { scheduler.cancel() }
+                            queuedRoute = scheduler.scheduledRouteId()
+                            cancelFailed = !succeeded
+                            cancelBusy = false
+                        }
+                    }
+                },
+                enabled = !cancelBusy,
+                modifier = Modifier.heightIn(min = 48.dp)
+                    .testTag("route-walk-reminder-global-cancel"),
+            ) { Text(stringResource(R.string.route_walk_reminder_cancel)) }
+            if (cancelFailed) {
+                Text(
+                    text = stringResource(R.string.route_walk_reminder_failure),
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("route-walk-reminder-global-failure"),
+                )
+            }
         }
     }
 }
