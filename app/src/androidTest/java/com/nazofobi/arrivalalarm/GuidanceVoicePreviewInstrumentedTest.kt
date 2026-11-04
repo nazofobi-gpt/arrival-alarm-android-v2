@@ -187,4 +187,15 @@ class GuidanceVoicePreviewInstrumentedTest {
         rule.onNodeWithTag("guidance-voice-preview").performClick()
         rule.onNodeWithTag("guidance-voice-preview-status").assertExists()
     }
+
+    @Test fun arrivalChannelSettingsIntentIsScoped() {
+        if (android.os.Build.VERSION.SDK_INT < 26) return
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val intent = AndroidArrivalAlertPreview.channelSettingsIntent(context)
+        assertEquals(android.provider.Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS, intent.action)
+        assertEquals(context.packageName,
+            intent.getStringExtra(android.provider.Settings.EXTRA_APP_PACKAGE))
+        assertEquals(AndroidArrivalAlertPreview.CHANNEL_ID,
+            intent.getStringExtra(android.provider.Settings.EXTRA_CHANNEL_ID))
+    }
 }
