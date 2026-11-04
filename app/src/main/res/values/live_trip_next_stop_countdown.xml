@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_trip_next_stop_scheduled_countdown">Sonraki durağa kalan süre (tarife)</string>
+    <string name="live_trip_next_stop_realtime_countdown">Sonraki durağa kalan süre (canlı veri)</string>
+    <string name="live_trip_boarding_walk_window_warning">Planlanan yürüyüş (%1$d dk), tarifedeki kalkışa kalan süreden uzun. Bu, canlı konumdan ölçülmüş bir yürüyüş değildir; durağa ulaşımı kontrol edin.</string>
+    <string name="live_trip_boarding_check_label">Kalkış öncesi kontrol (tarife; araç varlığı doğrulanmadı)</string>
+</resources>

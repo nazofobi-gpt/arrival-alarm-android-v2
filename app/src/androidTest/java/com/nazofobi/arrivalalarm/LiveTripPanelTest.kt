@@ -7,6 +7,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -289,7 +293,11 @@ class LiveTripPanelTest {
                 )
             }
         }
-        rule.onNodeWithTag("live-trip-planned-boarding").assertTextContains("5", substring = true)
+        // A rider must know which real route stop the countdown belongs to.
+        rule.onNodeWithTag("live-trip-planned-boarding")
+            .assertTextContains("Lohne", substring = true)
+        rule.onNodeWithTag("live-trip-planned-boarding")
+            .assertTextContains("5", substring = true)
         rule.runOnUiThread {
             now.longValue = "2026-09-26T08:01:00+02:00".toTransitEpochSecondsOrNull()!!
         }
@@ -483,5 +491,304 @@ class LiveTripPanelTest {
         rule.onNodeWithTag("live-trip-final-stop-advisory").assertDoesNotExist()
     }
 
+
+    @Test
+    fun nextIntermediateStopCountdownUsesCoherentEvidenceAndRequiresActiveJourney() {
+        val now = mutableLongStateOf(
+            "2026-09-26T07:50:00+02:00".toTransitEpochSecondsOrNull()!!
+        )
+        val offline = mutableStateOf(false)
+        val armed = mutableStateOf(true)
+        val nextStopName = mutableStateOf("Diepholz")
+        val route = RouteOption(
+            id = "next-stop-eta",
+            realtime = RouteRealtimeInfo(state = RouteRealtimeState.FRESH_MATCHED),
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
+            line = "RE 9",
+            direction = "Bremen Hbf",
+            departure = "08:00",
+            arrival = "09:00",
+            walkingMinutes = 0,
+            transfers = 0,
+            stops = listOf(
+                RouteStop(
+                    id = "start", name = "Lohne",
+                    plannedArrival = "2026-09-26T07:55:00+02:00",
+                    plannedDeparture = "2026-09-26T08:00:00+02:00",
+                ),
+                RouteStop(
+                    id = "middle", name = "Diepholz",
+                    arrival = "2026-09-26T08:25:00+02:00",
+                    departure = "2026-09-26T08:26:00+02:00",
+                    plannedArrival = "2026-09-26T08:20:00+02:00",
+                    plannedDeparture = "2026-09-26T08:21:00+02:00",
+                ),
+                RouteStop(
+                    id = "destination", name = "Bremen Hbf",
+                    plannedArrival = "2026-09-26T09:00:00+02:00",
+                ),
+            ),
+        )
+        rule.setContent {
+            MaterialTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    LiveTripPanel(
+                        selectedRoute = route.copy(
+                            stops = route.stops.map { stop ->
+                                if (stop.id == "middle") stop.copy(name = nextStopName.value) else stop
+                            },
+                        ),
+                        journey = JourneyUiState(
+                            phase = if (armed.value) JourneyPhase.ARMED
+                                else JourneyPhase.DESTINATION_SELECTED,
+                        ),
+                        guidanceState = GuidanceReliabilityState(),
+                        routeOffline = offline.value,
+                        nowEpochSeconds = now.longValue,
+                    )
+                }
+            }
+        }
+        // Before boarding, the first stop's arrival timestamp is NOT the next
+        // intermediate stop. The earlier implementation displayed "5 min" here.
+        rule.onNodeWithTag("live-trip-next-stop-countdown").assertDoesNotExist()
+        rule.runOnUiThread {
+            now.longValue = "2026-09-26T07:57:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        // Even while the origin is "current" during its scheduled dwell,
+        // the rider has not departed; do not report the next station ETA.
+        rule.onNodeWithTag("live-trip-next-stop-countdown").assertDoesNotExist()
+        rule.runOnUiThread {
+            now.longValue = "2026-09-26T08:10:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        // The next-stop countdown identifies its stop, even for assistive reading.
+        // Fresh, coherent realtime: 15 minutes to Diepholz.
+        rule.onNodeWithTag("live-trip-next-stop-countdown").performScrollTo()
+            .assertTextContains("Diepholz", substring = true)
+        rule.onNodeWithTag("live-trip-next-stop-countdown")
+            .assertTextContains("15", substring = true)
+        // Offline: no stale live ETA; keep Diepholz and the 10-minute planned arrival.
+        rule.runOnUiThread { offline.value = true }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-next-stop-countdown").performScrollTo()
+            .assertTextContains("Diepholz", substring = true)
+        rule.onNodeWithTag("live-trip-next-stop-countdown")
+            .assertTextContains("10", substring = true)
+        // Invalid or invisible next-stop identity must not become a spoken ETA.
+        rule.runOnUiThread { nextStopName.value = "" }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-next-stop-countdown").assertDoesNotExist()
+        rule.runOnUiThread { nextStopName.value = "\u200BDiepholz" }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-next-stop-countdown").assertDoesNotExist()
+        rule.runOnUiThread { nextStopName.value = "Diepholz" }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-next-stop-countdown").performScrollTo()
+            .assertTextContains("Diepholz", substring = true)
+        // Countdown remains readable well before the stop but must not speak
+        // every minute; only imminent stop guidance becomes a polite live region.
+        rule.runOnUiThread {
+            offline.value = false
+            now.longValue = "2026-09-26T08:19:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-next-stop-countdown").performScrollTo()
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
+        rule.runOnUiThread {
+            now.longValue = "2026-09-26T08:20:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-next-stop-countdown").performScrollTo()
+            .assert(SemanticsMatcher.expectValue(
+                SemanticsProperties.LiveRegion, LiveRegionMode.Polite,
+            ))
+        rule.runOnUiThread { offline.value = true }
+        rule.waitForIdle()
+        // Planned arrival has passed: never keep speaking stale realtime advice.
+        rule.onNodeWithTag("live-trip-next-stop-countdown").assertDoesNotExist()
+        // A journey that has not been armed must not show active-stop guidance.
+        rule.runOnUiThread { armed.value = false }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-next-stop-countdown").assertDoesNotExist()
+        // Once the destination is next, avoid duplicating destination ETA.
+        rule.runOnUiThread {
+            armed.value = true
+            now.longValue = "2026-09-26T08:30:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-next-stop-countdown").assertDoesNotExist()
+    }
+
+
+
+    @Test
+    fun activeBoardingShowsStopMatchedWalkingEstimateOnlyBeforeDeparture() {
+        val now = mutableLongStateOf(
+            "2026-09-26T07:50:00+02:00".toTransitEpochSecondsOrNull()!!
+        )
+        val armed = mutableStateOf(true)
+        val accessStopId = mutableStateOf("boarding")
+        val route = RouteOption(
+            id = "access-walk-guidance",
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
+            line = "RE 9",
+            direction = "Bremen Hbf",
+            departure = "08:00",
+            arrival = "08:45",
+            walkingMinutes = 6,
+            transfers = 0,
+            accessWalking = RouteWalkingLegEvidence(
+                stopId = "boarding", stopName = "Lohne", walkSeconds = 301,
+            ),
+            stops = listOf(
+                RouteStop(
+                    id = "boarding", name = "Lohne",
+                    plannedDeparture = "2026-09-26T08:00:00+02:00",
+                ),
+                RouteStop(
+                    id = "destination", name = "Bremen Hbf",
+                    plannedArrival = "2026-09-26T08:45:00+02:00",
+                ),
+            ),
+        )
+        rule.setContent {
+            MaterialTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    LiveTripPanel(
+                        selectedRoute = route.copy(
+                            accessWalking = route.accessWalking?.copy(stopId = accessStopId.value),
+                        ),
+                        journey = JourneyUiState(
+                            phase = if (armed.value) JourneyPhase.ARMED
+                                else JourneyPhase.DESTINATION_SELECTED,
+                        ),
+                        guidanceState = GuidanceReliabilityState(),
+                        routeOffline = true,
+                        nowEpochSeconds = now.longValue,
+                    )
+                }
+            }
+        }
+        // This is an existing route estimate, not measured pedestrian movement.
+        rule.onNodeWithTag("live-trip-access-walk").performScrollTo()
+            .assertTextContains("Lohne", substring = true)
+        rule.onNodeWithTag("live-trip-access-walk")
+            .assertTextContains("6", substring = true)
+
+        // Ten minutes remain at 07:50: the 301-second planned walk fits.
+        rule.onNodeWithTag("live-trip-boarding-walk-risk").assertDoesNotExist()
+        rule.runOnUiThread {
+            now.longValue = "2026-09-26T07:55:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        // Five minutes remain; only the selected boarding stop's planned walk
+        // exceeds the scheduled window. No GPS reachability is inferred.
+        rule.onNodeWithTag("live-trip-boarding-walk-risk").performScrollTo()
+            .assertTextContains("6", substring = true)
+
+        // A stale or wrong boarding stop must never inherit another stop's walk.
+        rule.runOnUiThread { accessStopId.value = "different-stop" }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-access-walk").assertDoesNotExist()
+        rule.onNodeWithTag("live-trip-boarding-walk-risk").assertDoesNotExist()
+
+        rule.runOnUiThread { accessStopId.value = "boarding" }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-access-walk").performScrollTo()
+            .assertTextContains("Lohne", substring = true)
+
+        rule.onNodeWithTag("live-trip-boarding-walk-risk").performScrollTo()
+            .assertTextContains("6", substring = true)
+
+        // The estimate is boarding guidance, not persistent progress guidance.
+        rule.runOnUiThread { armed.value = false }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-access-walk").assertDoesNotExist()
+        rule.onNodeWithTag("live-trip-boarding-walk-risk").assertDoesNotExist()
+
+        rule.runOnUiThread {
+            armed.value = true
+            now.longValue = "2026-09-26T08:01:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-access-walk").assertDoesNotExist()
+        rule.onNodeWithTag("live-trip-boarding-walk-risk").assertDoesNotExist()
+    }
+
+    @Test
+    fun boardingIdentityShowsSelectedStopAndSourceQualifiedPlatformOnlyBeforeDeparture() {
+        val now = mutableLongStateOf("2026-09-26T07:44:00+02:00".toTransitEpochSecondsOrNull()!!)
+        val offline = mutableStateOf(false)
+        val armed = mutableStateOf(true)
+        val route = RouteOption(
+            id = "boarding-identity",
+            realtime = RouteRealtimeInfo(state = RouteRealtimeState.FRESH_MATCHED),
+            origin = MapPoint(52.665, 8.237, "Lohne"),
+            destination = MapPoint(53.083, 8.813, "Bremen Hbf"),
+            line = "RE 9",
+            direction = "Bremen Hbf",
+            departure = "08:00",
+            arrival = "09:00",
+            walkingMinutes = 0,
+            transfers = 0,
+            stops = listOf(
+                RouteStop(
+                    id = "lo", name = "Lohne",
+                    plannedDeparture = "2026-09-26T08:00:00+02:00",
+                    platform = "7", plannedPlatform = "2",
+                ),
+                RouteStop(
+                    id = "hb", name = "Bremen Hbf",
+                    plannedArrival = "2026-09-26T09:00:00+02:00",
+                ),
+            ),
+        )
+        rule.setContent {
+            MaterialTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    LiveTripPanel(
+                        selectedRoute = route,
+                        journey = JourneyUiState(
+                            phase = if (armed.value) JourneyPhase.ARMED
+                                else JourneyPhase.DESTINATION_SELECTED,
+                        ),
+                        guidanceState = GuidanceReliabilityState(),
+                        routeOffline = offline.value,
+                        nowEpochSeconds = now.longValue,
+                    )
+                }
+            }
+        }
+        rule.onNodeWithTag("live-trip-boarding-check").assertDoesNotExist()
+        rule.runOnUiThread {
+            now.longValue = "2026-09-26T07:50:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-boarding-check").performScrollTo()
+            .assertTextContains("RE 9", substring = true)
+        rule.onNodeWithTag("live-trip-boarding-check")
+            .assertTextContains("Bremen Hbf", substring = true)
+        rule.onNodeWithTag("live-trip-boarding-check")
+            .assertTextContains("Lohne", substring = true)
+        rule.onNodeWithTag("live-trip-boarding-check")
+            .assertTextContains("7", substring = true)
+        rule.runOnUiThread { offline.value = true }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-boarding-check").performScrollTo()
+            .assertTextContains("2", substring = true)
+        rule.runOnUiThread { armed.value = false }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-boarding-check").assertDoesNotExist()
+        rule.runOnUiThread {
+            armed.value = true
+            now.longValue = "2026-09-26T08:01:00+02:00".toTransitEpochSecondsOrNull()!!
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("live-trip-boarding-check").assertDoesNotExist()
+    }
 
 }

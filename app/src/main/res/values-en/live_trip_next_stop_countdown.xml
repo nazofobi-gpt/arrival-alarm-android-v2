@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_trip_next_stop_scheduled_countdown">Time to next stop (scheduled)</string>
+    <string name="live_trip_next_stop_realtime_countdown">Time to next stop (realtime data)</string>
+    <string name="live_trip_boarding_walk_window_warning">Planned walk (%1$d min) exceeds the time to scheduled departure. This is not measured from your live location; check your boarding stop.</string>
+    <string name="live_trip_boarding_check_label">Check before boarding (timetable; vehicle not confirmed)</string>
+</resources>
