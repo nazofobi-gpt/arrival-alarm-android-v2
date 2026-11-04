@@ -290,6 +290,23 @@ internal fun staticRoutingServiceDates(epochMillis: Long, timeZone: TimeZone): L
 internal fun boundedStaticJourneyOptionLimit(requested: Int): Int =
     requested.coerceIn(0, 6)
 
+/**
+ * Rank every real, bounded static candidate before reducing the route cards.
+ * Filtering an already-capped arrival-time list can conceal a faster trip.
+ * Preserve original timetable order when the user has not opted into fastest.
+ */
+internal fun selectStaticRouteOptions(
+    candidates: List<RouteOption>,
+    requestedLimit: Int,
+    fastestFirst: Boolean,
+): List<RouteOption> {
+    val limit = boundedStaticJourneyOptionLimit(requestedLimit)
+    if (limit == 0) return emptyList()
+    val ranked = if (fastestFirst) RouteResultsFilter(fastestFirst = true).apply(candidates)
+        else candidates
+    return ranked.take(limit)
+}
+
 internal fun supportedFutureDeparture(nowMillis: Long, departureMillis: Long): Boolean =
     nowMillis >= 0L && departureMillis > nowMillis &&
         departureMillis - nowMillis <= 7L * 24L * 60L * 60L * 1_000L
@@ -354,6 +371,7 @@ class ProductionStaticJourneyPlanner(
         maxWalkingMinutes: Int? = null,
         departureEpochMillis: Long? = null,
         arrivalDeadlineEpochMillis: Long? = null,
+        fastestFirst: Boolean = false,
     ): LocalStaticJourneyOutcome {
         if (!validTransitJourneyCoordinates(origin.latitude, origin.longitude) ||
             !validTransitJourneyCoordinates(destination.latitude, destination.longitude)
@@ -435,10 +453,10 @@ class ProductionStaticJourneyPlanner(
                     }.thenBy { it.second.arrivalEpochMillis }.thenBy { it.second.id },
                 )
                 .distinctBy { it.second.id }
-                .take(boundedLimit)
                 .map { (serviceDate, journey) ->
                     mapper.map(journey, origin, destination, serviceDate, index.fetchedAt())
                 }
+                .let { selectStaticRouteOptions(it, boundedLimit, fastestFirst) }
             return if (options.isEmpty()) LocalStaticJourneyOutcome.NoPath
                 else LocalStaticJourneyOutcome.Results(options)
         }
@@ -473,7 +491,6 @@ class ProductionStaticJourneyPlanner(
                     .thenBy { it.second.id }
             )
             .distinctBy { it.second.id }
-            .take(boundedLimit)
             .map { (serviceDate, journey) ->
                 mapper.map(
                     journey = journey,
@@ -483,6 +500,7 @@ class ProductionStaticJourneyPlanner(
                     sourceUpdatedAtEpochSeconds = index.fetchedAt(),
                 )
             }
+            .let { selectStaticRouteOptions(it, boundedLimit, fastestFirst) }
         return when {
             options.isNotEmpty() -> LocalStaticJourneyOutcome.Results(options)
             sawSameOrigin -> LocalStaticJourneyOutcome.SameOrigin

@@ -596,6 +596,7 @@ class NationwideTransitGateway(
                 origin, destination, limit,
                 maxWalkingMinutes = if (routePreferences.loadMaxWalking15Minutes()) 15 else null,
                 arrivalDeadlineEpochMillis = arrivalDeadlineEpochMillis,
+                fastestFirst = routePreferences.loadFastestFirst(),
             )
         }.getOrDefault(LocalStaticJourneyOutcome.Unavailable)
         return when (outcome) {
@@ -625,6 +626,7 @@ class NationwideTransitGateway(
                 origin, destination, limit,
                 maxWalkingMinutes = if (routePreferences.loadMaxWalking15Minutes()) 15 else null,
                 departureEpochMillis = departureEpochMillis,
+                fastestFirst = routePreferences.loadFastestFirst(),
             )
         }.getOrDefault(LocalStaticJourneyOutcome.Unavailable)
         return when (outcome) {
@@ -651,6 +653,7 @@ class NationwideTransitGateway(
             staticJourneyPlanner.plan(
                 origin, destination, limit,
                 maxWalkingMinutes = if (routePreferences.loadMaxWalking15Minutes()) 15 else null,
+                fastestFirst = routePreferences.loadFastestFirst(),
             )
         }.getOrDefault(LocalStaticJourneyOutcome.Unavailable)
 

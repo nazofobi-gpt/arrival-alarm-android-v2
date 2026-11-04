@@ -1610,6 +1610,11 @@ fun ArrivalAlarmApp(
                                 val to = destination
                                 if (from != null && to != null) loadRoutes(from, to, null, chosen)
                             },
+                            onFastestPreferenceChanged = {
+                                val from = origin
+                                val to = destination
+                                if (from != null && to != null) loadRoutes(from, to)
+                            },
                             onRefreshRoutes = {
                                 val from = origin
                                 val to = destination

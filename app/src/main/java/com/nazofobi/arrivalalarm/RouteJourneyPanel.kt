@@ -63,6 +63,7 @@ fun RouteJourneyPanel(
     onDepartureTimeChange: (Long?) -> Unit = {},
     selectedArrivalDeadlineEpochMillis: Long? = null,
     onArrivalDeadlineChange: (Long?) -> Unit = {},
+    onFastestPreferenceChanged: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val preferences = remember(context) { ArrivalUiPreferences(context) }
@@ -369,6 +370,9 @@ fun RouteJourneyPanel(
                     onClick = {
                         fastestFirst = !fastestFirst
                         preferences.saveFastestFirst(fastestFirst)
+                        // Refresh the bounded static candidates instead of reordering only
+                        // an old three-card subset; request-gating blocks stale responses.
+                        onFastestPreferenceChanged()
                     },
                     label = { Text(stringResource(R.string.route_fastest_first_filter)) },
                     modifier = Modifier

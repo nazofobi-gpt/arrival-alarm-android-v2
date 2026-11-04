@@ -21,6 +21,26 @@ class RouteResultsFilterTest {
     )
 
     @Test
+    fun fastestPreferenceRanksAllRealStaticCandidatesBeforeThreeCardLimit() {
+        val candidates = listOf(
+            option("early-slow", 0).copy(
+                departureEpochMillis = 1_000L, arrivalEpochMillis = 3_601_000L),
+            option("middle-slow", 0).copy(
+                departureEpochMillis = 2_000L, arrivalEpochMillis = 3_602_000L),
+            option("late-slow", 0).copy(
+                departureEpochMillis = 3_000L, arrivalEpochMillis = 3_603_000L),
+            option("later-fast", 1).copy(
+                departureEpochMillis = 3_500_000L, arrivalEpochMillis = 3_800_000L),
+        )
+        assertEquals(listOf("early-slow", "middle-slow", "late-slow"),
+            selectStaticRouteOptions(candidates, 3, fastestFirst = false).map { it.id })
+        assertEquals(listOf("later-fast", "early-slow", "middle-slow"),
+            selectStaticRouteOptions(candidates, 3, fastestFirst = true).map { it.id })
+        assertEquals(4, candidates.size)
+        assertTrue(selectStaticRouteOptions(candidates, 0, fastestFirst = true).isEmpty())
+    }
+
+    @Test
     fun fastestFirstUsesVerifiedPositiveDurationAndKeepsUnknownEvidenceLast() {
         val options = listOf(
             option("unknown", 0),
