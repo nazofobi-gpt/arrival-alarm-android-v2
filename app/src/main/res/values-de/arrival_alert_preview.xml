@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="arrival_alert_preview_action">Ankunftsbenachrichtigung testen</string>
+    <string name="arrival_alert_preview_submitted">Testbenachrichtigung an Android gesendet. Anzeige und Vibration hängen von den Geräteeinstellungen ab.</string>
+    <string name="arrival_alert_preview_unavailable">Testbenachrichtigung konnte nicht gesendet werden. Benachrichtigungsberechtigung und Geräteeinstellungen prüfen.</string>
+    <string name="arrival_alert_preview_title">TEST — Ankunftsbenachrichtigung</string>
+    <string name="arrival_alert_preview_body">Dies ist nur ein Test. Es wurde kein Ankunftsalarm aktiviert.</string>
+</resources>

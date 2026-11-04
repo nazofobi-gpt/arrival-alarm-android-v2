@@ -75,6 +75,49 @@ class GuidanceVoicePreviewInstrumentedTest {
         assertEquals(0, spoken)
     }
 
+    @Test fun notificationPreviewRequiresTapWithoutSpeechOrJourneyMutation() {
+        var posts = 0
+        var speech = 0
+        rule.setContent {
+            MaterialTheme {
+                GuidanceVoicePreviewPanel(
+                    speaker = object : GuidanceSpeaker {
+                        override fun speak(utterance: GuidanceUtterance): Boolean {
+                            speech++
+                            return true
+                        }
+                    },
+                    language = GuidanceLanguage.ENGLISH,
+                    isJourneyAudioActive = false,
+                    onTestArrivalAlert = { posts++; true },
+                )
+            }
+        }
+        assertEquals(0, posts)
+        rule.onNodeWithTag("arrival-notification-preview").performClick()
+        rule.onNodeWithTag("arrival-notification-preview-status").assertExists()
+        assertEquals(1, posts)
+        assertEquals(0, speech)
+    }
+
+    @Test fun activeAlarmDisablesNotificationPreview() {
+        var posts = 0
+        rule.setContent {
+            MaterialTheme {
+                GuidanceVoicePreviewPanel(
+                    speaker = object : GuidanceSpeaker {
+                        override fun speak(utterance: GuidanceUtterance) = true
+                    },
+                    language = GuidanceLanguage.TURKISH,
+                    isJourneyAudioActive = true,
+                    onTestArrivalAlert = { posts++; true },
+                )
+            }
+        }
+        rule.onNodeWithTag("arrival-notification-preview").assertIsNotEnabled()
+        assertEquals(0, posts)
+    }
+
     @Test fun unavailableTtsShowsFailureWithoutSavingGuidance() {
         val speaker = object : GuidanceSpeaker {
             override fun speak(utterance: GuidanceUtterance): Boolean = false

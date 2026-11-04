@@ -56,7 +56,9 @@ internal fun GuidanceVoicePreviewPanel(
     language: GuidanceLanguage,
     isJourneyAudioActive: Boolean,
     modifier: Modifier = Modifier,
+    onTestArrivalAlert: () -> Boolean = { false },
 ) {
+    var alertPreviewResult by remember { mutableStateOf<Boolean?>(null) }
     var lastAttemptAccepted by remember(language) { mutableStateOf<Boolean?>(null) }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         OutlinedButton(
@@ -74,6 +76,22 @@ internal fun GuidanceVoicePreviewPanel(
                 .testTag("guidance-voice-preview"),
         ) {
             Text(stringResource(R.string.guidance_voice_preview_action))
+        }
+        OutlinedButton(
+            onClick = { alertPreviewResult = onTestArrivalAlert() },
+            enabled = !isJourneyAudioActive,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                .testTag("arrival-notification-preview"),
+        ) { Text(stringResource(R.string.arrival_alert_preview_action)) }
+        if (alertPreviewResult != null) {
+            Text(
+                text = stringResource(
+                    if (alertPreviewResult == true) R.string.arrival_alert_preview_submitted
+                    else R.string.arrival_alert_preview_unavailable,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.testTag("arrival-notification-preview-status"),
+            )
         }
         if (isJourneyAudioActive) {
             Text(

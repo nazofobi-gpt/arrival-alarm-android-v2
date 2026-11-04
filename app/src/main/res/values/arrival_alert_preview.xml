@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="arrival_alert_preview_action">Varış bildirimini dene</string>
+    <string name="arrival_alert_preview_submitted">Deneme bildirimi sisteme gönderildi. Görünürlük ve titreşim cihaz ayarlarına bağlıdır.</string>
+    <string name="arrival_alert_preview_unavailable">Bildirim denemesi başlatılamadı. Bildirim iznini ve cihaz ayarlarını kontrol edin.</string>
+    <string name="arrival_alert_preview_title">DENEME — Varış bildirimi</string>
+    <string name="arrival_alert_preview_body">Bu yalnızca denemedir. Varış alarmı kurulmadı.</string>
+</resources>

@@ -1848,6 +1848,7 @@ fun ArrivalAlarmApp(
                     speaker = guidanceSpeaker,
                     language = guidanceLanguage,
                     isJourneyAudioActive = isVoicePreviewProtectedPhase(journey.phase),
+                    onTestArrivalAlert = { AndroidArrivalAlertPreview.post(context) },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 destination?.let { target ->
