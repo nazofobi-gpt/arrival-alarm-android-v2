@@ -27,12 +27,31 @@ internal object AndroidArrivalAlertPreview {
                 Uri.parse("package:${context.packageName}"))
         }
 
-    internal fun openSettings(context: Context): Boolean = try {
-        context.startActivity(settingsIntent(context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        true
-    } catch (_: RuntimeException) {
-        // Device policies or missing settings handlers must never crash the alarm UI.
-        false
+    /** The alert channel is separate from general app notifications on API 26+. */
+    internal fun channelSettingsIntent(context: Context): Intent =
+        Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            putExtra(Settings.EXTRA_CHANNEL_ID, CHANNEL_ID)
+        }
+
+    internal fun openSettings(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT >= 26) {
+            try {
+                val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                // Do not retune an existing user-configured notification channel.
+                ArrivalAlertNotificationChannel.ensureExists(context, manager)
+                context.startActivity(channelSettingsIntent(context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                return true
+            } catch (_: RuntimeException) {
+                // Device-specific Settings UI may not support a channel deep link.
+            }
+        }
+        return try {
+            context.startActivity(settingsIntent(context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            true
+        } catch (_: RuntimeException) {
+            false
+        }
     }
 
     /** Withdraw only the test notification, never the real arrival alarm. */
