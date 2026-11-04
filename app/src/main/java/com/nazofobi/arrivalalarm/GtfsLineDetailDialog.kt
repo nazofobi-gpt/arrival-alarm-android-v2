@@ -106,24 +106,42 @@ internal fun GtfsLineDetailDialog(
                                 modifier = Modifier.testTag("gtfs-line-stops-$activeIndex"),
                             )
                         }
+                        var intermediatePage by rememberSaveable(
+                            lineLabel, detail.lineName, detail.sourceVersion, activeIndex,
+                        ) { mutableStateOf(0) }
                         // Identically named platforms and repeated stops must remain selectable
                         // by source identity. Browsing departures never arms a journey or alarm.
                         // Bound rendered choices so a broad query cannot expand the dialog without limit.
                         // Small direction lists are immediately actionable. Long lists still
                         // require an explicit filter to bound the number of choices.
-                        val matchingBoardStops = if (
-                            needle.isNotEmpty() || activeDirection.stops.size <= MAX_LINE_BOARD_CHOICES
-                        ) {
-                            matchingStopIndexes.mapNotNull { index ->
-                                activeDirection.stops.getOrNull(index)
-                                    ?.takeIf { it.id.isNotBlank() }
+                        val browseLongLine = needle.isEmpty() &&
+                            activeDirection.stops.size > MAX_LINE_BOARD_CHOICES
+                        val intermediateStops = if (browseLongLine) {
+                            (1 until activeDirection.stops.lastIndex).mapNotNull { index ->
+                                activeDirection.stops[index].takeIf { it.id.isNotBlank() }
                                     ?.let { index to it }
                             }.distinctBy { (_, stop) -> stop.id }
+                        } else emptyList()
+                        val pageCount = if (browseLongLine) {
+                            (intermediateStops.size + MAX_LINE_INTERMEDIATE_CHOICES - 1) /
+                                MAX_LINE_INTERMEDIATE_CHOICES
+                        } else 0
+                        val safePage = intermediatePage.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
+                        val matchingBoardStops = if (browseLongLine) {
+                            // Keep both terminals directly accessible on every page, including
+                            // circular routes where they share a single source stop ID.
+                            val terminals = listOf(0, activeDirection.stops.lastIndex).distinct()
+                                .mapNotNull { index ->
+                                    activeDirection.stops[index].takeIf { it.id.isNotBlank() }
+                                        ?.let { index to it }
+                                }
+                            (terminals + intermediateStops.drop(
+                                safePage * MAX_LINE_INTERMEDIATE_CHOICES
+                            ).take(MAX_LINE_INTERMEDIATE_CHOICES))
+                                .sortedBy { (index, _) -> index }
+                                .distinctBy { (_, stop) -> stop.id }
                         } else {
-                            // Long lines keep intermediate stops behind a bounded text filter,
-                            // but riders can still open the first/last stop board immediately.
-                            // A circular line may have the same physical terminal twice.
-                            listOf(0, activeDirection.stops.lastIndex).distinct().mapNotNull { index ->
+                            matchingStopIndexes.mapNotNull { index ->
                                 activeDirection.stops.getOrNull(index)
                                     ?.takeIf { it.id.isNotBlank() }
                                     ?.let { index to it }
@@ -140,6 +158,24 @@ internal fun GtfsLineDetailDialog(
                             ) {
                                 val label = if (unique) stop.name else "${index + 1}. ${stop.name}"
                                 Text(stringResource(R.string.gtfs_line_open_stop_departures, label))
+                            }
+                        }
+                        if (browseLongLine && pageCount > 1) {
+                            if (safePage > 0) {
+                                TextButton(
+                                    onClick = { intermediatePage = safePage - 1 },
+                                    modifier = Modifier.testTag("gtfs-line-previous-intermediate"),
+                                ) {
+                                    Text(stringResource(R.string.gtfs_line_previous_intermediate))
+                                }
+                            }
+                            if (safePage + 1 < pageCount) {
+                                TextButton(
+                                    onClick = { intermediatePage = safePage + 1 },
+                                    modifier = Modifier.testTag("gtfs-line-next-intermediate"),
+                                ) {
+                                    Text(stringResource(R.string.gtfs_line_next_intermediate))
+                                }
                             }
                         }
                         if (matchingBoardStops.size > MAX_LINE_BOARD_CHOICES) {
@@ -164,3 +200,4 @@ internal fun GtfsLineDetailDialog(
 }
 
 private const val MAX_LINE_BOARD_CHOICES = 8
+private const val MAX_LINE_INTERMEDIATE_CHOICES = MAX_LINE_BOARD_CHOICES - 2
