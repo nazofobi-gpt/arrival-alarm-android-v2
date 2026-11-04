@@ -290,6 +290,10 @@ internal fun staticRoutingServiceDates(epochMillis: Long, timeZone: TimeZone): L
 internal fun boundedStaticJourneyOptionLimit(requested: Int): Int =
     requested.coerceIn(0, 6)
 
+internal fun supportedFutureDeparture(nowMillis: Long, departureMillis: Long): Boolean =
+    nowMillis >= 0L && departureMillis > nowMillis &&
+        departureMillis - nowMillis <= 7L * 24L * 60L * 60L * 1_000L
+
 class ProductionStaticJourneyPlanner(
     private val index: NationwideTransitIndex,
     agencyTimeZone: TimeZone = TimeZone.getTimeZone("Europe/Berlin"),
@@ -332,6 +336,7 @@ class ProductionStaticJourneyPlanner(
         destination: MapPoint,
         limit: Int = 3,
         maxWalkingMinutes: Int? = null,
+        departureEpochMillis: Long? = null,
     ): LocalStaticJourneyOutcome {
         if (!validTransitJourneyCoordinates(origin.latitude, origin.longitude) ||
             !validTransitJourneyCoordinates(destination.latitude, destination.longitude)
@@ -377,7 +382,8 @@ class ProductionStaticJourneyPlanner(
         }
         if (origins.isEmpty() || destinations.isEmpty()) return LocalStaticJourneyOutcome.NoPath
 
-        val departureMillis = nowMillis()
+        val departureMillis = departureEpochMillis ?: nowMillis()
+        if (departureMillis < 0L) return LocalStaticJourneyOutcome.NoPath
         var sawSameOrigin = false
         val datedJourneys = buildList {
             serviceDates(departureMillis).forEach { serviceDate ->
