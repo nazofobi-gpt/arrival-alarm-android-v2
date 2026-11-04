@@ -6,4 +6,7 @@
     <string name="arrival_alert_preview_title">TEST — Ankunftsbenachrichtigung</string>
     <string name="arrival_alert_preview_body">Dies ist nur ein Test. Es wurde kein Ankunftsalarm aktiviert.</string>
     <string name="arrival_alert_preview_open_settings">Benachrichtigungseinstellungen öffnen</string>
+    <string name="arrival_alert_preview_dismiss_action">Testbenachrichtigung entfernen</string>
+    <string name="arrival_alert_preview_dismiss_requested">Anfrage zum Entfernen der Testbenachrichtigung an Android gesendet.</string>
+    <string name="arrival_alert_preview_dismiss_unavailable">Testbenachrichtigung konnte nicht entfernt werden. Benachrichtigungseinstellungen prüfen.</string>
 </resources>
