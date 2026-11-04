@@ -44,6 +44,14 @@ class GtfsLineDetailInstrumentedTest {
         db.execSQL("INSERT INTO stop_times(trip_id,stop_sequence,stop_id) VALUES('T1',10,'A')")
         db.execSQL("INSERT INTO stop_times(trip_id,stop_sequence,stop_id) VALUES('T2',1,'C')")
         db.execSQL("INSERT INTO stop_times(trip_id,stop_sequence,stop_id) VALUES('T2',2,'A')")
+        // Distinct source encodings of the same unnamed direction must render
+        // one option. Otherwise the 8-variant cap could hide another direction.
+        db.execSQL("INSERT INTO trips(trip_id,route_id,service_id,headsign,direction_id) VALUES('T3','R','S',NULL,2)")
+        db.execSQL("INSERT INTO trips(trip_id,route_id,service_id,headsign,direction_id) VALUES('T4','R','S','',2)")
+        db.execSQL("INSERT INTO stop_times(trip_id,stop_sequence,stop_id) VALUES('T3',1,'A')")
+        db.execSQL("INSERT INTO stop_times(trip_id,stop_sequence,stop_id) VALUES('T3',2,'B')")
+        db.execSQL("INSERT INTO stop_times(trip_id,stop_sequence,stop_id) VALUES('T4',1,'A')")
+        db.execSQL("INSERT INTO stop_times(trip_id,stop_sequence,stop_id) VALUES('T4',2,'B')")
 
         val preview = inspectGtfsLineDetail(index, "R")
         assertNotNull(preview)
@@ -51,6 +59,9 @@ class GtfsLineDetailInstrumentedTest {
         assertEquals(listOf("Alpha", "Beta"), preview.directions[0].stopNames)
         assertEquals("Beta", preview.directions[0].headsign)
         assertEquals(listOf("Gamma", "Alpha"), preview.directions[1].stopNames)
+        assertEquals(3, preview.directions.size)
+        assertEquals("", preview.directions[2].headsign)
+        assertEquals(listOf("Alpha", "Beta"), preview.directions[2].stopNames)
         assertFalse(preview.additionalDirectionsOmitted)
         assertNull(inspectGtfsLineDetail(index, "not-a-real-route"))
 
