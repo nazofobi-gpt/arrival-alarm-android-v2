@@ -1972,6 +1972,35 @@ fun ArrivalAlarmApp(
             lineLabel = selected.label,
             detail = lineDetail,
             loading = lineDetailBusy,
+            onOpenDepartures = { stopId ->
+                val routeId = selectedLineResult?.routeId
+                val expectedVersion = lineDetail?.sourceVersion
+                val installedVersion = (dataState as? NationwideDataState.Ready)?.sourceVersion
+                if (routeId == null || expectedVersion == null || installedVersion != expectedVersion) {
+                    lineDetail = null // Installed feed changed while the dialog was open.
+                } else {
+                    val token = lineDetailRequestGate.begin()
+                    lineDetailBusy = true
+                    coroutineScope.launch {
+                        val stop = withContext(Dispatchers.IO) {
+                            runCatching {
+                                loadGtfsLineBoardStop(context, routeId, stopId, expectedVersion)
+                            }.getOrNull()
+                        }
+                        lineDetailRequestGate.commitIfCurrent(token) {
+                            lineDetailBusy = false
+                            if (stop == null) {
+                                lineDetail = null // Fail closed on missing or replaced source.
+                            } else {
+                                lineDetailRequestGate.invalidate()
+                                selectedLineResult = null
+                                lineDetail = null
+                                openDepartureBoard(stop)
+                            }
+                        }
+                    }
+                }
+            },
             onDismiss = {
                 lineDetailRequestGate.invalidate()
                 selectedLineResult = null

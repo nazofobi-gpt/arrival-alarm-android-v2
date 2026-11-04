@@ -59,6 +59,7 @@ class GtfsLineDetailInstrumentedTest {
         assertNotNull(preview)
         assertEquals("RE1", preview!!.lineName)
         assertEquals(listOf("Alpha", "Beta"), preview.directions[0].stopNames)
+        assertEquals(listOf("A", "B"), preview.directions[0].stops.map { it.id })
         assertEquals("Beta", preview.directions[0].headsign)
         assertEquals(listOf("Gamma", "Alpha"), preview.directions[1].stopNames)
         assertEquals(3, preview.directions.size)
@@ -74,6 +75,12 @@ class GtfsLineDetailInstrumentedTest {
         assertNull(loadGtfsLineDetail(context, "R", "old-feed-version"))
         assertEquals(3, loadGtfsLineDetail(context, "R", "test-gtfs-v1")?.directions?.size)
         index.close()
+        val validBoardStop = loadGtfsLineBoardStop(context, "R", "B", "test-gtfs-v1")
+        assertEquals("B", validBoardStop?.id)
+        assertEquals("Beta", validBoardStop?.name)
+        assertNull(loadGtfsLineBoardStop(context, "R", "B", "old-feed"))
+        assertNull(loadGtfsLineBoardStop(context, "wrong-route", "B", "test-gtfs-v1"))
+        assertNull(loadGtfsLineBoardStop(context, "R", "unverified-stop", "test-gtfs-v1"))
     }
 
     @Test fun readOnlyLinePreviewDisplaysActualDirectionsAndCloseAction() {
@@ -143,5 +150,40 @@ class GtfsLineDetailInstrumentedTest {
         composeRule.onNodeWithTag("gtfs-line-no-matches").assertDoesNotExist()
         composeRule.onNodeWithTag("gtfs-line-stops-1")
             .assertTextContains("1. Gamma", substring = true)
+    }
+    @Test fun uniquelyFilteredGtfsStopOpensSourceBoundDepartureBoardOnlyOnTap() {
+        val preview = GtfsLineDetail(
+            lineName = "RE1",
+            directions = listOf(
+                GtfsLineDirection(
+                    "Beta", listOf("Alpha", "Beta", "Gamma"), false,
+                    stops = listOf(
+                        GtfsLineStop("A", "Alpha"),
+                        GtfsLineStop("B", "Beta"),
+                        GtfsLineStop("C", "Gamma"),
+                    ),
+                ),
+            ),
+            additionalDirectionsOmitted = false,
+            sourceVersion = "test-gtfs-v1",
+        )
+        var selectedStopId: String? = null
+        var dismissed = false
+        composeRule.setContent {
+            MaterialTheme {
+                GtfsLineDetailDialog(
+                    lineLabel = "RE1", detail = preview, loading = false,
+                    onOpenDepartures = { selectedStopId = it },
+                    onDismiss = { dismissed = true },
+                )
+            }
+        }
+        composeRule.onNodeWithTag("gtfs-line-open-departures").assertDoesNotExist()
+        composeRule.onNodeWithTag("gtfs-line-stop-filter").performTextInput("bEtA")
+        composeRule.onNodeWithTag("gtfs-line-open-departures").assertExists().performClick()
+        composeRule.runOnIdle {
+            assertEquals("B", selectedStopId)
+            assertFalse(dismissed)
+        }
     }
 }

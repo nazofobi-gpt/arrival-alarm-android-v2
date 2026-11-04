@@ -27,6 +27,7 @@ internal fun GtfsLineDetailDialog(
     lineLabel: String,
     detail: GtfsLineDetail?,
     loading: Boolean,
+    onOpenDepartures: (String) -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     var selectedDirection by rememberSaveable(lineLabel, detail?.lineName, detail?.directions?.size) {
@@ -88,10 +89,11 @@ internal fun GtfsLineDetailDialog(
                             modifier = Modifier.fillMaxWidth().testTag("gtfs-line-stop-filter"),
                         )
                         val needle = stopFilter.trim()
-                        val matchingStops = activeDirection.stopNames.mapIndexedNotNull { position, name ->
-                            if (needle.isEmpty() || name.contains(needle, ignoreCase = true)) {
-                                "${position + 1}. $name"
-                            } else null
+                        val matchingStopIndexes = activeDirection.stopNames.indices.filter { index ->
+                            needle.isEmpty() || activeDirection.stopNames[index].contains(needle, ignoreCase = true)
+                        }
+                        val matchingStops = matchingStopIndexes.map { index ->
+                            "${index + 1}. ${activeDirection.stopNames[index]}"
                         }
                         if (matchingStops.isEmpty()) {
                             Text(
@@ -103,6 +105,20 @@ internal fun GtfsLineDetailDialog(
                                 matchingStops.joinToString("\n"),
                                 modifier = Modifier.testTag("gtfs-line-stops-$activeIndex"),
                             )
+                        }
+                        // Opening a station board is an explicit browse action, never an alarm.
+                        // Require an unambiguous, source-backed stop ID from the selected direction.
+                        val singleMatch = matchingStopIndexes.singleOrNull()
+                            ?.takeIf { needle.isNotEmpty() }
+                            ?.let { activeDirection.stops.getOrNull(it) }
+                            ?.takeIf { it.id.isNotBlank() }
+                        if (singleMatch != null) {
+                            TextButton(
+                                onClick = { onOpenDepartures(singleMatch.id) },
+                                modifier = Modifier.testTag("gtfs-line-open-departures"),
+                            ) {
+                                Text(stringResource(R.string.gtfs_line_open_stop_departures, singleMatch.name))
+                            }
                         }
                         if (activeDirection.stopsTruncated) {
                             Text(stringResource(R.string.gtfs_line_stops_limited))
