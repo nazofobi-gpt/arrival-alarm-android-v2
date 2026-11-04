@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertTextContains
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
@@ -75,5 +77,29 @@ class GtfsLineDetailInstrumentedTest {
         composeRule.onNodeWithTag("gtfs-line-stops-0").assertExists()
         composeRule.onNodeWithTag("gtfs-line-close").assertExists()
         assertFalse(dismissed)
+    }
+
+    @Test fun directionPickerRendersOnlyTheSelectedGtfsStopOrder() {
+        val preview = GtfsLineDetail(
+            lineName = "RE1",
+            directions = listOf(
+                GtfsLineDirection("Beta", listOf("Alpha", "Beta"), false),
+                GtfsLineDirection("Alpha", listOf("Gamma", "Alpha"), false),
+            ),
+            additionalDirectionsOmitted = false,
+        )
+        composeRule.setContent {
+            MaterialTheme {
+                GtfsLineDetailDialog("RE1", preview, false) {}
+            }
+        }
+        composeRule.onNodeWithTag("gtfs-line-stops-0").assertExists()
+        composeRule.onNodeWithTag("gtfs-line-stops-1").assertDoesNotExist()
+        composeRule.onNodeWithTag("gtfs-line-select-direction-1").performClick()
+        composeRule.onNodeWithTag("gtfs-line-stops-1").assertExists()
+        composeRule.onNodeWithTag("gtfs-line-stops-1").assertTextContains("Gamma")
+        composeRule.onNodeWithTag("gtfs-line-stops-0").assertDoesNotExist()
+        composeRule.onNodeWithTag("gtfs-line-select-direction-0").performClick()
+        composeRule.onNodeWithTag("gtfs-line-stops-0").assertTextContains("Alpha")
     }
 }

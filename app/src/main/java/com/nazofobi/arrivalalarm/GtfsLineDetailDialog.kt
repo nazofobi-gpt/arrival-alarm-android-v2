@@ -7,10 +7,15 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -23,6 +28,9 @@ internal fun GtfsLineDetailDialog(
     loading: Boolean,
     onDismiss: () -> Unit,
 ) {
+    var selectedDirection by rememberSaveable(lineLabel, detail?.lineName, detail?.directions?.size) {
+        mutableStateOf(0)
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag("gtfs-line-detail-dialog"),
@@ -46,27 +54,38 @@ internal fun GtfsLineDetailDialog(
                     detail == null || detail.directions.isEmpty() ->
                         Text(stringResource(R.string.gtfs_line_unavailable))
                     else -> {
+                        // Keep the direction controls visible without rendering up to
+                        // eight long stop lists at once. Switching never changes a journey.
+                        val activeIndex = selectedDirection.takeIf {
+                            it in detail.directions.indices
+                        } ?: 0
                         detail.directions.forEachIndexed { index, direction ->
-                            Text(
-                                text = stringResource(
-                                    R.string.gtfs_line_direction,
-                                    index + 1,
-                                    direction.headsign.ifBlank {
-                                        stringResource(R.string.gtfs_line_unknown_direction)
-                                    },
-                                ),
-                                style = MaterialTheme.typography.titleSmall,
-                                modifier = Modifier.testTag("gtfs-line-direction-$index"),
+                            FilterChip(
+                                selected = activeIndex == index,
+                                onClick = { selectedDirection = index },
+                                label = {
+                                    Text(
+                                        stringResource(
+                                            R.string.gtfs_line_direction,
+                                            index + 1,
+                                            direction.headsign.ifBlank {
+                                                stringResource(R.string.gtfs_line_unknown_direction)
+                                            },
+                                        ),
+                                    )
+                                },
+                                modifier = Modifier.testTag("gtfs-line-select-direction-$index"),
                             )
-                            Text(
-                                direction.stopNames.mapIndexed { position, name ->
-                                    "${position + 1}. $name"
-                                }.joinToString("\n"),
-                                modifier = Modifier.testTag("gtfs-line-stops-$index"),
-                            )
-                            if (direction.stopsTruncated) {
-                                Text(stringResource(R.string.gtfs_line_stops_limited))
-                            }
+                        }
+                        val activeDirection = detail.directions[activeIndex]
+                        Text(
+                            activeDirection.stopNames.mapIndexed { position, name ->
+                                "${position + 1}. $name"
+                            }.joinToString("\n"),
+                            modifier = Modifier.testTag("gtfs-line-stops-$activeIndex"),
+                        )
+                        if (activeDirection.stopsTruncated) {
+                            Text(stringResource(R.string.gtfs_line_stops_limited))
                         }
                         if (detail.additionalDirectionsOmitted) {
                             Text(stringResource(R.string.gtfs_line_directions_limited))
