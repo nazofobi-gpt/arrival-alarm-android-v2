@@ -38,6 +38,13 @@ class ArrivalUiPreferences(context: Context) {
         prefs.edit().putBoolean(KEY_SHORTER_WALKING_FIRST, enabled).apply()
     }
 
+    fun loadFastestFirst(): Boolean =
+        runCatching { prefs.getBoolean(KEY_FASTEST_FIRST, false) }.getOrDefault(false)
+
+    fun saveFastestFirst(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_FASTEST_FIRST, enabled).apply()
+    }
+
     fun loadAtMostOneTransfer(): Boolean =
         runCatching { prefs.getBoolean(KEY_AT_MOST_ONE_TRANSFER, false) }.getOrDefault(false)
 
@@ -58,6 +65,7 @@ class ArrivalUiPreferences(context: Context) {
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_DIRECT_ONLY_ROUTES = "direct_only_routes"
         const val KEY_FEWER_TRANSFERS_FIRST = "fewer_transfers_first"
+        const val KEY_FASTEST_FIRST = "fastest_first"
         const val KEY_SHORTER_WALKING_FIRST = "shorter_walking_first"
     }
 }

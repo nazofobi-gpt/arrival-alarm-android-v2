@@ -132,6 +132,29 @@ class ArrivalUiPreferencesInstrumentedTest {
         }
     }
 
+    @Test
+    fun fastestPreferencePersistsIndependentlyAndMalformedValueFailsClosed() {
+        val prefs = context.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+        withRestoredPreferenceKeys(
+            prefs,
+            ArrivalUiPreferences.KEY_FASTEST_FIRST,
+            ArrivalUiPreferences.KEY_FEWER_TRANSFERS_FIRST,
+        ) {
+            prefs.edit()
+                .remove(ArrivalUiPreferences.KEY_FASTEST_FIRST)
+                .remove(ArrivalUiPreferences.KEY_FEWER_TRANSFERS_FIRST)
+                .commit()
+            assertFalse(ArrivalUiPreferences(context).loadFastestFirst())
+            ArrivalUiPreferences(context).saveFewerTransfersFirst(true)
+            ArrivalUiPreferences(context).saveFastestFirst(true)
+            assertTrue(ArrivalUiPreferences(context).loadFastestFirst())
+            assertTrue(ArrivalUiPreferences(context).loadFewerTransfersFirst())
+            prefs.edit().putString(ArrivalUiPreferences.KEY_FASTEST_FIRST, "bad-type").commit()
+            assertFalse(ArrivalUiPreferences(context).loadFastestFirst())
+            assertTrue(ArrivalUiPreferences(context).loadFewerTransfersFirst())
+        }
+    }
+
     private inline fun withRestoredPreferenceKeys(
         prefs: SharedPreferences,
         vararg keys: String,

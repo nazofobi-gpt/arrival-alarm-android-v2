@@ -78,6 +78,7 @@ fun RouteJourneyPanel(
     var shorterWalkingFirst by rememberSaveable {
         mutableStateOf(preferences.loadShorterWalkingFirst())
     }
+    var fastestFirst by rememberSaveable { mutableStateOf(preferences.loadFastestFirst()) }
     var atMostOneTransfer by rememberSaveable {
         mutableStateOf(preferences.loadAtMostOneTransfer())
     }
@@ -348,6 +349,7 @@ fun RouteJourneyPanel(
                     directOnly = directOnly,
                     fewerTransfersFirst = fewerTransfersFirst,
                     shorterWalkingFirst = shorterWalkingFirst,
+                    fastestFirst = fastestFirst,
                     maxTransfers = if (atMostOneTransfer) 1 else null,
                     maxWalkingMinutes = if (maxWalking15Minutes) 15 else null,
                 ).apply(routeOptions)
@@ -361,6 +363,17 @@ fun RouteJourneyPanel(
                     modifier = Modifier
                         .heightIn(min = 48.dp)
                         .testTag("route-direct-only-filter"),
+                )
+                FilterChip(
+                    selected = fastestFirst,
+                    onClick = {
+                        fastestFirst = !fastestFirst
+                        preferences.saveFastestFirst(fastestFirst)
+                    },
+                    label = { Text(stringResource(R.string.route_fastest_first_filter)) },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("route-fastest-first-filter"),
                 )
                 FilterChip(
                     selected = fewerTransfersFirst,
