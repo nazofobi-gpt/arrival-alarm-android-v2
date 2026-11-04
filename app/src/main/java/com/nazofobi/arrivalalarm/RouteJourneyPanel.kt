@@ -96,7 +96,7 @@ fun RouteJourneyPanel(
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         pendingAmbiguousTimes.forEachIndexed { index, epoch ->
-                            val displayed = SimpleDateFormat("HH:mm XXX", Locale.ROOT).apply {
+                            val displayed = SimpleDateFormat("HH:mm Z", Locale.ROOT).apply {
                                 timeZone = berlinZone
                             }.format(Date(epoch))
                             OutlinedButton(

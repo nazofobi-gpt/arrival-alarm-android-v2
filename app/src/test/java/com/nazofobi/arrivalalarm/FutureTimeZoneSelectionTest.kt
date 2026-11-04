@@ -16,11 +16,11 @@ class FutureTimeZoneSelectionTest {
         val candidates = berlinCivilTimeCandidates(2026, 9, 25, 2, 30)
         assertEquals(2, candidates.size)
         assertEquals(3_600_000L, candidates[1] - candidates[0])
-        val clock = SimpleDateFormat("yyyy-MM-dd HH:mm XXX", Locale.ROOT).apply {
+        val clock = SimpleDateFormat("yyyy-MM-dd HH:mm Z", Locale.ROOT).apply {
             timeZone = berlin
         }
-        assertEquals("2026-10-25 02:30 +02:00", clock.format(Date(candidates[0])))
-        assertEquals("2026-10-25 02:30 +01:00", clock.format(Date(candidates[1])))
+        assertEquals("2026-10-25 02:30 +0200", clock.format(Date(candidates[0])))
+        assertEquals("2026-10-25 02:30 +0100", clock.format(Date(candidates[1])))
     }
 
     @Test
