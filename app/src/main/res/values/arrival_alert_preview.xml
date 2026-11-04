@@ -6,4 +6,7 @@
     <string name="arrival_alert_preview_title">DENEME — Varış bildirimi</string>
     <string name="arrival_alert_preview_body">Bu yalnızca denemedir. Varış alarmı kurulmadı.</string>
     <string name="arrival_alert_preview_open_settings">Bildirim ayarlarını aç</string>
+    <string name="arrival_alert_preview_dismiss_action">Varış denemesini kaldır</string>
+    <string name="arrival_alert_preview_dismiss_requested">Deneme bildirimini kaldırma isteği Android'e gönderildi.</string>
+    <string name="arrival_alert_preview_dismiss_unavailable">Deneme bildirimi kaldırılamadı. Bildirim ayarlarını kontrol edin.</string>
 </resources>
