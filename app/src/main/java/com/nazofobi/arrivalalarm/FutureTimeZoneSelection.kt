@@ -36,3 +36,18 @@ internal fun berlinCivilTimeCandidates(
         .distinct()
         .sorted()
 }
+
+/**
+ * Reopen a valid chosen timetable instant, not today's clock.
+ * For a new choice use the next whole minute: the current minute is
+ * already in the past by the time the dialogs are confirmed.
+ */
+internal fun routeTimePickerInitialEpochMillis(
+    selectedEpochMillis: Long?,
+    nowEpochMillis: Long,
+): Long {
+    if (selectedEpochMillis != null &&
+        supportedFutureDeparture(nowEpochMillis, selectedEpochMillis)
+    ) return selectedEpochMillis
+    return nowEpochMillis - nowEpochMillis % 60_000L + 60_000L
+}

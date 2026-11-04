@@ -179,7 +179,11 @@ fun RouteJourneyPanel(
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                                 .testTag("route-departure-pick"),
                             onClick = {
-                                val calendar = Calendar.getInstance(berlinZone)
+                                val calendar = Calendar.getInstance(berlinZone).apply {
+                                    timeInMillis = routeTimePickerInitialEpochMillis(
+                                        selectedDepartureEpochMillis, System.currentTimeMillis(),
+                                    )
+                                }
                                 DatePickerDialog(
                                     context,
                                     { _, year, month, day ->
@@ -253,7 +257,11 @@ fun RouteJourneyPanel(
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                                 .testTag("route-arrival-pick"),
                             onClick = {
-                                val calendar = Calendar.getInstance(berlinZone)
+                                val calendar = Calendar.getInstance(berlinZone).apply {
+                                    timeInMillis = routeTimePickerInitialEpochMillis(
+                                        selectedArrivalDeadlineEpochMillis, System.currentTimeMillis(),
+                                    )
+                                }
                                 DatePickerDialog(
                                     context,
                                     { _, year, month, day ->

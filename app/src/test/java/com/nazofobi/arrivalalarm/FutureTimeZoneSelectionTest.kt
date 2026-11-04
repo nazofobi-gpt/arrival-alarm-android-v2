@@ -35,4 +35,29 @@ class FutureTimeZoneSelectionTest {
         assertTrue(berlinCivilTimeCandidates(2026, 1, 30, 12, 0).isEmpty())
         assertTrue(berlinCivilTimeCandidates(2026, 9, 25, 24, 0).isEmpty())
     }
+
+    @Test
+    fun timePickerStartsFromSavedFutureChoiceButNotAnExpiredOrOutOfRangeChoice() {
+        val now = 1_800_000_000_000L
+        val saved = now + 3_600_000L
+        assertEquals(saved, routeTimePickerInitialEpochMillis(saved, now))
+        val nextMinute = now + 60_000L
+        assertEquals(nextMinute, routeTimePickerInitialEpochMillis(now - 1L, now))
+        assertEquals(
+            nextMinute,
+            routeTimePickerInitialEpochMillis(now + 7L * 86_400_000L + 1L, now),
+        )
+    }
+
+    @Test
+    fun timePickerStartsAtNextSelectableMinuteInsteadOfPastCurrentMinute() {
+        val now = 1_800_000_059_999L
+        val initial = routeTimePickerInitialEpochMillis(null, now)
+        assertEquals(1_800_000_060_000L, initial)
+        assertTrue(supportedFutureDeparture(now, initial))
+        assertEquals(
+            1_800_000_120_000L,
+            routeTimePickerInitialEpochMillis(null, 1_800_000_060_000L),
+        )
+    }
 }
