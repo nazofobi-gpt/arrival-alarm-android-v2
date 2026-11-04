@@ -209,7 +209,7 @@ class GtfsLineDetailInstrumentedTest {
         composeRule.runOnIdle { assertEquals("B", selectedStopId) }
     }
 
-    @Test fun longGtfsLineRequiresExplicitStopFilterBeforeBoardActions() {
+    @Test fun longGtfsLineOpensTerminalBoardsWithoutTypingButFiltersIntermediateStops() {
         val stops = (1..9).map { GtfsLineStop("id-$it", "Stop-$it") }
         val preview = GtfsLineDetail(
             lineName = "RE1",
@@ -229,10 +229,41 @@ class GtfsLineDetailInstrumentedTest {
             }
         }
         composeRule.onNodeWithTag("gtfs-line-open-departures").assertDoesNotExist()
-        composeRule.onNodeWithTag("gtfs-line-open-departures-8").assertDoesNotExist()
-        composeRule.onNodeWithTag("gtfs-line-stop-filter").performTextInput("Stop-9")
-        composeRule.onNodeWithTag("gtfs-line-open-departures").assertExists().performClick()
+        composeRule.onNodeWithTag("gtfs-line-open-departures-4").assertDoesNotExist()
+        composeRule.onNodeWithTag("gtfs-line-open-departures-0").assertExists().performClick()
+        composeRule.runOnIdle { assertEquals("id-1", selectedStopId) }
+        composeRule.onNodeWithTag("gtfs-line-open-departures-8").assertExists().performClick()
         composeRule.runOnIdle { assertEquals("id-9", selectedStopId) }
+        composeRule.onNodeWithTag("gtfs-line-stop-filter").performTextInput("Stop-5")
+        composeRule.onNodeWithTag("gtfs-line-open-departures").assertExists().performClick()
+        composeRule.runOnIdle { assertEquals("id-5", selectedStopId) }
+    }
+
+    @Test fun circularGtfsLineShowsOneBoardButtonForSameSourceTerminal() {
+        val stops = (1..9).map { index ->
+            if (index == 9) GtfsLineStop("id-1", "Stop-1")
+            else GtfsLineStop("id-$index", "Stop-$index")
+        }
+        val preview = GtfsLineDetail(
+            lineName = "Ring",
+            directions = listOf(
+                GtfsLineDirection("Ring", stops.map { it.name }, false, stops = stops),
+            ),
+            additionalDirectionsOmitted = false,
+            sourceVersion = "test-gtfs-v1",
+        )
+        var selectedStopId: String? = null
+        composeRule.setContent {
+            MaterialTheme {
+                GtfsLineDetailDialog(
+                    lineLabel = "Ring", detail = preview, loading = false,
+                    onOpenDepartures = { selectedStopId = it }, onDismiss = {},
+                )
+            }
+        }
+        composeRule.onNodeWithTag("gtfs-line-open-departures").assertExists().performClick()
+        composeRule.onNodeWithTag("gtfs-line-open-departures-8").assertDoesNotExist()
+        composeRule.runOnIdle { assertEquals("id-1", selectedStopId) }
     }
 
     @Test fun uniquelyFilteredGtfsStopOpensSourceBoundDepartureBoardOnlyOnTap() {

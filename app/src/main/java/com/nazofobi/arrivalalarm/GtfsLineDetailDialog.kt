@@ -119,7 +119,16 @@ internal fun GtfsLineDetailDialog(
                                     ?.takeIf { it.id.isNotBlank() }
                                     ?.let { index to it }
                             }.distinctBy { (_, stop) -> stop.id }
-                        } else emptyList()
+                        } else {
+                            // Long lines keep intermediate stops behind a bounded text filter,
+                            // but riders can still open the first/last stop board immediately.
+                            // A circular line may have the same physical terminal twice.
+                            listOf(0, activeDirection.stops.lastIndex).distinct().mapNotNull { index ->
+                                activeDirection.stops.getOrNull(index)
+                                    ?.takeIf { it.id.isNotBlank() }
+                                    ?.let { index to it }
+                            }.distinctBy { (_, stop) -> stop.id }
+                        }
                         matchingBoardStops.take(MAX_LINE_BOARD_CHOICES).forEach { (index, stop) ->
                             val unique = matchingBoardStops.size == 1
                             TextButton(
