@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="g240_trip_stops_show">Show all stops (%1$d)</string>
+    <string name="g240_trip_stops_hide">Hide stop list (%1$d)</string>
+    <string name="g240_trip_stops_scheduled_only">Only source-verified GTFS scheduled times and listed platforms are shown; live changes are unverified.</string>
+    <string name="g240_trip_stop_arrival">Scheduled arrival: %1$s</string>
+    <string name="g240_trip_stop_departure">Scheduled departure: %1$s</string>
+    <string name="g240_trip_stop_platform">Scheduled platform: %1$s</string>
+    <string name="g240_trip_stop_boarding">Boarding stop</string>
+</resources>

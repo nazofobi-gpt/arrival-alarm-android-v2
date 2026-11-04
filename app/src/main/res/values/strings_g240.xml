@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="g240_trip_stops_show">Tüm durakları göster (%1$d)</string>
+    <string name="g240_trip_stops_hide">Durak listesini gizle (%1$d)</string>
+    <string name="g240_trip_stops_scheduled_only">Yalnız doğrulanmış GTFS plan saatleri ve kayıtlı peronlar gösterilir; canlı değişiklikler doğrulanmamıştır.</string>
+    <string name="g240_trip_stop_arrival">Planlı varış: %1$s</string>
+    <string name="g240_trip_stop_departure">Planlı kalkış: %1$s</string>
+    <string name="g240_trip_stop_platform">Planlı peron: %1$s</string>
+    <string name="g240_trip_stop_boarding">Biniş durağı</string>
+</resources>
