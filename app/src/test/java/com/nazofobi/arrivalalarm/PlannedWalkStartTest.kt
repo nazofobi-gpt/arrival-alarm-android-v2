@@ -69,6 +69,17 @@ class PlannedWalkStartTest {
         )
     }
 
+    @Test fun walkingEstimateForDifferentBoardingStopFailsClosed() {
+        val source = option()
+        assertNull(plannedWalkStartEpochMillis(source.copy(
+            accessWalking = RouteWalkingLegEvidence("other-stop", "Other", 600),
+        )))
+        assertNull(plannedWalkStartEpochMillis(source.copy(stops = emptyList())))
+        assertNull(plannedWalkStartEpochMillis(source.copy(
+            stops = listOf(source.stops.first().copy(id = "")),
+        )))
+    }
+
     @Test fun missingWalkingEvidenceFailsClosed() {
         assertNull(plannedWalkStartEpochMillis(option(walkSeconds = null)))
     }

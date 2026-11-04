@@ -24,6 +24,7 @@ class PlannedWalkStartInstrumentedTest {
         stopLongitude: Double? = null,
         directionsLauncher: ((Intent) -> Boolean)? = null,
         bufferMinutesForTest: Int? = 0,
+        walkingStopId: String = "stop-1",
         calendarLauncher: ((Intent) -> Boolean)? = null,
     ) {
         rule.setContent {
@@ -40,7 +41,7 @@ class PlannedWalkStartInstrumentedTest {
                             latitude = stopLatitude, longitude = stopLongitude,
                             plannedDeparture = planned)),
                         accessWalking = walking?.let {
-                            RouteWalkingLegEvidence("stop-1", "Lohne", it)
+                            RouteWalkingLegEvidence(walkingStopId, "Lohne", it)
                         },
                     ),
                     calendarLauncher = calendarLauncher,
@@ -92,6 +93,13 @@ class PlannedWalkStartInstrumentedTest {
         } finally {
             preferences.edit().remove("safety_buffer_minutes").commit()
         }
+    }
+
+    @Test fun otherBoardingStopWalkHidesTimeAndCalendarAction() {
+        show("2099-11-04T10:30:00+01:00", 600, walkingStopId = "other-stop")
+        rule.onNodeWithTag("route-planned-walk-start").assertDoesNotExist()
+        rule.onNodeWithTag("route-planned-walk-calendar").assertDoesNotExist()
+        rule.onNodeWithTag("route-walk-directions").assertDoesNotExist()
     }
 
     @Test fun missingPlannedDepartureDoesNotInventWalkingStart() {

@@ -9,10 +9,12 @@ package com.nazofobi.arrivalalarm
  */
 internal fun plannedWalkStartEpochMillis(option: RouteOption, safetyBufferMinutes: Int = 0): Long? {
     if (safetyBufferMinutes !in 0..15 || safetyBufferMinutes % 5 != 0) return null
-    val walkSeconds = option.accessWalking?.walkSeconds?.takeIf { it in 1..14_400 }
-        ?: return null
-    val plannedDeparture = option.stops.firstOrNull()?.plannedDeparture
-        .toTransitEpochSecondsOrNull() ?: return null
+    val walking = option.accessWalking ?: return null
+    val walkSeconds = walking.walkSeconds.takeIf { it in 1..14_400 } ?: return null
+    val firstStop = option.stops.firstOrNull() ?: return null
+    // A walk estimate for another boarding stop must never become this trip's leave time.
+    if (firstStop.id.isNullOrBlank() || firstStop.id != walking.stopId) return null
+    val plannedDeparture = firstStop.plannedDeparture.toTransitEpochSecondsOrNull() ?: return null
     return runCatching {
         Math.subtractExact(
             Math.multiplyExact(plannedDeparture, 1_000L),
