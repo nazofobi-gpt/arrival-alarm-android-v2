@@ -760,17 +760,19 @@ internal fun PlannedWalkStartNotice(
         modifier = Modifier.testTag("route-planned-walk-start-note"),
     )
     if (startEpoch > System.currentTimeMillis()) {
+        val calendarTitle = stringResource(
+            R.string.route_planned_walk_calendar_title,
+            option.origin.label,
+            option.destination.label,
+        )
+        val calendarDescription = stringResource(R.string.route_planned_walk_start_disclaimer)
         OutlinedButton(
             onClick = {
                 val draft = plannedWalkCalendarDraftIntent(
                     option = option,
                     nowMillis = System.currentTimeMillis(),
-                    title = context.getString(
-                        R.string.route_planned_walk_calendar_title,
-                        option.origin.label,
-                        option.destination.label,
-                    ),
-                    description = context.getString(R.string.route_planned_walk_start_disclaimer),
+                    title = calendarTitle,
+                    description = calendarDescription,
                 )
                 launchFailed = when {
                     draft == null -> true
