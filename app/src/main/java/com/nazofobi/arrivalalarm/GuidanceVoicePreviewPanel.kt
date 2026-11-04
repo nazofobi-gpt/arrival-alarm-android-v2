@@ -59,9 +59,11 @@ internal fun GuidanceVoicePreviewPanel(
     modifier: Modifier = Modifier,
     onTestArrivalAlert: () -> Boolean = { false },
     onOpenNotificationSettings: (() -> Unit)? = null,
+    onDismissArrivalAlert: (() -> Boolean)? = null,
 ) {
     val context = LocalContext.current
     var alertPreviewResult by remember { mutableStateOf<Boolean?>(null) }
+    var dismissResult by remember { mutableStateOf<Boolean?>(null) }
     var lastAttemptAccepted by remember(language) { mutableStateOf<Boolean?>(null) }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         OutlinedButton(
@@ -81,7 +83,10 @@ internal fun GuidanceVoicePreviewPanel(
             Text(stringResource(R.string.guidance_voice_preview_action))
         }
         OutlinedButton(
-            onClick = { alertPreviewResult = onTestArrivalAlert() },
+            onClick = {
+                dismissResult = null
+                alertPreviewResult = onTestArrivalAlert()
+            },
             enabled = !isJourneyAudioActive,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                 .testTag("arrival-notification-preview"),
@@ -94,6 +99,30 @@ internal fun GuidanceVoicePreviewPanel(
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.testTag("arrival-notification-preview-status"),
+            )
+        }
+        if (alertPreviewResult == true && !isJourneyAudioActive) {
+            OutlinedButton(
+                onClick = {
+                    val dismiss = onDismissArrivalAlert
+                        ?: { AndroidArrivalAlertPreview.dismiss(context) }
+                    dismissResult = dismiss()
+                    if (dismissResult == true) alertPreviewResult = null
+                },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    .testTag("arrival-notification-dismiss"),
+            ) {
+                Text(stringResource(R.string.arrival_alert_preview_dismiss_action))
+            }
+        }
+        if (dismissResult != null) {
+            Text(
+                text = stringResource(
+                    if (dismissResult == true) R.string.arrival_alert_preview_dismiss_requested
+                    else R.string.arrival_alert_preview_dismiss_unavailable,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.testTag("arrival-notification-dismiss-status"),
             )
         }
         if (alertPreviewResult == false && !isJourneyAudioActive) {
