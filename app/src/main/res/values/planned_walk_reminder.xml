@@ -9,4 +9,7 @@
     <string name="route_walk_reminder_notification_title">Tahmini yürüyüşe başlama zamanı</string>
     <string name="route_walk_reminder_notification_body">Bağlantı geçerliyse %1$s yönüne yürüyün. Gerçek sefer durumunu tekrar kontrol edin.</string>
     <string name="route_walk_reminder_details">Kaydedilen yürüyüş hatırlatıcısı: %1$s — %2$s (yerel saat; bildirim teslimi garanti değildir).</string>
+    <string name="route_walk_reminder_notifications_disabled">Bildirimler kapalı. Hatırlatıcı ayarlanamaz; bildirimi açmak için uygulama ayarlarına gidin.</string>
+    <string name="route_walk_reminder_open_notification_settings">Bildirim ayarlarını aç</string>
+    <string name="route_walk_reminder_settings_failure">Bildirim ayarları açılamadı. Android uygulama ayarlarından bildirimleri kontrol edin.</string>
 </resources>

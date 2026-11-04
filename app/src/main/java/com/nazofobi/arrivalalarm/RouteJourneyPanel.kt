@@ -1,6 +1,10 @@
 package com.nazofobi.arrivalalarm
 
 import android.content.Intent
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -832,6 +836,8 @@ internal fun PlannedWalkStartNotice(
     nowMillisForTest: Long? = null,
     bufferMinutesForTest: Int? = null,
     directionsLauncher: ((Intent) -> Boolean)? = null,
+    notificationPermissionReadyForTest: Boolean? = null,
+    notificationSettingsLauncher: ((Intent) -> Boolean)? = null,
 ) {
     val context = LocalContext.current
     val preferences = remember(context) {
@@ -985,6 +991,18 @@ internal fun PlannedWalkStartNotice(
         PlannedWalkReminderScheduler(context.applicationContext)
     }
     val reminderScope = rememberCoroutineScope()
+    // A denied notification permission needs explicit recovery, not a false schedule.
+    var notificationsReady by remember(option.id, notificationPermissionReadyForTest) {
+        mutableStateOf(notificationPermissionReadyForTest
+            ?: PlannedWalkReminderScheduler.notificationPermissionGranted(context))
+    }
+    val notificationSettingsResult = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        notificationsReady = notificationPermissionReadyForTest
+            ?: PlannedWalkReminderScheduler.notificationPermissionGranted(context)
+    }
+    var notificationSettingsFailed by remember(option.id) { mutableStateOf(false) }
     var reminderScheduled by remember(option.id) {
         mutableStateOf(reminderScheduler.scheduledRouteId() != null)
     }
@@ -1004,6 +1022,41 @@ internal fun PlannedWalkStartNotice(
                 modifier = Modifier.testTag("route-walk-reminder-other-route"),
             )
         }
+        if (!notificationsReady) {
+            Text(
+                text = stringResource(R.string.route_walk_reminder_notifications_disabled),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.testTag("route-walk-reminder-notifications-disabled"),
+            )
+            OutlinedButton(
+                onClick = {
+                    // Opening Settings is explicit; returning never auto-schedules.
+                    val settings = if (Build.VERSION.SDK_INT >= 26) {
+                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    } else {
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:${context.packageName}"))
+                    }
+                    notificationSettingsFailed = if (notificationSettingsLauncher != null) {
+                        !notificationSettingsLauncher(settings)
+                    } else {
+                        !runCatching { notificationSettingsResult.launch(settings); true }
+                            .getOrDefault(false)
+                    }
+                },
+                modifier = Modifier.heightIn(min = 48.dp)
+                    .testTag("route-walk-reminder-settings"),
+            ) { Text(stringResource(R.string.route_walk_reminder_open_notification_settings)) }
+            if (notificationSettingsFailed) {
+                Text(
+                    text = stringResource(R.string.route_walk_reminder_settings_failure),
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("route-walk-reminder-settings-failure"),
+                )
+            }
+        }
         OutlinedButton(
             onClick = {
                 if (!reminderBusy) {
@@ -1020,7 +1073,7 @@ internal fun PlannedWalkStartNotice(
                     }
                 }
             },
-            enabled = !reminderBusy,
+            enabled = !reminderBusy && (reminderScheduled || notificationsReady),
             modifier = Modifier.heightIn(min = 48.dp)
                 .testTag("route-walk-reminder-toggle"),
         ) {

@@ -2,6 +2,7 @@ package com.nazofobi.arrivalalarm
 
 import android.content.Intent
 import android.provider.CalendarContract
+import android.provider.Settings
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.assertTextContains
@@ -26,6 +27,8 @@ class PlannedWalkStartInstrumentedTest {
         directionsLauncher: ((Intent) -> Boolean)? = null,
         bufferMinutesForTest: Int? = 0,
         walkingStopId: String = "stop-1",
+        notificationPermissionReadyForTest: Boolean? = true,
+        notificationSettingsLauncher: ((Intent) -> Boolean)? = null,
         calendarLauncher: ((Intent) -> Boolean)? = null,
     ) {
         rule.setContent {
@@ -49,6 +52,8 @@ class PlannedWalkStartInstrumentedTest {
                     nowMillisForTest = nowMillisForTest,
                     directionsLauncher = directionsLauncher,
                     bufferMinutesForTest = bufferMinutesForTest,
+                    notificationPermissionReadyForTest = notificationPermissionReadyForTest,
+                    notificationSettingsLauncher = notificationSettingsLauncher,
                 )
             }
         }
@@ -398,6 +403,41 @@ class PlannedWalkStartInstrumentedTest {
             }
         }
         rule.onNodeWithTag("route-walk-reminder-global-card").assertDoesNotExist()
+    }
+
+    @Test fun disabledNotificationsOfferSettingsInsteadOfFalseSchedule() {
+        var observed: Intent? = null
+        show("2099-11-04T10:30:00+01:00", 600,
+            notificationPermissionReadyForTest = false,
+            notificationSettingsLauncher = { observed = it; true })
+        rule.onNodeWithTag("route-walk-reminder-notifications-disabled").assertExists()
+        rule.onNodeWithTag("route-walk-reminder-toggle").assertIsNotEnabled()
+        rule.onNodeWithTag("route-walk-reminder-settings").performClick()
+        rule.runOnIdle {
+            val intent = requireNotNull(observed)
+            assertEquals(Settings.ACTION_APP_NOTIFICATION_SETTINGS, intent.action)
+            assertEquals(
+                androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+                    .targetContext.packageName,
+                intent.getStringExtra(Settings.EXTRA_APP_PACKAGE),
+            )
+        }
+    }
+
+    @Test fun enabledNotificationsKeepOptInAndHideSettingsRecovery() {
+        show("2099-11-04T10:30:00+01:00", 600,
+            notificationPermissionReadyForTest = true)
+        rule.onNodeWithTag("route-walk-reminder-toggle").assertIsEnabled()
+        rule.onNodeWithTag("route-walk-reminder-settings").assertDoesNotExist()
+    }
+
+    @Test fun unavailableNotificationSettingsHandlerDoesNotSchedule() {
+        show("2099-11-04T10:30:00+01:00", 600,
+            notificationPermissionReadyForTest = false,
+            notificationSettingsLauncher = { false })
+        rule.onNodeWithTag("route-walk-reminder-settings").performClick()
+        rule.onNodeWithTag("route-walk-reminder-settings-failure").assertExists()
+        rule.onNodeWithTag("route-walk-reminder-toggle").assertIsNotEnabled()
     }
 
 }
