@@ -10,4 +10,6 @@
     <string name="route_planned_walk_maps_action">Biniş durağına yaya yolunu haritada aç</string>
     <string name="route_planned_walk_maps_disclaimer">Harici Google Haritalar açılır. Yaya rotası ve süresi tahminden farklı olabilir; kalkışa yetişme garantisi yoktur.</string>
     <string name="route_planned_walk_maps_failure">Yürüyüş haritası açılamadı.</string>
+    <string name="route_planned_walk_buffer_action">Ek güvenlik payı: %1$d dk (değiştir)</string>
+    <string name="route_planned_walk_buffer_failure">Güvenlik payı kaydedilemedi; önceki tercih korundu.</string>
 </resources>

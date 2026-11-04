@@ -7,7 +7,8 @@ package com.nazofobi.arrivalalarm
  * Use the *planned first-stop departure* only, not a potentially stale realtime
  * overlay or a device-local HH:mm clock (which is ambiguous across DST).
  */
-internal fun plannedWalkStartEpochMillis(option: RouteOption): Long? {
+internal fun plannedWalkStartEpochMillis(option: RouteOption, safetyBufferMinutes: Int = 0): Long? {
+    if (safetyBufferMinutes !in 0..15 || safetyBufferMinutes % 5 != 0) return null
     val walkSeconds = option.accessWalking?.walkSeconds?.takeIf { it in 1..14_400 }
         ?: return null
     val plannedDeparture = option.stops.firstOrNull()?.plannedDeparture
@@ -15,7 +16,10 @@ internal fun plannedWalkStartEpochMillis(option: RouteOption): Long? {
     return runCatching {
         Math.subtractExact(
             Math.multiplyExact(plannedDeparture, 1_000L),
-            Math.multiplyExact(walkSeconds.toLong(), 1_000L),
+            Math.multiplyExact(
+                Math.addExact(walkSeconds.toLong(), safetyBufferMinutes.toLong() * 60L),
+                1_000L,
+            ),
         )
     }.getOrNull()
 }
@@ -24,11 +28,18 @@ internal fun plannedWalkStartEpochMillis(option: RouteOption): Long? {
 internal enum class PlannedWalkWarning { WALK_START_PASSED, PLANNED_DEPARTURE_PASSED }
 
 /** Null when source time or access-walk evidence is absent or still in the future. */
-internal fun plannedWalkWarning(option: RouteOption, nowMillis: Long): PlannedWalkWarning? {
-    val start = plannedWalkStartEpochMillis(option) ?: return null
+internal fun plannedWalkWarning(
+    option: RouteOption,
+    nowMillis: Long,
+    safetyBufferMinutes: Int = 0,
+): PlannedWalkWarning? {
+    val start = plannedWalkStartEpochMillis(option, safetyBufferMinutes) ?: return null
     val seconds = option.accessWalking?.walkSeconds ?: return null
     val plannedDeparture = runCatching {
-        Math.addExact(start, Math.multiplyExact(seconds.toLong(), 1_000L))
+        Math.addExact(
+            start,
+            Math.multiplyExact(seconds.toLong() + safetyBufferMinutes.toLong() * 60L, 1_000L),
+        )
     }.getOrNull() ?: return null
     return when {
         nowMillis >= plannedDeparture -> PlannedWalkWarning.PLANNED_DEPARTURE_PASSED

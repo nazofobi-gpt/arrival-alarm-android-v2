@@ -23,6 +23,7 @@ class PlannedWalkStartInstrumentedTest {
         stopLatitude: Double? = null,
         stopLongitude: Double? = null,
         directionsLauncher: ((Intent) -> Boolean)? = null,
+        bufferMinutesForTest: Int? = 0,
         calendarLauncher: ((Intent) -> Boolean)? = null,
     ) {
         rule.setContent {
@@ -45,6 +46,7 @@ class PlannedWalkStartInstrumentedTest {
                     calendarLauncher = calendarLauncher,
                     nowMillisForTest = nowMillisForTest,
                     directionsLauncher = directionsLauncher,
+                    bufferMinutesForTest = bufferMinutesForTest,
                 )
             }
         }
@@ -54,6 +56,42 @@ class PlannedWalkStartInstrumentedTest {
         show("2026-11-04T10:30:00+01:00", 600)
         rule.onNodeWithTag("route-planned-walk-start").assertExists()
         rule.onNodeWithTag("route-planned-walk-start-note").assertExists()
+    }
+
+    @Test fun selectingBufferMovesCalendarDraftButKeepsScheduledDeparture() {
+        var observed: Intent? = null
+        show(
+            "2099-11-04T10:30:00+01:00", 600,
+            bufferMinutesForTest = 0,
+            calendarLauncher = { observed = it; true },
+        )
+        rule.onNodeWithTag("route-walk-safety-buffer").performClick()
+        rule.onNodeWithTag("route-planned-walk-calendar").performClick()
+        rule.runOnIdle {
+            val draft = requireNotNull(observed)
+            assertEquals(
+                java.time.Instant.parse("2099-11-04T09:15:00Z").toEpochMilli(),
+                draft.getLongExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, -1L),
+            )
+            assertEquals(
+                java.time.Instant.parse("2099-11-04T09:30:00Z").toEpochMilli(),
+                draft.getLongExtra(CalendarContract.EXTRA_EVENT_END_TIME, -1L),
+            )
+        }
+    }
+
+    @Test fun chosenBufferIsPersistedWithoutAutoCreatingCalendarEvent() {
+        val preferences = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+            .targetContext.getSharedPreferences(
+                "route_walk_preferences", android.content.Context.MODE_PRIVATE)
+        preferences.edit().remove("safety_buffer_minutes").commit()
+        try {
+            show("2099-11-04T10:30:00+01:00", 600, bufferMinutesForTest = null)
+            rule.onNodeWithTag("route-walk-safety-buffer").performClick()
+            rule.runOnIdle { assertEquals(5, preferences.getInt("safety_buffer_minutes", -1)) }
+        } finally {
+            preferences.edit().remove("safety_buffer_minutes").commit()
+        }
     }
 
     @Test fun missingPlannedDepartureDoesNotInventWalkingStart() {

@@ -742,10 +742,21 @@ internal fun PlannedWalkStartNotice(
     option: RouteOption,
     calendarLauncher: ((Intent) -> Boolean)? = null,
     nowMillisForTest: Long? = null,
+    bufferMinutesForTest: Int? = null,
     directionsLauncher: ((Intent) -> Boolean)? = null,
 ) {
     val context = LocalContext.current
-    val startEpoch = plannedWalkStartEpochMillis(option) ?: return
+    val preferences = remember(context) {
+        context.getSharedPreferences("route_walk_preferences", android.content.Context.MODE_PRIVATE)
+    }
+    var safetyBufferMinutes by remember(option.id, bufferMinutesForTest) {
+        mutableStateOf(
+            bufferMinutesForTest ?: preferences.getInt("safety_buffer_minutes", 0)
+                .takeIf { it == 0 || it == 5 || it == 10 || it == 15 } ?: 0,
+        )
+    }
+    var bufferSaveFailed by remember(option.id) { mutableStateOf(false) }
+    val startEpoch = plannedWalkStartEpochMillis(option, safetyBufferMinutes) ?: return
     var liveNowMillis by remember(option.id, startEpoch) {
         mutableStateOf(System.currentTimeMillis())
     }
@@ -764,6 +775,29 @@ internal fun PlannedWalkStartNotice(
         java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
             .format(java.util.Date(startEpoch))
     }
+    OutlinedButton(
+        onClick = {
+            val next = if (safetyBufferMinutes >= 15) 0 else safetyBufferMinutes + 5
+            if (bufferMinutesForTest == null) {
+                if (preferences.edit().putInt("safety_buffer_minutes", next).commit()) {
+                    safetyBufferMinutes = next
+                    bufferSaveFailed = false
+                } else {
+                    bufferSaveFailed = true
+                }
+            } else {
+                safetyBufferMinutes = next
+            }
+        },
+        modifier = Modifier.heightIn(min = 48.dp).testTag("route-walk-safety-buffer"),
+    ) { Text(stringResource(R.string.route_planned_walk_buffer_action, safetyBufferMinutes)) }
+    if (bufferSaveFailed) {
+        Text(
+            text = stringResource(R.string.route_planned_walk_buffer_failure),
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.testTag("route-walk-buffer-save-failure"),
+        )
+    }
     Text(
         text = stringResource(R.string.route_planned_walk_start, clock),
         style = MaterialTheme.typography.bodyMedium,
@@ -776,7 +810,7 @@ internal fun PlannedWalkStartNotice(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.testTag("route-planned-walk-start-note"),
     )
-    when (plannedWalkWarning(option, displayNowMillis)) {
+    when (plannedWalkWarning(option, displayNowMillis, safetyBufferMinutes)) {
         PlannedWalkWarning.WALK_START_PASSED -> Text(
             text = stringResource(R.string.route_planned_walk_late_warning),
             style = MaterialTheme.typography.bodyMedium,
@@ -793,7 +827,7 @@ internal fun PlannedWalkStartNotice(
     }
     val directionsUrl = plannedWalkDirectionsUrl(option)
     if (directionsUrl != null &&
-        plannedWalkWarning(option, displayNowMillis) != PlannedWalkWarning.PLANNED_DEPARTURE_PASSED
+        plannedWalkWarning(option, displayNowMillis, safetyBufferMinutes) != PlannedWalkWarning.PLANNED_DEPARTURE_PASSED
     ) {
         OutlinedButton(
             onClick = {
@@ -833,6 +867,7 @@ internal fun PlannedWalkStartNotice(
                     nowMillis = System.currentTimeMillis(),
                     title = calendarTitle,
                     description = calendarDescription,
+                    safetyBufferMinutes = safetyBufferMinutes,
                 )
                 launchFailed = when {
                     draft == null -> true

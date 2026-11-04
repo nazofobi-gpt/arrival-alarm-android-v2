@@ -10,4 +10,6 @@
     <string name="route_planned_walk_maps_action">Fußweg zum Einstieg in Google Maps öffnen</string>
     <string name="route_planned_walk_maps_disclaimer">Google Maps wird extern geöffnet. Fußweg und Dauer können von der Schätzung abweichen; kein Anschluss garantiert.</string>
     <string name="route_planned_walk_maps_failure">Fußwegkarte konnte nicht geöffnet werden.</string>
+    <string name="route_planned_walk_buffer_action">Zusätzlicher Zeitpuffer: %1$d Min. (ändern)</string>
+    <string name="route_planned_walk_buffer_failure">Zeitpuffer konnte nicht gespeichert werden. Bisherige Einstellung bleibt erhalten.</string>
 </resources>

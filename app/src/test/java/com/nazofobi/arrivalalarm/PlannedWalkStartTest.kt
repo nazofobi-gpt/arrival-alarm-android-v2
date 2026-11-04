@@ -30,6 +30,31 @@ class PlannedWalkStartTest {
         )
     }
 
+    @Test fun chosenBufferMovesRecommendedStartEarlierWithoutMovingDeparture() {
+        val expected = Instant.parse("2026-11-04T09:15:00Z").toEpochMilli()
+        assertEquals(expected, plannedWalkStartEpochMillis(option(), safetyBufferMinutes = 5))
+        assertEquals(
+            Instant.parse("2026-11-04T09:05:00Z").toEpochMilli(),
+            plannedWalkStartEpochMillis(option(), safetyBufferMinutes = 15),
+        )
+    }
+
+    @Test fun unsupportedBufferValuesFailClosed() {
+        for (minutes in listOf(-5, 1, 4, 16, 100, Int.MAX_VALUE)) {
+            assertNull(plannedWalkStartEpochMillis(option(), safetyBufferMinutes = minutes))
+        }
+    }
+
+    @Test fun bufferUsesExplicitOffsetAcrossDstTransition() {
+        assertEquals(
+            Instant.parse("2026-10-25T01:15:00Z").toEpochMilli(),
+            plannedWalkStartEpochMillis(
+                option(planned = "2026-10-25T02:30:00+01:00"),
+                safetyBufferMinutes = 5,
+            ),
+        )
+    }
+
     @Test fun springDstOffsetPreservesTrueInstant() {
         assertEquals(
             Instant.parse("2026-03-29T01:20:00Z").toEpochMilli(),
@@ -99,6 +124,16 @@ class PlannedWalkWarningTest {
         assertNull(plannedWalkWarning(option(planned = "10:30"), now))
         assertNull(plannedWalkWarning(option(seconds = 14_401), now))
     }
+    @Test fun bufferAdvancesWarningButNotScheduledDeparture() {
+        val now = Instant.parse("2026-11-04T09:15:00Z").toEpochMilli()
+        assertEquals(PlannedWalkWarning.WALK_START_PASSED, plannedWalkWarning(option(), now, 5))
+        assertNull(plannedWalkWarning(option(), now, 0))
+        assertEquals(
+            PlannedWalkWarning.PLANNED_DEPARTURE_PASSED,
+            plannedWalkWarning(option(), Instant.parse("2026-11-04T09:30:00Z").toEpochMilli(), 5),
+        )
+    }
+
     @Test fun explicitDstOffsetUsesActualInstant() {
         assertEquals(
             PlannedWalkWarning.WALK_START_PASSED,

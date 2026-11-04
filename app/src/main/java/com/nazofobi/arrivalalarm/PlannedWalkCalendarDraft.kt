@@ -12,11 +12,15 @@ internal fun plannedWalkCalendarDraftIntent(
     nowMillis: Long,
     title: String,
     description: String,
+    safetyBufferMinutes: Int = 0,
 ): Intent? {
-    val start = plannedWalkStartEpochMillis(option) ?: return null
+    val start = plannedWalkStartEpochMillis(option, safetyBufferMinutes) ?: return null
     val walkSeconds = option.accessWalking?.walkSeconds ?: return null
     val end = runCatching {
-        Math.addExact(start, Math.multiplyExact(walkSeconds.toLong(), 1_000L))
+        Math.addExact(
+            start,
+            Math.multiplyExact(walkSeconds.toLong() + safetyBufferMinutes.toLong() * 60L, 1_000L),
+        )
     }.getOrNull() ?: return null
     if (start <= nowMillis || end <= start) return null
 

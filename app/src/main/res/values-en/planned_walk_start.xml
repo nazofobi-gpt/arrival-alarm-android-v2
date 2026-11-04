@@ -10,4 +10,6 @@
     <string name="route_planned_walk_maps_action">Open walking directions to boarding stop</string>
     <string name="route_planned_walk_maps_disclaimer">Opens Google Maps outside this app. Walking route and duration may differ; boarding is not guaranteed.</string>
     <string name="route_planned_walk_maps_failure">Could not open walking directions.</string>
+    <string name="route_planned_walk_buffer_action">Extra safety buffer: %1$d min (change)</string>
+    <string name="route_planned_walk_buffer_failure">Could not save the safety buffer; the previous choice was kept.</string>
 </resources>
