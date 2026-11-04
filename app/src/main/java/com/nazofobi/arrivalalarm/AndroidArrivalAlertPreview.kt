@@ -2,9 +2,11 @@ package com.nazofobi.arrivalalarm
 
 import android.Manifest
 import android.app.Notification
+import android.app.PendingIntent
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 
@@ -38,6 +40,15 @@ internal object AndroidArrivalAlertPreview {
                     NotificationManager.IMPORTANCE_NONE
                 ) return false
             }
+            // The test banner should return to the app, never start or mutate an alarm.
+            val openApp = PendingIntent.getActivity(
+                context,
+                NOTIFICATION_ID,
+                Intent(context, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
             val notification = if (Build.VERSION.SDK_INT >= 26) {
                 Notification.Builder(context, CHANNEL_ID)
             } else {
@@ -52,6 +63,7 @@ internal object AndroidArrivalAlertPreview {
                     .setCategory(Notification.CATEGORY_ALARM)
                     .setVisibility(Notification.VISIBILITY_PRIVATE)
                     .setAutoCancel(true)
+                    .setContentIntent(openApp)
                     .build(),
             )
             // Android accepting the post is not evidence that a person saw/felt it.

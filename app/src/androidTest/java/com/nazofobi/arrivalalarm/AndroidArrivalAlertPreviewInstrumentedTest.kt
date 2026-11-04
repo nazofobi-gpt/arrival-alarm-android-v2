@@ -39,6 +39,7 @@ class AndroidArrivalAlertPreviewInstrumentedTest {
             assertNotNull("Expected preview notification ID", status)
             val notification = status!!.notification
             assertEquals(AndroidArrivalAlertPreview.CHANNEL_ID, notification.channelId)
+            assertTrue("Preview should return to the app on tap", notification.contentIntent?.isActivity == true)
             assertEquals(Notification.CATEGORY_ALARM, notification.category)
             assertEquals(
                 context.getString(R.string.arrival_alert_preview_title),
