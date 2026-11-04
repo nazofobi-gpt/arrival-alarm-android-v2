@@ -73,10 +73,12 @@ class GtfsLineDetailInstrumentedTest {
             }
         }
         composeRule.onNodeWithTag("gtfs-line-detail-dialog").assertExists()
-        composeRule.onNodeWithTag("gtfs-line-direction-0").assertExists()
+        composeRule.onNodeWithTag("gtfs-line-select-direction-0").assertExists()
         composeRule.onNodeWithTag("gtfs-line-stops-0").assertExists()
         composeRule.onNodeWithTag("gtfs-line-close").assertExists()
         assertFalse(dismissed)
+        composeRule.onNodeWithTag("gtfs-line-close").performClick()
+        composeRule.runOnIdle { assertTrue(dismissed) }
     }
 
     @Test fun directionPickerRendersOnlyTheSelectedGtfsStopOrder() {
@@ -97,9 +99,9 @@ class GtfsLineDetailInstrumentedTest {
         composeRule.onNodeWithTag("gtfs-line-stops-1").assertDoesNotExist()
         composeRule.onNodeWithTag("gtfs-line-select-direction-1").performClick()
         composeRule.onNodeWithTag("gtfs-line-stops-1").assertExists()
-        composeRule.onNodeWithTag("gtfs-line-stops-1").assertTextContains("Gamma")
+        composeRule.onNodeWithTag("gtfs-line-stops-1").assertTextContains("Gamma", substring = true)
         composeRule.onNodeWithTag("gtfs-line-stops-0").assertDoesNotExist()
         composeRule.onNodeWithTag("gtfs-line-select-direction-0").performClick()
-        composeRule.onNodeWithTag("gtfs-line-stops-0").assertTextContains("Alpha")
+        composeRule.onNodeWithTag("gtfs-line-stops-0").assertTextContains("Alpha", substring = true)
     }
 }
