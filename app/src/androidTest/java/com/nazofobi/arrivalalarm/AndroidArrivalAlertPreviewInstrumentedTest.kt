@@ -33,10 +33,19 @@ class AndroidArrivalAlertPreviewInstrumentedTest {
         assumeTrue("OS notifications are disabled", manager.areNotificationsEnabled())
         try {
             assertTrue(AndroidArrivalAlertPreview.post(context))
-            val status = manager.activeNotifications.firstOrNull {
+            // NotificationManager posts asynchronously on API 36; observe the real OS state
+            // with a bounded deadline instead of assuming immediate publication.
+            val deadlineMs = android.os.SystemClock.elapsedRealtime() + 5_000L
+            var status = manager.activeNotifications.firstOrNull {
                 it.id == AndroidArrivalAlertPreview.NOTIFICATION_ID
             }
-            assertNotNull("Expected preview notification ID", status)
+            while (status == null && android.os.SystemClock.elapsedRealtime() < deadlineMs) {
+                android.os.SystemClock.sleep(100L)
+                status = manager.activeNotifications.firstOrNull {
+                    it.id == AndroidArrivalAlertPreview.NOTIFICATION_ID
+                }
+            }
+            assertNotNull("Expected preview notification ID after bounded wait", status)
             val notification = status!!.notification
             assertEquals(AndroidArrivalAlertPreview.CHANNEL_ID, notification.channelId)
             assertTrue("Preview should return to the app on tap", notification.contentIntent?.isActivity == true)
