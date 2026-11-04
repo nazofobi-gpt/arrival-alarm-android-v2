@@ -5,4 +5,5 @@
     <string name="arrival_alert_preview_unavailable">Testbenachrichtigung konnte nicht gesendet werden. Benachrichtigungsberechtigung und Geräteeinstellungen prüfen.</string>
     <string name="arrival_alert_preview_title">TEST — Ankunftsbenachrichtigung</string>
     <string name="arrival_alert_preview_body">Dies ist nur ein Test. Es wurde kein Ankunftsalarm aktiviert.</string>
+    <string name="arrival_alert_preview_open_settings">${label}</string>
 </resources>

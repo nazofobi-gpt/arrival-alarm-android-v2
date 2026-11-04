@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.Settings
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -18,6 +19,16 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class AndroidArrivalAlertPreviewInstrumentedTest {
+    @Test fun notificationRecoveryTargetsOnlyThisAppWithoutArmingAnAlarm() {
+        assumeTrue(Build.VERSION.SDK_INT >= 26)
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val intent = AndroidArrivalAlertPreview.settingsIntent(context)
+        assertEquals(Settings.ACTION_APP_NOTIFICATION_SETTINGS, intent.action)
+        assertEquals(context.packageName, intent.getStringExtra(Settings.EXTRA_APP_PACKAGE))
+        assertEquals(null, intent.data)
+        assertEquals(null, intent.component)
+    }
+
     @Test fun newArrivalChannelHasHapticsWithoutChangingExistingUserSettings() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val channel = ArrivalAlertNotificationChannel.newChannel(context)

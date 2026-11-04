@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -57,7 +58,9 @@ internal fun GuidanceVoicePreviewPanel(
     isJourneyAudioActive: Boolean,
     modifier: Modifier = Modifier,
     onTestArrivalAlert: () -> Boolean = { false },
+    onOpenNotificationSettings: (() -> Unit)? = null,
 ) {
+    val context = LocalContext.current
     var alertPreviewResult by remember { mutableStateOf<Boolean?>(null) }
     var lastAttemptAccepted by remember(language) { mutableStateOf<Boolean?>(null) }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -92,6 +95,20 @@ internal fun GuidanceVoicePreviewPanel(
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.testTag("arrival-notification-preview-status"),
             )
+        }
+        if (alertPreviewResult == false && !isJourneyAudioActive) {
+            // Android can deny a preview when permission or the channel is blocked.
+            // Offer user-driven recovery without opening Settings on our own.
+            OutlinedButton(
+                onClick = {
+                    if (onOpenNotificationSettings != null) onOpenNotificationSettings()
+                    else AndroidArrivalAlertPreview.openSettings(context)
+                },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    .testTag("arrival-notification-settings"),
+            ) {
+                Text(stringResource(R.string.arrival_alert_preview_open_settings))
+            }
         }
         if (isJourneyAudioActive) {
             Text(

@@ -8,11 +8,32 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.net.Uri
+import android.provider.Settings
 
 /** Explicit local notification test. Does not start, arm or modify a real journey. */
 internal object AndroidArrivalAlertPreview {
     internal const val CHANNEL_ID = ArrivalAlertNotificationChannel.ID
     internal const val NOTIFICATION_ID = 4111
+
+    /** Only the user's explicit recovery tap opens this app's OS notification settings. */
+    internal fun settingsIntent(context: Context): Intent =
+        if (Build.VERSION.SDK_INT >= 26) {
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            }
+        } else {
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:${context.packageName}"))
+        }
+
+    internal fun openSettings(context: Context): Boolean = try {
+        context.startActivity(settingsIntent(context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        true
+    } catch (_: RuntimeException) {
+        // Device policies or missing settings handlers must never crash the alarm UI.
+        false
+    }
 
     fun post(context: Context): Boolean {
         if (Build.VERSION.SDK_INT >= 33 &&

@@ -5,4 +5,5 @@
     <string name="arrival_alert_preview_unavailable">Bildirim denemesi başlatılamadı. Bildirim iznini ve cihaz ayarlarını kontrol edin.</string>
     <string name="arrival_alert_preview_title">DENEME — Varış bildirimi</string>
     <string name="arrival_alert_preview_body">Bu yalnızca denemedir. Varış alarmı kurulmadı.</string>
+    <string name="arrival_alert_preview_open_settings">${label}</string>
 </resources>

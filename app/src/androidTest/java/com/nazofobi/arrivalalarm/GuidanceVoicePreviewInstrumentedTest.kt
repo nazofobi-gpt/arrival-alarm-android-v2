@@ -97,7 +97,32 @@ class GuidanceVoicePreviewInstrumentedTest {
         rule.onNodeWithTag("arrival-notification-preview").performClick()
         rule.onNodeWithTag("arrival-notification-preview-status").assertExists()
         assertEquals(1, posts)
+        rule.onNodeWithTag("arrival-notification-settings").assertDoesNotExist()
         assertEquals(0, speech)
+    }
+
+    @Test fun rejectedNotificationPreviewOffersUserControlledRecovery() {
+        var opened = 0
+        rule.setContent {
+            MaterialTheme {
+                GuidanceVoicePreviewPanel(
+                    speaker = object : GuidanceSpeaker {
+                        override fun speak(utterance: GuidanceUtterance) = true
+                    },
+                    language = GuidanceLanguage.GERMAN,
+                    isJourneyAudioActive = false,
+                    onTestArrivalAlert = { false },
+                    onOpenNotificationSettings = { opened++ },
+                )
+            }
+        }
+        rule.onNodeWithTag("arrival-notification-settings").assertDoesNotExist()
+        rule.onNodeWithTag("arrival-notification-preview").performClick()
+        rule.onNodeWithTag("arrival-notification-preview-status").assertExists()
+        rule.onNodeWithTag("arrival-notification-settings").assertExists()
+        assertEquals(0, opened)
+        rule.onNodeWithTag("arrival-notification-settings").performClick()
+        assertEquals(1, opened)
     }
 
     @Test fun activeAlarmDisablesNotificationPreview() {
