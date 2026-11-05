@@ -13,4 +13,5 @@
     <string name="route_planned_transfer_walk_unavailable">Yaya haritası açılamadı.</string>
     <string name="route_planned_transfer_walk_risk">Uyarı: 1,7 m/sn hızlı yürüyüş varsayımıyla bile kuş uçuşu mesafe planlı aktarma süresini aşabilir. Gerçek yaya rotası, gecikme ve bağlantı doğrulanmadı.</string>
     <string name="route_planned_transfer_straight_line_distance">Kuş uçuşu yaklaşık %1$d m (yaya yolu veya yürüyüş süresi değildir).</string>
+    <string name="route_planned_transfer_short_window_risk">Uyarı: Planlı aktarma yalnızca 3 dakika veya daha kısa. Yürüme, peron değişimi ve gecikmeyle yetişemeyebilirsiniz; canlı bağlantı durumu doğrulanmadı.</string>
 </resources>

@@ -130,6 +130,14 @@ internal fun PlannedTransferWindowPanel(
                     modifier = Modifier.testTag("journey-transfer-walk-risk-" + index),
                 )
             }
+            if (plannedTransferShortConnectionRisk(evidence)) {
+                Text(
+                    text = stringResource(R.string.route_planned_transfer_short_window_risk),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("journey-transfer-short-window-risk-" + index),
+                )
+            }
             evidence.walkingCoordinates?.let(::plannedTransferWalkingDirectionsUrl)?.let { walkUrl ->
                 TextButton(
                     onClick = {

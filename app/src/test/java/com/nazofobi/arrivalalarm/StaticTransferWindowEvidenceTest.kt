@@ -173,4 +173,43 @@ class StaticTransferWindowEvidenceTest {
             plannedGapMinutes = 6,
         )))
     }
+
+    @Test fun veryShortScheduledGapWarnsWithoutWalkingCoordinatesButNeverClaimsLiveMiss() {
+        val arrival = 1_800_000_000_000L
+        val base = RouteTransferWindowEvidence(
+            "X", "Y", "Arrival", "Boarding", 3,
+            plannedArrivalEpochMillis = arrival,
+            plannedDepartureEpochMillis = arrival + 180_000L,
+        )
+        assertTrue(plannedTransferShortConnectionRisk(base))
+        assertTrue(plannedTransferShortConnectionRisk(base.copy(
+            plannedGapMinutes = 2,
+            plannedDepartureEpochMillis = arrival + 120_000L,
+        )))
+        assertFalse(plannedTransferShortConnectionRisk(base.copy(
+            plannedGapMinutes = 4,
+            plannedDepartureEpochMillis = arrival + 180_001L,
+        )))
+        assertFalse(plannedTransferShortConnectionRisk(base.copy(
+            plannedGapMinutes = 5,
+            plannedDepartureEpochMillis = arrival + 300_000L,
+        )))
+        assertFalse(plannedTransferShortConnectionRisk(base.copy(plannedArrivalEpochMillis = 0L)))
+        assertFalse(plannedTransferShortConnectionRisk(base.copy(plannedDepartureEpochMillis = 0L)))
+        assertFalse(plannedTransferShortConnectionRisk(base.copy(plannedGapMinutes = 2)))
+        assertFalse(plannedTransferShortConnectionRisk(base.copy(arrivalStopId = "")))
+        assertFalse(plannedTransferShortConnectionRisk(base.copy(departureStopName = "")))
+        assertFalse(plannedTransferShortConnectionRisk(base.copy(
+            plannedDepartureEpochMillis = arrival - 60_000L,
+        )))
+        assertFalse(plannedTransferShortConnectionRisk(base.copy(
+            plannedDepartureEpochMillis = Long.MAX_VALUE,
+        )))
+        // UTC source instants are unambiguous across Berlin's repeated DST hour.
+        val dst = java.time.Instant.parse("2026-10-25T01:30:00Z").toEpochMilli()
+        assertTrue(plannedTransferShortConnectionRisk(base.copy(
+            plannedArrivalEpochMillis = dst,
+            plannedDepartureEpochMillis = dst + 180_000L,
+        )))
+    }
 }

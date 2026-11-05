@@ -223,3 +223,23 @@ internal fun plannedTransferStraightLineWalkingRisk(
         ?: return false
     return distanceMeters > (gapMillis / 1000.0) * 1.7
 }
+
+/**
+ * Timetable-only caution for very short connections (<= 3 exact minutes).
+ * Does not depend on pedestrian coordinates and must never claim live connection loss.
+ * Fail closed if the scheduled timestamps/identities are incomplete or inconsistent.
+ */
+internal fun plannedTransferShortConnectionRisk(
+    window: RouteTransferWindowEvidence,
+): Boolean {
+    if (window.plannedGapMinutes !in 1..180 ||
+        window.arrivalStopId.isBlank() || window.departureStopId.isBlank() ||
+        window.arrivalStopName.isBlank() || window.departureStopName.isBlank() ||
+        window.plannedArrivalEpochMillis <= 0L || window.plannedDepartureEpochMillis <= 0L) return false
+    val gapMillis = runCatching {
+        Math.subtractExact(window.plannedDepartureEpochMillis, window.plannedArrivalEpochMillis)
+    }.getOrNull() ?: return false
+    if (gapMillis !in 60_000L..10_800_000L ||
+        ((gapMillis + 59_999L) / 60_000L).toInt() != window.plannedGapMinutes) return false
+    return gapMillis <= 180_000L
+}

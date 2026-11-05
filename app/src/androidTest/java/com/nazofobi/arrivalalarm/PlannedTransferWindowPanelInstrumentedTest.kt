@@ -205,4 +205,40 @@ class PlannedTransferWindowPanelInstrumentedTest {
         rule.onNodeWithTag("journey-transfer-walk-risk-0").assertDoesNotExist()
         rule.onNodeWithTag("journey-static-transfer-disclaimer").assertExists()
     }
+
+    @Test fun veryShortSourceBackedTransferShowsQualifiedCautionWithoutWalkingPositions() {
+        val arrival = 1_800_000_000_000L
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(listOf(evidence.copy(
+                    plannedGapMinutes = 3,
+                    plannedArrivalEpochMillis = arrival,
+                    plannedDepartureEpochMillis = arrival + 180_000L,
+                )))
+            }
+        }
+        rule.onNodeWithTag("journey-transfer-short-window-risk-0").assertExists()
+        rule.onNodeWithTag("journey-static-transfer-disclaimer").assertExists()
+        rule.onNodeWithTag("journey-transfer-walk-risk-0").assertDoesNotExist()
+    }
+
+    @Test fun normalOrUnsourcedTransferNeverShowsShortWindowWarning() {
+        val arrival = 1_800_000_000_000L
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(listOf(evidence.copy(
+                    plannedGapMinutes = 4,
+                    plannedArrivalEpochMillis = arrival,
+                    plannedDepartureEpochMillis = arrival + 180_001L,
+                )))
+            }
+        }
+        rule.onNodeWithTag("journey-transfer-short-window-risk-0").assertDoesNotExist()
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(listOf(evidence.copy(plannedGapMinutes = 3)))
+            }
+        }
+        rule.onNodeWithTag("journey-transfer-short-window-risk-0").assertDoesNotExist()
+    }
 }
