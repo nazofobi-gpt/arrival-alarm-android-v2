@@ -58,14 +58,27 @@ internal fun PlannedTransferWindowPanel(
                     modifier = Modifier.testTag("journey-static-transfer-local-time-" + index),
                 )
             }
-            plannedTransferDepartureCountdownMinutes(
+            val countdownMinutes = plannedTransferDepartureCountdownMinutes(
                 evidence.plannedDepartureEpochMillis, currentEpochMillis,
-            )?.let { minutes ->
+            )
+            if (countdownMinutes != null) {
                 Text(
-                    text = stringResource(R.string.route_planned_transfer_departure_countdown, minutes),
+                    text = stringResource(
+                        R.string.route_planned_transfer_departure_countdown, countdownMinutes,
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.testTag("journey-static-transfer-countdown-" + index),
+                )
+            } else if (plannedTransferDepartureRecentlyPassed(
+                    evidence.plannedDepartureEpochMillis, currentEpochMillis,
+                )
+            ) {
+                Text(
+                    text = stringResource(R.string.route_planned_transfer_departure_past),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("journey-static-transfer-departure-passed-" + index),
                 )
             }
         }

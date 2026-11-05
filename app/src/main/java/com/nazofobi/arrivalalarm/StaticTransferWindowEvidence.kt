@@ -67,6 +67,19 @@ internal fun plannedTransferDepartureCountdownMinutes(
     return ((remainingMillis + 59_999L) / 60_000L).toInt()
 }
 
+/** A past *scheduled* transfer departure is not evidence of the vehicle's actual status. */
+internal fun plannedTransferDepartureRecentlyPassed(
+    departureEpochMillis: Long,
+    nowEpochMillis: Long,
+): Boolean {
+    if (departureEpochMillis <= 0L || nowEpochMillis <= 0L) return false
+    val elapsedMillis = runCatching {
+        Math.subtractExact(nowEpochMillis, departureEpochMillis)
+    }.getOrNull() ?: return false
+    // A bounded foreground hint avoids indefinite warnings on historic itineraries.
+    return elapsedMillis in 1L..10_800_000L
+}
+
 /** Format the source GTFS departure with its agency-zone offset; never use device local time. */
 internal fun plannedTransferDepartureLocalTime(
     departureEpochMillis: Long,

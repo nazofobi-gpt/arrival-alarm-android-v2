@@ -1,6 +1,7 @@
 package com.nazofobi.arrivalalarm
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
@@ -65,6 +66,17 @@ class StaticTransferWindowEvidenceTest {
         assertEquals("25.10.2026 02:30 +02:00", plannedTransferDepartureLocalTime(beforeFallback, berlin))
         assertEquals("25.10.2026 02:30 +01:00", plannedTransferDepartureLocalTime(afterFallback, berlin))
         assertEquals(null, plannedTransferDepartureLocalTime(0L, berlin))
+    }
+
+    @Test fun passedDepartureShowsOnlyRecentScheduledHintNotLiveMissedConnection() {
+        val departure = second.departureEpochMillis
+        assertFalse(plannedTransferDepartureRecentlyPassed(departure, departure))
+        assertTrue(plannedTransferDepartureRecentlyPassed(departure, departure + 1L))
+        assertTrue(plannedTransferDepartureRecentlyPassed(departure, departure + 10_800_000L))
+        assertFalse(plannedTransferDepartureRecentlyPassed(departure, departure + 10_800_001L))
+        assertFalse(plannedTransferDepartureRecentlyPassed(departure, departure - 1L))
+        assertFalse(plannedTransferDepartureRecentlyPassed(0L, departure + 1L))
+        assertFalse(plannedTransferDepartureRecentlyPassed(Long.MAX_VALUE, 1L))
     }
 
     @Test fun refusesToShowPartialTransferEvidenceOnMultipleLegs() {
