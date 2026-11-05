@@ -16,4 +16,5 @@
     <string name="route_planned_transfer_walk_risk">Warning: Even straight-line walking at a brisk 1.7 m/s may exceed the scheduled transfer window. Pedestrian route, delays and connection are unverified.</string>
     <string name="route_planned_transfer_straight_line_distance">Approx. %1$d m straight line (not a walking route or walking time).</string>
     <string name="route_planned_transfer_short_window_risk">Caution: scheduled transfer window is 3 minutes or less. Walking, platforms and delays may prevent the connection; live status is unverified.</string>
+    <string name="route_planned_transfer_different_stops">The timetable identifies separate arrival and onward boarding stops. Check the walk and platform independently; the connection is unverified.</string>
 </resources>

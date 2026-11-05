@@ -316,4 +316,40 @@ class PlannedTransferWindowPanelInstrumentedTest {
         rule.onNodeWithTag("journey-static-transfer-arrival-countdown-0").assertDoesNotExist()
     }
 
+
+    @Test fun distinctGtfsStopsShowSourceQualifiedTransferCheck() {
+        val arrival = 1_800_000_000_000L
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(listOf(evidence.copy(
+                    plannedArrivalEpochMillis = arrival,
+                    plannedDepartureEpochMillis = arrival + 360_000L,
+                )))
+            }
+        }
+        rule.onNodeWithTag("journey-transfer-different-source-stops-0").assertExists()
+        rule.onNodeWithTag("journey-static-transfer-disclaimer").assertExists()
+    }
+
+    @Test fun sameStopOrUnverifiedTimesNeverShowStopChangeAdvice() {
+        val arrival = 1_800_000_000_000L
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(listOf(evidence.copy(
+                    departureStopId = "x",
+                    plannedArrivalEpochMillis = arrival,
+                    plannedDepartureEpochMillis = arrival + 360_000L,
+                )))
+            }
+        }
+        rule.onNodeWithTag("journey-transfer-different-source-stops-0").assertDoesNotExist()
+    }
+
+    @Test fun noSourceTimesNeverInventDifferentStopTransferAdvice() {
+        rule.setContent {
+            MaterialTheme { PlannedTransferWindowPanel(listOf(evidence)) }
+        }
+        rule.onNodeWithTag("journey-transfer-different-source-stops-0").assertDoesNotExist()
+    }
+
 }

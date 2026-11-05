@@ -284,3 +284,21 @@ internal fun plannedTransferShortConnectionRisk(
         ((gapMillis + 59_999L) / 60_000L).toInt() != window.plannedGapMinutes) return false
     return gapMillis <= 180_000L
 }
+
+/**
+ * Warn only when the two source GTFS stop identities genuinely differ and the
+ * scheduled connection timestamps independently agree with the displayed gap.
+ * This does not prove a pedestrian transfer, platform change or live connection.
+ */
+internal fun plannedTransferDifferentSourceStops(window: RouteTransferWindowEvidence): Boolean {
+    if (window.arrivalStopId.isBlank() || window.departureStopId.isBlank() ||
+        window.arrivalStopName.isBlank() || window.departureStopName.isBlank() ||
+        window.arrivalStopId == window.departureStopId ||
+        window.plannedGapMinutes !in 1..180 ||
+        window.plannedArrivalEpochMillis <= 0L || window.plannedDepartureEpochMillis <= 0L) return false
+    val gap = runCatching {
+        Math.subtractExact(window.plannedDepartureEpochMillis, window.plannedArrivalEpochMillis)
+    }.getOrNull() ?: return false
+    return gap in 60_000L..10_800_000L &&
+        ((gap + 59_999L) / 60_000L).toInt() == window.plannedGapMinutes
+}

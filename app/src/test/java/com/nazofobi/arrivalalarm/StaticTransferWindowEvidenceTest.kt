@@ -265,4 +265,27 @@ class StaticTransferWindowEvidenceTest {
         assertNull(plannedTransferArrivalCountdownMinutes(w, 0L))
     }
 
+
+    @Test fun distinctGtfsStopCueRequiresConsistentSourceSchedule() {
+        val arrival = 1_800_000_000_000L
+        val window = RouteTransferWindowEvidence(
+            "stop-A", "stop-B", "Arrival", "Boarding", 6,
+            plannedArrivalEpochMillis = arrival,
+            plannedDepartureEpochMillis = arrival + 360_000L,
+        )
+        assertTrue(plannedTransferDifferentSourceStops(window))
+        assertFalse(plannedTransferDifferentSourceStops(window.copy(departureStopId = "stop-A")))
+        assertFalse(plannedTransferDifferentSourceStops(window.copy(departureStopName = "")))
+        assertFalse(plannedTransferDifferentSourceStops(window.copy(plannedArrivalEpochMillis = 0L)))
+        assertFalse(plannedTransferDifferentSourceStops(window.copy(plannedGapMinutes = 5)))
+        assertFalse(plannedTransferDifferentSourceStops(window.copy(
+            plannedDepartureEpochMillis = arrival - 1L,
+        )))
+        assertFalse(plannedTransferDifferentSourceStops(window.copy(
+            plannedDepartureEpochMillis = Long.MAX_VALUE,
+        )))
+        // Two differently identified GTFS stops do not establish walking feasibility.
+        assertFalse(plannedTransferDifferentSourceStops(window.copy(arrivalStopId = "")))
+    }
+
 }
