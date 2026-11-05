@@ -839,6 +839,7 @@ internal fun PlannedWalkStartNotice(
     notificationPermissionReadyForTest: Boolean? = null,
     notificationSettingsLauncher: ((Intent) -> Boolean)? = null,
     notificationChannelMutedForTest: Boolean? = null,
+    notificationPreviewSender: (() -> Boolean)? = null,
 ) {
     val context = LocalContext.current
     val preferences = remember(context) {
@@ -1019,6 +1020,7 @@ internal fun PlannedWalkStartNotice(
         option, displayNowMillis, safetyBufferMinutes,
     )
     if (reminderScheduled || reminderDelay != null) {
+        var reminderPreviewResult by remember(option.id) { mutableStateOf<Boolean?>(null) }
         // A previous route's reminder must be disclosed and cancelled explicitly;
         // never silently replace it when a different journey is selected.
         if (reminderScheduled && !reminderScheduler.isScheduledForRoute(option.id)) {
@@ -1102,6 +1104,29 @@ internal fun PlannedWalkStartNotice(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.testTag("route-walk-reminder-note"),
         )
+        // Testing this channel is opt-in, has a distinct notification ID, and
+        // neither schedules a walking reminder nor arms an arrival alarm.
+        OutlinedButton(
+            onClick = {
+                reminderPreviewResult = (notificationPreviewSender
+                    ?: { PlannedWalkReminderPreview.post(context) })()
+            },
+            enabled = notificationsReady && !reminderBusy,
+            modifier = Modifier.heightIn(min = 48.dp)
+                .testTag("route-walk-reminder-preview"),
+        ) { Text(stringResource(R.string.route_walk_reminder_preview_action)) }
+        reminderPreviewResult?.let { submitted ->
+            Text(
+                text = stringResource(
+                    if (submitted) R.string.route_walk_reminder_preview_submitted
+                    else R.string.route_walk_reminder_preview_failed,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (submitted) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.error,
+                modifier = Modifier.testTag("route-walk-reminder-preview-result"),
+            )
+        }
         if (reminderScheduled) {
             Text(
                 text = stringResource(R.string.route_walk_reminder_queued),
