@@ -4,6 +4,11 @@ import android.content.Intent
 import android.provider.CalendarContract
 import android.provider.Settings
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertIsEnabled
@@ -36,7 +41,10 @@ class PlannedWalkStartInstrumentedTest {
     ) {
         rule.setContent {
             MaterialTheme {
-                PlannedWalkStartNotice(
+                // Match the real RouteJourneyPanel vertical layout; otherwise sibling
+                // controls overlap at the origin and Compose clicks hit the wrong node.
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    PlannedWalkStartNotice(
                     RouteOption(
                         id = "gtfs-1",
                         origin = MapPoint(52.67, 8.24, "Lohne"),
@@ -58,10 +66,18 @@ class PlannedWalkStartInstrumentedTest {
                     notificationPermissionReadyForTest = notificationPermissionReadyForTest,
                     notificationChannelMutedForTest = notificationChannelMutedForTest,
                     notificationSettingsLauncher = notificationSettingsLauncher,
-                )
+                    )
+                }
             }
         }
     }
+
+    /** Within the seven-day scheduling window, using an explicit source UTC offset. */
+    private fun nearFutureDeparture(): String = java.time.Instant.now()
+        .plusSeconds(7_200L)
+        .atOffset(java.time.ZoneOffset.ofHours(1))
+        .withNano(0)
+        .toString()
 
     @Test fun overnightWalkStartShowsTheCalendarDateNotOnlyTheClock() {
         // First boarding stop leaves after midnight in the source's +01:00 offset;
@@ -107,8 +123,8 @@ class PlannedWalkStartInstrumentedTest {
             bufferMinutesForTest = 0,
             calendarLauncher = { observed = it; true },
         )
-        rule.onNodeWithTag("route-walk-safety-buffer").performClick()
-        rule.onNodeWithTag("route-planned-walk-calendar").performClick()
+        rule.onNodeWithTag("route-walk-safety-buffer").performScrollTo().performClick()
+        rule.onNodeWithTag("route-planned-walk-calendar").performScrollTo().performClick()
         rule.runOnIdle {
             val draft = requireNotNull(observed)
             assertEquals(
@@ -129,7 +145,7 @@ class PlannedWalkStartInstrumentedTest {
         preferences.edit().remove("safety_buffer_minutes").commit()
         try {
             show("2099-11-04T10:30:00+01:00", 600, bufferMinutesForTest = null)
-            rule.onNodeWithTag("route-walk-safety-buffer").performClick()
+            rule.onNodeWithTag("route-walk-safety-buffer").performScrollTo().performClick()
             rule.runOnIdle { assertEquals(5, preferences.getInt("safety_buffer_minutes", -1)) }
         } finally {
             preferences.edit().remove("safety_buffer_minutes").commit()
@@ -158,7 +174,7 @@ class PlannedWalkStartInstrumentedTest {
             observed = intent
             true
         }
-        rule.onNodeWithTag("route-planned-walk-calendar").performClick()
+        rule.onNodeWithTag("route-planned-walk-calendar").performScrollTo().performClick()
         rule.runOnIdle {
             val intent = requireNotNull(observed)
             assertEquals(Intent.ACTION_INSERT, intent.action)
@@ -188,7 +204,7 @@ class PlannedWalkStartInstrumentedTest {
 
     @Test fun calendarFailureVisibleWithoutClaimingSavedEvent() {
         show("2099-11-04T10:30:00+01:00", 600) { false }
-        rule.onNodeWithTag("route-planned-walk-calendar").performClick()
+        rule.onNodeWithTag("route-planned-walk-calendar").performScrollTo().performClick()
         rule.onNodeWithTag("route-planned-walk-calendar-failure").assertExists()
     }
     @Test fun showsWarningAfterPlannedWalkStart() {
@@ -216,7 +232,7 @@ class PlannedWalkStartInstrumentedTest {
             directionsLauncher = { observed = it; true })
         rule.onNodeWithTag("route-walk-directions").assertExists()
         rule.runOnIdle { assertEquals(null, observed) }
-        rule.onNodeWithTag("route-walk-directions").performClick()
+        rule.onNodeWithTag("route-walk-directions").performScrollTo().performClick()
         rule.runOnIdle {
             assertEquals(Intent.ACTION_VIEW, requireNotNull(observed).action)
             assertEquals(
@@ -232,7 +248,7 @@ class PlannedWalkStartInstrumentedTest {
     @Test fun failedExternalLaunchIsVisible() {
         show("2099-11-04T10:30:00+01:00", 600, stopLatitude = 52.67,
             stopLongitude = 8.24, directionsLauncher = { false })
-        rule.onNodeWithTag("route-walk-directions").performClick()
+        rule.onNodeWithTag("route-walk-directions").performScrollTo().performClick()
         rule.onNodeWithTag("route-walk-directions-failure").assertExists()
     }
     @Test fun departedTripHidesDirections() {
@@ -411,12 +427,12 @@ class PlannedWalkStartInstrumentedTest {
 
     @Test fun disabledNotificationsOfferSettingsInsteadOfFalseSchedule() {
         var observed: Intent? = null
-        show("2099-11-04T10:30:00+01:00", 600,
+        show(nearFutureDeparture(), 600,
             notificationPermissionReadyForTest = false,
             notificationSettingsLauncher = { observed = it; true })
         rule.onNodeWithTag("route-walk-reminder-notifications-disabled").assertExists()
         rule.onNodeWithTag("route-walk-reminder-toggle").assertIsNotEnabled()
-        rule.onNodeWithTag("route-walk-reminder-settings").performClick()
+        rule.onNodeWithTag("route-walk-reminder-settings").performScrollTo().performClick()
         rule.runOnIdle {
             val intent = requireNotNull(observed)
             assertEquals(Settings.ACTION_APP_NOTIFICATION_SETTINGS, intent.action)
@@ -429,30 +445,30 @@ class PlannedWalkStartInstrumentedTest {
     }
 
     @Test fun enabledNotificationsKeepOptInAndHideSettingsRecovery() {
-        show("2099-11-04T10:30:00+01:00", 600,
+        show(nearFutureDeparture(), 600,
             notificationPermissionReadyForTest = true)
         rule.onNodeWithTag("route-walk-reminder-toggle").assertIsEnabled()
         rule.onNodeWithTag("route-walk-reminder-settings").assertDoesNotExist()
     }
 
     @Test fun unavailableNotificationSettingsHandlerDoesNotSchedule() {
-        show("2099-11-04T10:30:00+01:00", 600,
+        show(nearFutureDeparture(), 600,
             notificationPermissionReadyForTest = false,
             notificationSettingsLauncher = { false })
-        rule.onNodeWithTag("route-walk-reminder-settings").performClick()
+        rule.onNodeWithTag("route-walk-reminder-settings").performScrollTo().performClick()
         rule.onNodeWithTag("route-walk-reminder-settings-failure").assertExists()
         rule.onNodeWithTag("route-walk-reminder-toggle").assertIsNotEnabled()
     }
 
     @Test fun mutedChannelDisablesOptInAndOpensChannelSpecificAndroidSettings() {
         var observed: Intent? = null
-        show("2099-11-04T10:30:00+01:00", 600,
+        show(nearFutureDeparture(), 600,
             notificationPermissionReadyForTest = true,
             notificationChannelMutedForTest = true,
             notificationSettingsLauncher = { observed = it; true })
         rule.onNodeWithTag("route-walk-reminder-notifications-disabled").assertExists()
         rule.onNodeWithTag("route-walk-reminder-toggle").assertIsNotEnabled()
-        rule.onNodeWithTag("route-walk-reminder-settings").performClick()
+        rule.onNodeWithTag("route-walk-reminder-settings").performScrollTo().performClick()
         rule.runOnIdle {
             val intent = requireNotNull(observed)
             assertEquals(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS, intent.action)
