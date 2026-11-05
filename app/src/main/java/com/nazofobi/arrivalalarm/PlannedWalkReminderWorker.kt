@@ -132,6 +132,56 @@ internal class PlannedWalkReminderScheduler(private val context: Context) {
     }
 }
 
+/**
+ * Explicit notification-channel preview, separate from the scheduled walking reminder.
+ * Never schedules WorkManager, changes the selected journey, or triggers an arrival alarm.
+ * Android accepting notify() does not prove that the user heard or saw the notification.
+ */
+internal object PlannedWalkReminderPreview {
+    const val NOTIFICATION_ID = 2403 // Distinct from the actual reminder notification 2402.
+
+    @SuppressLint("MissingPermission")
+    fun post(context: Context): Boolean {
+        if (!PlannedWalkReminderScheduler.notificationPermissionGranted(context)) return false
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE)
+            as? NotificationManager ?: return false
+        return runCatching {
+            if (Build.VERSION.SDK_INT >= 26) {
+                // Never overwrite an existing OS channel: its user choices are authoritative.
+                if (manager.getNotificationChannel(PlannedWalkReminderScheduler.CHANNEL) == null) {
+                    manager.createNotificationChannel(NotificationChannel(
+                        PlannedWalkReminderScheduler.CHANNEL,
+                        context.getString(R.string.route_walk_reminder_notification_title),
+                        NotificationManager.IMPORTANCE_DEFAULT,
+                    ))
+                }
+                if (manager.getNotificationChannel(PlannedWalkReminderScheduler.CHANNEL)?.importance ==
+                    NotificationManager.IMPORTANCE_NONE) return false
+            }
+            val open = PendingIntent.getActivity(
+                context, NOTIFICATION_ID, Intent(context, MainActivity::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val notification = (if (Build.VERSION.SDK_INT >= 26) {
+                Notification.Builder(context, PlannedWalkReminderScheduler.CHANNEL)
+            } else {
+                @Suppress("DEPRECATION")
+                Notification.Builder(context)
+            })
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle(context.getString(R.string.route_walk_reminder_preview_title))
+                .setContentText(context.getString(R.string.route_walk_reminder_preview_body))
+                .setVisibility(Notification.VISIBILITY_PRIVATE)
+                .setCategory(Notification.CATEGORY_STATUS)
+                .setAutoCancel(true)
+                .setContentIntent(open)
+                .build()
+            manager.notify(NOTIFICATION_ID, notification)
+            true
+        }.getOrDefault(false)
+    }
+}
+
 class PlannedWalkReminderWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     @SuppressLint("MissingPermission")
     override fun doWork(): Result {
