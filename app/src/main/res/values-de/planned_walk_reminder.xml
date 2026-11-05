@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="route_walk_reminder_set">Ungefähre Erinnerung zum Losgehen aktivieren</string>
+    <string name="route_walk_reminder_other_route">Für eine andere Route ist bereits eine Geherinnerung aktiv. Zuerst diese Erinnerung löschen; die neue Route ersetzt sie nicht unbemerkt.</string>
+    <string name="route_walk_reminder_cancel">Erinnerung zum Losgehen löschen</string>
+    <string name="route_walk_reminder_disclaimer">Nur eine freiwillige Android-Benachrichtigung. Energiesparen, Doze oder fehlende Berechtigung können sie verzögern oder verhindern. Kein garantierter Alarm. Eine Änderung des Zeitpuffers verschiebt eine bestehende Erinnerung nicht.</string>
+    <string name="route_walk_reminder_queued">Erinnerung vorgemerkt; die Zustellzeit ist nicht garantiert.</string>
+    <string name="route_walk_reminder_failure">Erinnerung konnte nicht geändert werden. Benachrichtigungen prüfen.</string>
+    <string name="route_walk_reminder_notification_title">Geschätzte Zeit zum Losgehen</string>
+    <string name="route_walk_reminder_notification_body">Geh ggf. in Richtung %1$s. Prüfe die tatsächliche Verbindung erneut.</string>
+    <string name="route_walk_reminder_details">Gespeicherte Geherinnerung: %1$s — %2$s (Ortszeit; Zustellung nicht garantiert).</string>
+    <string name="route_walk_reminder_notifications_disabled">Benachrichtigungen sind ausgeschaltet. Die Erinnerung kann nicht geplant werden. Öffne die App-Einstellungen.</string>
+    <string name="route_walk_reminder_open_notification_settings">Benachrichtigungseinstellungen öffnen</string>
+    <string name="route_walk_reminder_settings_failure">Einstellungen konnten nicht geöffnet werden. Prüfe die App-Benachrichtigungen in Android.</string>
+    <string name="route_walk_reminder_preview_action">Benachrichtigung zum Losgehen testen</string>
+    <string name="route_walk_reminder_preview_title">TEST — Geherinnerung</string>
+    <string name="route_walk_reminder_preview_body">Nur ein Test. Keine Fahrt und keine Erinnerung gestartet.</string>
+    <string name="route_walk_reminder_preview_submitted">Test an Android gesendet. Sicht- oder Hörbarkeit ist nicht bestätigt.</string>
+    <string name="route_walk_reminder_preview_failed">Test konnte nicht gesendet werden. Android-Benachrichtigungen prüfen.</string>
+    <string name="route_walk_reminder_preview_dismiss">Testbenachrichtigung entfernen</string>
+    <string name="route_walk_reminder_preview_dismissed">Entfernen der Testbenachrichtigung an Android übermittelt.</string>
+    <string name="route_walk_reminder_preview_dismiss_failed">Testbenachrichtigung konnte nicht entfernt werden. Erneut versuchen.</string>
+    <string name="route_walk_reminder_update_notice">Die gespeicherte Erinnerungszeit weicht von der aktuellen Gehschätzung ab. Nur durch deine ausdrückliche Aktion wird sie für diese Route geändert.</string>
+    <string name="route_walk_reminder_update">Erinnerung dieser Route auf die neue Zeit setzen</string>
+</resources>

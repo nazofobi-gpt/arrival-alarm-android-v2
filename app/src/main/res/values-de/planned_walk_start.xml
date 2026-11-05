@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="route_planned_walk_start">Voraussichtlicher Aufbruch zu Fuß: %1$s</string>
+    <string name="route_planned_walk_start_disclaimer">Die Gehzeit ist aus der Luftlinie geschätzt. Keine Fußwegnavigation oder automatische Erinnerung.</string>
+    <string name="route_planned_walk_calendar_action">Gehzeit im Kalender vormerken</string>
+    <string name="route_planned_walk_calendar_title">Fußweg von %1$s Richtung %2$s</string>
+    <string name="route_planned_walk_calendar_failure">Kalender konnte nicht geöffnet werden. Kein Termin wurde gespeichert.</string>
+    <string name="route_planned_walk_late_warning">Die geschätzte Aufbruchzeit zu Fuß ist vorbei. Das Erreichen dieser planmäßigen Abfahrt ist nicht gesichert.</string>
+    <string name="route_planned_walk_departure_passed">Die erste planmäßige Abfahrtszeit ist vorbei. Echtzeitstatus und spätere Fahrten prüfen.</string>
+    <string name="route_planned_walk_maps_action">Fußweg zum Einstieg in Google Maps öffnen</string>
+    <string name="route_planned_walk_maps_disclaimer">Google Maps wird extern geöffnet. Fußweg und Dauer können von der Schätzung abweichen; kein Anschluss garantiert.</string>
+    <string name="route_planned_walk_maps_failure">Fußwegkarte konnte nicht geöffnet werden.</string>
+    <string name="route_planned_walk_buffer_action">Zusätzlicher Zeitpuffer: %1$d Min. (ändern)</string>
+    <string name="route_planned_walk_buffer_failure">Zeitpuffer konnte nicht gespeichert werden. Bisherige Einstellung bleibt erhalten.</string>
+    <string name="route_planned_walk_remaining_minutes">Noch etwa %1$d Minuten bis zum geschätzten Aufbruch zu Fuß.</string>
+</resources>

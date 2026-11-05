@@ -1,5 +1,11 @@
 package com.nazofobi.arrivalalarm
 
+import android.content.Intent
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,9 +20,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -27,6 +35,9 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class RouteJourneyMode {
     RESULTS,
@@ -70,6 +81,13 @@ fun RouteJourneyPanel(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // A previously queued walk reminder must remain cancellable when
+        // routes disappear, filters hide every option, or the selection is lost.
+        // A selected journey already has its own reminder control below.
+        if (mode == RouteJourneyMode.RESULTS ||
+            selectedRouteId == null || routeOptions.none { it.id == selectedRouteId }) {
+            PendingWalkReminderWithoutRoute()
+        }
         if (mode == RouteJourneyMode.RESULTS) {
             Text(
                 text = stringResource(R.string.route_results_title),
@@ -264,6 +282,83 @@ fun RouteJourneyPanel(
     }
 }
 
+/** Display the persisted scheduled stop/time, never a recomputed time from a new route. */
+@Composable
+private fun StoredWalkReminderDetails(scheduler: PlannedWalkReminderScheduler) {
+    val details = scheduler.scheduledDetails() ?: return
+    val clock = remember(details.startMillis) {
+        java.text.DateFormat.getDateTimeInstance(
+            java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT,
+        ).format(java.util.Date(details.startMillis))
+    }
+    Text(
+        text = stringResource(R.string.route_walk_reminder_details, details.stopName, clock),
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.testTag("route-walk-reminder-details"),
+    )
+}
+
+/**
+ * An opt-in reminder must not become impossible to revoke when a route card is
+ * unavailable. This is status + explicit cancellation only; never arms a job.
+ */
+@Composable
+private fun PendingWalkReminderWithoutRoute() {
+    val context = LocalContext.current
+    val scheduler = remember(context) {
+        PlannedWalkReminderScheduler(context.applicationContext)
+    }
+    var queuedRoute by remember(context) { mutableStateOf(scheduler.scheduledRouteId()) }
+    var cancelBusy by remember { mutableStateOf(false) }
+    var cancelFailed by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    if (queuedRoute == null) return
+
+    Card(
+        modifier = Modifier.fillMaxWidth().testTag("route-walk-reminder-global-card"),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.route_walk_reminder_queued),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            StoredWalkReminderDetails(scheduler)
+            Text(
+                text = stringResource(R.string.route_walk_reminder_disclaimer),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = {
+                    if (!cancelBusy) {
+                        cancelBusy = true
+                        scope.launch {
+                            val succeeded = withContext(Dispatchers.IO) { scheduler.cancel() }
+                            queuedRoute = scheduler.scheduledRouteId()
+                            cancelFailed = !succeeded
+                            cancelBusy = false
+                        }
+                    }
+                },
+                enabled = !cancelBusy,
+                modifier = Modifier.heightIn(min = 48.dp)
+                    .testTag("route-walk-reminder-global-cancel"),
+            ) { Text(stringResource(R.string.route_walk_reminder_cancel)) }
+            if (cancelFailed) {
+                Text(
+                    text = stringResource(R.string.route_walk_reminder_failure),
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("route-walk-reminder-global-failure"),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun RouteOptionCard(
     option: RouteOption,
@@ -434,6 +529,7 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
                     modifier = Modifier.testTag("route-walk-access"),
                 )
             }
+            PlannedWalkStartNotice(option)
             option.egressWalking?.takeIf { it.walkSeconds > 0 }?.let { leg ->
                 val roundedMinutes = ((leg.walkSeconds.toLong() + 59L) / 60L).toInt()
                 Text(
@@ -730,3 +826,456 @@ internal fun routeClock(value: String?): String? {
 private fun hasRealtimeDelta(stop: RouteStop): Boolean =
     routeHasUsableRealtimeDelta(stop.arrival, stop.plannedArrival) ||
         routeHasUsableRealtimeDelta(stop.departure, stop.plannedDeparture)
+
+/** Informational source-backed walking start: no reminder or notification is armed. */
+/** An optional user-confirmed Calendar draft; never silently arms an event or reminder. */
+@Composable
+internal fun PlannedWalkStartNotice(
+    option: RouteOption,
+    calendarLauncher: ((Intent) -> Boolean)? = null,
+    nowMillisForTest: Long? = null,
+    bufferMinutesForTest: Int? = null,
+    directionsLauncher: ((Intent) -> Boolean)? = null,
+    notificationPermissionReadyForTest: Boolean? = null,
+    notificationSettingsLauncher: ((Intent) -> Boolean)? = null,
+    notificationChannelMutedForTest: Boolean? = null,
+    notificationPreviewSender: (() -> Boolean)? = null,
+    notificationPreviewCanceller: (() -> Boolean)? = null,
+) {
+    val context = LocalContext.current
+    val preferences = remember(context) {
+        context.getSharedPreferences("route_walk_preferences", android.content.Context.MODE_PRIVATE)
+    }
+    var safetyBufferMinutes by remember(option.id, bufferMinutesForTest) {
+        mutableStateOf(
+            bufferMinutesForTest ?: preferences.getInt("safety_buffer_minutes", 0)
+                .takeIf { it == 0 || it == 5 || it == 10 || it == 15 } ?: 0,
+        )
+    }
+    var bufferSaveFailed by remember(option.id) { mutableStateOf(false) }
+    val startEpoch = plannedWalkStartEpochMillis(option, safetyBufferMinutes)
+    if (startEpoch == null) {
+        // Installed GTFS data can disappear or change after an opt-in reminder was
+        // queued. Keep its cancellation available without inventing a walk time.
+        val scheduler = remember(context) {
+            PlannedWalkReminderScheduler(context.applicationContext)
+        }
+        var pending by remember(option.id) {
+            mutableStateOf(scheduler.scheduledRouteId() != null)
+        }
+        var cancelBusy by remember(option.id) { mutableStateOf(false) }
+        var cancelFailed by remember(option.id) { mutableStateOf(false) }
+        val cancelScope = rememberCoroutineScope()
+        if (pending) {
+            if (!scheduler.isScheduledForRoute(option.id)) {
+                Text(
+                    text = stringResource(R.string.route_walk_reminder_other_route),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("route-walk-reminder-other-route"),
+                )
+            }
+            StoredWalkReminderDetails(scheduler)
+            OutlinedButton(
+                onClick = {
+                    if (!cancelBusy) {
+                        cancelBusy = true
+                        cancelScope.launch {
+                            val succeeded = withContext(Dispatchers.IO) {
+                                scheduler.cancel()
+                            }
+                            pending = scheduler.scheduledRouteId() != null
+                            cancelFailed = !succeeded
+                            cancelBusy = false
+                        }
+                    }
+                },
+                enabled = !cancelBusy,
+                modifier = Modifier.heightIn(min = 48.dp)
+                    .testTag("route-walk-reminder-toggle"),
+            ) { Text(stringResource(R.string.route_walk_reminder_cancel)) }
+            Text(
+                text = stringResource(R.string.route_walk_reminder_disclaimer),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("route-walk-reminder-note"),
+            )
+            if (cancelFailed) {
+                Text(
+                    text = stringResource(R.string.route_walk_reminder_failure),
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("route-walk-reminder-failure"),
+                )
+            }
+        }
+        return
+    }
+    var liveNowMillis by remember(option.id, startEpoch) {
+        mutableStateOf(System.currentTimeMillis())
+    }
+    LaunchedEffect(option.id, startEpoch, nowMillisForTest) {
+        if (nowMillisForTest == null) {
+            while (true) {
+                liveNowMillis = System.currentTimeMillis()
+                kotlinx.coroutines.delay(30_000L)
+            }
+        }
+    }
+    val displayNowMillis = nowMillisForTest ?: liveNowMillis
+    var launchFailed by remember(option.id, startEpoch) { mutableStateOf(false) }
+    var directionsFailed by remember(option.id, startEpoch) { mutableStateOf(false) }
+    // A time alone is ambiguous for overnight and next-day trips. Format the
+    // verified instant in the device's local calendar, including its date.
+    val clock = remember(startEpoch) {
+        java.text.DateFormat.getDateTimeInstance(
+            java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT,
+        ).format(java.util.Date(startEpoch))
+    }
+    OutlinedButton(
+        onClick = {
+            val next = if (safetyBufferMinutes >= 15) 0 else safetyBufferMinutes + 5
+            if (bufferMinutesForTest == null) {
+                if (preferences.edit().putInt("safety_buffer_minutes", next).commit()) {
+                    safetyBufferMinutes = next
+                    bufferSaveFailed = false
+                } else {
+                    bufferSaveFailed = true
+                }
+            } else {
+                safetyBufferMinutes = next
+            }
+        },
+        modifier = Modifier.heightIn(min = 48.dp).testTag("route-walk-safety-buffer"),
+    ) { Text(stringResource(R.string.route_planned_walk_buffer_action, safetyBufferMinutes)) }
+    if (bufferSaveFailed) {
+        Text(
+            text = stringResource(R.string.route_planned_walk_buffer_failure),
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.testTag("route-walk-buffer-save-failure"),
+        )
+    }
+    Text(
+        text = stringResource(R.string.route_planned_walk_start, clock),
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.testTag("route-planned-walk-start"),
+    )
+    Text(
+        text = stringResource(R.string.route_planned_walk_start_disclaimer),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.testTag("route-planned-walk-start-note"),
+    )
+    plannedWalkMinutesRemaining(option, displayNowMillis, safetyBufferMinutes)?.let { minutes ->
+        Text(
+            text = stringResource(R.string.route_planned_walk_remaining_minutes, minutes),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.testTag("route-walk-minutes-remaining"),
+        )
+    }
+    when (plannedWalkWarning(option, displayNowMillis, safetyBufferMinutes)) {
+        PlannedWalkWarning.WALK_START_PASSED -> Text(
+            text = stringResource(R.string.route_planned_walk_late_warning),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.testTag("route-walk-start-passed"),
+        )
+        PlannedWalkWarning.PLANNED_DEPARTURE_PASSED -> Text(
+            text = stringResource(R.string.route_planned_walk_departure_passed),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.testTag("route-walk-departure-passed"),
+        )
+        null -> Unit
+    }
+    // Opt-in, best-effort WorkManager notification; never a guaranteed wake-up alarm.
+    // An existing reminder is still cancellable if a later buffer choice changed.
+    val reminderScheduler = remember(context) {
+        PlannedWalkReminderScheduler(context.applicationContext)
+    }
+    val reminderScope = rememberCoroutineScope()
+    // A denied notification permission needs explicit recovery, not a false schedule.
+    var notificationsReady by remember(
+        option.id, notificationPermissionReadyForTest, notificationChannelMutedForTest,
+    ) {
+        mutableStateOf(
+            (notificationPermissionReadyForTest
+                ?: PlannedWalkReminderScheduler.notificationPermissionGranted(context)) &&
+                notificationChannelMutedForTest != true,
+        )
+    }
+    val notificationSettingsResult = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        notificationsReady = (notificationPermissionReadyForTest
+            ?: PlannedWalkReminderScheduler.notificationPermissionGranted(context)) &&
+            notificationChannelMutedForTest != true
+    }
+    var notificationSettingsFailed by remember(option.id) { mutableStateOf(false) }
+    var reminderScheduled by remember(option.id) {
+        mutableStateOf(reminderScheduler.scheduledRouteId() != null)
+    }
+    // WorkManager can deliver/expire and clear a reminder while DETAIL remains open.
+    // Reconcile the cached UI flag at each existing 30-second clock tick; never
+    // claim a queued reminder after its persisted opt-in token disappears.
+    LaunchedEffect(reminderScheduler, option.id, displayNowMillis) {
+        reminderScheduled = reminderScheduler.scheduledRouteId() != null
+    }
+    var reminderActionFailed by remember(option.id) { mutableStateOf(false) }
+    var reminderBusy by remember(option.id) { mutableStateOf(false) }
+    val reminderDelay = plannedWalkReminderDelayMillis(
+        option, displayNowMillis, safetyBufferMinutes,
+    )
+    // The saved opt-in is not silently rescheduled when the walking buffer or
+    // source-backed departure changes. A separate explicit action can update it.
+    val savedStart = if (reminderScheduled &&
+        reminderScheduler.isScheduledForRoute(option.id)
+    ) reminderScheduler.scheduledDetails()?.startMillis else null
+    val reminderUpdateAvailable = savedStart != null &&
+        savedStart != startEpoch && reminderDelay != null
+    if (reminderScheduled || reminderDelay != null) {
+        var reminderPreviewResult by remember(option.id) { mutableStateOf<Boolean?>(null) }
+        var reminderPreviewDismissResult by remember(option.id) { mutableStateOf<Boolean?>(null) }
+        // A previous route's reminder must be disclosed and cancelled explicitly;
+        // never silently replace it when a different journey is selected.
+        if (reminderScheduled && !reminderScheduler.isScheduledForRoute(option.id)) {
+            Text(
+                text = stringResource(R.string.route_walk_reminder_other_route),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("route-walk-reminder-other-route"),
+            )
+        }
+        if (!notificationsReady) {
+            Text(
+                text = stringResource(R.string.route_walk_reminder_notifications_disabled),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.testTag("route-walk-reminder-notifications-disabled"),
+            )
+            OutlinedButton(
+                onClick = {
+                    // Opening Settings is explicit; returning never auto-schedules.
+                    val settings = if (Build.VERSION.SDK_INT >= 26 &&
+                        (notificationChannelMutedForTest
+                            ?: PlannedWalkReminderScheduler.notificationChannelMuted(context))
+                    ) {
+                        Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            .putExtra(Settings.EXTRA_CHANNEL_ID, PlannedWalkReminderScheduler.CHANNEL)
+                    } else if (Build.VERSION.SDK_INT >= 26) {
+                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    } else {
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:${context.packageName}"))
+                    }
+                    notificationSettingsFailed = if (notificationSettingsLauncher != null) {
+                        !notificationSettingsLauncher(settings)
+                    } else {
+                        !runCatching { notificationSettingsResult.launch(settings); true }
+                            .getOrDefault(false)
+                    }
+                },
+                modifier = Modifier.heightIn(min = 48.dp)
+                    .testTag("route-walk-reminder-settings"),
+            ) { Text(stringResource(R.string.route_walk_reminder_open_notification_settings)) }
+            if (notificationSettingsFailed) {
+                Text(
+                    text = stringResource(R.string.route_walk_reminder_settings_failure),
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("route-walk-reminder-settings-failure"),
+                )
+            }
+        }
+        OutlinedButton(
+            onClick = {
+                if (!reminderBusy) {
+                    reminderBusy = true
+                    val cancel = reminderScheduled
+                    reminderScope.launch {
+                        val worked = withContext(Dispatchers.IO) {
+                            if (cancel) reminderScheduler.cancel()
+                            else reminderScheduler.schedule(option, safetyBufferMinutes)
+                        }
+                        reminderScheduled = reminderScheduler.scheduledRouteId() != null
+                        reminderActionFailed = !worked
+                        reminderBusy = false
+                    }
+                }
+            },
+            enabled = !reminderBusy && (reminderScheduled || notificationsReady),
+            modifier = Modifier.heightIn(min = 48.dp)
+                .testTag("route-walk-reminder-toggle"),
+        ) {
+            Text(stringResource(
+                if (reminderScheduled) R.string.route_walk_reminder_cancel
+                else R.string.route_walk_reminder_set,
+            ))
+        }
+        Text(
+            text = stringResource(R.string.route_walk_reminder_disclaimer),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.testTag("route-walk-reminder-note"),
+        )
+        // Testing this channel is opt-in, has a distinct notification ID, and
+        // neither schedules a walking reminder nor arms an arrival alarm.
+        OutlinedButton(
+            onClick = {
+                reminderPreviewDismissResult = null
+                reminderPreviewResult = (notificationPreviewSender
+                    ?: { PlannedWalkReminderPreview.post(context) })()
+            },
+            enabled = notificationsReady && !reminderBusy,
+            modifier = Modifier.heightIn(min = 48.dp)
+                .testTag("route-walk-reminder-preview"),
+        ) { Text(stringResource(R.string.route_walk_reminder_preview_action)) }
+        reminderPreviewResult?.let { submitted ->
+            Text(
+                text = stringResource(
+                    if (submitted) R.string.route_walk_reminder_preview_submitted
+                    else R.string.route_walk_reminder_preview_failed,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (submitted) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.error,
+                modifier = Modifier.testTag("route-walk-reminder-preview-result"),
+            )
+        }
+        if (reminderPreviewResult == true) {
+            OutlinedButton(
+                onClick = {
+                    val cancelled = (notificationPreviewCanceller
+                        ?: { PlannedWalkReminderPreview.dismiss(context) })()
+                    reminderPreviewDismissResult = cancelled
+                    if (cancelled) reminderPreviewResult = null
+                },
+                enabled = !reminderBusy,
+                modifier = Modifier.heightIn(min = 48.dp)
+                    .testTag("route-walk-reminder-preview-dismiss"),
+            ) { Text(stringResource(R.string.route_walk_reminder_preview_dismiss)) }
+        }
+        reminderPreviewDismissResult?.let { dismissed ->
+            Text(
+                text = stringResource(
+                    if (dismissed) R.string.route_walk_reminder_preview_dismissed
+                    else R.string.route_walk_reminder_preview_dismiss_failed,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (dismissed) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.error,
+                modifier = Modifier.testTag("route-walk-reminder-preview-dismiss-result"),
+            )
+        }
+        if (reminderScheduled) {
+            Text(
+                text = stringResource(R.string.route_walk_reminder_queued),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.testTag("route-walk-reminder-queued"),
+            )
+            StoredWalkReminderDetails(reminderScheduler)
+        }
+        if (reminderUpdateAvailable) {
+            Text(
+                text = stringResource(R.string.route_walk_reminder_update_notice),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("route-walk-reminder-update-notice"),
+            )
+            OutlinedButton(
+                onClick = {
+                    if (!reminderBusy) {
+                        reminderBusy = true
+                        reminderScope.launch {
+                            // Same route only; the scheduler independently refuses a
+                            // different route's still-active opt-in.
+                            val worked = withContext(Dispatchers.IO) {
+                                reminderScheduler.schedule(option, safetyBufferMinutes)
+                            }
+                            reminderScheduled = reminderScheduler.scheduledRouteId() != null
+                            reminderActionFailed = !worked
+                            reminderBusy = false
+                        }
+                    }
+                },
+                enabled = !reminderBusy && notificationsReady,
+                modifier = Modifier.heightIn(min = 48.dp)
+                    .testTag("route-walk-reminder-update"),
+            ) { Text(stringResource(R.string.route_walk_reminder_update)) }
+        }
+        if (reminderActionFailed) {
+            Text(
+                text = stringResource(R.string.route_walk_reminder_failure),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.testTag("route-walk-reminder-failure"),
+            )
+        }
+    }
+    val directionsUrl = plannedWalkDirectionsUrl(option)
+    if (directionsUrl != null &&
+        plannedWalkWarning(option, displayNowMillis, safetyBufferMinutes) != PlannedWalkWarning.PLANNED_DEPARTURE_PASSED
+    ) {
+        OutlinedButton(
+            onClick = {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(directionsUrl))
+                directionsFailed = when {
+                    directionsLauncher != null -> !directionsLauncher(intent)
+                    else -> !runCatching { context.startActivity(intent); true }.getOrDefault(false)
+                }
+            },
+            modifier = Modifier.heightIn(min = 48.dp).testTag("route-walk-directions"),
+        ) { Text(stringResource(R.string.route_planned_walk_maps_action)) }
+        Text(
+            text = stringResource(R.string.route_planned_walk_maps_disclaimer),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (directionsFailed) {
+            Text(
+                text = stringResource(R.string.route_planned_walk_maps_failure),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.testTag("route-walk-directions-failure"),
+            )
+        }
+    }
+    if (startEpoch > displayNowMillis) {
+        val calendarTitle = stringResource(
+            R.string.route_planned_walk_calendar_title,
+            option.origin.label,
+            option.destination.label,
+        )
+        val calendarDescription = stringResource(R.string.route_planned_walk_start_disclaimer)
+        OutlinedButton(
+            onClick = {
+                val draft = plannedWalkCalendarDraftIntent(
+                    option = option,
+                    nowMillis = System.currentTimeMillis(),
+                    title = calendarTitle,
+                    description = calendarDescription,
+                    safetyBufferMinutes = safetyBufferMinutes,
+                )
+                launchFailed = when {
+                    draft == null -> true
+                    calendarLauncher != null -> !calendarLauncher(draft)
+                    else -> !runCatching { context.startActivity(draft); true }
+                        .getOrDefault(false)
+                }
+            },
+            modifier = Modifier.heightIn(min = 48.dp)
+                .testTag("route-planned-walk-calendar"),
+        ) {
+            Text(stringResource(R.string.route_planned_walk_calendar_action))
+        }
+        if (launchFailed) {
+            Text(
+                text = stringResource(R.string.route_planned_walk_calendar_failure),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.testTag("route-planned-walk-calendar-failure"),
+            )
+        }
+    }
+}

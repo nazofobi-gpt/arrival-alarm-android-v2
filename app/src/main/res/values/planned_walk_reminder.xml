@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="route_walk_reminder_set">Tahmini yürüyüş başlangıcı hatırlatıcısını etkinleştir</string>
+    <string name="route_walk_reminder_other_route">Başka bir rota için yürüyüş hatırlatıcısı etkin. Önce mevcut hatırlatıcıyı iptal edin; yeni rota eskisini sessizce değiştirmez.</string>
+    <string name="route_walk_reminder_cancel">Yürüyüş hatırlatıcısını iptal et</string>
+    <string name="route_walk_reminder_disclaimer">Yalnızca isteğe bağlı Android bildirimi. Doze, pil kısıtları veya kapalı bildirim izni teslimi geciktirebilir ya da engelleyebilir. Kesin alarm değildir. Güvenlik payı değişirse mevcut hatırlatıcı otomatik güncellenmez.</string>
+    <string name="route_walk_reminder_queued">Hatırlatıcı sıraya alındı; bildirim zamanı garanti değildir.</string>
+    <string name="route_walk_reminder_failure">Hatırlatıcı değiştirilemedi. Bildirim ayarlarını kontrol edin.</string>
+    <string name="route_walk_reminder_notification_title">Tahmini yürüyüşe başlama zamanı</string>
+    <string name="route_walk_reminder_notification_body">Bağlantı geçerliyse %1$s yönüne yürüyün. Gerçek sefer durumunu tekrar kontrol edin.</string>
+    <string name="route_walk_reminder_details">Kaydedilen yürüyüş hatırlatıcısı: %1$s — %2$s (yerel saat; bildirim teslimi garanti değildir).</string>
+    <string name="route_walk_reminder_notifications_disabled">Bildirimler kapalı. Hatırlatıcı ayarlanamaz; bildirimi açmak için uygulama ayarlarına gidin.</string>
+    <string name="route_walk_reminder_open_notification_settings">Bildirim ayarlarını aç</string>
+    <string name="route_walk_reminder_settings_failure">Bildirim ayarları açılamadı. Android uygulama ayarlarından bildirimleri kontrol edin.</string>
+    <string name="route_walk_reminder_preview_action">Yürüyüş hatırlatıcısı bildirimini dene</string>
+    <string name="route_walk_reminder_preview_title">TEST — Yürüyüş bildirimi</string>
+    <string name="route_walk_reminder_preview_body">Bu yalnızca testtir; yolculuk veya hatırlatıcı başlatılmadı.</string>
+    <string name="route_walk_reminder_preview_submitted">Test bildirimi Android sistemine gönderildi. Görüldüğü veya duyulduğu doğrulanmadı.</string>
+    <string name="route_walk_reminder_preview_failed">Test bildirimi gönderilemedi. Android bildirim ayarlarını kontrol edin.</string>
+    <string name="route_walk_reminder_preview_dismiss">Deneme bildirimini kaldır</string>
+    <string name="route_walk_reminder_preview_dismissed">Deneme bildirimi kaldırma isteği Android sistemine gönderildi.</string>
+    <string name="route_walk_reminder_preview_dismiss_failed">Deneme bildirimi kaldırılamadı. Yeniden deneyin.</string>
+    <string name="route_walk_reminder_update_notice">Kaydedilen hatırlatma saati mevcut yürüyüş tahmininden farklı. Sadece siz onaylarsanız aynı rotanın hatırlatıcısı yeni saate alınır.</string>
+    <string name="route_walk_reminder_update">Bu rotanın hatırlatıcısını yeni saate güncelle</string>
+</resources>

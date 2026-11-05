@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="route_planned_walk_start">Planned time to start walking: %1$s</string>
+    <string name="route_planned_walk_start_disclaimer">Walking time is estimated from straight-line distance. Not walking directions or an automatic reminder.</string>
+    <string name="route_planned_walk_calendar_action">Add walking time to calendar</string>
+    <string name="route_planned_walk_calendar_title">Walk from %1$s toward %2$s</string>
+    <string name="route_planned_walk_calendar_failure">Calendar could not be opened. No event was saved.</string>
+    <string name="route_planned_walk_late_warning">The estimated walking start time has passed. Reaching this scheduled departure is not guaranteed.</string>
+    <string name="route_planned_walk_departure_passed">The first scheduled departure time has passed. Check live status and later services.</string>
+    <string name="route_planned_walk_maps_action">Open walking directions to boarding stop</string>
+    <string name="route_planned_walk_maps_disclaimer">Opens Google Maps outside this app. Walking route and duration may differ; boarding is not guaranteed.</string>
+    <string name="route_planned_walk_maps_failure">Could not open walking directions.</string>
+    <string name="route_planned_walk_buffer_action">Extra safety buffer: %1$d min (change)</string>
+    <string name="route_planned_walk_buffer_failure">Could not save the safety buffer; the previous choice was kept.</string>
+    <string name="route_planned_walk_remaining_minutes">About %1$d minutes until the estimated walking start.</string>
+</resources>

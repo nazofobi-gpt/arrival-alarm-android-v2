@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="route_walk_reminder_set">Enable approximate walking-start reminder</string>
+    <string name="route_walk_reminder_other_route">A walking reminder is active for another route. Cancel it first; selecting this route will not silently replace the reminder.</string>
+    <string name="route_walk_reminder_cancel">Cancel walking-start reminder</string>
+    <string name="route_walk_reminder_disclaimer">Opt-in Android notification only. Doze, battery controls or disabled notifications can delay or prevent delivery. Not a guaranteed alarm. Changing the buffer does not reschedule an existing reminder.</string>
+    <string name="route_walk_reminder_queued">Reminder queued; delivery time is not guaranteed.</string>
+    <string name="route_walk_reminder_failure">Reminder could not be changed. Check notification settings.</string>
+    <string name="route_walk_reminder_notification_title">Estimated time to start walking</string>
+    <string name="route_walk_reminder_notification_body">Walk toward %1$s if your departure is still valid. Recheck real service status.</string>
+    <string name="route_walk_reminder_details">Saved walking reminder: %1$s — %2$s (local time; notification delivery is not guaranteed).</string>
+    <string name="route_walk_reminder_notifications_disabled">Notifications are off. A reminder cannot be scheduled. Open the app settings to enable them.</string>
+    <string name="route_walk_reminder_open_notification_settings">Open notification settings</string>
+    <string name="route_walk_reminder_settings_failure">Could not open notification settings. Check notifications for this app in Android settings.</string>
+    <string name="route_walk_reminder_preview_action">Test walking-reminder notification</string>
+    <string name="route_walk_reminder_preview_title">TEST — Walking reminder</string>
+    <string name="route_walk_reminder_preview_body">Test only. No journey or reminder was started.</string>
+    <string name="route_walk_reminder_preview_submitted">Test submitted to Android. Visibility and sound are not verified.</string>
+    <string name="route_walk_reminder_preview_failed">Test could not be submitted. Check Android notification settings.</string>
+    <string name="route_walk_reminder_preview_dismiss">Dismiss test notification</string>
+    <string name="route_walk_reminder_preview_dismissed">Test notification dismissal requested from Android.</string>
+    <string name="route_walk_reminder_preview_dismiss_failed">Could not dismiss test notification. Try again.</string>
+    <string name="route_walk_reminder_update_notice">The saved reminder time differs from the current walking estimate. Only your explicit action will update the reminder for this route.</string>
+    <string name="route_walk_reminder_update">Update the reminder for this route to the new time</string>
+</resources>
