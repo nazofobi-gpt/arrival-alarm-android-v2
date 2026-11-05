@@ -51,6 +51,13 @@ internal fun PlannedTransferWindowPanel(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.testTag("journey-static-transfer-" + index),
             )
+            evidence.plannedDepartureLocalTime?.takeIf { it.isNotBlank() }?.let { localTime ->
+                Text(
+                    text = stringResource(R.string.route_planned_transfer_local_time, localTime),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.testTag("journey-static-transfer-local-time-" + index),
+                )
+            }
             plannedTransferDepartureCountdownMinutes(
                 evidence.plannedDepartureEpochMillis, currentEpochMillis,
             )?.let { minutes ->

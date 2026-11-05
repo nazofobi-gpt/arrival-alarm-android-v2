@@ -29,6 +29,17 @@ class PlannedTransferWindowPanelInstrumentedTest {
         rule.onNodeWithTag("journey-static-transfer-disclaimer").assertExists()
     }
 
+    @Test fun rendersAgencyLocalDepartureTimeOnlyWhenSourceTimeExists() {
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(listOf(
+                    evidence.copy(plannedDepartureLocalTime = "25.10.2026 02:30 +01:00"),
+                ))
+            }
+        }
+        rule.onNodeWithTag("journey-static-transfer-local-time-0").assertExists()
+    }
+
     @Test fun nearTermDepartureShowsOnlyScheduledForegroundCountdown() {
         val now = 1_800_000_000_000L
         rule.setContent {
@@ -55,6 +66,7 @@ class PlannedTransferWindowPanelInstrumentedTest {
         }
         rule.onNodeWithTag("journey-static-transfer-0").assertExists()
         rule.onNodeWithTag("journey-static-transfer-countdown-0").assertDoesNotExist()
+        rule.onNodeWithTag("journey-static-transfer-local-time-0").assertDoesNotExist()
     }
 
     @Test fun missingTransferSourceDoesNotShowUnfoundedConnectionAdvice() {

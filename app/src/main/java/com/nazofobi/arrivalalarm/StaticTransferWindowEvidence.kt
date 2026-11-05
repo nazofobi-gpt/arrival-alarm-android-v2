@@ -9,6 +9,8 @@ data class RouteTransferWindowEvidence(
     val plannedGapMinutes: Int,
     // Source GTFS UTC instant; absent timestamp never creates a countdown.
     val plannedDepartureEpochMillis: Long = 0L,
+    // Source timetable time in the GTFS agency's zone, including DST offset.
+    val plannedDepartureLocalTime: String? = null,
 )
 
 /**
@@ -63,4 +65,17 @@ internal fun plannedTransferDepartureCountdownMinutes(
     // Outside the near-term 3h window or already departed: show no countdown.
     if (remainingMillis !in 1L..10_800_000L) return null
     return ((remainingMillis + 59_999L) / 60_000L).toInt()
+}
+
+/** Format the source GTFS departure with its agency-zone offset; never use device local time. */
+internal fun plannedTransferDepartureLocalTime(
+    departureEpochMillis: Long,
+    agencyTimeZone: java.util.TimeZone,
+): String? {
+    if (departureEpochMillis <= 0L) return null
+    return runCatching {
+        java.text.SimpleDateFormat("dd.MM.yyyy HH:mm XXX", java.util.Locale.ROOT).apply {
+            timeZone = agencyTimeZone
+        }.format(java.util.Date(departureEpochMillis))
+    }.getOrNull()
 }

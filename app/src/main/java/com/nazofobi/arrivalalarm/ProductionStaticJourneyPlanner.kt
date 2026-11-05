@@ -112,6 +112,10 @@ internal class StaticRouteOptionMapper(
             egressWalking = walkingLegEvidence(journey.egress),
             transferWindows = plannedStaticTransferWindows(journey.legs) { stopId ->
                 data.stop(stopId)?.name
+            }.map { window ->
+                window.copy(plannedDepartureLocalTime = plannedTransferDepartureLocalTime(
+                    window.plannedDepartureEpochMillis, agencyTimeZone,
+                ))
             },
         )
     }

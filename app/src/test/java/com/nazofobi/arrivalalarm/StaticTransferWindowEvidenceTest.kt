@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
+import java.util.TimeZone
 
 class StaticTransferWindowEvidenceTest {
     private val t = Instant.parse("2026-10-25T01:00:00Z").toEpochMilli()
@@ -55,6 +56,15 @@ class StaticTransferWindowEvidenceTest {
         // Explicit epoch instants remain unambiguous across Europe/Berlin DST.
         val dst = Instant.parse("2026-10-25T01:00:00Z").toEpochMilli()
         assertEquals(5, plannedTransferDepartureCountdownMinutes(dst, dst - 5 * 60_000L))
+    }
+
+    @Test fun scheduledDepartureUsesAgencyZoneAndDisambiguatesDstOverlap() {
+        val berlin = TimeZone.getTimeZone("Europe/Berlin")
+        val beforeFallback = Instant.parse("2026-10-25T00:30:00Z").toEpochMilli()
+        val afterFallback = Instant.parse("2026-10-25T01:30:00Z").toEpochMilli()
+        assertEquals("25.10.2026 02:30 +02:00", plannedTransferDepartureLocalTime(beforeFallback, berlin))
+        assertEquals("25.10.2026 02:30 +01:00", plannedTransferDepartureLocalTime(afterFallback, berlin))
+        assertEquals(null, plannedTransferDepartureLocalTime(0L, berlin))
     }
 
     @Test fun refusesToShowPartialTransferEvidenceOnMultipleLegs() {
