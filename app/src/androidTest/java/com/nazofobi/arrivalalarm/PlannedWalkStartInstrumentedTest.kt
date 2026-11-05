@@ -516,6 +516,54 @@ class PlannedWalkStartInstrumentedTest {
         rule.onNodeWithTag("route-walk-reminder-settings").assertExists()
     }
 
+    @Test fun clearedWorkerTokenUpdatesOpenRouteReminderStatusOnClockTick() {
+        val context = androidx.test.platform.app.InstrumentationRegistry
+            .getInstrumentation().targetContext
+        val preferences = context.getSharedPreferences(
+            PlannedWalkReminderScheduler.PREFS, android.content.Context.MODE_PRIVATE)
+        preferences.edit().clear()
+            .putString(PlannedWalkReminderScheduler.KEY_TOKEN, "delivered-token")
+            .putString(PlannedWalkReminderScheduler.KEY_ROUTE, "previous-gtfs-route")
+            .putLong(PlannedWalkReminderScheduler.KEY_START,
+                System.currentTimeMillis() + 300_000L)
+            .commit()
+        val clock = androidx.compose.runtime.mutableLongStateOf(System.currentTimeMillis())
+        try {
+            val option = RouteOption(
+                id = "gtfs-1", origin = MapPoint(52.67, 8.24, "Lohne"),
+                destination = MapPoint(53.08, 8.81, "Bremen Hbf"),
+                line = "RE", direction = "Bremen",
+                departure = "10:30", arrival = "11:30", walkingMinutes = 10,
+                transfers = 0,
+                stops = listOf(RouteStop(id = "stop-1", name = "Lohne",
+                    plannedDeparture = nearFutureDeparture())),
+                accessWalking = RouteWalkingLegEvidence("stop-1", "Lohne", 600),
+            )
+            rule.setContent {
+                MaterialTheme {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        PlannedWalkStartNotice(
+                            option = option, nowMillisForTest = clock.longValue,
+                            bufferMinutesForTest = 0,
+                            notificationPermissionReadyForTest = true,
+                        )
+                    }
+                }
+            }
+            rule.onNodeWithTag("route-walk-reminder-other-route").assertExists()
+            rule.onNodeWithTag("route-walk-reminder-queued").assertExists()
+            // Simulate the independent worker clearing the persisted opt-in token.
+            preferences.edit().clear().commit()
+            rule.runOnIdle { clock.longValue += 1_000L }
+            rule.onNodeWithTag("route-walk-reminder-other-route").assertDoesNotExist()
+            rule.onNodeWithTag("route-walk-reminder-queued").assertDoesNotExist()
+            rule.onNodeWithTag("route-walk-reminder-toggle").assertTextContains(
+                context.getString(R.string.route_walk_reminder_set), substring = true)
+        } finally {
+            preferences.edit().clear().commit()
+        }
+    }
+
     @Test fun overdueReminderDoesNotBlockNextTripAfterWorkerFreshnessWindow() {
         val context = androidx.test.platform.app.InstrumentationRegistry
             .getInstrumentation().targetContext
