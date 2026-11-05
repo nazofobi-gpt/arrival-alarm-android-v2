@@ -37,6 +37,7 @@ class PlannedWalkStartInstrumentedTest {
         notificationPermissionReadyForTest: Boolean? = true,
         notificationChannelMutedForTest: Boolean? = null,
         notificationSettingsLauncher: ((Intent) -> Boolean)? = null,
+        notificationPreviewSender: (() -> Boolean)? = null,
         calendarLauncher: ((Intent) -> Boolean)? = null,
     ) {
         rule.setContent {
@@ -66,6 +67,7 @@ class PlannedWalkStartInstrumentedTest {
                     notificationPermissionReadyForTest = notificationPermissionReadyForTest,
                     notificationChannelMutedForTest = notificationChannelMutedForTest,
                     notificationSettingsLauncher = notificationSettingsLauncher,
+                    notificationPreviewSender = notificationPreviewSender,
                     )
                 }
             }
@@ -480,6 +482,38 @@ class PlannedWalkStartInstrumentedTest {
                 intent.getStringExtra(Settings.EXTRA_APP_PACKAGE),
             )
         }
+    }
+
+    @Test fun manualWalkNotificationPreviewIsOptInAndDoesNotScheduleReminder() {
+        var submissions = 0
+        show(nearFutureDeparture(), 600,
+            notificationPermissionReadyForTest = true,
+            notificationPreviewSender = { submissions++; true })
+        rule.runOnIdle { assertEquals(0, submissions) }
+        rule.onNodeWithTag("route-walk-reminder-preview").performScrollTo().performClick()
+        rule.onNodeWithTag("route-walk-reminder-preview-result").assertExists()
+        rule.runOnIdle {
+            assertEquals(1, submissions)
+        }
+    }
+
+    @Test fun manualWalkNotificationPreviewFailureIsVisible() {
+        show(nearFutureDeparture(), 600,
+            notificationPermissionReadyForTest = true,
+            notificationPreviewSender = { false })
+        rule.onNodeWithTag("route-walk-reminder-preview").performScrollTo().performClick()
+        rule.onNodeWithTag("route-walk-reminder-preview-result").assertExists()
+        rule.onNodeWithTag("route-walk-reminder-toggle").assertIsEnabled()
+    }
+
+    @Test fun disabledNotificationsBlockWalkPreviewWithoutInvokingSender() {
+        var submissions = 0
+        show(nearFutureDeparture(), 600,
+            notificationPermissionReadyForTest = false,
+            notificationPreviewSender = { submissions++; true })
+        rule.onNodeWithTag("route-walk-reminder-preview").assertIsNotEnabled()
+        rule.runOnIdle { assertEquals(0, submissions) }
+        rule.onNodeWithTag("route-walk-reminder-settings").assertExists()
     }
 
     @Test fun onlyMutedAndroidChannelIsRejectedWhenAppWideNotificationsAreOn() {
