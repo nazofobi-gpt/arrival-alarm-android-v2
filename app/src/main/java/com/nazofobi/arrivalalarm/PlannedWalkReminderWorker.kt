@@ -101,7 +101,8 @@ internal class PlannedWalkReminderScheduler(private val context: Context) {
             ?.takeIf { it.isNotBlank() } ?: return false
         val request = OneTimeWorkRequestBuilder<PlannedWalkReminderWorker>()
             .setInitialDelay(delay, TimeUnit.MILLISECONDS)
-            .setInputData(workDataOf(KEY_TOKEN to token, KEY_START to start, KEY_STOP to stop,\n                KEY_DIRECTIONS_URL to (plannedWalkDirectionsUrl(option) ?: "")))
+            .setInputData(workDataOf(KEY_TOKEN to token, KEY_START to start, KEY_STOP to stop,
+                KEY_DIRECTIONS_URL to (plannedWalkDirectionsUrl(option) ?: "")))
             .build()
         return runCatching {
             WorkManager.getInstance(context)
