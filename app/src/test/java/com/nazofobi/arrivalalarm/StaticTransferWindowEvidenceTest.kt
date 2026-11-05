@@ -119,12 +119,19 @@ class StaticTransferWindowEvidenceTest {
 
     @Test fun warnsOnlyWhenStraightLineAtBriskSpeedExceedsGap() {
         val far = RouteTransferWalkingCoordinates(53.075, 8.808, 53.095, 8.808)
+        val scheduledArrival = t + 20 * 60_000L
         val base = RouteTransferWindowEvidence(
-            "X", "Y", "Arrival", "Boarding", 5, walkingCoordinates = far,
+            "X", "Y", "Arrival", "Boarding", 5,
+            plannedArrivalEpochMillis = scheduledArrival,
+            plannedDepartureEpochMillis = scheduledArrival + 300_000L,
+            walkingCoordinates = far,
         )
         assertTrue(plannedTransferStraightLineWalkingRisk(base))
         // A wider scheduled interval is NOT called safe; only the warning disappears.
-        assertFalse(plannedTransferStraightLineWalkingRisk(base.copy(plannedGapMinutes = 30)))
+        assertFalse(plannedTransferStraightLineWalkingRisk(base.copy(
+            plannedGapMinutes = 30,
+            plannedDepartureEpochMillis = scheduledArrival + 30 * 60_000L,
+        )))
         assertFalse(plannedTransferStraightLineWalkingRisk(base.copy(walkingCoordinates = null)))
         assertFalse(plannedTransferStraightLineWalkingRisk(base.copy(plannedGapMinutes = 0)))
         assertFalse(plannedTransferStraightLineWalkingRisk(base.copy(departureStopId = "X")))
@@ -133,6 +140,27 @@ class StaticTransferWindowEvidenceTest {
         )))
         assertFalse(plannedTransferStraightLineWalkingRisk(base.copy(
             walkingCoordinates = RouteTransferWalkingCoordinates(53.075, 8.808, 53.0751, 8.808),
+        )))
+
+        // 4m01s displays as 5min. A ~445m walk at 1.7m/s exceeds 241s,
+        // even though it fits within the rounded 300s label.
+        val close = RouteTransferWalkingCoordinates(53.075, 8.808, 53.079, 8.808)
+        val partialMinute = base.copy(
+            plannedDepartureEpochMillis = scheduledArrival + 241_000L,
+            walkingCoordinates = close,
+        )
+        assertTrue(plannedTransferStraightLineWalkingRisk(partialMinute))
+        assertFalse(plannedTransferStraightLineWalkingRisk(partialMinute.copy(
+            plannedDepartureEpochMillis = scheduledArrival + 300_000L,
+        )))
+        assertFalse(plannedTransferStraightLineWalkingRisk(base.copy(
+            plannedArrivalEpochMillis = 0L,
+        )))
+        assertFalse(plannedTransferStraightLineWalkingRisk(base.copy(
+            plannedDepartureEpochMillis = Long.MAX_VALUE,
+        )))
+        assertFalse(plannedTransferStraightLineWalkingRisk(base.copy(
+            plannedGapMinutes = 6,
         )))
     }
 }
