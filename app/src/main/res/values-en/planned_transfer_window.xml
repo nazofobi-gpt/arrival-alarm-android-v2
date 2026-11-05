@@ -4,6 +4,7 @@
     <string name="route_planned_transfer_arrival_platform">Scheduled arrival platform: %1$s</string>
     <string name="route_planned_transfer_departure_platform">Scheduled connecting platform: %1$s</string>
     <string name="route_planned_transfer_disclaimer">Static timetable only. Excludes transfer walking time and live delays; connection is not guaranteed.</string>
+    <string name="route_planned_transfer_arrival_countdown">Scheduled transfer arrival in %1$d min (timetable only, not live).</string>
     <string name="route_planned_transfer_departure_countdown">Scheduled connecting departure in %1$d min</string>
     <string name="route_planned_transfer_arrival_local_time">Scheduled arrival at transfer: %1$s</string>
     <string name="route_planned_transfer_local_time">Scheduled connecting departure: %1$s</string>

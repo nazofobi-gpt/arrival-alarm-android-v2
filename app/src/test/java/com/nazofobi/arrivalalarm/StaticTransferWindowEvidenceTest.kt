@@ -212,4 +212,33 @@ class StaticTransferWindowEvidenceTest {
             plannedDepartureEpochMillis = dst + 180_000L,
         )))
     }
+    @Test fun inboundArrivalCountdownUsesOnlyConsistentSourceTimesAcrossDst() {
+        val arrival = java.time.Instant.parse("2026-10-25T01:30:00Z").toEpochMilli()
+        val w = RouteTransferWindowEvidence("X", "Y", "Bremen Hbf", "Bremen Süd", 6,
+            plannedArrivalEpochMillis = arrival, plannedDepartureEpochMillis = arrival + 360_000L)
+        assertEquals(2, plannedTransferArrivalCountdownMinutes(w, arrival - 61_000L))
+        assertEquals(1, plannedTransferArrivalCountdownMinutes(w, arrival - 1L))
+        assertNull(plannedTransferArrivalCountdownMinutes(w, arrival))
+        assertNull(plannedTransferArrivalCountdownMinutes(w, arrival + 1L))
+        assertNull(plannedTransferArrivalCountdownMinutes(w, arrival - 10_800_001L))
+    }
+
+    @Test fun missingOrContradictorySourceHidesInboundArrivalCountdown() {
+        val arrival = 1_800_000_000_000L
+        val w = RouteTransferWindowEvidence("X", "Y", "Arrival", "Boarding", 6,
+            plannedArrivalEpochMillis = arrival, plannedDepartureEpochMillis = arrival + 360_000L)
+        val now = arrival - 60_000L
+        assertNull(plannedTransferArrivalCountdownMinutes(w.copy(plannedDepartureEpochMillis = 0L), now))
+        assertNull(plannedTransferArrivalCountdownMinutes(w.copy(plannedGapMinutes = 5), now))
+        assertNull(plannedTransferArrivalCountdownMinutes(w.copy(arrivalStopId = ""), now))
+        assertNull(plannedTransferArrivalCountdownMinutes(w.copy(departureStopName = ""), now))
+        assertNull(plannedTransferArrivalCountdownMinutes(w.copy(
+            plannedDepartureEpochMillis = Long.MAX_VALUE,
+        ), now))
+        assertNull(plannedTransferArrivalCountdownMinutes(w.copy(
+            plannedArrivalEpochMillis = Long.MAX_VALUE,
+        ), now))
+        assertNull(plannedTransferArrivalCountdownMinutes(w, 0L))
+    }
+
 }

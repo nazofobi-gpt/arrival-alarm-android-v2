@@ -68,6 +68,14 @@ internal fun PlannedTransferWindowPanel(
                     modifier = Modifier.testTag("journey-static-transfer-arrival-time-" + index),
                 )
             }
+            plannedTransferArrivalCountdownMinutes(evidence, currentEpochMillis)?.let { minutes ->
+                Text(
+                    text = stringResource(R.string.route_planned_transfer_arrival_countdown, minutes),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("journey-static-transfer-arrival-countdown-" + index),
+                )
+            }
             boundedGtfsPlatformCode(evidence.plannedArrivalPlatformCode)?.let { platform ->
                 Text(
                     text = stringResource(R.string.route_planned_transfer_arrival_platform, platform),

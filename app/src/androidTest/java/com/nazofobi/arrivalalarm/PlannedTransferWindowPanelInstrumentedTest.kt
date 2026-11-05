@@ -244,4 +244,45 @@ class PlannedTransferWindowPanelInstrumentedTest {
         }
         rule.onNodeWithTag("journey-transfer-short-window-risk-0").assertDoesNotExist()
     }
+    @Test fun inboundTransferShowsScheduledArrivalCountdownWhenSourceIsComplete() {
+        val now = 1_800_000_000_000L
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(listOf(evidence.copy(
+                    plannedArrivalEpochMillis = now + 61_000L,
+                    plannedDepartureEpochMillis = now + 421_000L,
+                )), nowEpochMillis = now)
+            }
+        }
+        rule.onNodeWithTag("journey-static-transfer-arrival-countdown-0").assertExists()
+        rule.onNodeWithTag("journey-static-transfer-disclaimer").assertExists()
+    }
+
+    @Test fun inboundTransferArrivalCountdownHidesWhenScheduledArrivalHasPassed() {
+        val now = 1_800_000_000_000L
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(listOf(evidence.copy(
+                    plannedArrivalEpochMillis = now - 61_000L,
+                    plannedDepartureEpochMillis = now + 299_000L,
+                )), nowEpochMillis = now)
+            }
+        }
+        rule.onNodeWithTag("journey-static-transfer-arrival-countdown-0").assertDoesNotExist()
+    }
+
+    @Test fun inboundTransferArrivalCountdownRejectsContradictoryGap() {
+        val now = 1_800_000_000_000L
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(listOf(evidence.copy(
+                    plannedArrivalEpochMillis = now + 60_000L,
+                    plannedDepartureEpochMillis = now + 420_000L,
+                    plannedGapMinutes = 5,
+                )), nowEpochMillis = now)
+            }
+        }
+        rule.onNodeWithTag("journey-static-transfer-arrival-countdown-0").assertDoesNotExist()
+    }
+
 }

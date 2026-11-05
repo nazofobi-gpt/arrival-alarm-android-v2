@@ -86,6 +86,25 @@ internal fun plannedTransferDepartureCountdownMinutes(
     return ((remainingMillis + 59_999L) / 60_000L).toInt()
 }
 
+/** Scheduled-only countdown to the inbound vehicle's planned transfer arrival. */
+internal fun plannedTransferArrivalCountdownMinutes(
+    window: RouteTransferWindowEvidence,
+    nowEpochMillis: Long,
+): Int? {
+    if (window.arrivalStopId.isBlank() || window.departureStopId.isBlank() ||
+        window.arrivalStopName.isBlank() || window.departureStopName.isBlank() ||
+        window.plannedGapMinutes !in 1..180 ||
+        window.plannedArrivalEpochMillis <= 0L || window.plannedDepartureEpochMillis <= 0L
+    ) return null
+    val gapMillis = runCatching {
+        Math.subtractExact(window.plannedDepartureEpochMillis, window.plannedArrivalEpochMillis)
+    }.getOrNull() ?: return null
+    // Reject contradictory or rounded-only timestamps. Do not infer realtime arrival.
+    if (gapMillis !in 60_000L..10_800_000L ||
+        ((gapMillis + 59_999L) / 60_000L).toInt() != window.plannedGapMinutes) return null
+    return plannedTransferDepartureCountdownMinutes(window.plannedArrivalEpochMillis, nowEpochMillis)
+}
+
 /** A past *scheduled* transfer departure is not evidence of the vehicle's actual status. */
 internal fun plannedTransferDepartureRecentlyPassed(
     departureEpochMillis: Long,

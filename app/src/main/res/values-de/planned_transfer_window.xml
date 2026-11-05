@@ -4,6 +4,7 @@
     <string name="route_planned_transfer_arrival_platform">Planmäßiges Ankunftsgleis: %1$s</string>
     <string name="route_planned_transfer_departure_platform">Planmäßiges Anschlussgleis: %1$s</string>
     <string name="route_planned_transfer_disclaimer">Nur statischer Fahrplan. Ohne Umsteige-Fußweg und Echtzeitverspätung; Anschluss nicht garantiert.</string>
+    <string name="route_planned_transfer_arrival_countdown">Planmäßige Ankunft am Umstieg in %1$d Min. (keine Echtzeit).</string>
     <string name="route_planned_transfer_departure_countdown">Planmäßige Anschlussabfahrt in %1$d Min.</string>
     <string name="route_planned_transfer_arrival_local_time">Planmäßige Ankunft am Umstieg: %1$s</string>
     <string name="route_planned_transfer_local_time">Planmäßige Anschlussabfahrt: %1$s</string>
