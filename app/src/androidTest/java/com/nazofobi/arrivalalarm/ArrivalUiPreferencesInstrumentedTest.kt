@@ -133,6 +133,21 @@ class ArrivalUiPreferencesInstrumentedTest {
     }
 
     @Test
+    fun simplePreferencePersistsAndRejectsCorruptedType() {
+        val prefs = context.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+        withRestoredPreferenceKeys(prefs, ArrivalUiPreferences.KEY_SIMPLE_FIRST) {
+            prefs.edit().remove(ArrivalUiPreferences.KEY_SIMPLE_FIRST).commit()
+            assertFalse(ArrivalUiPreferences(context).loadSimpleFirst())
+            ArrivalUiPreferences(context).saveSimpleFirst(true)
+            assertTrue(ArrivalUiPreferences(context).loadSimpleFirst())
+            ArrivalUiPreferences(context).saveSimpleFirst(false)
+            assertFalse(ArrivalUiPreferences(context).loadSimpleFirst())
+            prefs.edit().putString(ArrivalUiPreferences.KEY_SIMPLE_FIRST, "bad-type").commit()
+            assertFalse(ArrivalUiPreferences(context).loadSimpleFirst())
+        }
+    }
+
+    @Test
     fun fastestPreferencePersistsIndependentlyAndMalformedValueFailsClosed() {
         val prefs = context.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
         withRestoredPreferenceKeys(

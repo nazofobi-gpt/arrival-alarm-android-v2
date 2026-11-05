@@ -80,6 +80,7 @@ fun RouteJourneyPanel(
         mutableStateOf(preferences.loadShorterWalkingFirst())
     }
     var fastestFirst by rememberSaveable { mutableStateOf(preferences.loadFastestFirst()) }
+    var simpleFirst by rememberSaveable { mutableStateOf(preferences.loadSimpleFirst()) }
     var atMostOneTransfer by rememberSaveable {
         mutableStateOf(preferences.loadAtMostOneTransfer())
     }
@@ -351,6 +352,7 @@ fun RouteJourneyPanel(
                     fewerTransfersFirst = fewerTransfersFirst,
                     shorterWalkingFirst = shorterWalkingFirst,
                     fastestFirst = fastestFirst,
+                    simpleFirst = simpleFirst,
                     maxTransfers = if (atMostOneTransfer) 1 else null,
                     maxWalkingMinutes = if (maxWalking15Minutes) 15 else null,
                 ).apply(routeOptions)
@@ -370,6 +372,10 @@ fun RouteJourneyPanel(
                     onClick = {
                         fastestFirst = !fastestFirst
                         preferences.saveFastestFirst(fastestFirst)
+                        if (fastestFirst && simpleFirst) {
+                            simpleFirst = false
+                            preferences.saveSimpleFirst(false)
+                        }
                         // Refresh the bounded static candidates instead of reordering only
                         // an old three-card subset; request-gating blocks stale responses.
                         onFastestPreferenceChanged()
@@ -378,6 +384,22 @@ fun RouteJourneyPanel(
                     modifier = Modifier
                         .heightIn(min = 48.dp)
                         .testTag("route-fastest-first-filter"),
+                )
+                FilterChip(
+                    selected = simpleFirst,
+                    onClick = {
+                        simpleFirst = !simpleFirst
+                        preferences.saveSimpleFirst(simpleFirst)
+                        if (simpleFirst && fastestFirst) {
+                            fastestFirst = false
+                            preferences.saveFastestFirst(false)
+                        }
+                        // Re-rank actual static candidates before limiting result cards.
+                        onFastestPreferenceChanged()
+                    },
+                    label = { Text(stringResource(R.string.route_simple_first_filter)) },
+                    modifier = Modifier.heightIn(min = 48.dp)
+                        .testTag("route-simple-first-filter"),
                 )
                 FilterChip(
                     selected = fewerTransfersFirst,

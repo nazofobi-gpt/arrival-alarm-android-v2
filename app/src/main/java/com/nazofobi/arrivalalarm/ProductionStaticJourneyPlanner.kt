@@ -299,10 +299,12 @@ internal fun selectStaticRouteOptions(
     candidates: List<RouteOption>,
     requestedLimit: Int,
     fastestFirst: Boolean,
+    simpleFirst: Boolean = false,
 ): List<RouteOption> {
     val limit = boundedStaticJourneyOptionLimit(requestedLimit)
     if (limit == 0) return emptyList()
-    val ranked = if (fastestFirst) RouteResultsFilter(fastestFirst = true).apply(candidates)
+    val ranked = if (fastestFirst || simpleFirst)
+        RouteResultsFilter(fastestFirst = fastestFirst, simpleFirst = simpleFirst).apply(candidates)
         else candidates
     return ranked.take(limit)
 }
@@ -372,6 +374,7 @@ class ProductionStaticJourneyPlanner(
         departureEpochMillis: Long? = null,
         arrivalDeadlineEpochMillis: Long? = null,
         fastestFirst: Boolean = false,
+        simpleFirst: Boolean = false,
     ): LocalStaticJourneyOutcome {
         if (!validTransitJourneyCoordinates(origin.latitude, origin.longitude) ||
             !validTransitJourneyCoordinates(destination.latitude, destination.longitude)
@@ -456,7 +459,7 @@ class ProductionStaticJourneyPlanner(
                 .map { (serviceDate, journey) ->
                     mapper.map(journey, origin, destination, serviceDate, index.fetchedAt())
                 }
-                .let { selectStaticRouteOptions(it, boundedLimit, fastestFirst) }
+                .let { selectStaticRouteOptions(it, boundedLimit, fastestFirst, simpleFirst) }
             return if (options.isEmpty()) LocalStaticJourneyOutcome.NoPath
                 else LocalStaticJourneyOutcome.Results(options)
         }
@@ -500,7 +503,7 @@ class ProductionStaticJourneyPlanner(
                     sourceUpdatedAtEpochSeconds = index.fetchedAt(),
                 )
             }
-            .let { selectStaticRouteOptions(it, boundedLimit, fastestFirst) }
+            .let { selectStaticRouteOptions(it, boundedLimit, fastestFirst, simpleFirst) }
         return when {
             options.isNotEmpty() -> LocalStaticJourneyOutcome.Results(options)
             sawSameOrigin -> LocalStaticJourneyOutcome.SameOrigin

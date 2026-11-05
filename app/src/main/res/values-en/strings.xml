@@ -88,6 +88,7 @@
     <string name="route_at_most_one_transfer_filter">At most 1 transfer</string>
     <string name="route_at_most_one_transfer_empty">No route with at most one transfer. Turn off the filter to see alternatives.</string>
     <string name="route_fewer_transfers_filter">Fewest transfers first</string>
+    <string name="route_simple_first_filter">Simpler journeys first (fewer transfers and walking)</string>
     <string name="route_fastest_first_filter">Shortest journey time first</string>
     <string name="route_shorter_walking_filter">Least walking first</string>
     <string name="route_direct_only_empty">No direct route is available. Turn off the filter to see connections.</string>
