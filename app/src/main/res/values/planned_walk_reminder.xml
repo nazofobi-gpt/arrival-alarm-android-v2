@@ -15,6 +15,6 @@
     <string name="route_walk_reminder_preview_action">Yürüyüş hatırlatıcısı bildirimini dene</string>
     <string name="route_walk_reminder_preview_title">TEST — Yürüyüş bildirimi</string>
     <string name="route_walk_reminder_preview_body">Bu yalnızca testtir; yolculuk veya hatırlatıcı başlatılmadı.</string>
-    <string name="route_walk_reminder_preview_submitted">Test bildirimi Android'e gönderildi. Görüldüğü veya duyulduğu doğrulanmadı.</string>
+    <string name="route_walk_reminder_preview_submitted">Test bildirimi Android sistemine gönderildi. Görüldüğü veya duyulduğu doğrulanmadı.</string>
     <string name="route_walk_reminder_preview_failed">Test bildirimi gönderilemedi. Android bildirim ayarlarını kontrol edin.</string>
 </resources>
