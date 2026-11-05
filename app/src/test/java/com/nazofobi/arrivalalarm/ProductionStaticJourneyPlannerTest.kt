@@ -79,6 +79,8 @@ class ProductionStaticJourneyPlannerTest {
         assertEquals(8.813, points?.departureLongitude)
         assertEquals("3", option.transferWindows.single().plannedArrivalPlatformCode)
         assertEquals("7B", option.transferWindows.single().plannedDeparturePlatformCode)
+        assertNull(option.transferWindows.single().plannedConnectionLine)
+        assertNull(option.transferWindows.single().plannedConnectionDirection)
 
         val unknown = FakeRouteOptionData(
             routes = emptyMap(), trips = emptyMap(),
@@ -156,6 +158,8 @@ class ProductionStaticJourneyPlannerTest {
         assertEquals(120, option.egressWalking?.walkSeconds)
         assertEquals(1, option.transfers)
         assertEquals(1, option.transferWindows.size)
+        assertEquals("IC 2", option.transferWindows.single().plannedConnectionLine)
+        assertEquals("Berlin", option.transferWindows.single().plannedConnectionDirection)
         assertEquals("Bremen Hbf", option.transferWindows.single().arrivalStopName)
         assertEquals("Bremen Hbf", option.transferWindows.single().departureStopName)
         assertEquals(5, option.transferWindows.single().plannedGapMinutes)

@@ -22,6 +22,31 @@ class PlannedTransferWindowPanelInstrumentedTest {
         plannedGapMinutes = 6,
     )
 
+    @Test fun gtfsConnectingLineAndHeadSignAppearWithoutLiveClaim() {
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(listOf(evidence.copy(
+                    plannedConnectionLine = "IC 2",
+                    plannedConnectionDirection = "Berlin",
+                )))
+            }
+        }
+        rule.onNodeWithTag("journey-static-transfer-connection-0").assertExists()
+        rule.onNodeWithTag("journey-static-transfer-disclaimer").assertExists()
+    }
+
+    @Test fun unsafeGtfsBoardingDirectionFailsClosed() {
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(listOf(evidence.copy(
+                    plannedConnectionLine = "IC 2",
+                    plannedConnectionDirection = "\\u202eBerlin",
+                )))
+            }
+        }
+        rule.onNodeWithTag("journey-static-transfer-connection-0").assertDoesNotExist()
+    }
+
     @Test fun sourceBackedTransferShowsLabeledGapAndExplicitCaveat() {
         rule.setContent {
             MaterialTheme { PlannedTransferWindowPanel(listOf(evidence)) }

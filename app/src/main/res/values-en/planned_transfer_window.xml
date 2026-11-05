@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="route_planned_transfer_window">Scheduled transfer %1$d: %2$s → %3$s · %4$d min</string>
+    <string name="route_planned_transfer_connection">Scheduled connecting line: %1$s · towards %2$s (not a live vehicle confirmation).</string>
     <string name="route_planned_transfer_arrival_platform">Scheduled arrival platform: %1$s</string>
     <string name="route_planned_transfer_departure_platform">Scheduled connecting platform: %1$s</string>
     <string name="route_planned_transfer_disclaimer">Static timetable only. Excludes transfer walking time and live delays; connection is not guaranteed.</string>

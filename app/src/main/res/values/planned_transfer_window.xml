@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="route_planned_transfer_window">Planlı aktarma %1$d: %2$s → %3$s · %4$d dk</string>
+    <string name="route_planned_transfer_connection">Planlı sonraki hat: %1$s · yön %2$s (canlı araç doğrulaması değildir).</string>
     <string name="route_planned_transfer_arrival_platform">Tarifedeki varış peronu: %1$s</string>
     <string name="route_planned_transfer_departure_platform">Tarifedeki sonraki biniş peronu: %1$s</string>
     <string name="route_planned_transfer_disclaimer">Yalnız statik tarife. Yürüme süresi, canlı gecikme ve aktarmaya yetişme garantisi içermez.</string>

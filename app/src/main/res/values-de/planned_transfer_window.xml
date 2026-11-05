@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="route_planned_transfer_window">Geplanter Umstieg %1$d: %2$s → %3$s · %4$d Min.</string>
+    <string name="route_planned_transfer_connection">Planmäßige Anschlusslinie: %1$s · Richtung %2$s (keine Echtzeitbestätigung).</string>
     <string name="route_planned_transfer_arrival_platform">Planmäßiges Ankunftsgleis: %1$s</string>
     <string name="route_planned_transfer_departure_platform">Planmäßiges Anschlussgleis: %1$s</string>
     <string name="route_planned_transfer_disclaimer">Nur statischer Fahrplan. Ohne Umsteige-Fußweg und Echtzeitverspätung; Anschluss nicht garantiert.</string>

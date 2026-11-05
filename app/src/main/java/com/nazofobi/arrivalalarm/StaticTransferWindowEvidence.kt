@@ -19,6 +19,9 @@ data class RouteTransferWindowEvidence(
     val plannedDeparturePlatformCode: String? = null,
     // Exact public GTFS stop coordinates only, never device location.
     val walkingCoordinates: RouteTransferWalkingCoordinates? = null,
+    // Next GTFS leg only; never fallback to the journey endpoint.
+    val plannedConnectionLine: String? = null,
+    val plannedConnectionDirection: String? = null,
 )
 
 /**
@@ -60,6 +63,19 @@ internal fun plannedStaticTransferWindows(
         )
     }
     return windows
+}
+
+/** Show an upcoming GTFS route and headsign together, never guessed boarding advice. */
+internal fun plannedTransferConnectingService(
+    line: String?,
+    direction: String?,
+): Pair<String, String>? {
+    fun bounded(value: String?): String? = value?.trim()?.takeIf {
+        it.length in 1..100 && it.none { char ->
+            Character.isISOControl(char) || Character.getType(char) == Character.FORMAT.toInt()
+        }
+    }
+    return (bounded(line) ?: return null) to (bounded(direction) ?: return null)
 }
 
 /** Bound provider-supplied platform_code before showing it as timetable evidence. */

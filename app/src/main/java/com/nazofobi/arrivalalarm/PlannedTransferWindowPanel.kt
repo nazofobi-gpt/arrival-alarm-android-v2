@@ -61,6 +61,18 @@ internal fun PlannedTransferWindowPanel(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.testTag("journey-static-transfer-" + index),
             )
+            plannedTransferConnectingService(
+                evidence.plannedConnectionLine, evidence.plannedConnectionDirection,
+            )?.let { service ->
+                Text(
+                    text = stringResource(
+                        R.string.route_planned_transfer_connection,
+                        service.first, service.second,
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.testTag("journey-static-transfer-connection-" + index),
+                )
+            }
             evidence.plannedArrivalLocalTime?.takeIf { it.isNotBlank() }?.let { localTime ->
                 Text(
                     text = stringResource(R.string.route_planned_transfer_arrival_local_time, localTime),

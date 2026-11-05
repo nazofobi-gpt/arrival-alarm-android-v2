@@ -14,6 +14,17 @@ class StaticTransferWindowEvidenceTest {
     private val second = StaticTransitLeg("t2", "r2", "y", "b", t + 25 * 60_000L, t + 50 * 60_000L)
     private val names = mapOf("x" to "Bremen Hbf", "y" to "Platform Süd")
 
+    @Test fun connectingGtfsServiceRequiresBothBoundedSourceLabels() {
+        assertEquals("IC 2" to "Berlin Hbf",
+            plannedTransferConnectingService(" IC 2 ", " Berlin Hbf "))
+        assertNull(plannedTransferConnectingService(null, "Berlin"))
+        assertNull(plannedTransferConnectingService("IC 2", null))
+        assertNull(plannedTransferConnectingService("IC 2", "  "))
+        assertNull(plannedTransferConnectingService("IC\\n2", "Berlin"))
+        assertNull(plannedTransferConnectingService("IC 2", "Berlin\\u202e"))
+        assertNull(plannedTransferConnectingService("IC 2", "x".repeat(101)))
+    }
+
     @Test fun onlyBoundedUnspoofedGtfsPlatformLabelsAreShown() {
         assertEquals("7 B", boundedGtfsPlatformCode(" 7 B "))
         assertEquals("2", boundedGtfsPlatformCode("2"))

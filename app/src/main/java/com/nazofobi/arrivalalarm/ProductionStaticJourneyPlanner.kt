@@ -112,7 +112,17 @@ internal class StaticRouteOptionMapper(
             egressWalking = walkingLegEvidence(journey.egress),
             transferWindows = plannedStaticTransferWindows(journey.legs) { stopId ->
                 data.stop(stopId)?.name
-            }.map { window ->
+            }.mapIndexed { index, window ->
+                // Window at index belongs to the exact following GTFS leg.
+                val connectingService = journey.legs.getOrNull(index + 1)?.let { leg ->
+                    val route = data.route(leg.routeId)?.takeIf { it.id == leg.routeId }
+                    val trip = data.trip(leg.tripId)
+                        ?.takeIf { it.id == leg.tripId && it.routeId == leg.routeId }
+                    plannedTransferConnectingService(
+                        route?.shortName?.takeIf { it.isNotBlank() } ?: route?.longName,
+                        trip?.headsign,
+                    )
+                }
                 // The identity and coordinate pair must both come from the indexed GTFS feed.
                 // Never substitute current GPS, map pin or a nearby guessed boarding stop.
                 val arrivalStop = data.stop(window.arrivalStopId)
@@ -124,6 +134,8 @@ internal class StaticRouteOptionMapper(
                 }
                 val departing = departureStop.takeIf { arriving != null }
                 window.copy(
+                    plannedConnectionLine = connectingService?.first,
+                    plannedConnectionDirection = connectingService?.second,
                     // Timetable-only platform labels; absent source data stays absent.
                     plannedArrivalPlatformCode = boundedGtfsPlatformCode(arrivalStop?.platformCode),
                     plannedDeparturePlatformCode = boundedGtfsPlatformCode(departureStop?.platformCode),
