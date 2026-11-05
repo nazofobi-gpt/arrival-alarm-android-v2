@@ -5,4 +5,7 @@
     <string name="route_planned_transfer_departure_countdown">Scheduled connecting departure in %1$d min</string>
     <string name="route_planned_transfer_local_time">Scheduled connecting departure: %1$s</string>
     <string name="route_planned_transfer_departure_past">The scheduled connecting departure time has passed. Actual vehicle departure remains unverified; check current services.</string>
+    <string name="route_planned_transfer_walk_map">Open walking map between transfer stops</string>
+    <string name="route_planned_transfer_walk_privacy">Only the two timetable stop coordinates go to the external map. This app does not add your device location; the map app may use its own location permission. Walking time is unverified.</string>
+    <string name="route_planned_transfer_walk_unavailable">Walking map could not be opened.</string>
 </resources>

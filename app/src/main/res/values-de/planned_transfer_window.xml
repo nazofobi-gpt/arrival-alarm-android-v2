@@ -5,4 +5,7 @@
     <string name="route_planned_transfer_departure_countdown">Planmäßige Anschlussabfahrt in %1$d Min.</string>
     <string name="route_planned_transfer_local_time">Planmäßige Anschlussabfahrt: %1$s</string>
     <string name="route_planned_transfer_departure_past">Die planmäßige Anschlussabfahrt liegt zurück. Ob das Fahrzeug tatsächlich abgefahren ist, ist unbestätigt; bitte aktuelle Verbindungen prüfen.</string>
+    <string name="route_planned_transfer_walk_map">Fußweg zwischen den Umsteigehaltestellen öffnen</string>
+    <string name="route_planned_transfer_walk_privacy">An die externe Karte gehen nur die beiden GTFS-Haltestellenpositionen. Diese App übermittelt keinen Gerätestandort; die Karten-App kann eigene Standortrechte nutzen. Gehzeit unbestätigt.</string>
+    <string name="route_planned_transfer_walk_unavailable">Fußwegkarte konnte nicht geöffnet werden.</string>
 </resources>

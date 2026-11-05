@@ -11,6 +11,8 @@ data class RouteTransferWindowEvidence(
     val plannedDepartureEpochMillis: Long = 0L,
     // Source timetable time in the GTFS agency's zone, including DST offset.
     val plannedDepartureLocalTime: String? = null,
+    // Exact public GTFS stop coordinates only, never device location.
+    val walkingCoordinates: RouteTransferWalkingCoordinates? = null,
 )
 
 /**
@@ -94,4 +96,48 @@ internal fun plannedTransferDepartureLocalTime(
         }.format(java.util.Date(departureEpochMillis))
         formatted.dropLast(2) + ":" + formatted.takeLast(2)
     }.getOrNull()
+}
+
+/** Public GTFS transfer endpoints, not a pedestrian route or device location. */
+data class RouteTransferWalkingCoordinates(
+    val arrivalLatitude: Double,
+    val arrivalLongitude: Double,
+    val departureLatitude: Double,
+    val departureLongitude: Double,
+)
+
+/** Omit external walking actions without two different identifiable, plausible stops. */
+internal fun plannedTransferWalkingCoordinates(
+    arrivalStopId: String,
+    departureStopId: String,
+    arrivalLatitude: Double?,
+    arrivalLongitude: Double?,
+    departureLatitude: Double?,
+    departureLongitude: Double?,
+): RouteTransferWalkingCoordinates? {
+    if (arrivalStopId.isBlank() || departureStopId.isBlank() ||
+        arrivalStopId == departureStopId ||
+        arrivalLatitude == null || arrivalLongitude == null ||
+        departureLatitude == null || departureLongitude == null) return null
+    if (!validTransitJourneyCoordinates(arrivalLatitude, arrivalLongitude) ||
+        !validTransitJourneyCoordinates(departureLatitude, departureLongitude)) return null
+    // (0,0) in a German stop feed is a missing-coordinate placeholder.
+    if ((arrivalLatitude == 0.0 && arrivalLongitude == 0.0) ||
+        (departureLatitude == 0.0 && departureLongitude == 0.0)) return null
+    return RouteTransferWalkingCoordinates(
+        arrivalLatitude, arrivalLongitude, departureLatitude, departureLongitude,
+    )
+}
+
+/** A user-tapped external walking map receives only public timetable stop positions. */
+internal fun plannedTransferWalkingDirectionsUrl(
+    points: RouteTransferWalkingCoordinates,
+): String? {
+    if (plannedTransferWalkingCoordinates(
+            "arrival", "departure",
+            points.arrivalLatitude, points.arrivalLongitude,
+            points.departureLatitude, points.departureLongitude,
+        ) == null) return null
+    return "https://www.google.com/maps/dir/?api=1&origin=${points.arrivalLatitude},${points.arrivalLongitude}" +
+        "&destination=${points.departureLatitude},${points.departureLongitude}&travelmode=walking"
 }

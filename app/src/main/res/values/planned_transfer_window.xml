@@ -5,4 +5,7 @@
     <string name="route_planned_transfer_departure_countdown">Planlı aktarma kalkışına %1$d dk</string>
     <string name="route_planned_transfer_local_time">Tarifedeki aktarma kalkışı: %1$s</string>
     <string name="route_planned_transfer_departure_past">Planlı aktarma kalkış saati geçti. Aracın gerçekten ayrıldığı doğrulanmadı; güncel seferi kontrol edin.</string>
+    <string name="route_planned_transfer_walk_map">Aktarma durakları arasında yaya haritasını aç</string>
+    <string name="route_planned_transfer_walk_privacy">Dış haritaya yalnız tarifedeki iki durak koordinatı gönderilir. Bu uygulama konumunuzu eklemez; harita kendi konum izinlerini kullanabilir. Yürüyüş süresi doğrulanmadı.</string>
+    <string name="route_planned_transfer_walk_unavailable">Yaya haritası açılamadı.</string>
 </resources>

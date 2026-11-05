@@ -3,7 +3,9 @@ package com.nazofobi.arrivalalarm
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -94,6 +96,32 @@ class PlannedTransferWindowPanelInstrumentedTest {
             }
         }
         rule.onNodeWithTag("journey-static-transfer-departure-passed-0").assertDoesNotExist()
+    }
+
+    @Test fun explicitTransferWalkUsesOnlyPublicStopCoordsAndShowsDisclosure() {
+        val coords = RouteTransferWalkingCoordinates(53.075, 8.808, 53.079, 8.813)
+        var opened: String? = null
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(
+                    listOf(evidence.copy(walkingCoordinates = coords)),
+                    onOpenWalkingDirections = { opened = it },
+                )
+            }
+        }
+        rule.onNodeWithTag("journey-transfer-walk-map-0").assertExists().performClick()
+        rule.onNodeWithTag("journey-transfer-walk-privacy-0").assertExists()
+        rule.runOnIdle {
+            assertEquals(plannedTransferWalkingDirectionsUrl(coords), opened)
+        }
+    }
+
+    @Test fun transferWalkingButtonFailsClosedWithoutVerifiedStopPair() {
+        rule.setContent {
+            MaterialTheme { PlannedTransferWindowPanel(listOf(evidence)) }
+        }
+        rule.onNodeWithTag("journey-static-transfer-0").assertExists()
+        rule.onNodeWithTag("journey-transfer-walk-map-0").assertDoesNotExist()
     }
 
     @Test fun missingTransferSourceDoesNotShowUnfoundedConnectionAdvice() {

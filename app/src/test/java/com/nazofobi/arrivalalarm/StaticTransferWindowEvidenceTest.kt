@@ -2,6 +2,7 @@ package com.nazofobi.arrivalalarm
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
@@ -77,6 +78,25 @@ class StaticTransferWindowEvidenceTest {
         assertFalse(plannedTransferDepartureRecentlyPassed(departure, departure - 1L))
         assertFalse(plannedTransferDepartureRecentlyPassed(0L, departure + 1L))
         assertFalse(plannedTransferDepartureRecentlyPassed(Long.MAX_VALUE, 1L))
+    }
+
+    @Test fun transferWalkMapNeedsTwoDistinctSourceStopsAndValidCoordinates() {
+        val walk = plannedTransferWalkingCoordinates(
+            "X", "Y", 53.075, 8.808, 53.079, 8.813,
+        )
+        assertEquals(
+            "https://www.google.com/maps/dir/?api=1&origin=53.075,8.808" +
+                "&destination=53.079,8.813&travelmode=walking",
+            plannedTransferWalkingDirectionsUrl(walk!!),
+        )
+        assertNull(plannedTransferWalkingCoordinates("X", "X", 53.075, 8.808, 53.079, 8.813))
+        assertNull(plannedTransferWalkingCoordinates("X", "Y", null, 8.808, 53.079, 8.813))
+        assertNull(plannedTransferWalkingCoordinates("X", "Y", Double.NaN, 8.808, 53.079, 8.813))
+        assertNull(plannedTransferWalkingCoordinates("X", "Y", 0.0, 0.0, 53.079, 8.813))
+        assertNull(plannedTransferWalkingCoordinates("X", "Y", 53.075, 8.808, 200.0, 8.813))
+        assertNull(plannedTransferWalkingDirectionsUrl(
+            RouteTransferWalkingCoordinates(53.075, 8.808, Double.POSITIVE_INFINITY, 8.813),
+        ))
     }
 
     @Test fun refusesToShowPartialTransferEvidenceOnMultipleLegs() {

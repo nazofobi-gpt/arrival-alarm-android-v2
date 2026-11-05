@@ -51,6 +51,44 @@ class ProductionStaticJourneyPlannerTest {
         assertNull(withoutWalk.egressWalking)
     }
 
+    @Test
+    fun mapperUsesOnlyVerifiedDistinctGtfsStopsForExternalTransferWalking() {
+        val data = FakeRouteOptionData(
+            routes = emptyMap(), trips = emptyMap(),
+            stops = mapOf(
+                "X" to GtfsScheduleStop("X", "Arrival", 53.075, 8.808, null, 0, null, null),
+                "Y" to GtfsScheduleStop("Y", "Boarding", 53.079, 8.813, null, 0, null, null),
+            ),
+            stopTimes = emptyMap(),
+        )
+        val journey = StaticTransitJourney(
+            id = "different-transfer-stops",
+            access = StaticRouterAccess("A"),
+            egress = StaticRouterAccess("B"),
+            legs = listOf(
+                StaticTransitLeg("T1", "R1", "A", "X", at("08:00:00"), at("08:20:00")),
+                StaticTransitLeg("T2", "R2", "Y", "B", at("08:25:00"), at("08:45:00")),
+            ),
+            arrivalEpochMillis = at("08:45:00"),
+        )
+        val option = StaticRouteOptionMapper(data, zone).map(
+            journey, MapPoint(52.0, 8.0, "Start"), MapPoint(52.1, 8.1, "End"), date, 1L,
+        )
+        val points = option.transferWindows.single().walkingCoordinates
+        assertEquals(53.075, points?.arrivalLatitude)
+        assertEquals(8.813, points?.departureLongitude)
+
+        val unknown = FakeRouteOptionData(
+            routes = emptyMap(), trips = emptyMap(),
+            stops = mapOf("X" to GtfsScheduleStop("X", "Arrival", 53.075, 8.808, null, 0, null, null),
+                "Y" to GtfsScheduleStop("Y", "Boarding", 0.0, 0.0, null, 0, null, null)),
+            stopTimes = emptyMap(),
+        )
+        assertNull(StaticRouteOptionMapper(unknown, zone).map(
+            journey, MapPoint(52.0, 8.0, "Start"), MapPoint(52.1, 8.1, "End"), date, 1L,
+        ).transferWindows.single().walkingCoordinates)
+    }
+
     private val zone = TimeZone.getTimeZone("Europe/Berlin")
     private val date = GtfsServiceDate(2026, 10, 4)
 

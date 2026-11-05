@@ -113,9 +113,24 @@ internal class StaticRouteOptionMapper(
             transferWindows = plannedStaticTransferWindows(journey.legs) { stopId ->
                 data.stop(stopId)?.name
             }.map { window ->
-                window.copy(plannedDepartureLocalTime = plannedTransferDepartureLocalTime(
-                    window.plannedDepartureEpochMillis, agencyTimeZone,
-                ))
+                // The identity and coordinate pair must both come from the indexed GTFS feed.
+                // Never substitute current GPS, map pin or a nearby guessed boarding stop.
+                val arriving = if (window.arrivalStopId != window.departureStopId) {
+                    data.stop(window.arrivalStopId)?.takeIf { it.id == window.arrivalStopId }
+                } else null
+                val departing = if (arriving != null) {
+                    data.stop(window.departureStopId)?.takeIf { it.id == window.departureStopId }
+                } else null
+                window.copy(
+                    plannedDepartureLocalTime = plannedTransferDepartureLocalTime(
+                        window.plannedDepartureEpochMillis, agencyTimeZone,
+                    ),
+                    walkingCoordinates = plannedTransferWalkingCoordinates(
+                        window.arrivalStopId, window.departureStopId,
+                        arriving?.latitude, arriving?.longitude,
+                        departing?.latitude, departing?.longitude,
+                    ),
+                )
             },
         )
     }
