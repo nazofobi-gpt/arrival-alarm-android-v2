@@ -112,6 +112,16 @@ internal fun PlannedTransferWindowPanel(
                     modifier = Modifier.testTag("journey-static-transfer-departure-passed-" + index),
                 )
             }
+            plannedTransferStraightLineDistanceMeters(evidence)?.let { distanceMeters ->
+                Text(
+                    text = stringResource(
+                        R.string.route_planned_transfer_straight_line_distance, distanceMeters,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("journey-transfer-straight-distance-" + index),
+                )
+            }
             if (plannedTransferStraightLineWalkingRisk(evidence)) {
                 Text(
                     text = stringResource(R.string.route_planned_transfer_walk_risk),

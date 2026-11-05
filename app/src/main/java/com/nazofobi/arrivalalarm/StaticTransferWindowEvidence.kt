@@ -160,26 +160,23 @@ internal fun plannedTransferWalkingDirectionsUrl(
 }
 
 /**
- * Conservative warning only: even an optimistic 1.7 m/s straight-line walk may
- * outlast the scheduled gap. A negative result NEVER proves a walkable transfer.
- * Use exact source arrival/departure instants, not ceiling-rounded display minutes.
- * Source GTFS stop coordinates only; no device fix, API request or live ETA.
+ * Only exact scheduled UTC timestamps, consistent display gap, two distinct public
+ * GTFS stops and valid positions authorize any straight-line transfer metric.
+ * Neither the distance nor the departure window proves a walkable connection.
  */
-internal fun plannedTransferStraightLineWalkingRisk(
+private fun verifiedTransferStraightLineDistanceAndGap(
     window: RouteTransferWindowEvidence,
-): Boolean {
-    val points = window.walkingCoordinates ?: return false
+): Pair<Double, Long>? {
+    val points = window.walkingCoordinates ?: return null
     if (window.plannedGapMinutes !in 1..180 ||
         window.arrivalStopId.isBlank() || window.departureStopId.isBlank() ||
-        window.arrivalStopId == window.departureStopId) return false
+        window.arrivalStopId == window.departureStopId) return null
     if (plannedTransferWalkingCoordinates(
             window.arrivalStopId, window.departureStopId,
             points.arrivalLatitude, points.arrivalLongitude,
             points.departureLatitude, points.departureLongitude,
-        ) == null) return false
+        ) == null) return null
 
-    // The display rounds partial minutes up; that overstates walkable time.
-    // Risk guidance uses only the two exact verified GTFS UTC instants.
     val gapMillis = if (window.plannedArrivalEpochMillis > 0L &&
         window.plannedDepartureEpochMillis > 0L) {
         runCatching {
@@ -189,7 +186,7 @@ internal fun plannedTransferStraightLineWalkingRisk(
         }.getOrNull()
     } else null
     if (gapMillis == null || gapMillis !in 60_000L..10_800_000L ||
-        ((gapMillis + 59_999L) / 60_000L).toInt() != window.plannedGapMinutes) return false
+        ((gapMillis + 59_999L) / 60_000L).toInt() != window.plannedGapMinutes) return null
 
     val lat1 = Math.toRadians(points.arrivalLatitude)
     val lat2 = Math.toRadians(points.departureLatitude)
@@ -201,6 +198,28 @@ internal fun plannedTransferStraightLineWalkingRisk(
         kotlin.math.cos(lat1) * kotlin.math.cos(lat2) * sinLon * sinLon
     val distanceMeters = 2.0 * 6_371_000.0 *
         kotlin.math.asin(kotlin.math.sqrt(a.coerceIn(0.0, 1.0)))
-    return distanceMeters.isFinite() &&
-        distanceMeters > (gapMillis / 1000.0) * 1.7
+    return distanceMeters.takeIf { it.isFinite() && it >= 0.0 }?.let { it to gapMillis }
+}
+
+/**
+ * Approximate source-stop straight-line separation, rounded UP to avoid
+ * understating it. This is not pedestrian route length or walking duration.
+ * Implausible >20km transfers and unevidenced schedule/geometry remain hidden.
+ */
+internal fun plannedTransferStraightLineDistanceMeters(
+    window: RouteTransferWindowEvidence,
+): Int? = verifiedTransferStraightLineDistanceAndGap(window)
+    ?.first?.takeIf { it >= 1.0 && it <= 20_000.0 }
+    ?.let { kotlin.math.ceil(it).toInt() }
+
+/**
+ * Conservative warning only: even an optimistic 1.7 m/s straight-line walk may
+ * outlast the exact scheduled gap. Absence of this warning does NOT prove safety.
+ */
+internal fun plannedTransferStraightLineWalkingRisk(
+    window: RouteTransferWindowEvidence,
+): Boolean {
+    val (distanceMeters, gapMillis) = verifiedTransferStraightLineDistanceAndGap(window)
+        ?: return false
+    return distanceMeters > (gapMillis / 1000.0) * 1.7
 }

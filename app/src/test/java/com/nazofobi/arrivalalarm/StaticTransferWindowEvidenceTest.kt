@@ -127,6 +127,7 @@ class StaticTransferWindowEvidenceTest {
             walkingCoordinates = far,
         )
         assertTrue(plannedTransferStraightLineWalkingRisk(base))
+        assertTrue(plannedTransferStraightLineDistanceMeters(base) in 2_200..2_250)
         // A wider scheduled interval is NOT called safe; only the warning disappears.
         assertFalse(plannedTransferStraightLineWalkingRisk(base.copy(
             plannedGapMinutes = 30,
@@ -155,6 +156,15 @@ class StaticTransferWindowEvidenceTest {
         )))
         assertFalse(plannedTransferStraightLineWalkingRisk(base.copy(
             plannedArrivalEpochMillis = 0L,
+        )))
+        assertNull(plannedTransferStraightLineDistanceMeters(base.copy(
+            plannedArrivalEpochMillis = 0L,
+        )))
+        assertNull(plannedTransferStraightLineDistanceMeters(base.copy(
+            plannedGapMinutes = 6,
+        )))
+        assertNull(plannedTransferStraightLineDistanceMeters(base.copy(
+            walkingCoordinates = far.copy(departureLatitude = Double.NaN),
         )))
         assertFalse(plannedTransferStraightLineWalkingRisk(base.copy(
             plannedDepartureEpochMillis = Long.MAX_VALUE,

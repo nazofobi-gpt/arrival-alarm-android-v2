@@ -176,6 +176,7 @@ class PlannedTransferWindowPanelInstrumentedTest {
             MaterialTheme { PlannedTransferWindowPanel(listOf(longTransfer)) }
         }
         rule.onNodeWithTag("journey-transfer-walk-risk-0").assertExists()
+        rule.onNodeWithTag("journey-transfer-straight-distance-0").assertExists()
         rule.onNodeWithTag("journey-static-transfer-disclaimer").assertExists()
     }
 
@@ -188,6 +189,7 @@ class PlannedTransferWindowPanelInstrumentedTest {
         }
         rule.onNodeWithTag("journey-static-transfer-0").assertExists()
         rule.onNodeWithTag("journey-transfer-walk-risk-0").assertDoesNotExist()
+        rule.onNodeWithTag("journey-transfer-straight-distance-0").assertDoesNotExist()
     }
 
     @Test fun missingOrShortWalkingEvidenceNeverShowsFeasibilityClaim() {
