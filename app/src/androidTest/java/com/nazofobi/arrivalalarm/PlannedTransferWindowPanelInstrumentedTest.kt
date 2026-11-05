@@ -166,7 +166,10 @@ class PlannedTransferWindowPanelInstrumentedTest {
     }
 
     @Test fun sourceCoordinatesAndTightGapShowQualifiedWalkingRisk() {
+        val arrival = 1_800_000_000_000L
         val longTransfer = evidence.copy(
+            plannedArrivalEpochMillis = arrival,
+            plannedDepartureEpochMillis = arrival + 6 * 60_000L,
             walkingCoordinates = RouteTransferWalkingCoordinates(53.075, 8.808, 53.095, 8.808),
         )
         rule.setContent {
@@ -174,6 +177,17 @@ class PlannedTransferWindowPanelInstrumentedTest {
         }
         rule.onNodeWithTag("journey-transfer-walk-risk-0").assertExists()
         rule.onNodeWithTag("journey-static-transfer-disclaimer").assertExists()
+    }
+
+    @Test fun missingExactTransferTimesHideUnverifiableWalkingRisk() {
+        val longTransfer = evidence.copy(
+            walkingCoordinates = RouteTransferWalkingCoordinates(53.075, 8.808, 53.095, 8.808),
+        )
+        rule.setContent {
+            MaterialTheme { PlannedTransferWindowPanel(listOf(longTransfer)) }
+        }
+        rule.onNodeWithTag("journey-static-transfer-0").assertExists()
+        rule.onNodeWithTag("journey-transfer-walk-risk-0").assertDoesNotExist()
     }
 
     @Test fun missingOrShortWalkingEvidenceNeverShowsFeasibilityClaim() {
