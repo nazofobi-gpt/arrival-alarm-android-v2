@@ -1,0 +1,17 @@
+<resources>
+    <string name="future_route_depart_now">Depart now</string>
+    <string name="future_route_pick_departure">Choose departure date and time</string>
+    <string name="future_route_departure_selected">Planned departure (Berlin): %1$s</string>
+    <string name="future_route_invalid_time">Choose a valid departure within the next 7 days.</string>
+    <string name="future_route_static_only">Future departure: local GTFS timetable only; live predictions are not applied.</string>
+    <string name="future_route_not_found">No scheduled route at that time. Try another departure time.</string>
+    <string name="future_route_offline_required">Current offline transit data must be installed for future departures.</string>
+    <string name="future_route_unavailable">Future departure routing is unavailable.</string>
+    <string name="arrival_by_mode_label">Choose an arrival deadline</string>
+    <string name="arrival_by_selected">Arrive by (Berlin): %1$s</string>
+    <string name="arrival_by_pick">Choose arrival date and latest time</string>
+    <string name="arrival_by_reset">Depart now</string>
+    <string name="arrival_by_static_only">Arrive by: local GTFS timetable over the preceding 24 hours, without realtime predictions.</string>
+    <string name="arrival_by_not_found">No scheduled route arrives by that time. Try a different deadline.</string>
+    <string name="future_route_ambiguous_time">This clock time occurs twice during the daylight-saving change. Choose the intended UTC offset.</string>
+</resources>

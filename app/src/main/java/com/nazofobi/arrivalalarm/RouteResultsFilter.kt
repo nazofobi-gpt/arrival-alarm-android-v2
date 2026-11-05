@@ -10,6 +10,8 @@ internal data class RouteResultsFilter(
     val directOnly: Boolean = false,
     val fewerTransfersFirst: Boolean = false,
     val shorterWalkingFirst: Boolean = false,
+    val fastestFirst: Boolean = false,
+    val simpleFirst: Boolean = false,
     val maxTransfers: Int? = null,
     val maxWalkingMinutes: Int? = null,
 ) {
@@ -62,6 +64,37 @@ internal data class RouteResultsFilter(
         }
         // Keep provider order for equally convenient routes.
         return when {
+            simpleFirst -> {
+                // A simple trip has fewer transfers and then less evidenced walking.
+                // Only actual positive timetable duration can break remaining ties.
+                filtered.sortedWith(compareBy<RouteOption> { it.transfers }
+                    .thenBy { it.walkingMinutes }
+                    .thenBy { option ->
+                        val start = option.departureEpochMillis
+                        val end = option.arrivalEpochMillis
+                        if (start != null && end != null && start >= 0L && end > start)
+                            end - start else Long.MAX_VALUE
+                    })
+            }
+            fastestFirst -> {
+                // Use only source-backed positive durations. Unknown evidence comes last,
+                // never computed from display clock labels or guessed by the UI.
+                val byDuration = compareBy<RouteOption> { option ->
+                    val start = option.departureEpochMillis
+                    val end = option.arrivalEpochMillis
+                    if (start != null && end != null && start >= 0L && end > start) {
+                        end - start
+                    } else Long.MAX_VALUE
+                }
+                val comparator = when {
+                    fewerTransfersFirst && shorterWalkingFirst ->
+                        byDuration.thenBy { it.transfers }.thenBy { it.walkingMinutes }
+                    fewerTransfersFirst -> byDuration.thenBy { it.transfers }
+                    shorterWalkingFirst -> byDuration.thenBy { it.walkingMinutes }
+                    else -> byDuration
+                }
+                filtered.sortedWith(comparator)
+            }
             // With both options enabled, transfers remain the primary preference;
             // walking time breaks ties without overriding the user's transfer choice.
             fewerTransfersFirst && shorterWalkingFirst ->

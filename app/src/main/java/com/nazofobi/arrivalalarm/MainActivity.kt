@@ -227,6 +227,8 @@ fun ArrivalAlarmApp(
     var locationMessage by remember { mutableStateOf<String?>(null) }
     var mapMessage by remember { mutableStateOf<String?>(null) }
     var routeOptions by remember { mutableStateOf(emptyList<RouteOption>()) }
+    var selectedDepartureEpochMillis by rememberSaveable { mutableStateOf<Long?>(null) }
+    var selectedArrivalDeadlineEpochMillis by rememberSaveable { mutableStateOf<Long?>(null) }
     // The selected GTFS alarm has no matching ad-hoc route-search card.
     var confirmedTripLiveRoute by remember { mutableStateOf<RouteOption?>(null) }
     var selectedRouteId by remember { mutableStateOf<String?>(null) }
@@ -423,13 +425,17 @@ fun ArrivalAlarmApp(
     fun routeKey(a: MapPoint, b: MapPoint) =
         "${a.latitude},${a.longitude}->${b.latitude},${b.longitude}"
 
-    fun loadRoutes(a: MapPoint, b: MapPoint) {
+    fun loadRoutes(
+        a: MapPoint, b: MapPoint,
+        departureEpochMillis: Long? = selectedDepartureEpochMillis,
+        arrivalDeadlineEpochMillis: Long? = selectedArrivalDeadlineEpochMillis,
+    ) {
         val token = routeRequestGate.begin()
         routingHealth = TransitFunctionHealth.UNVERIFIED
         routeBusy = true
         routeStatus = context.getString(R.string.route_calculating)
         val key = routeKey(a, b)
-        transit.journeyOptions(a, b) callback@{ options, status ->
+        val onResult: (List<RouteOption>, String) -> Unit = callback@{ options, status ->
             routeRequestGate.commitIfCurrent(token) {
                 routeBusy = false
                 if (options.isNotEmpty()) {
@@ -445,9 +451,12 @@ fun ArrivalAlarmApp(
                     routeStatus = if (hadSelection && retainedSelection == null) {
                         context.getString(R.string.error_trip_required)
                     } else status
-                    routeCache.put(CachedTransitPlan(key, options, emptyList(), System.currentTimeMillis() / 1000))
+                    if (departureEpochMillis == null && arrivalDeadlineEpochMillis == null) {
+                        routeCache.put(CachedTransitPlan(key, options, emptyList(), System.currentTimeMillis() / 1000))
+                    }
                 } else {
-                    val cached = routeCache.routeOptions(key)
+                    val cached = if (departureEpochMillis == null && arrivalDeadlineEpochMillis == null)
+                        routeCache.routeOptions(key) else emptyList()
                     routingHealth = if (cached.isNotEmpty()) TransitFunctionHealth.DEGRADED
                         else TransitFunctionHealth.FAILED
                     routeOffline = cached.isNotEmpty()
@@ -461,13 +470,19 @@ fun ArrivalAlarmApp(
                     routeStatus = when {
                         hadSelection && retainedSelection == null -> context.getString(R.string.error_trip_required)
                         cached.isNotEmpty() -> context.getString(R.string.route_offline_fallback)
-                        else -> status
+                        else -> status.ifBlank { context.getString(R.string.future_route_unavailable) }
                     }
                 }
             }
         }
+        when {
+            arrivalDeadlineEpochMillis != null ->
+                transit.arrivalByJourneyOptions(a, b, arrivalDeadlineEpochMillis, callback = onResult)
+            departureEpochMillis != null ->
+                transit.futureJourneyOptions(a, b, departureEpochMillis, callback = onResult)
+            else -> transit.journeyOptions(a, b, callback = onResult)
+        }
     }
-
     fun loadStationDepartures(stop: CatalogStop) {
         val token = stationRequestGate.begin()
         stationLoading = true
@@ -850,14 +865,21 @@ fun ArrivalAlarmApp(
         }
         if (restoredOrigin != null && restoredDestination != null && routeOptions.isEmpty()) {
             val key = routeKey(restoredOrigin, restoredDestination)
-            val cached = routeCache.routeOptions(key)
+            // The cache is keyed only by endpoints and contains depart-now routes.
+            // A restored future/arrival-by selection needs a fresh date-qualified search.
+            val cached = if (shouldRestoreDepartNowCache(
+                    selectedDepartureEpochMillis, selectedArrivalDeadlineEpochMillis,
+                )) routeCache.routeOptions(key) else emptyList()
             if (cached.isNotEmpty()) {
                 routeOffline = true
                 routeOptions = cached
                 graph.routeRegistry.replace(cached)
                 routeStatus = context.getString(R.string.route_offline_fallback)
             } else {
-                loadRoutes(restoredOrigin, restoredDestination)
+                loadRoutes(
+                    restoredOrigin, restoredDestination,
+                    selectedDepartureEpochMillis, selectedArrivalDeadlineEpochMillis,
+                )
             }
         }
     }
@@ -1570,6 +1592,29 @@ fun ArrivalAlarmApp(
                             routeOffline = routeOffline,
                             selectedRouteId = selectedRouteId,
                             journey = journey,
+                            selectedDepartureEpochMillis = selectedDepartureEpochMillis,
+                            selectedArrivalDeadlineEpochMillis = selectedArrivalDeadlineEpochMillis,
+                            onDepartureTimeChange = { chosen ->
+                                selectedDepartureEpochMillis = chosen
+                                selectedArrivalDeadlineEpochMillis = null
+                                routeRequestGate.invalidate()
+                                val from = origin
+                                val to = destination
+                                if (from != null && to != null) loadRoutes(from, to, chosen, null)
+                            },
+                            onArrivalDeadlineChange = { chosen ->
+                                selectedArrivalDeadlineEpochMillis = chosen
+                                selectedDepartureEpochMillis = null
+                                routeRequestGate.invalidate()
+                                val from = origin
+                                val to = destination
+                                if (from != null && to != null) loadRoutes(from, to, null, chosen)
+                            },
+                            onFastestPreferenceChanged = {
+                                val from = origin
+                                val to = destination
+                                if (from != null && to != null) loadRoutes(from, to)
+                            },
                             onRefreshRoutes = {
                                 val from = origin
                                 val to = destination

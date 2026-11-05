@@ -1,0 +1,17 @@
+<resources>
+    <string name="future_route_depart_now">Jetzt abfahren</string>
+    <string name="future_route_pick_departure">Abfahrtsdatum und -uhrzeit wählen</string>
+    <string name="future_route_departure_selected">Geplante Abfahrt (Berlin): %1$s</string>
+    <string name="future_route_invalid_time">Bitte eine gültige Abfahrt innerhalb der nächsten 7 Tage wählen.</string>
+    <string name="future_route_static_only">Zukünftige Abfahrt: lokaler GTFS-Fahrplan ohne Echtzeitprognose.</string>
+    <string name="future_route_not_found">Keine planmäßige Verbindung zur gewählten Zeit. Andere Zeit versuchen.</string>
+    <string name="future_route_offline_required">Für zukünftige Abfahrten müssen aktuelle Offline-Fahrplandaten installiert sein.</string>
+    <string name="future_route_unavailable">Routensuche für zukünftige Abfahrten nicht verfügbar.</string>
+    <string name="arrival_by_mode_label">Späteste Ankunft wählen</string>
+    <string name="arrival_by_selected">Späteste Ankunft (Berlin): %1$s</string>
+    <string name="arrival_by_pick">Ankunftsdatum und späteste Uhrzeit wählen</string>
+    <string name="arrival_by_reset">Jetzt abfahren</string>
+    <string name="arrival_by_static_only">Späteste Ankunft: lokaler GTFS-Fahrplan für 24 Stunden, ohne Echtzeitprognose.</string>
+    <string name="arrival_by_not_found">Keine planmäßige Verbindung bis zu dieser Ankunftszeit. Andere Zeit versuchen.</string>
+    <string name="future_route_ambiguous_time">Diese Uhrzeit kommt bei der Zeitumstellung zweimal vor. Wählen Sie den gewünschten UTC-Offset.</string>
+</resources>

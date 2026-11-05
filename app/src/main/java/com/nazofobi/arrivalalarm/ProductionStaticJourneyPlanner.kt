@@ -290,6 +290,45 @@ internal fun staticRoutingServiceDates(epochMillis: Long, timeZone: TimeZone): L
 internal fun boundedStaticJourneyOptionLimit(requested: Int): Int =
     requested.coerceIn(0, 6)
 
+/**
+ * Rank every real, bounded static candidate before reducing the route cards.
+ * Filtering an already-capped arrival-time list can conceal a faster trip.
+ * Preserve original timetable order when the user has not opted into fastest.
+ */
+internal fun selectStaticRouteOptions(
+    candidates: List<RouteOption>,
+    requestedLimit: Int,
+    fastestFirst: Boolean,
+    simpleFirst: Boolean = false,
+): List<RouteOption> {
+    val limit = boundedStaticJourneyOptionLimit(requestedLimit)
+    if (limit == 0) return emptyList()
+    val ranked = if (fastestFirst || simpleFirst)
+        RouteResultsFilter(fastestFirst = fastestFirst, simpleFirst = simpleFirst).apply(candidates)
+        else candidates
+    return ranked.take(limit)
+}
+
+internal fun supportedFutureDeparture(nowMillis: Long, departureMillis: Long): Boolean =
+    nowMillis >= 0L && departureMillis > nowMillis &&
+        departureMillis - nowMillis <= 7L * 24L * 60L * 60L * 1_000L
+
+/** Monotone bounded timetable search to within one minute of the last feasible start. */
+internal fun latestFeasibleDepartureThreshold(
+    earliestMillis: Long, deadlineMillis: Long, isFeasible: (Long) -> Boolean,
+): Long? {
+    if (earliestMillis < 0L || deadlineMillis <= earliestMillis ||
+        !isFeasible(earliestMillis)) return null
+    var lower = earliestMillis
+    var upper = deadlineMillis
+    repeat(12) {
+        if (upper - lower <= 60_000L) return lower
+        val middle = lower + (upper - lower) / 2L
+        if (isFeasible(middle)) lower = middle else upper = middle
+    }
+    return lower
+}
+
 class ProductionStaticJourneyPlanner(
     private val index: NationwideTransitIndex,
     agencyTimeZone: TimeZone = TimeZone.getTimeZone("Europe/Berlin"),
@@ -332,12 +371,17 @@ class ProductionStaticJourneyPlanner(
         destination: MapPoint,
         limit: Int = 3,
         maxWalkingMinutes: Int? = null,
+        departureEpochMillis: Long? = null,
+        arrivalDeadlineEpochMillis: Long? = null,
+        fastestFirst: Boolean = false,
+        simpleFirst: Boolean = false,
     ): LocalStaticJourneyOutcome {
         if (!validTransitJourneyCoordinates(origin.latitude, origin.longitude) ||
             !validTransitJourneyCoordinates(destination.latitude, destination.longitude)
         ) return LocalStaticJourneyOutcome.NoPath
         val boundedLimit = boundedStaticJourneyOptionLimit(limit)
-        if (boundedLimit == 0 || (maxWalkingMinutes != null && maxWalkingMinutes < 0)) {
+        if ((departureEpochMillis != null && arrivalDeadlineEpochMillis != null) ||
+            boundedLimit == 0 || (maxWalkingMinutes != null && maxWalkingMinutes < 0)) {
             return LocalStaticJourneyOutcome.NoPath
         }
         val maxWalkingSeconds = maxWalkingMinutes
@@ -377,7 +421,51 @@ class ProductionStaticJourneyPlanner(
         }
         if (origins.isEmpty() || destinations.isEmpty()) return LocalStaticJourneyOutcome.NoPath
 
-        val departureMillis = nowMillis()
+        if (arrivalDeadlineEpochMillis != null) {
+            val now = nowMillis()
+            if (!supportedFutureDeparture(now, arrivalDeadlineEpochMillis)) {
+                return LocalStaticJourneyOutcome.NoPath
+            }
+            // Explicit 24h journey horizon; never substitute a now-only live route.
+            val earliest = maxOf(now, arrivalDeadlineEpochMillis - 24L * 60L * 60L * 1_000L)
+            fun eligible(threshold: Long): List<Pair<GtfsServiceDate, StaticTransitJourney>> =
+                serviceDates(threshold).flatMap { serviceDate ->
+                    when (val result = router.route(
+                        origins = origins, destinations = destinations,
+                        serviceDate = serviceDate, departureEpochMillis = threshold,
+                        maxWalkingSeconds = maxWalkingSeconds,
+                    )) {
+                        is StaticRouterResult.Journeys -> result.journeys
+                            .filter { it.arrivalEpochMillis <= arrivalDeadlineEpochMillis }
+                            .map { serviceDate to it }
+                        StaticRouterResult.NoPath, StaticRouterResult.SameOrigin -> emptyList()
+                    }
+                }
+            // Preserve earlier deadline-feasible choices as alternatives: the latest
+            // threshold alone can hide a train that leaves sooner but still arrives on time.
+            // Reuse the initial feasibility query instead of repeating its GTFS search.
+            val earliestOptions = eligible(earliest)
+            val threshold = latestFeasibleDepartureThreshold(earliest, arrivalDeadlineEpochMillis) {
+                if (it == earliest) earliestOptions.isNotEmpty() else eligible(it).isNotEmpty()
+            } ?: return LocalStaticJourneyOutcome.NoPath
+            val options = (eligible(threshold) + earliestOptions)
+                .sortedWith(
+                    compareByDescending<Pair<GtfsServiceDate, StaticTransitJourney>> {
+                        it.second.legs.first().departureEpochMillis -
+                            it.second.access.walkSeconds * 1_000L
+                    }.thenBy { it.second.arrivalEpochMillis }.thenBy { it.second.id },
+                )
+                .distinctBy { it.second.id }
+                .map { (serviceDate, journey) ->
+                    mapper.map(journey, origin, destination, serviceDate, index.fetchedAt())
+                }
+                .let { selectStaticRouteOptions(it, boundedLimit, fastestFirst, simpleFirst) }
+            return if (options.isEmpty()) LocalStaticJourneyOutcome.NoPath
+                else LocalStaticJourneyOutcome.Results(options)
+        }
+
+        val departureMillis = departureEpochMillis ?: nowMillis()
+        if (departureMillis < 0L) return LocalStaticJourneyOutcome.NoPath
         var sawSameOrigin = false
         val datedJourneys = buildList {
             serviceDates(departureMillis).forEach { serviceDate ->
@@ -406,7 +494,6 @@ class ProductionStaticJourneyPlanner(
                     .thenBy { it.second.id }
             )
             .distinctBy { it.second.id }
-            .take(boundedLimit)
             .map { (serviceDate, journey) ->
                 mapper.map(
                     journey = journey,
@@ -416,6 +503,7 @@ class ProductionStaticJourneyPlanner(
                     sourceUpdatedAtEpochSeconds = index.fetchedAt(),
                 )
             }
+            .let { selectStaticRouteOptions(it, boundedLimit, fastestFirst, simpleFirst) }
         return when {
             options.isNotEmpty() -> LocalStaticJourneyOutcome.Results(options)
             sawSameOrigin -> LocalStaticJourneyOutcome.SameOrigin

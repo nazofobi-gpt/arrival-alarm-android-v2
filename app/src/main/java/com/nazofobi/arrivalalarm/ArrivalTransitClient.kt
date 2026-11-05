@@ -26,5 +26,15 @@ interface ArrivalTransitClient {
         limit: Int = 3,
         callback: (List<RouteOption>, String) -> Unit,
     )
+    /** Unsupported adapters must not pretend that current results are future departures. */
+    fun futureJourneyOptions(
+        origin: MapPoint, destination: MapPoint, departureEpochMillis: Long,
+        limit: Int = 3, callback: (List<RouteOption>, String) -> Unit,
+    ) { callback(emptyList(), "") }
+    /** Unsupported adapters never relabel now-only routes as deadline routes. */
+    fun arrivalByJourneyOptions(
+        origin: MapPoint, destination: MapPoint, arrivalDeadlineEpochMillis: Long,
+        limit: Int = 3, callback: (List<RouteOption>, String) -> Unit,
+    ) { callback(emptyList(), "") }
     fun close()
 }

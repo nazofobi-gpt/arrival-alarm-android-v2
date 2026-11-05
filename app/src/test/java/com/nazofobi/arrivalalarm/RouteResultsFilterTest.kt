@@ -21,6 +21,109 @@ class RouteResultsFilterTest {
     )
 
     @Test
+    fun simplePreferenceSelectsSourceBackedRoutesBeforeCardLimit() {
+        val candidates = listOf(
+            option("one-change", 1).copy(walkingMinutes = 1),
+            option("two-changes", 2).copy(walkingMinutes = 0),
+            option("direct-long-walk", 0).copy(walkingMinutes = 20),
+            option("direct-short-walk", 0).copy(walkingMinutes = 3),
+        )
+        assertEquals(listOf("one-change", "two-changes", "direct-long-walk"),
+            selectStaticRouteOptions(candidates, 3, fastestFirst = false).map { it.id })
+        assertEquals(listOf("direct-short-walk", "direct-long-walk", "one-change"),
+            selectStaticRouteOptions(candidates, 3, fastestFirst = false, simpleFirst = true)
+                .map { it.id })
+        assertEquals(4, candidates.size)
+    }
+
+    @Test
+    fun simplePreferenceNeverInventsDurationAndPreservesEqualEvidenceOrder() {
+        val options = listOf(
+            option("unknown", 0).copy(walkingMinutes = 2),
+            option("valid", 0).copy(walkingMinutes = 2,
+                departureEpochMillis = 1_000L, arrivalEpochMillis = 61_000L),
+            option("invalid", 0).copy(walkingMinutes = 2,
+                departureEpochMillis = 20_000L, arrivalEpochMillis = 10_000L),
+            option("change", 1).copy(walkingMinutes = 0),
+        )
+        assertEquals(listOf("valid", "unknown", "invalid", "change"),
+            RouteResultsFilter(simpleFirst = true).apply(options).map { it.id })
+        assertEquals(listOf("valid", "unknown", "invalid"),
+            RouteResultsFilter(simpleFirst = true, directOnly = true).apply(options).map { it.id })
+    }
+
+    @Test
+    fun fastestPreferenceRanksAllRealStaticCandidatesBeforeThreeCardLimit() {
+        val candidates = listOf(
+            option("early-slow", 0).copy(
+                departureEpochMillis = 1_000L, arrivalEpochMillis = 3_601_000L),
+            option("middle-slow", 0).copy(
+                departureEpochMillis = 2_000L, arrivalEpochMillis = 3_602_000L),
+            option("late-slow", 0).copy(
+                departureEpochMillis = 3_000L, arrivalEpochMillis = 3_603_000L),
+            option("later-fast", 1).copy(
+                departureEpochMillis = 3_500_000L, arrivalEpochMillis = 3_800_000L),
+        )
+        assertEquals(listOf("early-slow", "middle-slow", "late-slow"),
+            selectStaticRouteOptions(candidates, 3, fastestFirst = false).map { it.id })
+        assertEquals(listOf("later-fast", "early-slow", "middle-slow"),
+            selectStaticRouteOptions(candidates, 3, fastestFirst = true).map { it.id })
+        assertEquals(4, candidates.size)
+        assertTrue(selectStaticRouteOptions(candidates, 0, fastestFirst = true).isEmpty())
+    }
+
+    @Test
+    fun fastestFirstUsesVerifiedPositiveDurationAndKeepsUnknownEvidenceLast() {
+        val options = listOf(
+            option("unknown", 0),
+            option("slow", 0).copy(departureEpochMillis = 1_000L, arrivalEpochMillis = 3_601_000L),
+            option("quick-one", 1).copy(departureEpochMillis = 1_000L, arrivalEpochMillis = 901_000L),
+            option("invalid", 0).copy(departureEpochMillis = 2_000L, arrivalEpochMillis = 1_000L),
+            option("quick-two", 0).copy(departureEpochMillis = 2_000L, arrivalEpochMillis = 902_000L),
+        )
+        assertEquals(
+            listOf("quick-one", "quick-two", "slow", "unknown", "invalid"),
+            RouteResultsFilter(fastestFirst = true).apply(options).map { it.id },
+        )
+        assertEquals("unknown", options.first().id)
+    }
+
+    @Test
+    fun fastestPreferenceUsesTransferAndWalkingAsTieBreakersWithoutChangingFilters() {
+        val options = listOf(
+            option("transfer-long", 1).copy(walkingMinutes = 15,
+                departureEpochMillis = 1_000L, arrivalEpochMillis = 601_000L),
+            option("direct-long", 0).copy(walkingMinutes = 10,
+                departureEpochMillis = 1_000L, arrivalEpochMillis = 601_000L),
+            option("direct-short", 0).copy(walkingMinutes = 3,
+                departureEpochMillis = 1_000L, arrivalEpochMillis = 601_000L),
+            option("slow", 0).copy(walkingMinutes = 0,
+                departureEpochMillis = 1_000L, arrivalEpochMillis = 1_201_000L),
+        )
+        assertEquals(
+            listOf("direct-short", "direct-long", "transfer-long", "slow"),
+            RouteResultsFilter(fastestFirst = true, fewerTransfersFirst = true,
+                shorterWalkingFirst = true).apply(options).map { it.id },
+        )
+        assertEquals(
+            listOf("direct-long", "direct-short", "slow"),
+            RouteResultsFilter(fastestFirst = true, directOnly = true).apply(options).map { it.id },
+        )
+    }
+
+    @Test
+    fun fastestPreferenceNeverPromotesInvalidEpochOrFabricatesMissingDuration() {
+        val options = listOf(
+            option("missing", 0),
+            option("negative-epoch", 0).copy(departureEpochMillis = -5L, arrivalEpochMillis = 100L),
+            option("zero-duration", 0).copy(departureEpochMillis = 100L, arrivalEpochMillis = 100L),
+            option("actual", 1).copy(departureEpochMillis = 100L, arrivalEpochMillis = 200L),
+        )
+        assertEquals(listOf("actual", "missing", "negative-epoch", "zero-duration"),
+            RouteResultsFilter(fastestFirst = true).apply(options).map { it.id })
+    }
+
+    @Test
     fun disabledFilterPreservesProviderOrderAndAllCandidates() {
         val candidates = listOf(option("via-1", 1), option("direct-1", 0), option("via-2", 2))
         assertEquals(candidates, RouteResultsFilter().apply(candidates))

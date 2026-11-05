@@ -1,10 +1,19 @@
 package com.nazofobi.arrivalalarm
 
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+import java.text.DateFormat
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -13,6 +22,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,9 +59,19 @@ fun RouteJourneyPanel(
     onCancelAlarm: () -> Unit,
     mode: RouteJourneyMode = RouteJourneyMode.RESULTS,
     modifier: Modifier = Modifier,
+    selectedDepartureEpochMillis: Long? = null,
+    onDepartureTimeChange: (Long?) -> Unit = {},
+    selectedArrivalDeadlineEpochMillis: Long? = null,
+    onArrivalDeadlineChange: (Long?) -> Unit = {},
+    onFastestPreferenceChanged: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val preferences = remember(context) { ArrivalUiPreferences(context) }
+    val berlinZone = remember { TimeZone.getTimeZone("Europe/Berlin") }
+    var departureTimeInvalid by rememberSaveable { mutableStateOf(false) }
+    // A clock hour occurs twice on Berlin's autumn DST transition; never pick an offset silently.
+    var pendingAmbiguousTimes by remember { mutableStateOf<List<Long>>(emptyList()) }
+    var pendingAmbiguousArrival by remember { mutableStateOf(false) }
     var directOnly by rememberSaveable { mutableStateOf(preferences.loadDirectOnlyRoutes()) }
     var fewerTransfersFirst by rememberSaveable {
         mutableStateOf(preferences.loadFewerTransfersFirst())
@@ -59,6 +79,8 @@ fun RouteJourneyPanel(
     var shorterWalkingFirst by rememberSaveable {
         mutableStateOf(preferences.loadShorterWalkingFirst())
     }
+    var fastestFirst by rememberSaveable { mutableStateOf(preferences.loadFastestFirst()) }
+    var simpleFirst by rememberSaveable { mutableStateOf(preferences.loadSimpleFirst()) }
     var atMostOneTransfer by rememberSaveable {
         mutableStateOf(preferences.loadAtMostOneTransfer())
     }
@@ -70,6 +92,40 @@ fun RouteJourneyPanel(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        if (pendingAmbiguousTimes.isNotEmpty()) {
+            AlertDialog(
+                onDismissRequest = { pendingAmbiguousTimes = emptyList() },
+                title = { Text(stringResource(R.string.future_route_ambiguous_time)) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        pendingAmbiguousTimes.forEachIndexed { index, epoch ->
+                            val displayed = SimpleDateFormat("HH:mm Z", Locale.ROOT).apply {
+                                timeZone = berlinZone
+                            }.format(Date(epoch))
+                            OutlinedButton(
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                    .testTag("route-dst-option-${index + 1}"),
+                                onClick = {
+                                    pendingAmbiguousTimes = emptyList()
+                                    if (supportedFutureDeparture(System.currentTimeMillis(), epoch)) {
+                                        departureTimeInvalid = false
+                                        if (pendingAmbiguousArrival) onArrivalDeadlineChange(epoch)
+                                        else onDepartureTimeChange(epoch)
+                                    } else {
+                                        departureTimeInvalid = true
+                                    }
+                                },
+                            ) { Text(displayed) }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { pendingAmbiguousTimes = emptyList() }) {
+                        Text(stringResource(android.R.string.cancel))
+                    }
+                },
+            )
+        }
         if (mode == RouteJourneyMode.RESULTS) {
             Text(
                 text = stringResource(R.string.route_results_title),
@@ -105,6 +161,157 @@ fun RouteJourneyPanel(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
+                        val displayedDeparture = selectedDepartureEpochMillis?.let { epoch ->
+                            DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).apply {
+                                timeZone = berlinZone
+                            }.format(Date(epoch))
+                        }
+                        Text(
+                            text = if (displayedDeparture == null) {
+                                if (selectedArrivalDeadlineEpochMillis != null)
+                                    stringResource(R.string.arrival_by_mode_label)
+                                else stringResource(R.string.future_route_depart_now)
+                            } else {
+                                stringResource(R.string.future_route_departure_selected, displayedDeparture)
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.testTag("route-departure-time"),
+                        )
+                        OutlinedButton(
+                            enabled = !routeBusy,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                .testTag("route-departure-pick"),
+                            onClick = {
+                                val calendar = Calendar.getInstance(berlinZone).apply {
+                                    timeInMillis = routeTimePickerInitialEpochMillis(
+                                        selectedDepartureEpochMillis, System.currentTimeMillis(),
+                                    )
+                                }
+                                DatePickerDialog(
+                                    context,
+                                    { _, year, month, day ->
+                                        TimePickerDialog(
+                                            context,
+                                            { _, hour, minute ->
+                                                val choices = berlinCivilTimeCandidates(
+                                                    year, month, day, hour, minute,
+                                                ).filter {
+                                                    supportedFutureDeparture(System.currentTimeMillis(), it)
+                                                }
+                                                when (choices.size) {
+                                                    0 -> departureTimeInvalid = true
+                                                    1 -> {
+                                                        departureTimeInvalid = false
+                                                        onDepartureTimeChange(choices.single())
+                                                    }
+                                                    else -> {
+                                                        departureTimeInvalid = false
+                                                        pendingAmbiguousArrival = false
+                                                        pendingAmbiguousTimes = choices
+                                                    }
+                                                }
+                                            },
+                                            calendar.get(Calendar.HOUR_OF_DAY),
+                                            calendar.get(Calendar.MINUTE),
+                                            true,
+                                        ).show()
+                                    },
+                                    calendar.get(Calendar.YEAR),
+                                    calendar.get(Calendar.MONTH),
+                                    calendar.get(Calendar.DAY_OF_MONTH),
+                                ).show()
+                            },
+                        ) {
+                            Text(stringResource(R.string.future_route_pick_departure))
+                        }
+                        if (selectedDepartureEpochMillis != null) {
+                            OutlinedButton(
+                                enabled = !routeBusy,
+                                onClick = {
+                                    departureTimeInvalid = false
+                                    onDepartureTimeChange(null)
+                                },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                    .testTag("route-departure-now"),
+                            ) {
+                                Text(stringResource(R.string.future_route_depart_now))
+                            }
+                        }
+                        if (departureTimeInvalid) {
+                            Text(
+                                stringResource(R.string.future_route_invalid_time),
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.testTag("route-departure-error"),
+                            )
+                        }
+                        val arrivalDeadlineLabel = selectedArrivalDeadlineEpochMillis?.let { epoch ->
+                            DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).apply {
+                                timeZone = berlinZone
+                            }.format(Date(epoch))
+                        }
+                        if (arrivalDeadlineLabel != null) {
+                            Text(
+                                text = stringResource(R.string.arrival_by_selected, arrivalDeadlineLabel),
+                                modifier = Modifier.testTag("route-arrival-deadline"),
+                            )
+                        }
+                        OutlinedButton(
+                            enabled = !routeBusy,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                .testTag("route-arrival-pick"),
+                            onClick = {
+                                val calendar = Calendar.getInstance(berlinZone).apply {
+                                    timeInMillis = routeTimePickerInitialEpochMillis(
+                                        selectedArrivalDeadlineEpochMillis, System.currentTimeMillis(),
+                                    )
+                                }
+                                DatePickerDialog(
+                                    context,
+                                    { _, year, month, day ->
+                                        TimePickerDialog(
+                                            context,
+                                            { _, hour, minute ->
+                                                val choices = berlinCivilTimeCandidates(
+                                                    year, month, day, hour, minute,
+                                                ).filter {
+                                                    supportedFutureDeparture(System.currentTimeMillis(), it)
+                                                }
+                                                when (choices.size) {
+                                                    0 -> departureTimeInvalid = true
+                                                    1 -> {
+                                                        departureTimeInvalid = false
+                                                        onArrivalDeadlineChange(choices.single())
+                                                    }
+                                                    else -> {
+                                                        departureTimeInvalid = false
+                                                        pendingAmbiguousArrival = true
+                                                        pendingAmbiguousTimes = choices
+                                                    }
+                                                }
+                                            },
+                                            calendar.get(Calendar.HOUR_OF_DAY),
+                                            calendar.get(Calendar.MINUTE),
+                                            true,
+                                        ).show()
+                                    },
+                                    calendar.get(Calendar.YEAR),
+                                    calendar.get(Calendar.MONTH),
+                                    calendar.get(Calendar.DAY_OF_MONTH),
+                                ).show()
+                            },
+                        ) {
+                            Text(stringResource(R.string.arrival_by_pick))
+                        }
+                        if (selectedArrivalDeadlineEpochMillis != null) {
+                            OutlinedButton(
+                                enabled = !routeBusy,
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                    .testTag("route-arrival-clear"),
+                                onClick = { onArrivalDeadlineChange(null) },
+                            ) {
+                                Text(stringResource(R.string.arrival_by_reset))
+                            }
+                        }
                         routeStatus?.let {
                             Text(
                                 text = it,
@@ -144,6 +351,8 @@ fun RouteJourneyPanel(
                     directOnly = directOnly,
                     fewerTransfersFirst = fewerTransfersFirst,
                     shorterWalkingFirst = shorterWalkingFirst,
+                    fastestFirst = fastestFirst,
+                    simpleFirst = simpleFirst,
                     maxTransfers = if (atMostOneTransfer) 1 else null,
                     maxWalkingMinutes = if (maxWalking15Minutes) 15 else null,
                 ).apply(routeOptions)
@@ -157,6 +366,40 @@ fun RouteJourneyPanel(
                     modifier = Modifier
                         .heightIn(min = 48.dp)
                         .testTag("route-direct-only-filter"),
+                )
+                FilterChip(
+                    selected = fastestFirst,
+                    onClick = {
+                        fastestFirst = !fastestFirst
+                        preferences.saveFastestFirst(fastestFirst)
+                        if (fastestFirst && simpleFirst) {
+                            simpleFirst = false
+                            preferences.saveSimpleFirst(false)
+                        }
+                        // Refresh the bounded static candidates instead of reordering only
+                        // an old three-card subset; request-gating blocks stale responses.
+                        onFastestPreferenceChanged()
+                    },
+                    label = { Text(stringResource(R.string.route_fastest_first_filter)) },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("route-fastest-first-filter"),
+                )
+                FilterChip(
+                    selected = simpleFirst,
+                    onClick = {
+                        simpleFirst = !simpleFirst
+                        preferences.saveSimpleFirst(simpleFirst)
+                        if (simpleFirst && fastestFirst) {
+                            fastestFirst = false
+                            preferences.saveFastestFirst(false)
+                        }
+                        // Re-rank actual static candidates before limiting result cards.
+                        onFastestPreferenceChanged()
+                    },
+                    label = { Text(stringResource(R.string.route_simple_first_filter)) },
+                    modifier = Modifier.heightIn(min = 48.dp)
+                        .testTag("route-simple-first-filter"),
                 )
                 FilterChip(
                     selected = fewerTransfersFirst,
@@ -212,6 +455,7 @@ fun RouteJourneyPanel(
                         option = option,
                         selected = selectedRouteId == option.id,
                         routeOffline = routeOffline,
+                        routeBusy = routeBusy,
                         onSelect = { onSelectRoute(option) },
                         selectTestTag = "route-option-select-" + index,
                         modifier = Modifier.testTag("route-option-" + index),
@@ -269,6 +513,7 @@ private fun RouteOptionCard(
     option: RouteOption,
     selected: Boolean,
     routeOffline: Boolean,
+    routeBusy: Boolean,
     onSelect: () -> Unit,
     selectTestTag: String,
     modifier: Modifier = Modifier,
@@ -359,7 +604,7 @@ private fun RouteOptionCard(
             )
             OutlinedButton(
                 onClick = onSelect,
-                enabled = !selected && !hasVerifiedCancellation,
+                enabled = !routeBusy && !selected && !hasVerifiedCancellation,
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)

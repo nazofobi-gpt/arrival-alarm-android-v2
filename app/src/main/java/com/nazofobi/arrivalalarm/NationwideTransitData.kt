@@ -544,6 +544,104 @@ class NationwideTransitGateway(
         }
     }
 
+    override fun futureJourneyOptions(
+        origin: MapPoint, destination: MapPoint, departureEpochMillis: Long,
+        limit: Int, callback: (List<RouteOption>, String) -> Unit,
+    ) {
+        io.execute {
+            val resolution = resolveFutureJourneyOptions(origin, destination, departureEpochMillis, limit)
+            val options = (resolution as? NationwideJourneyResolution.Results)?.options.orEmpty()
+            val status = when (resolution) {
+                is NationwideJourneyResolution.Results -> appContext.getString(R.string.future_route_static_only)
+                is NationwideJourneyResolution.NoRoute -> appContext.getString(R.string.future_route_not_found)
+                is NationwideJourneyResolution.ProviderUnavailable -> appContext.getString(R.string.future_route_offline_required)
+            }
+            main.post { callback(options, status) }
+        }
+    }
+
+    override fun arrivalByJourneyOptions(
+        origin: MapPoint, destination: MapPoint, arrivalDeadlineEpochMillis: Long,
+        limit: Int, callback: (List<RouteOption>, String) -> Unit,
+    ) {
+        io.execute {
+            val resolution = resolveArrivalByJourneyOptions(
+                origin, destination, arrivalDeadlineEpochMillis, limit,
+            )
+            val options = (resolution as? NationwideJourneyResolution.Results)?.options.orEmpty()
+            val status = when (resolution) {
+                is NationwideJourneyResolution.Results ->
+                    appContext.getString(R.string.arrival_by_static_only)
+                is NationwideJourneyResolution.NoRoute ->
+                    appContext.getString(R.string.arrival_by_not_found)
+                is NationwideJourneyResolution.ProviderUnavailable ->
+                    appContext.getString(R.string.future_route_offline_required)
+            }
+            main.post { callback(options, status) }
+        }
+    }
+
+    /** Offline-only deadline route. Never call a now-only live API or realtime feed. */
+    internal fun resolveArrivalByJourneyOptions(
+        origin: MapPoint, destination: MapPoint, arrivalDeadlineEpochMillis: Long,
+        limit: Int = 3,
+    ): NationwideJourneyResolution {
+        if (!supportedFutureDeparture(nowMillis(), arrivalDeadlineEpochMillis) ||
+            !validTransitJourneyCoordinates(origin.latitude, origin.longitude) ||
+            !validTransitJourneyCoordinates(destination.latitude, destination.longitude)) {
+            return NationwideJourneyResolution.NoRoute(LocalStaticJourneyOutcome.NoPath)
+        }
+        val outcome = runCatching {
+            staticJourneyPlanner.plan(
+                origin, destination, limit,
+                maxWalkingMinutes = if (routePreferences.loadMaxWalking15Minutes()) 15 else null,
+                arrivalDeadlineEpochMillis = arrivalDeadlineEpochMillis,
+                fastestFirst = routePreferences.loadFastestFirst(),
+                simpleFirst = routePreferences.loadSimpleFirst(),
+            )
+        }.getOrDefault(LocalStaticJourneyOutcome.Unavailable)
+        return when (outcome) {
+            is LocalStaticJourneyOutcome.Results ->
+                NationwideJourneyResolution.Results(outcome.options, NationwideJourneySource.LOCAL_STATIC)
+            LocalStaticJourneyOutcome.Unavailable -> NationwideJourneyResolution.ProviderUnavailable(
+                localOutcome = outcome,
+                message = appContext.getString(R.string.future_route_offline_required),
+            )
+            else -> NationwideJourneyResolution.NoRoute(outcome)
+        }
+    }
+
+    /** Future departures use the selected GTFS service day, without a now-only live fallback. */
+    internal fun resolveFutureJourneyOptions(
+        origin: MapPoint, destination: MapPoint, departureEpochMillis: Long,
+        limit: Int = 3,
+    ): NationwideJourneyResolution {
+        if (!supportedFutureDeparture(nowMillis(), departureEpochMillis)) {
+            return NationwideJourneyResolution.NoRoute(LocalStaticJourneyOutcome.NoPath)
+        }
+        if (!validTransitJourneyCoordinates(origin.latitude, origin.longitude) ||
+            !validTransitJourneyCoordinates(destination.latitude, destination.longitude)
+        ) return NationwideJourneyResolution.NoRoute(LocalStaticJourneyOutcome.NoPath)
+        val outcome = runCatching {
+            staticJourneyPlanner.plan(
+                origin, destination, limit,
+                maxWalkingMinutes = if (routePreferences.loadMaxWalking15Minutes()) 15 else null,
+                departureEpochMillis = departureEpochMillis,
+                fastestFirst = routePreferences.loadFastestFirst(),
+                simpleFirst = routePreferences.loadSimpleFirst(),
+            )
+        }.getOrDefault(LocalStaticJourneyOutcome.Unavailable)
+        return when (outcome) {
+            is LocalStaticJourneyOutcome.Results -> NationwideJourneyResolution.Results(
+                options = outcome.options, source = NationwideJourneySource.LOCAL_STATIC,
+            )
+            LocalStaticJourneyOutcome.Unavailable -> NationwideJourneyResolution.ProviderUnavailable(
+                localOutcome = outcome, message = appContext.getString(R.string.future_route_offline_required),
+            )
+            else -> NationwideJourneyResolution.NoRoute(outcome)
+        }
+    }
+
     internal fun resolveJourneyOptions(
         origin: MapPoint,
         destination: MapPoint,
@@ -557,6 +655,8 @@ class NationwideTransitGateway(
             staticJourneyPlanner.plan(
                 origin, destination, limit,
                 maxWalkingMinutes = if (routePreferences.loadMaxWalking15Minutes()) 15 else null,
+                fastestFirst = routePreferences.loadFastestFirst(),
+                simpleFirst = routePreferences.loadSimpleFirst(),
             )
         }.getOrDefault(LocalStaticJourneyOutcome.Unavailable)
 

@@ -8,6 +8,33 @@ import org.junit.Test
 
 class ProductionStaticJourneyPlannerTest {
     @Test
+    fun futureDepartureRequiresARealBoundedFutureInstant() {
+        val now = 1_800_000_000_000L
+        val week = 7L * 24L * 60L * 60L * 1_000L
+        org.junit.Assert.assertFalse(supportedFutureDeparture(now, now))
+        org.junit.Assert.assertFalse(supportedFutureDeparture(now, now - 1))
+        org.junit.Assert.assertTrue(supportedFutureDeparture(now, now + 1))
+        org.junit.Assert.assertTrue(supportedFutureDeparture(now, now + week))
+        org.junit.Assert.assertFalse(supportedFutureDeparture(now, now + week + 1))
+        org.junit.Assert.assertFalse(supportedFutureDeparture(now, Long.MAX_VALUE))
+        org.junit.Assert.assertFalse(supportedFutureDeparture(-1, 100))
+    }
+
+    @Test
+    fun arrivalByBoundedSearchFindsLastFeasibleMinuteAndFailsClosed() {
+        val now = 1_800_000_000_000L
+        val lastDeparture = now + 42L * 60_000L
+        val deadline = now + 60L * 60_000L
+        val selected = latestFeasibleDepartureThreshold(now, deadline) { it <= lastDeparture }
+        org.junit.Assert.assertNotNull(selected)
+        org.junit.Assert.assertTrue(selected!! <= lastDeparture)
+        org.junit.Assert.assertTrue(lastDeparture - selected <= 60_000L)
+        assertNull(latestFeasibleDepartureThreshold(now, deadline) { false })
+        assertNull(latestFeasibleDepartureThreshold(deadline, now) { true })
+        assertNull(latestFeasibleDepartureThreshold(-1L, deadline) { true })
+    }
+
+    @Test
     fun nonpositiveStaticJourneyLimitNeverSynthesizesARequestedOption() {
         for (invalid in listOf(0, -1, Int.MIN_VALUE)) {
             assertEquals(0, boundedStaticJourneyOptionLimit(invalid))

@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.ParcelFileDescriptor
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
@@ -509,7 +510,15 @@ class MainActivityTest {
             .performScrollTo()
             .assertIsDisplayed()
             .performClick()
+        // Route cards from the previous service day may remain visible during refresh.
+        // Never click a disabled/stale card; wait for the new response to be actionable.
         waitForTag("route-option-0")
+        rule.waitUntil(timeoutMillis = 60_000L) {
+            runCatching {
+                rule.onNodeWithTag("route-option-select-0").assertIsEnabled()
+            }.isSuccess
+        }
+        rule.onNodeWithTag("route-option-select-0").assertIsEnabled()
         captureScreen("route")
 
         rule.onNodeWithTag("route-option-select-0")

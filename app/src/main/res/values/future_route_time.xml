@@ -1,0 +1,17 @@
+<resources>
+    <string name="future_route_depart_now">Şimdi hareket et</string>
+    <string name="future_route_pick_departure">Gelecek kalkış tarihini ve saatini seç</string>
+    <string name="future_route_departure_selected">Planlanan kalkış (Berlin): %1$s</string>
+    <string name="future_route_invalid_time">Sonraki 7 gün içinde geçerli bir kalkış saati seçin.</string>
+    <string name="future_route_static_only">Gelecek kalkış için yerel GTFS tarifesi kullanılıyor; canlı tahmin uygulanmaz.</string>
+    <string name="future_route_not_found">Seçilen saatte tarifeli rota bulunamadı. Başka saat deneyin.</string>
+    <string name="future_route_offline_required">Gelecek kalkış araması için güncel çevrimdışı toplu taşıma verisi kurulmalı.</string>
+    <string name="future_route_unavailable">Gelecek kalkış için rota araması kullanılamıyor.</string>
+    <string name="arrival_by_mode_label">En geç varış saatini seçin</string>
+    <string name="arrival_by_selected">En geç varış (Berlin): %1$s</string>
+    <string name="arrival_by_pick">En geç varış tarihini ve saatini seç</string>
+    <string name="arrival_by_reset">Şimdi hareket et</string>
+    <string name="arrival_by_static_only">En geç varış: son 24 saat içindeki yerel GTFS tarifesi; canlı tahmin uygulanmaz.</string>
+    <string name="arrival_by_not_found">Seçilen saate kadar varan tarifeli bağlantı bulunamadı. Başka saat deneyin.</string>
+    <string name="future_route_ambiguous_time">Bu saat, yaz/kış saati değişiminde iki kez yaşanır. İstediğiniz UTC ofsetini seçin.</string>
+</resources>
