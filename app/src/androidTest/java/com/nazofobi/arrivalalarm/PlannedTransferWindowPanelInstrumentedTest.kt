@@ -190,6 +190,50 @@ class PlannedTransferWindowPanelInstrumentedTest {
         rule.onNodeWithTag("journey-static-transfer-0").assertDoesNotExist()
     }
 
+
+    @Test fun upcomingSourceBackedTransferOffersExplicitCalendarDraftWithoutSaving() {
+        val now = 1_800_000_000_000L
+        val arrival = now + 120_000L
+        val departure = arrival + 360_000L
+        var requested: Pair<Long, Long>? = null
+        var names: Pair<String, String>? = null
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(
+                    windows = listOf(evidence.copy(
+                        plannedArrivalEpochMillis = arrival,
+                        plannedDepartureEpochMillis = departure,
+                    )),
+                    nowEpochMillis = now,
+                    onAddCalendarTransfer = { start, end, from, to ->
+                        requested = start to end
+                        names = from to to
+                    },
+                )
+            }
+        }
+        rule.onNodeWithTag("journey-transfer-calendar-0").assertExists().performClick()
+        rule.onNodeWithTag("journey-transfer-calendar-disclosure-0").assertExists()
+        rule.runOnIdle {
+            assertEquals(arrival to departure, requested)
+            assertEquals("Bremen Hbf" to "Bremen Süd", names)
+        }
+    }
+
+    @Test fun staleOrContradictoryTransferNeverOffersCalendarDraft() {
+        val now = 1_800_000_000_000L
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(listOf(evidence.copy(
+                    plannedArrivalEpochMillis = now + 120_000L,
+                    plannedDepartureEpochMillis = now + 480_000L,
+                    plannedGapMinutes = 5,
+                )), nowEpochMillis = now)
+            }
+        }
+        rule.onNodeWithTag("journey-transfer-calendar-0").assertDoesNotExist()
+    }
+
     @Test fun sourceCoordinatesAndTightGapShowQualifiedWalkingRisk() {
         val arrival = 1_800_000_000_000L
         val longTransfer = evidence.copy(

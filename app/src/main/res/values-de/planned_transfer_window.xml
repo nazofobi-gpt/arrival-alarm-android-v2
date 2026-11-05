@@ -18,4 +18,8 @@
     <string name="route_planned_transfer_straight_line_distance">Ca. %1$d m Luftlinie (keine Fußwegstrecke oder Gehzeit).</string>
     <string name="route_planned_transfer_short_window_risk">Achtung: Das planmäßige Umsteigefenster beträgt höchstens 3 Minuten. Fußweg, Gleiswechsel und Verspätungen können den Anschluss verhindern; Echtzeitstatus ungeprüft.</string>
     <string name="route_planned_transfer_different_stops">Ankunft und nächste Abfahrt sind im Fahrplan als unterschiedliche Haltestellen erfasst. Fußweg und Gleis gesondert prüfen; Anschluss ungeprüft.</string>
+    <string name="route_planned_transfer_calendar_action">Planmäßigen Umstieg im Kalender öffnen</string>
+    <string name="route_planned_transfer_calendar_disclosure">Die Kalender-App erhält nur die geplanten Umsteigehaltestellen und Zeiten. Ohne Ihre Bestätigung wird nichts gespeichert; keine Echtzeit- oder Erinnerungszusage.</string>
+    <string name="route_planned_transfer_calendar_unavailable">Kalender konnte nicht geöffnet werden.</string>
+    <string name="route_planned_transfer_calendar_title">Varış v2 · Geplanter Umstieg: %1$s → %2$s</string>
 </resources>

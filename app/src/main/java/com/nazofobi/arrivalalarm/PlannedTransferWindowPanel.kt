@@ -3,6 +3,7 @@ package com.nazofobi.arrivalalarm
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.provider.CalendarContract
 import android.widget.Toast
 
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +31,7 @@ internal fun PlannedTransferWindowPanel(
     windows: List<RouteTransferWindowEvidence>,
     nowEpochMillis: Long? = null,
     onOpenWalkingDirections: ((String) -> Unit)? = null,
+    onAddCalendarTransfer: ((Long, Long, String, String) -> Unit)? = null,
 ) {
     if (windows.isEmpty()) return
     val context = LocalContext.current
@@ -172,6 +174,49 @@ internal fun PlannedTransferWindowPanel(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.testTag("journey-transfer-short-window-risk-" + index),
+                )
+            }
+
+            plannedTransferCalendarTimes(evidence, currentEpochMillis)?.let { (begin, end) ->
+                val calendarTitle = stringResource(
+                    R.string.route_planned_transfer_calendar_title,
+                    evidence.arrivalStopName, evidence.departureStopName,
+                )
+                val calendarDisclosure = stringResource(R.string.route_planned_transfer_calendar_disclosure)
+                val calendarUnavailable = stringResource(R.string.route_planned_transfer_calendar_unavailable)
+                TextButton(
+                    onClick = {
+                        if (onAddCalendarTransfer != null) {
+                            onAddCalendarTransfer(
+                                begin, end, evidence.arrivalStopName, evidence.departureStopName,
+                            )
+                        } else {
+                            try {
+                                context.startActivity(
+                                    Intent(Intent.ACTION_INSERT).apply {
+                                        data = CalendarContract.Events.CONTENT_URI
+                                        putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, begin)
+                                        putExtra(CalendarContract.EXTRA_EVENT_END_TIME, end)
+                                        putExtra(CalendarContract.Events.TITLE, calendarTitle)
+                                        putExtra(CalendarContract.Events.DESCRIPTION, calendarDisclosure)
+                                    },
+                                )
+                            } catch (_: ActivityNotFoundException) {
+                                Toast.makeText(context, calendarUnavailable, Toast.LENGTH_LONG).show()
+                            } catch (_: SecurityException) {
+                                Toast.makeText(context, calendarUnavailable, Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    },
+                    modifier = Modifier.testTag("journey-transfer-calendar-" + index),
+                ) {
+                    Text(stringResource(R.string.route_planned_transfer_calendar_action))
+                }
+                Text(
+                    text = calendarDisclosure,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("journey-transfer-calendar-disclosure-" + index),
                 )
             }
             evidence.walkingCoordinates?.let(::plannedTransferWalkingDirectionsUrl)?.let { walkUrl ->

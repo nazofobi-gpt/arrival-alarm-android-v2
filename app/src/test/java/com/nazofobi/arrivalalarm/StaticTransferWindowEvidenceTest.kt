@@ -91,6 +91,40 @@ class StaticTransferWindowEvidenceTest {
         assertEquals(null, plannedTransferDepartureLocalTime(0L, berlin))
     }
 
+
+    @Test fun calendarDraftRequiresUpcomingCoherentGtfsTransferAndNeverGuessesTime() {
+        val now = 1_800_000_000_000L
+        val arrival = now + 120_000L
+        val valid = RouteTransferWindowEvidence(
+            "arrival", "departure", "Bremen Hbf", "Bremen Süd", 6,
+            plannedArrivalEpochMillis = arrival,
+            plannedDepartureEpochMillis = arrival + 360_000L,
+        )
+        assertEquals(arrival to (arrival + 360_000L), plannedTransferCalendarTimes(valid, now))
+        assertNull(plannedTransferCalendarTimes(valid.copy(plannedGapMinutes = 5), now))
+        assertNull(plannedTransferCalendarTimes(valid.copy(plannedArrivalEpochMillis = 0L), now))
+        assertNull(plannedTransferCalendarTimes(valid.copy(plannedDepartureEpochMillis = 0L), now))
+        assertNull(plannedTransferCalendarTimes(valid.copy(arrivalStopId = ""), now))
+        assertNull(plannedTransferCalendarTimes(valid.copy(departureStopName = ""), now))
+        assertNull(plannedTransferCalendarTimes(valid.copy(arrivalStopName = "Bad\nStop"), now))
+        assertNull(plannedTransferCalendarTimes(valid.copy(arrivalStopName = "Bad\u202eStop"), now))
+        assertNull(plannedTransferCalendarTimes(valid, arrival))
+        assertNull(plannedTransferCalendarTimes(valid, 0L))
+        assertNull(plannedTransferCalendarTimes(valid, arrival - 2_592_000_001L))
+        assertNull(plannedTransferCalendarTimes(valid.copy(
+            plannedDepartureEpochMillis = Long.MAX_VALUE,
+        ), now))
+        assertNull(plannedTransferCalendarTimes(valid.copy(
+            plannedDepartureEpochMillis = arrival - 1L,
+        ), now))
+        // Explicit UTC instants remain correct across the autumn DST overlap.
+        val dst = Instant.parse("2026-10-25T01:30:00Z").toEpochMilli()
+        assertEquals(dst to (dst + 360_000L), plannedTransferCalendarTimes(valid.copy(
+            plannedArrivalEpochMillis = dst,
+            plannedDepartureEpochMillis = dst + 360_000L,
+        ), dst - 60_000L))
+    }
+
     @Test fun passedDepartureShowsOnlyRecentScheduledHintNotLiveMissedConnection() {
         val departure = second.departureEpochMillis
         assertFalse(plannedTransferDepartureRecentlyPassed(departure, departure))

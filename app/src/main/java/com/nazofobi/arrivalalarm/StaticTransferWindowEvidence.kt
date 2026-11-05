@@ -143,6 +143,36 @@ internal fun plannedTransferImminentDeparture(
     return remainingMillis in 1L..120_000L
 }
 
+
+/**
+ * A calendar draft is offered only for a complete, upcoming, same-source scheduled
+ * interchange. No Calendar write occurs here; the user must confirm in their app.
+ */
+internal fun plannedTransferCalendarTimes(
+    window: RouteTransferWindowEvidence,
+    nowEpochMillis: Long,
+): Pair<Long, Long>? {
+    fun safeName(value: String): Boolean =
+        value.isNotBlank() && value.length <= 100 &&
+            value.none { Character.isISOControl(it) || Character.getType(it) == Character.FORMAT.toInt() }
+    if (window.arrivalStopId.isBlank() || window.departureStopId.isBlank() ||
+        !safeName(window.arrivalStopName) || !safeName(window.departureStopName) ||
+        window.plannedGapMinutes !in 1..180 ||
+        window.plannedArrivalEpochMillis <= 0L ||
+        window.plannedDepartureEpochMillis <= 0L || nowEpochMillis <= 0L) return null
+    val gap = runCatching {
+        Math.subtractExact(window.plannedDepartureEpochMillis, window.plannedArrivalEpochMillis)
+    }.getOrNull() ?: return null
+    if (gap !in 60_000L..10_800_000L ||
+        ((gap + 59_999L) / 60_000L).toInt() != window.plannedGapMinutes) return null
+    val untilArrival = runCatching {
+        Math.subtractExact(window.plannedArrivalEpochMillis, nowEpochMillis)
+    }.getOrNull() ?: return null
+    // A stale itinerary or far-future/corrupted provider instant cannot create a draft.
+    if (untilArrival !in 1L..2_592_000_000L) return null
+    return window.plannedArrivalEpochMillis to window.plannedDepartureEpochMillis
+}
+
 /** A past *scheduled* transfer departure is not evidence of the vehicle's actual status. */
 internal fun plannedTransferDepartureRecentlyPassed(
     departureEpochMillis: Long,

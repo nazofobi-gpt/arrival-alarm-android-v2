@@ -18,4 +18,8 @@
     <string name="route_planned_transfer_straight_line_distance">Approx. %1$d m straight line (not a walking route or walking time).</string>
     <string name="route_planned_transfer_short_window_risk">Caution: scheduled transfer window is 3 minutes or less. Walking, platforms and delays may prevent the connection; live status is unverified.</string>
     <string name="route_planned_transfer_different_stops">The timetable identifies separate arrival and onward boarding stops. Check the walk and platform independently; the connection is unverified.</string>
+    <string name="route_planned_transfer_calendar_action">Open planned transfer in calendar</string>
+    <string name="route_planned_transfer_calendar_disclosure">Only scheduled stop names and times are passed to the calendar app. Nothing is saved without your confirmation; this is not live service or a reminder guarantee.</string>
+    <string name="route_planned_transfer_calendar_unavailable">Calendar could not be opened.</string>
+    <string name="route_planned_transfer_calendar_title">Varış v2 planned transfer: %1$s → %2$s</string>
 </resources>

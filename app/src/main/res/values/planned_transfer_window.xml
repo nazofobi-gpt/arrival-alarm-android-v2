@@ -18,4 +18,8 @@
     <string name="route_planned_transfer_straight_line_distance">Kuş uçuşu yaklaşık %1$d m (yaya yolu veya yürüyüş süresi değildir).</string>
     <string name="route_planned_transfer_short_window_risk">Uyarı: Planlı aktarma yalnızca 3 dakika veya daha kısa. Yürüme, peron değişimi ve gecikmeyle yetişemeyebilirsiniz; canlı bağlantı durumu doğrulanmadı.</string>
     <string name="route_planned_transfer_different_stops">Bu aktarmada varış ve sonraki biniş tarifede farklı duraklar olarak kayıtlı. Yürüyüşü ve peronu ayrıca kontrol edin; bağlantı doğrulanmadı.</string>
+    <string name="route_planned_transfer_calendar_action">Planlı aktarmayı takvimde aç</string>
+    <string name="route_planned_transfer_calendar_disclosure">Takvim uygulaması yalnız planlı aktarma durak adlarını ve saatlerini alır; kayıt kullanıcı onayı olmadan yapılmaz. Canlı sefer veya hatırlatma garantisi değildir.</string>
+    <string name="route_planned_transfer_calendar_unavailable">Takvim açılamadı.</string>
+    <string name="route_planned_transfer_calendar_title">Varış v2 planlı aktarma: %1$s → %2$s</string>
 </resources>
