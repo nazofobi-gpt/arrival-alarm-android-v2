@@ -23,6 +23,12 @@ class NationwideFeedRefreshWorker(
 ) : Worker(appContext, workerParams) {
 
     override fun doWork(): Result {
+        val manualRequest = tags.contains(NationwideFeedRefreshScheduler.MANUAL_WORK_NAME)
+        // A queued periodic job cannot override an explicit local opt-out.
+        if (!shouldRunPackRefresh(
+                OfflinePackAutoUpdatePreference.isEnabled(applicationContext), manualRequest,
+            )
+        ) return Result.success()
         return try {
             val index = NationwideTransitIndex(applicationContext)
             try {
@@ -35,6 +41,12 @@ class NationwideFeedRefreshWorker(
                     setForegroundAsync(foregroundInfo(applicationContext, null)).get()
 
                     index.importFeed(GtfsDeutschlandLoader.FEED_URL) { importedStopCount ->
+                        // Interrupt transactional import when automatic updates were disabled.
+                        if (!shouldRunPackRefresh(
+                                OfflinePackAutoUpdatePreference.isEnabled(applicationContext),
+                                manualRequest,
+                            )
+                        ) throw CancellationException("Automatic offline updates disabled")
                         if (isStopped || Thread.currentThread().isInterrupted) {
                             throw CancellationException("Offline feed refresh was stopped")
                         }
@@ -48,7 +60,10 @@ class NationwideFeedRefreshWorker(
                 runCatching { index.close() }
             }
         } catch (cancelled: CancellationException) {
-            Result.retry()
+            if (!shouldRunPackRefresh(
+                    OfflinePackAutoUpdatePreference.isEnabled(applicationContext), manualRequest,
+                )
+            ) Result.success() else Result.retry()
         } catch (interrupted: InterruptedException) {
             Thread.currentThread().interrupt()
             Result.retry()

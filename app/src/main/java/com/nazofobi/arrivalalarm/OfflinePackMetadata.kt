@@ -77,5 +77,26 @@ internal fun offlinePackMetadataText(
         context.getString(R.string.offline_pack_updated_unknown)
     }
 
-    return context.getString(R.string.offline_pack_metadata, size, version, checked)
+    // A successful HTTP 304 is evidence of a recent check, not a new GTFS import.
+    // Older installations without checked_at fall back to their import timestamp.
+    val checkedAtMillis = state.checkedAtEpochSeconds
+        .takeIf { it > 0L && nowMillis >= 0L && it <= nowMillis / 1_000L }
+        ?.times(1_000L)
+    val recentVerifiedCheck = listOfNotNull(fetchedAtMillis, checkedAtMillis).maxOrNull()
+    val metadata = context.getString(R.string.offline_pack_metadata, size, version, checked)
+    val withCheck = if (checkedAtMillis != null) {
+        val checkAge = DateUtils.getRelativeTimeSpanString(
+            checkedAtMillis, nowMillis, DateUtils.MINUTE_IN_MILLIS,
+        ).toString()
+        metadata + " · " + context.getString(R.string.offline_pack_last_checked, checkAge)
+    } else {
+        metadata
+    }
+    val overdue = recentVerifiedCheck != null &&
+        nowMillis - recentVerifiedCheck >= 7L * 24 * 60 * 60 * 1_000
+    return if (overdue) {
+        withCheck + " · " + context.getString(R.string.offline_pack_refresh_overdue)
+    } else {
+        withCheck
+    }
 }

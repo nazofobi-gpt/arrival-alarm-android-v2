@@ -10,6 +10,7 @@ import androidx.work.testing.SynchronousExecutor
 import androidx.work.testing.TestWorkerBuilder
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -28,6 +29,20 @@ class NationwideFeedRefreshWorkerInstrumentedTest {
         assertEquals(24L, NationwideFeedRefreshScheduler.REPEAT_INTERVAL_HOURS)
         assertEquals(6L, NationwideFeedRefreshScheduler.FLEX_INTERVAL_HOURS)
         assertEquals(24L, NationwideFeedRefreshScheduler.INITIAL_DELAY_HOURS)
+    }
+
+    @Test
+    fun manualRefreshRequiresUnmeteredNetworkAndHealthyStorageButNotCharging() {
+        val request = NationwideFeedRefreshScheduler.createManualRequest()
+        val constraints = request.workSpec.constraints
+
+        assertEquals(NetworkType.UNMETERED, constraints.requiredNetworkType)
+        assertFalse(constraints.requiresCharging())
+        assertTrue(constraints.requiresBatteryNotLow())
+        assertTrue(constraints.requiresStorageNotLow())
+        assertTrue(request.tags.contains(NationwideFeedRefreshScheduler.MANUAL_WORK_NAME))
+        assertFalse(NationwideFeedRefreshScheduler.MANUAL_WORK_NAME ==
+            NationwideFeedRefreshScheduler.UNIQUE_WORK_NAME)
     }
 
     @Test

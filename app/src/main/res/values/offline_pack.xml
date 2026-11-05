@@ -4,4 +4,17 @@
     <string name="offline_pack_size_unknown">boyut bilinmiyor</string>
     <string name="offline_pack_version_unknown">sürüm bilinmiyor</string>
     <string name="offline_pack_updated_unknown">güncelleme zamanı bilinmiyor</string>
+    <string name="offline_pack_refresh_wifi">Yüklü ulaşım verisini Wi-Fi ile güncelle</string>
+    <string name="offline_pack_refresh_wifi_note">Güncelleme sınırsız Wi-Fi ve yeterli pil/depolama bekleyebilir; büyük veri indirilebilir.</string>
+    <string name="offline_pack_refresh_overdue">Son kontrol en az 7 gün önceydi; seferler değişmiş olabilir.</string>
+    <string name="offline_pack_refresh_waiting">Yenileme isteği bekliyor; Wi-Fi, pil veya depolama koşulları gerekli olabilir.</string>
+    <string name="offline_pack_refresh_running">Yüklü ulaşım verisi kontrol ediliyor veya güncelleniyor.</string>
+    <string name="offline_pack_refresh_checked">Son yenileme kontrolü tamamlandı; veri sürümünü ve kontrol zamanını doğrulayın.</string>
+    <string name="offline_pack_refresh_failed">Yenileme tamamlanamadı; bağlantı ve cihaz koşullarını kontrol edin.</string>
+    <string name="offline_pack_refresh_cancel">Yenilemeyi iptal et</string>
+    <string name="offline_pack_refresh_cancelled">Yenileme iptal edildi; zamanlanmış güncellemeler etkilenmez.</string>
+    <string name="offline_pack_auto_updates_disable">Otomatik çevrimdışı veri güncellemelerini kapat</string>
+    <string name="offline_pack_auto_updates_enable">Otomatik çevrimdışı veri güncellemelerini aç</string>
+    <string name="offline_pack_auto_updates_note">Bu seçim yalnız otomatik güncellemeleri etkiler. Yüklü veri korunur; Wi-Fi ile elle güncelleme kullanılabilir.</string>
+    <string name="offline_pack_last_checked">Son başarılı kaynak kontrolü %1$s</string>
 </resources>

@@ -4,4 +4,17 @@
     <string name="offline_pack_size_unknown">size unknown</string>
     <string name="offline_pack_version_unknown">version unknown</string>
     <string name="offline_pack_updated_unknown">update time unknown</string>
+    <string name="offline_pack_refresh_wifi">Refresh installed transit data over Wi-Fi</string>
+    <string name="offline_pack_refresh_wifi_note">Refresh may wait for unmetered Wi-Fi and sufficient battery/storage; a large download may be needed.</string>
+    <string name="offline_pack_refresh_overdue">Last check was at least 7 days ago; schedules may have changed.</string>
+    <string name="offline_pack_refresh_waiting">Refresh is waiting; Wi-Fi, battery or storage conditions may be required.</string>
+    <string name="offline_pack_refresh_running">Checking or refreshing installed transit data.</string>
+    <string name="offline_pack_refresh_checked">The last refresh check finished; verify the data version and check time.</string>
+    <string name="offline_pack_refresh_failed">Refresh did not complete; check network and device conditions.</string>
+    <string name="offline_pack_refresh_cancel">Cancel refresh</string>
+    <string name="offline_pack_refresh_cancelled">Refresh cancelled; scheduled updates are unaffected.</string>
+    <string name="offline_pack_auto_updates_disable">Turn off automatic offline data updates</string>
+    <string name="offline_pack_auto_updates_enable">Turn on automatic offline data updates</string>
+    <string name="offline_pack_auto_updates_note">This changes only automatic updates. Installed data stays available; manual Wi-Fi refresh still works.</string>
+    <string name="offline_pack_last_checked">Last successful source check %1$s</string>
 </resources>

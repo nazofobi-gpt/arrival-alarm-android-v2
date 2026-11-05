@@ -1,18 +1,28 @@
 package com.nazofobi.arrivalalarm
 
 import android.content.ContextWrapper
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import android.text.format.DateUtils
 import android.text.format.Formatter
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import androidx.work.WorkInfo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -72,9 +82,15 @@ class OfflinePackMetadataInstrumentedTest {
                 routingHealth = TransitFunctionHealth.WORKING,
             )
 
+            var manualRefreshClicks = 0
+            var manualCancelClicks = 0
+            val manualWorkState = mutableStateOf<WorkInfo.State?>(null)
             composeRule.setContent {
                 CompositionLocalProvider(LocalContext provides context) {
                     MaterialTheme {
+                        // Match the production Settings screen: the readiness card is
+                        // inside a vertically scrollable viewport, not an unscrollable fixture.
+                        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                         SettingsReadinessPanel(
                             state = state,
                             connectorBusy = false,
@@ -87,13 +103,47 @@ class OfflinePackMetadataInstrumentedTest {
                             onOpenAppSettings = {},
                             onRetryData = {},
                             onConnectorAction = {},
+                            onUpdateInstalledData = { manualRefreshClicks++ },
+                            onCancelInstalledDataUpdate = { manualCancelClicks++ },
+                            manualRefreshWorkState = manualWorkState.value,
                         )
+                        }
                     }
                 }
             }
 
+            composeRule.onNodeWithTag("nationwide-index-refresh-now")
+                .performScrollTo()
+                .assertIsDisplayed()
+                .performClick()
+            assertEquals(1, manualRefreshClicks)
+            for ((stateValue, statusLabel) in listOf(
+                WorkInfo.State.ENQUEUED to R.string.offline_pack_refresh_waiting,
+                WorkInfo.State.RUNNING to R.string.offline_pack_refresh_running,
+                WorkInfo.State.SUCCEEDED to R.string.offline_pack_refresh_checked,
+                WorkInfo.State.FAILED to R.string.offline_pack_refresh_failed,
+            )) {
+                composeRule.runOnIdle { manualWorkState.value = stateValue }
+                composeRule.onNodeWithTag("nationwide-index-refresh-status")
+                    .assertTextContains(context.getString(statusLabel))
+            }
+
+            composeRule.runOnIdle { manualWorkState.value = WorkInfo.State.ENQUEUED }
+            composeRule.onNodeWithTag("nationwide-index-refresh-now")
+                .performScrollTo().assertIsNotEnabled()
+            composeRule.onNodeWithTag("nationwide-index-refresh-cancel")
+                .performScrollTo().assertIsDisplayed().performClick()
+            assertEquals(1, manualCancelClicks)
+            composeRule.runOnIdle { manualWorkState.value = WorkInfo.State.CANCELLED }
+            composeRule.onNodeWithTag("nationwide-index-refresh-status")
+                .assertTextContains(context.getString(R.string.offline_pack_refresh_cancelled))
+            composeRule.onNodeWithTag("nationwide-index-refresh-now")
+                .performScrollTo().assertIsEnabled()
+
             val metadataNode = composeRule.onNodeWithTag("offline-pack-metadata")
-            metadataNode.assertIsDisplayed().assertTextContains("etag-g185-test", substring = true)
+            metadataNode.performScrollTo()
+                .assertIsDisplayed()
+                .assertTextContains("etag-g185-test", substring = true)
             fun normalizeWhitespace(value: String): String = value
                 .replace('\u00A0', ' ')
                 .replace('\u202F', ' ')
@@ -113,6 +163,60 @@ class OfflinePackMetadataInstrumentedTest {
         } finally {
             files.forEach { it.delete() }
         }
+    }
+
+    @Test
+    fun recent304CheckSuppressesFalseStaleWarningButKeepsOldDownloadAge() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val nowMillis = 1_783_000_000_000L
+        val oldImport = nowMillis / 1_000L - 9L * 24L * 60L * 60L
+        val recentCheck = nowMillis / 1_000L - 60L
+        val staleWarning = context.getString(R.string.offline_pack_refresh_overdue)
+        fun render(lastCheck: Long) = offlinePackMetadataText(
+            context, NationwideDataState.Ready(12_000, oldImport, "etag-unchanged", lastCheck),
+            nowMillis,
+        )
+        val checked = render(recentCheck)
+        assertTrue(checked.contains(context.getString(
+            R.string.offline_pack_last_checked,
+            DateUtils.getRelativeTimeSpanString(
+                recentCheck * 1_000L, nowMillis, DateUtils.MINUTE_IN_MILLIS,
+            ).toString(),
+        )))
+        assertTrue(checked.contains(DateUtils.getRelativeTimeSpanString(
+            oldImport * 1_000L, nowMillis, DateUtils.MINUTE_IN_MILLIS,
+        ).toString()))
+        assertTrue(!checked.contains(staleWarning))
+        assertTrue(render(0L).contains(staleWarning))
+        assertTrue(render(nowMillis / 1_000L + 3_600L).contains(staleWarning))
+    }
+
+    @Test
+    fun oldOfflineIndexWarnsAboutScheduleChangesWithoutFlaggingFreshOrUnknownData() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val nowMillis = 1_783_000_000_000L
+        val weekMillis = 7L * 24 * 60 * 60 * 1_000
+        val warning = context.getString(R.string.offline_pack_refresh_overdue)
+        fun metadata(ageMillis: Long) = offlinePackMetadataText(
+            context,
+            NationwideDataState.Ready(
+                stopCount = 42,
+                fetchedAtEpochSeconds = (nowMillis - ageMillis) / 1_000,
+                sourceVersion = "etag-test",
+            ),
+            nowMillis,
+        )
+
+        assertTrue(metadata(weekMillis + 60_000L).contains(warning))
+        assertTrue(!metadata(24L * 60 * 60 * 1_000).contains(warning))
+        assertTrue(!metadata(0L).contains(warning))
+        val unknown = offlinePackMetadataText(
+            context,
+            NationwideDataState.Ready(42, 0L, "etag-test"),
+            nowMillis,
+        )
+        assertTrue(!unknown.contains(warning))
+        assertTrue(unknown.contains(context.getString(R.string.offline_pack_updated_unknown)))
     }
 
     @Test
@@ -200,5 +304,59 @@ class OfflinePackMetadataInstrumentedTest {
             assertTrue("Invalid timestamp $timestamp must be shown as unknown: $text", text.contains(unknown))
             assertTrue("Feed version must remain visible", text.contains("feed-1"))
         }
+    }
+    @Test
+    fun automaticUpdatesCanBeToggledWithoutBlockingManualRefresh() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val automatic = mutableStateOf(true)
+        var manualRefreshRequests = 0
+        val state = SettingsReadinessState(
+            themeMode = ArrivalThemeMode.SYSTEM,
+            locationPermission = true,
+            notificationPermission = true,
+            locationServicesAvailable = true,
+            bluetoothPermission = true,
+            guidancePermissionState = GuidancePermissionState.GRANTED,
+            audioRoute = GuidanceAudioRoute.DEVICE,
+            dataState = NationwideDataState.Ready(12, 1_700_000_000L, "source-test"),
+            backgroundJourneyActive = false,
+            connectorConfigured = false,
+            connectorConnected = false,
+        )
+        composeRule.setContent {
+            MaterialTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    SettingsReadinessPanel(
+                        state = state,
+                        connectorBusy = false,
+                        connectorStatus = "",
+                        onThemeModeChange = {},
+                        onRequestJourneyPermissions = {},
+                        onRequestGuidancePermissions = {},
+                        onRefreshReadiness = {},
+                        onShareDiagnostics = {},
+                        onOpenAppSettings = {},
+                        onRetryData = {},
+                        onConnectorAction = {},
+                        onUpdateInstalledData = { manualRefreshRequests++ },
+                        autoUpdatesEnabled = automatic.value,
+                        onAutoUpdatesChange = { automatic.value = it },
+                    )
+                }
+            }
+        }
+        composeRule.onNodeWithTag("nationwide-index-auto-updates-toggle")
+            .performScrollTo().assertTextContains(
+                context.getString(R.string.offline_pack_auto_updates_disable),
+            ).performClick()
+        composeRule.runOnIdle { assertEquals(false, automatic.value) }
+        composeRule.onNodeWithTag("nationwide-index-refresh-now")
+            .performScrollTo().assertIsEnabled().performClick()
+        composeRule.runOnIdle { assertEquals(1, manualRefreshRequests) }
+        composeRule.onNodeWithTag("nationwide-index-auto-updates-toggle")
+            .performScrollTo().assertTextContains(
+                context.getString(R.string.offline_pack_auto_updates_enable),
+            ).performClick()
+        composeRule.runOnIdle { assertEquals(true, automatic.value) }
     }
 }
