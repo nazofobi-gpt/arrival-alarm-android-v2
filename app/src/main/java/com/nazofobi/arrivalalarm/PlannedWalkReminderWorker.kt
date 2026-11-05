@@ -8,6 +8,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.work.ExistingWorkPolicy
@@ -34,6 +35,21 @@ internal fun plannedWalkReminderDelayMillis(
     // A selected offline GTFS journey can be planned up to seven days ahead.
     // WorkManager stays best-effort; a delayed job is discarded at delivery time.
     return delay.takeIf { it in 60_000L..604_800_000L }
+}
+
+/** Accept only the canonical source-backed Maps URL. Worker input is never a free-form deep link. */
+internal fun validatedPlannedWalkNotificationMapsUrl(raw: String?): String? {
+    val prefix = "https://www.google.com/maps/dir/?api=1&destination="
+    val suffix = "&travelmode=walking&dir_action=navigate"
+    if (raw == null || raw.length > 200 || !raw.startsWith(prefix) || !raw.endsWith(suffix))
+        return null
+    val coordinates = raw.removePrefix(prefix).removeSuffix(suffix).split("%2C")
+    if (coordinates.size != 2) return null
+    val latitude = coordinates[0].toDoubleOrNull()
+        ?.takeIf { it.isFinite() && it in -90.0..90.0 } ?: return null
+    val longitude = coordinates[1].toDoubleOrNull()
+        ?.takeIf { it.isFinite() && it in -180.0..180.0 } ?: return null
+    return "${prefix}${latitude}%2C${longitude}${suffix}"
 }
 
 internal data class PlannedWalkReminderDetails(val stopName: String, val startMillis: Long)
@@ -85,7 +101,7 @@ internal class PlannedWalkReminderScheduler(private val context: Context) {
             ?.takeIf { it.isNotBlank() } ?: return false
         val request = OneTimeWorkRequestBuilder<PlannedWalkReminderWorker>()
             .setInitialDelay(delay, TimeUnit.MILLISECONDS)
-            .setInputData(workDataOf(KEY_TOKEN to token, KEY_START to start, KEY_STOP to stop))
+            .setInputData(workDataOf(KEY_TOKEN to token, KEY_START to start, KEY_STOP to stop,\n                KEY_DIRECTIONS_URL to (plannedWalkDirectionsUrl(option) ?: "")))
             .build()
         return runCatching {
             WorkManager.getInstance(context)
@@ -119,6 +135,7 @@ internal class PlannedWalkReminderScheduler(private val context: Context) {
         const val KEY_ROUTE = "route_id"
         const val KEY_START = "start"
         const val KEY_STOP = "stop_name"
+        const val KEY_DIRECTIONS_URL = "walking_directions_url"
         const val KEY_DETAILS_TOKEN = "details_token"
         const val CHANNEL = "planned_walk_estimate_v1"
 
@@ -255,6 +272,25 @@ class PlannedWalkReminderWorker(context: Context, params: WorkerParameters) : Wo
                 R.string.route_walk_reminder_notification_body, stop))
             .setAutoCancel(true)
             .setContentIntent(open)
+            .apply {
+                // Maps is optional: only a source-matched boarding stop with real
+                // coordinates can offer this explicit external action. No origin/GPS
+                // is included, and tapping the notice itself still opens this app.
+                validatedPlannedWalkNotificationMapsUrl(
+                    inputData.getString(PlannedWalkReminderScheduler.KEY_DIRECTIONS_URL),
+                )?.let { directionsUrl ->
+                    val directions = Intent(Intent.ACTION_VIEW, Uri.parse(directionsUrl))
+                        .addCategory(Intent.CATEGORY_BROWSABLE)
+                    val openDirections = PendingIntent.getActivity(
+                        applicationContext, 2404, directions, flags,
+                    )
+                    addAction(
+                        android.R.drawable.ic_menu_compass,
+                        applicationContext.getString(R.string.route_planned_walk_maps_action),
+                        openDirections,
+                    )
+                }
+            }
             .build()
         // Invalidate before send: retries or duplicate workers cannot notify twice.
         if (clearTokenIfCurrent(prefs, token)) {
