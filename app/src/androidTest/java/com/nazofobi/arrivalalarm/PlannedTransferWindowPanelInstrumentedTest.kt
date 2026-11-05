@@ -244,6 +244,37 @@ class PlannedTransferWindowPanelInstrumentedTest {
         }
         rule.onNodeWithTag("journey-transfer-short-window-risk-0").assertDoesNotExist()
     }
+    @Test fun imminentScheduledConnectionUsesExplicitNonLiveCaution() {
+        val now = 1_800_000_000_000L
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(listOf(evidence.copy(
+                    plannedGapMinutes = 3,
+                    plannedArrivalEpochMillis = now - 120_000L,
+                    plannedDepartureEpochMillis = now + 60_000L,
+                )), nowEpochMillis = now)
+            }
+        }
+        rule.onNodeWithTag("journey-static-transfer-departure-imminent-0").assertExists()
+        rule.onNodeWithTag("journey-static-transfer-countdown-0").assertExists()
+        rule.onNodeWithTag("journey-static-transfer-disclaimer").assertExists()
+    }
+
+    @Test fun unverifiedTimetableNeverShowsImminentConnectionCaution() {
+        val now = 1_800_000_000_000L
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(listOf(evidence.copy(
+                    plannedGapMinutes = 3,
+                    plannedArrivalEpochMillis = 0L,
+                    plannedDepartureEpochMillis = now + 60_000L,
+                )), nowEpochMillis = now)
+            }
+        }
+        rule.onNodeWithTag("journey-static-transfer-departure-imminent-0").assertDoesNotExist()
+        rule.onNodeWithTag("journey-static-transfer-countdown-0").assertExists()
+    }
+
     @Test fun inboundTransferShowsScheduledArrivalCountdownWhenSourceIsComplete() {
         val now = 1_800_000_000_000L
         rule.setContent {

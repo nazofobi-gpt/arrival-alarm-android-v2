@@ -105,6 +105,28 @@ internal fun plannedTransferArrivalCountdownMinutes(
     return plannedTransferDepartureCountdownMinutes(window.plannedArrivalEpochMillis, nowEpochMillis)
 }
 
+/** Source-verified scheduled imminent departure cue; never a live position claim. */
+internal fun plannedTransferImminentDeparture(
+    window: RouteTransferWindowEvidence,
+    nowEpochMillis: Long,
+): Boolean {
+    if (window.arrivalStopId.isBlank() || window.departureStopId.isBlank() ||
+        window.arrivalStopName.isBlank() || window.departureStopName.isBlank() ||
+        window.plannedGapMinutes !in 1..180 ||
+        window.plannedArrivalEpochMillis <= 0L || window.plannedDepartureEpochMillis <= 0L ||
+        nowEpochMillis <= 0L) return false
+    val gapMillis = runCatching {
+        Math.subtractExact(window.plannedDepartureEpochMillis, window.plannedArrivalEpochMillis)
+    }.getOrNull() ?: return false
+    if (gapMillis !in 60_000L..10_800_000L ||
+        ((gapMillis + 59_999L) / 60_000L).toInt() != window.plannedGapMinutes) return false
+    val remainingMillis = runCatching {
+        Math.subtractExact(window.plannedDepartureEpochMillis, nowEpochMillis)
+    }.getOrNull() ?: return false
+    // Only the last two minutes before scheduled departure; never after.
+    return remainingMillis in 1L..120_000L
+}
+
 /** A past *scheduled* transfer departure is not evidence of the vehicle's actual status. */
 internal fun plannedTransferDepartureRecentlyPassed(
     departureEpochMillis: Long,

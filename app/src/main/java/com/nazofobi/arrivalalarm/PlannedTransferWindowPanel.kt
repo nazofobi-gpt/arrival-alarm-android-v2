@@ -120,6 +120,14 @@ internal fun PlannedTransferWindowPanel(
                     modifier = Modifier.testTag("journey-static-transfer-departure-passed-" + index),
                 )
             }
+            if (plannedTransferImminentDeparture(evidence, currentEpochMillis)) {
+                Text(
+                    text = stringResource(R.string.route_planned_transfer_departure_imminent),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("journey-static-transfer-departure-imminent-" + index),
+                )
+            }
             plannedTransferStraightLineDistanceMeters(evidence)?.let { distanceMeters ->
                 Text(
                     text = stringResource(

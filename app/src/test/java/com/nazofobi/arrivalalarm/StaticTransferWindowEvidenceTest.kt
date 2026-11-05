@@ -223,6 +223,30 @@ class StaticTransferWindowEvidenceTest {
         assertNull(plannedTransferArrivalCountdownMinutes(w, arrival - 10_800_001L))
     }
 
+    @Test fun imminentConnectionDepartureWarnsOnlyWithCompleteUtcTimetable() {
+        val arrival = 1_800_000_000_000L
+        val base = RouteTransferWindowEvidence(
+            "X", "Y", "Arrival", "Boarding", 3,
+            plannedArrivalEpochMillis = arrival,
+            plannedDepartureEpochMillis = arrival + 180_000L,
+        )
+        val departure = base.plannedDepartureEpochMillis
+        assertTrue(plannedTransferImminentDeparture(base, departure - 120_000L))
+        assertTrue(plannedTransferImminentDeparture(base, departure - 1L))
+        assertFalse(plannedTransferImminentDeparture(base, departure - 120_001L))
+        assertFalse(plannedTransferImminentDeparture(base, departure))
+        assertFalse(plannedTransferImminentDeparture(base, departure + 1L))
+        assertFalse(plannedTransferImminentDeparture(base.copy(plannedGapMinutes = 2), departure - 1L))
+        assertFalse(plannedTransferImminentDeparture(base.copy(plannedArrivalEpochMillis = 0L), departure - 1L))
+        assertFalse(plannedTransferImminentDeparture(base.copy(departureStopId = ""), departure - 1L))
+        assertFalse(plannedTransferImminentDeparture(base.copy(plannedDepartureEpochMillis = Long.MAX_VALUE), departure - 1L))
+        val dst = Instant.parse("2026-10-25T01:30:00Z").toEpochMilli()
+        assertTrue(plannedTransferImminentDeparture(base.copy(
+            plannedArrivalEpochMillis = dst,
+            plannedDepartureEpochMillis = dst + 180_000L,
+        ), dst + 60_000L))
+    }
+
     @Test fun missingOrContradictorySourceHidesInboundArrivalCountdown() {
         val arrival = 1_800_000_000_000L
         val w = RouteTransferWindowEvidence("X", "Y", "Arrival", "Boarding", 6,
