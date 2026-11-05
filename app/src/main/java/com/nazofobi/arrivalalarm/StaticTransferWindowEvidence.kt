@@ -74,8 +74,11 @@ internal fun plannedTransferDepartureLocalTime(
 ): String? {
     if (departureEpochMillis <= 0L) return null
     return runCatching {
-        java.text.SimpleDateFormat("dd.MM.yyyy HH:mm XXX", java.util.Locale.ROOT).apply {
+        // API 23 supports RFC 822 offset 'Z' but not ISO 8601 pattern 'X' (API 24).
+        // Insert the display colon only after the fixed ±HHmm offset is formatted.
+        val formatted = java.text.SimpleDateFormat("dd.MM.yyyy HH:mm Z", java.util.Locale.ROOT).apply {
             timeZone = agencyTimeZone
         }.format(java.util.Date(departureEpochMillis))
+        formatted.dropLast(2) + ":" + formatted.takeLast(2)
     }.getOrNull()
 }
