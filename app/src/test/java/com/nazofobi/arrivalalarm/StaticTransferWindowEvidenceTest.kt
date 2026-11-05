@@ -105,4 +105,23 @@ class StaticTransferWindowEvidenceTest {
         assertTrue(plannedStaticTransferWindows(listOf(first, second, third)) { names[it] }.isEmpty())
         assertTrue(plannedStaticTransferWindows(listOf(first)) { names[it] }.isEmpty())
     }
+
+    @Test fun warnsOnlyWhenStraightLineAtBriskSpeedExceedsGap() {
+        val far = RouteTransferWalkingCoordinates(53.075, 8.808, 53.095, 8.808)
+        val base = RouteTransferWindowEvidence(
+            "X", "Y", "Arrival", "Boarding", 5, walkingCoordinates = far,
+        )
+        assertTrue(plannedTransferStraightLineWalkingRisk(base))
+        // A wider scheduled interval is NOT called safe; only the warning disappears.
+        assertFalse(plannedTransferStraightLineWalkingRisk(base.copy(plannedGapMinutes = 30)))
+        assertFalse(plannedTransferStraightLineWalkingRisk(base.copy(walkingCoordinates = null)))
+        assertFalse(plannedTransferStraightLineWalkingRisk(base.copy(plannedGapMinutes = 0)))
+        assertFalse(plannedTransferStraightLineWalkingRisk(base.copy(departureStopId = "X")))
+        assertFalse(plannedTransferStraightLineWalkingRisk(base.copy(
+            walkingCoordinates = far.copy(departureLatitude = Double.NaN),
+        )))
+        assertFalse(plannedTransferStraightLineWalkingRisk(base.copy(
+            walkingCoordinates = RouteTransferWalkingCoordinates(53.075, 8.808, 53.0751, 8.808),
+        )))
+    }
 }

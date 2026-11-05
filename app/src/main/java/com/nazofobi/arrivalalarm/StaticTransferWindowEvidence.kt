@@ -141,3 +141,36 @@ internal fun plannedTransferWalkingDirectionsUrl(
     return "https://www.google.com/maps/dir/?api=1&origin=${points.arrivalLatitude},${points.arrivalLongitude}" +
         "&destination=${points.departureLatitude},${points.departureLongitude}&travelmode=walking"
 }
+
+/**
+ * Conservative warning only: even an optimistic 1.7 m/s straight-line walk may
+ * outlast the scheduled gap. A negative result NEVER proves a walkable transfer.
+ * Rounded-up display minutes make this check under-warn rather than over-warn.
+ * Source GTFS stop coordinates only; no device fix, API request or live ETA.
+ */
+internal fun plannedTransferStraightLineWalkingRisk(
+    window: RouteTransferWindowEvidence,
+): Boolean {
+    val points = window.walkingCoordinates ?: return false
+    if (window.plannedGapMinutes !in 1..180 ||
+        window.arrivalStopId.isBlank() || window.departureStopId.isBlank() ||
+        window.arrivalStopId == window.departureStopId) return false
+    if (plannedTransferWalkingCoordinates(
+            window.arrivalStopId, window.departureStopId,
+            points.arrivalLatitude, points.arrivalLongitude,
+            points.departureLatitude, points.departureLongitude,
+        ) == null) return false
+
+    val lat1 = Math.toRadians(points.arrivalLatitude)
+    val lat2 = Math.toRadians(points.departureLatitude)
+    val deltaLat = lat2 - lat1
+    val deltaLon = Math.toRadians(points.departureLongitude - points.arrivalLongitude)
+    val sinLat = kotlin.math.sin(deltaLat / 2.0)
+    val sinLon = kotlin.math.sin(deltaLon / 2.0)
+    val a = sinLat * sinLat +
+        kotlin.math.cos(lat1) * kotlin.math.cos(lat2) * sinLon * sinLon
+    val distanceMeters = 2.0 * 6_371_000.0 *
+        kotlin.math.asin(kotlin.math.sqrt(a.coerceIn(0.0, 1.0)))
+    return distanceMeters.isFinite() &&
+        distanceMeters > window.plannedGapMinutes * 60.0 * 1.7
+}

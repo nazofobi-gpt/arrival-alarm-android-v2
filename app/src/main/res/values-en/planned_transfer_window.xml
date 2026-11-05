@@ -8,4 +8,5 @@
     <string name="route_planned_transfer_walk_map">Open walking map between transfer stops</string>
     <string name="route_planned_transfer_walk_privacy">Only the two timetable stop coordinates go to the external map. This app does not add your device location; the map app may use its own location permission. Walking time is unverified.</string>
     <string name="route_planned_transfer_walk_unavailable">Walking map could not be opened.</string>
+    <string name="route_planned_transfer_walk_risk">Warning: Even straight-line walking at a brisk 1.7 m/s may exceed the scheduled transfer window. Pedestrian route, delays and connection are unverified.</string>
 </resources>

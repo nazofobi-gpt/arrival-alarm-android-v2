@@ -131,4 +131,29 @@ class PlannedTransferWindowPanelInstrumentedTest {
         rule.onNodeWithTag("journey-static-transfers").assertDoesNotExist()
         rule.onNodeWithTag("journey-static-transfer-0").assertDoesNotExist()
     }
+
+    @Test fun sourceCoordinatesAndTightGapShowQualifiedWalkingRisk() {
+        val longTransfer = evidence.copy(
+            walkingCoordinates = RouteTransferWalkingCoordinates(53.075, 8.808, 53.095, 8.808),
+        )
+        rule.setContent {
+            MaterialTheme { PlannedTransferWindowPanel(listOf(longTransfer)) }
+        }
+        rule.onNodeWithTag("journey-transfer-walk-risk-0").assertExists()
+        rule.onNodeWithTag("journey-static-transfer-disclaimer").assertExists()
+    }
+
+    @Test fun missingOrShortWalkingEvidenceNeverShowsFeasibilityClaim() {
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(listOf(evidence.copy(
+                    walkingCoordinates = RouteTransferWalkingCoordinates(
+                        53.075, 8.808, 53.0751, 8.808,
+                    ),
+                )))
+            }
+        }
+        rule.onNodeWithTag("journey-transfer-walk-risk-0").assertDoesNotExist()
+        rule.onNodeWithTag("journey-static-transfer-disclaimer").assertExists()
+    }
 }

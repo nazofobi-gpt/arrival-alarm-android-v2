@@ -91,6 +91,14 @@ internal fun PlannedTransferWindowPanel(
                     modifier = Modifier.testTag("journey-static-transfer-departure-passed-" + index),
                 )
             }
+            if (plannedTransferStraightLineWalkingRisk(evidence)) {
+                Text(
+                    text = stringResource(R.string.route_planned_transfer_walk_risk),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("journey-transfer-walk-risk-" + index),
+                )
+            }
             evidence.walkingCoordinates?.let(::plannedTransferWalkingDirectionsUrl)?.let { walkUrl ->
                 TextButton(
                     onClick = {

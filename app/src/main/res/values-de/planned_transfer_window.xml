@@ -8,4 +8,5 @@
     <string name="route_planned_transfer_walk_map">Fußweg zwischen den Umsteigehaltestellen öffnen</string>
     <string name="route_planned_transfer_walk_privacy">An die externe Karte gehen nur die beiden GTFS-Haltestellenpositionen. Diese App übermittelt keinen Gerätestandort; die Karten-App kann eigene Standortrechte nutzen. Gehzeit unbestätigt.</string>
     <string name="route_planned_transfer_walk_unavailable">Fußwegkarte konnte nicht geöffnet werden.</string>
+    <string name="route_planned_transfer_walk_risk">Warnung: Schon die Luftlinie kann bei zügigem Gehen (1,7 m/s) das geplante Umsteigefenster überschreiten. Fußweg, Verspätung und Anschluss sind ungeprüft.</string>
 </resources>

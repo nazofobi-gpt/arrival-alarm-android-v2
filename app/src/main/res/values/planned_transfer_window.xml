@@ -8,4 +8,5 @@
     <string name="route_planned_transfer_walk_map">Aktarma durakları arasında yaya haritasını aç</string>
     <string name="route_planned_transfer_walk_privacy">Dış haritaya yalnız tarifedeki iki durak koordinatı gönderilir. Bu uygulama konumunuzu eklemez; harita kendi konum izinlerini kullanabilir. Yürüyüş süresi doğrulanmadı.</string>
     <string name="route_planned_transfer_walk_unavailable">Yaya haritası açılamadı.</string>
+    <string name="route_planned_transfer_walk_risk">Uyarı: 1,7 m/sn hızlı yürüyüş varsayımıyla bile kuş uçuşu mesafe planlı aktarma süresini aşabilir. Gerçek yaya rotası, gecikme ve bağlantı doğrulanmadı.</string>
 </resources>
