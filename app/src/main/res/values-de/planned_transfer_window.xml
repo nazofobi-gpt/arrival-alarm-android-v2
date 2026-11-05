@@ -2,4 +2,5 @@
 <resources>
     <string name="route_planned_transfer_window">Geplanter Umstieg %1$d: %2$s → %3$s · %4$d Min.</string>
     <string name="route_planned_transfer_disclaimer">Nur statischer Fahrplan. Ohne Umsteige-Fußweg und Echtzeitverspätung; Anschluss nicht garantiert.</string>
+    <string name="route_planned_transfer_departure_countdown">Planmäßige Anschlussabfahrt in %1$d Min.</string>
 </resources>

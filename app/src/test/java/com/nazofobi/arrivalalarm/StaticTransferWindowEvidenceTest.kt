@@ -19,6 +19,7 @@ class StaticTransferWindowEvidenceTest {
         assertEquals("Bremen Hbf", result.single().arrivalStopName)
         assertEquals("Platform Süd", result.single().departureStopName)
         assertEquals(5, result.single().plannedGapMinutes)
+        assertEquals(second.departureEpochMillis, result.single().plannedDepartureEpochMillis)
     }
 
     @Test fun roundsUpSecondsWithoutReadingAmbiguousDstLocalClocks() {
@@ -39,6 +40,21 @@ class StaticTransferWindowEvidenceTest {
         assertTrue(plannedStaticTransferWindows(listOf(first, second.copy(
             departureEpochMillis = Long.MAX_VALUE,
         ))) { names[it] }.isEmpty())
+    }
+
+    @Test fun departureCountdownShowsOnlyFutureSourceBackedNearTermUtcInstants() {
+        val departure = second.departureEpochMillis
+        assertEquals(2, plannedTransferDepartureCountdownMinutes(departure, departure - 61_000L))
+        assertEquals(1, plannedTransferDepartureCountdownMinutes(departure, departure - 1L))
+        assertEquals(180, plannedTransferDepartureCountdownMinutes(departure, departure - 10_800_000L))
+        assertEquals(null, plannedTransferDepartureCountdownMinutes(departure, departure - 10_800_001L))
+        assertEquals(null, plannedTransferDepartureCountdownMinutes(departure, departure))
+        assertEquals(null, plannedTransferDepartureCountdownMinutes(departure, departure + 1L))
+        assertEquals(null, plannedTransferDepartureCountdownMinutes(0L, departure - 30_000L))
+        assertEquals(null, plannedTransferDepartureCountdownMinutes(Long.MAX_VALUE, 1L))
+        // Explicit epoch instants remain unambiguous across Europe/Berlin DST.
+        val dst = Instant.parse("2026-10-25T01:00:00Z").toEpochMilli()
+        assertEquals(5, plannedTransferDepartureCountdownMinutes(dst, dst - 5 * 60_000L))
     }
 
     @Test fun refusesToShowPartialTransferEvidenceOnMultipleLegs() {

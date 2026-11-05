@@ -2,4 +2,5 @@
 <resources>
     <string name="route_planned_transfer_window">Scheduled transfer %1$d: %2$s → %3$s · %4$d min</string>
     <string name="route_planned_transfer_disclaimer">Static timetable only. Excludes transfer walking time and live delays; connection is not guaranteed.</string>
+    <string name="route_planned_transfer_departure_countdown">Scheduled connecting departure in %1$d min</string>
 </resources>

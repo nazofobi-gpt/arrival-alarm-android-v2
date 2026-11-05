@@ -7,6 +7,8 @@ data class RouteTransferWindowEvidence(
     val arrivalStopName: String,
     val departureStopName: String,
     val plannedGapMinutes: Int,
+    // Source GTFS UTC instant; absent timestamp never creates a countdown.
+    val plannedDepartureEpochMillis: Long = 0L,
 )
 
 /**
@@ -43,7 +45,22 @@ internal fun plannedStaticTransferWindows(
             arrivalStopName = arrivalName,
             departureStopName = departureName,
             plannedGapMinutes = ((gapMillis + 59_999L) / 60_000L).toInt(),
+            plannedDepartureEpochMillis = departing.departureEpochMillis,
         )
     }
     return windows
+}
+
+/** Foreground-only scheduled departure countdown, not realtime or connection-risk advice. */
+internal fun plannedTransferDepartureCountdownMinutes(
+    departureEpochMillis: Long,
+    nowEpochMillis: Long,
+): Int? {
+    if (departureEpochMillis <= 0L || nowEpochMillis <= 0L) return null
+    val remainingMillis = runCatching {
+        Math.subtractExact(departureEpochMillis, nowEpochMillis)
+    }.getOrNull() ?: return null
+    // Outside the near-term 3h window or already departed: show no countdown.
+    if (remainingMillis !in 1L..10_800_000L) return null
+    return ((remainingMillis + 59_999L) / 60_000L).toInt()
 }

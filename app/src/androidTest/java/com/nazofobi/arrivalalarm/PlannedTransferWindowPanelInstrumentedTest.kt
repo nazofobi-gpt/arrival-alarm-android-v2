@@ -29,6 +29,34 @@ class PlannedTransferWindowPanelInstrumentedTest {
         rule.onNodeWithTag("journey-static-transfer-disclaimer").assertExists()
     }
 
+    @Test fun nearTermDepartureShowsOnlyScheduledForegroundCountdown() {
+        val now = 1_800_000_000_000L
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(
+                    listOf(evidence.copy(plannedDepartureEpochMillis = now + 61_000L)),
+                    nowEpochMillis = now,
+                )
+            }
+        }
+        rule.onNodeWithTag("journey-static-transfer-countdown-0").assertExists()
+        rule.onNodeWithTag("journey-static-transfer-disclaimer").assertExists()
+    }
+
+    @Test fun staleOrUnknownDepartureDoesNotShowCountdown() {
+        val now = 1_800_000_000_000L
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(
+                    listOf(evidence.copy(plannedDepartureEpochMillis = now - 1L)),
+                    nowEpochMillis = now,
+                )
+            }
+        }
+        rule.onNodeWithTag("journey-static-transfer-0").assertExists()
+        rule.onNodeWithTag("journey-static-transfer-countdown-0").assertDoesNotExist()
+    }
+
     @Test fun missingTransferSourceDoesNotShowUnfoundedConnectionAdvice() {
         rule.setContent {
             MaterialTheme { PlannedTransferWindowPanel(emptyList()) }
