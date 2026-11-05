@@ -16,4 +16,5 @@
     <string name="offline_pack_auto_updates_disable">Otomatik çevrimdışı veri güncellemelerini kapat</string>
     <string name="offline_pack_auto_updates_enable">Otomatik çevrimdışı veri güncellemelerini aç</string>
     <string name="offline_pack_auto_updates_note">Bu seçim yalnız otomatik güncellemeleri etkiler. Yüklü veri korunur; Wi-Fi ile elle güncelleme kullanılabilir.</string>
+    <string name="offline_pack_last_checked">Son başarılı kaynak kontrolü %1$s</string>
 </resources>

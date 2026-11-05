@@ -37,6 +37,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
         private const val PROVIDER_ID = "gtfs-de-full"
         private const val READY_KEY = "ready"
         private const val FETCHED_KEY = "fetched_at"
+        private const val CHECKED_KEY = "checked_at"
         private const val COUNT_KEY = "stop_count"
         private const val VERSION_KEY = "source_version"
         private const val SCHEMA_KEY = "schema_version"
@@ -71,6 +72,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
 
     fun isReady(): Boolean = metadata(READY_KEY) == "1"
     fun fetchedAt(): Long = metadata(FETCHED_KEY)?.toLongOrNull() ?: 0L
+    fun checkedAt(): Long = metadata(CHECKED_KEY)?.toLongOrNull() ?: 0L
     fun stopCount(): Int = metadata(COUNT_KEY)?.toIntOrNull() ?: 0
     fun sourceVersion(): String = metadata(VERSION_KEY) ?: "unknown"
 
@@ -121,6 +123,16 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
                 http.disconnect()
                 // HTTP 304 does not change the usable feed or fetch timestamp.
                 if (validators.isNotEmpty() && isReady()) {
+                    // HTTP 304 validates the installed feed; never claim a fresh import.
+                    // Persist a separate check timestamp without altering GTFS graph/version.
+                    db.beginTransaction()
+                    try {
+                        val checkedSeconds = maxOf(checkedAt(), System.currentTimeMillis() / 1_000L)
+                        putMetadata(db, CHECKED_KEY, checkedSeconds.toString())
+                        db.setTransactionSuccessful()
+                    } finally {
+                        db.endTransaction()
+                    }
                     onCount(stopCount())
                     return
                 }
@@ -223,6 +235,7 @@ class NationwideTransitIndex(context: Context) : SQLiteOpenHelper(context, "nati
             )
             putMetadata(db, READY_KEY, "1")
             putMetadata(db, FETCHED_KEY, (fetchedAtMillis / 1000).toString())
+            putMetadata(db, CHECKED_KEY, (fetchedAtMillis / 1000).toString())
             putMetadata(db, COUNT_KEY, stops.toString())
             putMetadata(db, VERSION_KEY, sourceVersion)
             putMetadata(db, SOURCE_URL_KEY, url)

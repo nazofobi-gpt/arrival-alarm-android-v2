@@ -16,4 +16,5 @@
     <string name="offline_pack_auto_updates_disable">Turn off automatic offline data updates</string>
     <string name="offline_pack_auto_updates_enable">Turn on automatic offline data updates</string>
     <string name="offline_pack_auto_updates_note">This changes only automatic updates. Installed data stays available; manual Wi-Fi refresh still works.</string>
+    <string name="offline_pack_last_checked">Last successful source check %1$s</string>
 </resources>

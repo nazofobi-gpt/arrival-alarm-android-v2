@@ -77,15 +77,26 @@ internal fun offlinePackMetadataText(
         context.getString(R.string.offline_pack_updated_unknown)
     }
 
+    // A successful HTTP 304 is evidence of a recent check, not a new GTFS import.
+    // Older installations without checked_at fall back to their import timestamp.
+    val checkedAtMillis = state.checkedAtEpochSeconds
+        .takeIf { it > 0L && nowMillis >= 0L && it <= nowMillis / 1_000L }
+        ?.times(1_000L)
+    val recentVerifiedCheck = listOfNotNull(fetchedAtMillis, checkedAtMillis).maxOrNull()
     val metadata = context.getString(R.string.offline_pack_metadata, size, version, checked)
-    // A completed download is not proof that old timetables remain valid today.
-    // Only classify a known, nonfuture successful check as overdue; unknown timestamps
-    // remain explicitly unknown instead of acquiring a fabricated stale age.
-    val overdue = fetchedAtMillis != null &&
-        nowMillis - fetchedAtMillis >= 7L * 24 * 60 * 60 * 1_000
-    return if (overdue) {
-        metadata + " · " + context.getString(R.string.offline_pack_refresh_overdue)
+    val withCheck = if (checkedAtMillis != null) {
+        val checkAge = DateUtils.getRelativeTimeSpanString(
+            checkedAtMillis, nowMillis, DateUtils.MINUTE_IN_MILLIS,
+        ).toString()
+        metadata + " · " + context.getString(R.string.offline_pack_last_checked, checkAge)
     } else {
         metadata
+    }
+    val overdue = recentVerifiedCheck != null &&
+        nowMillis - recentVerifiedCheck >= 7L * 24 * 60 * 60 * 1_000
+    return if (overdue) {
+        withCheck + " · " + context.getString(R.string.offline_pack_refresh_overdue)
+    } else {
+        withCheck
     }
 }

@@ -24,6 +24,43 @@ class GtfsConditionalRevalidationInstrumentedTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
     private val sourceUrl = "https://feed.example.invalid/germany.zip"
 
+    @Test fun notModifiedRecordsDurableCheckWithoutChangingImportedGraph() {
+        context.deleteDatabase("nationwide_transit.db")
+        val index = NationwideTransitIndex(context)
+        try {
+            index.importFeedWithConnection(
+                sourceUrl, {},
+                FakeGtfsHttpConnection(
+                    URL(sourceUrl), HttpURLConnection.HTTP_OK, validFeed(),
+                    etag = "\"last-check-test\"",
+                ),
+            )
+            val before = snapshot(index)
+            val importedAt = index.fetchedAt()
+            index.writableDatabase.execSQL(
+                "INSERT OR REPLACE INTO metadata(key,value) VALUES(?,?)",
+                arrayOf("checked_at", "1000"),
+            )
+            assertEquals(1000L, index.checkedAt())
+            val unchanged = FakeGtfsHttpConnection(
+                URL(sourceUrl), HttpURLConnection.HTTP_NOT_MODIFIED, byteArrayOf(),
+            )
+            index.importFeedWithConnection(sourceUrl, {}, unchanged)
+            assertEquals(0, unchanged.streamReads)
+            assertEquals(importedAt, index.fetchedAt())
+            assertTrue(index.checkedAt() >= importedAt)
+            assertEquals(before, snapshot(index))
+            index.close()
+            NationwideTransitIndex(context).use { reopened ->
+                assertEquals(importedAt, reopened.fetchedAt())
+                assertTrue(reopened.checkedAt() >= importedAt)
+                assertEquals(before, snapshot(reopened))
+            }
+        } finally {
+            index.close()
+        }
+    }
+
     @After fun cleanup() {
         context.deleteDatabase("nationwide_transit.db")
     }

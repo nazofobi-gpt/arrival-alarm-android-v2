@@ -28,7 +28,12 @@ import kotlin.math.*
 sealed interface NationwideDataState {
     data object Idle : NationwideDataState
     data class Loading(val message: String) : NationwideDataState
-    data class Ready(val stopCount: Int, val fetchedAtEpochSeconds: Long, val sourceVersion: String) : NationwideDataState
+    data class Ready(
+        val stopCount: Int,
+        val fetchedAtEpochSeconds: Long,
+        val sourceVersion: String,
+        val checkedAtEpochSeconds: Long = 0L,
+    ) : NationwideDataState
     data class Error(val message: String) : NationwideDataState
 }
 
@@ -184,11 +189,11 @@ class NationwideTransitGateway(
     private val main = Handler(Looper.getMainLooper())
 
     override fun currentState(): NationwideDataState =
-        if (store.isReady()) NationwideDataState.Ready(store.stopCount(), store.fetchedAt(), store.sourceVersion()) else NationwideDataState.Idle
+        if (store.isReady()) NationwideDataState.Ready(store.stopCount(), store.fetchedAt(), store.sourceVersion(), store.checkedAt()) else NationwideDataState.Idle
 
     override fun ensureNationwideIndex(callback: (NationwideDataState) -> Unit) {
         if (store.isReady()) {
-            callback(NationwideDataState.Ready(store.stopCount(), store.fetchedAt(), store.sourceVersion()))
+            callback(NationwideDataState.Ready(store.stopCount(), store.fetchedAt(), store.sourceVersion(), store.checkedAt()))
             return
         }
         callback(NationwideDataState.Loading(appContext.getString(R.string.data_loading)))
@@ -199,7 +204,7 @@ class NationwideTransitGateway(
                         callback(NationwideDataState.Loading(appContext.getString(R.string.data_indexing, count)))
                     }
                 }
-                NationwideDataState.Ready(store.stopCount(), store.fetchedAt(), store.sourceVersion())
+                NationwideDataState.Ready(store.stopCount(), store.fetchedAt(), store.sourceVersion(), store.checkedAt())
             }.getOrElse { NationwideDataState.Error(it.message ?: appContext.getString(R.string.data_load_failed)) }
             main.post { callback(state) }
         }

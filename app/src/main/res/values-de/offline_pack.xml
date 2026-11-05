@@ -16,4 +16,5 @@
     <string name="offline_pack_auto_updates_disable">Automatische Offline-Datenaktualisierung ausschalten</string>
     <string name="offline_pack_auto_updates_enable">Automatische Offline-Datenaktualisierung einschalten</string>
     <string name="offline_pack_auto_updates_note">Dies betrifft nur automatische Updates. Installierte Daten bleiben verfügbar; manuelle WLAN-Aktualisierung bleibt möglich.</string>
+    <string name="offline_pack_last_checked">Letzte erfolgreiche Quellenprüfung %1$s</string>
 </resources>

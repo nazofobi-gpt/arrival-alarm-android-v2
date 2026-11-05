@@ -166,6 +166,32 @@ class OfflinePackMetadataInstrumentedTest {
     }
 
     @Test
+    fun recent304CheckSuppressesFalseStaleWarningButKeepsOldDownloadAge() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val nowMillis = 1_783_000_000_000L
+        val oldImport = nowMillis / 1_000L - 9L * 24L * 60L * 60L
+        val recentCheck = nowMillis / 1_000L - 60L
+        val staleWarning = context.getString(R.string.offline_pack_refresh_overdue)
+        fun render(lastCheck: Long) = offlinePackMetadataText(
+            context, NationwideDataState.Ready(12_000, oldImport, "etag-unchanged", lastCheck),
+            nowMillis,
+        )
+        val checked = render(recentCheck)
+        assertTrue(checked.contains(context.getString(
+            R.string.offline_pack_last_checked,
+            DateUtils.getRelativeTimeSpanString(
+                recentCheck * 1_000L, nowMillis, DateUtils.MINUTE_IN_MILLIS,
+            ).toString(),
+        )))
+        assertTrue(checked.contains(DateUtils.getRelativeTimeSpanString(
+            oldImport * 1_000L, nowMillis, DateUtils.MINUTE_IN_MILLIS,
+        ).toString()))
+        assertTrue(!checked.contains(staleWarning))
+        assertTrue(render(0L).contains(staleWarning))
+        assertTrue(render(nowMillis / 1_000L + 3_600L).contains(staleWarning))
+    }
+
+    @Test
     fun oldOfflineIndexWarnsAboutScheduleChangesWithoutFlaggingFreshOrUnknownData() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val nowMillis = 1_783_000_000_000L
