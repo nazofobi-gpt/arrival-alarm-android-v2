@@ -840,6 +840,7 @@ internal fun PlannedWalkStartNotice(
     notificationSettingsLauncher: ((Intent) -> Boolean)? = null,
     notificationChannelMutedForTest: Boolean? = null,
     notificationPreviewSender: (() -> Boolean)? = null,
+    notificationPreviewCanceller: (() -> Boolean)? = null,
 ) {
     val context = LocalContext.current
     val preferences = remember(context) {
@@ -1027,6 +1028,7 @@ internal fun PlannedWalkStartNotice(
     )
     if (reminderScheduled || reminderDelay != null) {
         var reminderPreviewResult by remember(option.id) { mutableStateOf<Boolean?>(null) }
+        var reminderPreviewDismissResult by remember(option.id) { mutableStateOf<Boolean?>(null) }
         // A previous route's reminder must be disclosed and cancelled explicitly;
         // never silently replace it when a different journey is selected.
         if (reminderScheduled && !reminderScheduler.isScheduledForRoute(option.id)) {
@@ -1114,6 +1116,7 @@ internal fun PlannedWalkStartNotice(
         // neither schedules a walking reminder nor arms an arrival alarm.
         OutlinedButton(
             onClick = {
+                reminderPreviewDismissResult = null
                 reminderPreviewResult = (notificationPreviewSender
                     ?: { PlannedWalkReminderPreview.post(context) })()
             },
@@ -1131,6 +1134,31 @@ internal fun PlannedWalkStartNotice(
                 color = if (submitted) MaterialTheme.colorScheme.onSurfaceVariant
                     else MaterialTheme.colorScheme.error,
                 modifier = Modifier.testTag("route-walk-reminder-preview-result"),
+            )
+        }
+        if (reminderPreviewResult == true) {
+            OutlinedButton(
+                onClick = {
+                    val cancelled = (notificationPreviewCanceller
+                        ?: { PlannedWalkReminderPreview.dismiss(context) })()
+                    reminderPreviewDismissResult = cancelled
+                    if (cancelled) reminderPreviewResult = null
+                },
+                enabled = !reminderBusy,
+                modifier = Modifier.heightIn(min = 48.dp)
+                    .testTag("route-walk-reminder-preview-dismiss"),
+            ) { Text(stringResource(R.string.route_walk_reminder_preview_dismiss)) }
+        }
+        reminderPreviewDismissResult?.let { dismissed ->
+            Text(
+                text = stringResource(
+                    if (dismissed) R.string.route_walk_reminder_preview_dismissed
+                    else R.string.route_walk_reminder_preview_dismiss_failed,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (dismissed) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.error,
+                modifier = Modifier.testTag("route-walk-reminder-preview-dismiss-result"),
             )
         }
         if (reminderScheduled) {

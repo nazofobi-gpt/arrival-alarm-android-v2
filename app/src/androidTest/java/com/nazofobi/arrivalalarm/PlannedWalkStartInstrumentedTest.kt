@@ -38,6 +38,7 @@ class PlannedWalkStartInstrumentedTest {
         notificationChannelMutedForTest: Boolean? = null,
         notificationSettingsLauncher: ((Intent) -> Boolean)? = null,
         notificationPreviewSender: (() -> Boolean)? = null,
+        notificationPreviewCanceller: (() -> Boolean)? = null,
         calendarLauncher: ((Intent) -> Boolean)? = null,
     ) {
         rule.setContent {
@@ -68,6 +69,7 @@ class PlannedWalkStartInstrumentedTest {
                     notificationChannelMutedForTest = notificationChannelMutedForTest,
                     notificationSettingsLauncher = notificationSettingsLauncher,
                     notificationPreviewSender = notificationPreviewSender,
+                    notificationPreviewCanceller = notificationPreviewCanceller,
                     )
                 }
             }
@@ -495,6 +497,41 @@ class PlannedWalkStartInstrumentedTest {
         rule.runOnIdle {
             assertEquals(1, submissions)
         }
+    }
+
+
+    @Test fun onlySuccessfulManualPreviewOffersExplicitDismissWithoutChangingReminder() {
+        var posted = 0
+        var dismissed = 0
+        show(nearFutureDeparture(), 600,
+            notificationPermissionReadyForTest = true,
+            notificationPreviewSender = { posted++; true },
+            notificationPreviewCanceller = { dismissed++; true })
+        rule.onNodeWithTag("route-walk-reminder-preview-dismiss").assertDoesNotExist()
+        rule.onNodeWithTag("route-walk-reminder-preview").performScrollTo().performClick()
+        rule.onNodeWithTag("route-walk-reminder-preview-dismiss").performScrollTo().performClick()
+        rule.onNodeWithTag("route-walk-reminder-preview-dismiss").assertDoesNotExist()
+        rule.onNodeWithTag("route-walk-reminder-preview-dismiss-result").assertExists()
+        rule.onNodeWithTag("route-walk-reminder-toggle").assertIsEnabled()
+        rule.runOnIdle {
+            assertEquals(1, posted)
+            assertEquals(1, dismissed)
+        }
+    }
+
+    @Test fun failedDismissRemainsVisibleAndRetryableWithoutChangingReminder() {
+        var dismissed = 0
+        show(nearFutureDeparture(), 600,
+            notificationPermissionReadyForTest = true,
+            notificationPreviewSender = { true },
+            notificationPreviewCanceller = { dismissed++; false })
+        rule.onNodeWithTag("route-walk-reminder-preview-dismiss").assertDoesNotExist()
+        rule.onNodeWithTag("route-walk-reminder-preview").performScrollTo().performClick()
+        rule.onNodeWithTag("route-walk-reminder-preview-dismiss").performScrollTo().performClick()
+        rule.onNodeWithTag("route-walk-reminder-preview-dismiss").assertExists()
+        rule.onNodeWithTag("route-walk-reminder-preview-dismiss-result").assertExists()
+        rule.onNodeWithTag("route-walk-reminder-toggle").assertIsEnabled()
+        rule.runOnIdle { assertEquals(1, dismissed) }
     }
 
     @Test fun manualWalkNotificationPreviewFailureIsVisible() {

@@ -17,4 +17,7 @@
     <string name="route_walk_reminder_preview_body">Test only. No journey or reminder was started.</string>
     <string name="route_walk_reminder_preview_submitted">Test submitted to Android. Visibility and sound are not verified.</string>
     <string name="route_walk_reminder_preview_failed">Test could not be submitted. Check Android notification settings.</string>
+    <string name="route_walk_reminder_preview_dismiss">Dismiss test notification</string>
+    <string name="route_walk_reminder_preview_dismissed">Test notification dismissal requested from Android.</string>
+    <string name="route_walk_reminder_preview_dismiss_failed">Could not dismiss test notification. Try again.</string>
 </resources>

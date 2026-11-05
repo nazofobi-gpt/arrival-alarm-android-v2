@@ -190,6 +190,15 @@ internal object PlannedWalkReminderPreview {
             manager.notify(NOTIFICATION_ID, notification)
             true
         }.getOrDefault(false)
+    }    
+    /** Cancel only the explicit test notification, never the scheduled reminder (2402). */
+    fun dismiss(context: Context): Boolean {
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE)
+            as? NotificationManager ?: return false
+        return runCatching {
+            manager.cancel(NOTIFICATION_ID)
+            true
+        }.getOrDefault(false)
     }
 }
 

@@ -79,4 +79,47 @@ class PlannedWalkReminderPreviewInstrumentedTest {
             manager.cancel(PlannedWalkReminderPreview.NOTIFICATION_ID)
         }
     }
+
+    @Test fun dismissPreviewRemovesOnlyTestIdAndPreservesWalkingReminderId() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE)
+            as NotificationManager
+        if (Build.VERSION.SDK_INT >= 33 &&
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(
+                context.packageName, Manifest.permission.POST_NOTIFICATIONS,
+            )
+        }
+        assumeTrue("Notifications unavailable", manager.areNotificationsEnabled())
+        assumeTrue(PlannedWalkReminderPreview.post(context))
+        try {
+            val sibling = (if (Build.VERSION.SDK_INT >= 26) {
+                Notification.Builder(context, PlannedWalkReminderScheduler.CHANNEL)
+            } else {
+                @Suppress("DEPRECATION")
+                Notification.Builder(context)
+            }).setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("Existing walking reminder").build()
+            manager.notify(2402, sibling)
+            fun visible(id: Int): Boolean = manager.activeNotifications.any { it.id == id }
+            var deadline = android.os.SystemClock.elapsedRealtime() + 5_000L
+            while ((!visible(2402) || !visible(PlannedWalkReminderPreview.NOTIFICATION_ID)) &&
+                android.os.SystemClock.elapsedRealtime() < deadline
+            ) android.os.SystemClock.sleep(100L)
+            assertTrue("Test notification must be posted", visible(PlannedWalkReminderPreview.NOTIFICATION_ID))
+            assertTrue("Sibling reminder must be posted", visible(2402))
+            assertTrue(PlannedWalkReminderPreview.dismiss(context))
+            deadline = android.os.SystemClock.elapsedRealtime() + 5_000L
+            while (visible(PlannedWalkReminderPreview.NOTIFICATION_ID) &&
+                android.os.SystemClock.elapsedRealtime() < deadline
+            ) android.os.SystemClock.sleep(100L)
+            assertTrue("Test notification was not removed", !visible(PlannedWalkReminderPreview.NOTIFICATION_ID))
+            assertTrue("Real reminder notification ID must remain", visible(2402))
+        } finally {
+            manager.cancel(PlannedWalkReminderPreview.NOTIFICATION_ID)
+            manager.cancel(2402)
+        }
+    }
 }

@@ -17,4 +17,7 @@
     <string name="route_walk_reminder_preview_body">Nur ein Test. Keine Fahrt und keine Erinnerung gestartet.</string>
     <string name="route_walk_reminder_preview_submitted">Test an Android gesendet. Sicht- oder Hörbarkeit ist nicht bestätigt.</string>
     <string name="route_walk_reminder_preview_failed">Test konnte nicht gesendet werden. Android-Benachrichtigungen prüfen.</string>
+    <string name="route_walk_reminder_preview_dismiss">Testbenachrichtigung entfernen</string>
+    <string name="route_walk_reminder_preview_dismissed">Entfernen der Testbenachrichtigung an Android übermittelt.</string>
+    <string name="route_walk_reminder_preview_dismiss_failed">Testbenachrichtigung konnte nicht entfernt werden. Erneut versuchen.</string>
 </resources>
