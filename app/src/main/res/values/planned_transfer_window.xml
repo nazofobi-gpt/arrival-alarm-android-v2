@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="route_planned_transfer_window">Planlı aktarma %1$d: %2$s → %3$s · %4$d dk</string>
+    <string name="route_planned_transfer_connection">Planlı sonraki hat: %1$s · yön %2$s (canlı araç doğrulaması değildir).</string>
+    <string name="route_planned_transfer_arrival_platform">Tarifedeki varış peronu: %1$s</string>
+    <string name="route_planned_transfer_departure_platform">Tarifedeki sonraki biniş peronu: %1$s</string>
+    <string name="route_planned_transfer_disclaimer">Yalnız statik tarife. Yürüme süresi, canlı gecikme ve aktarmaya yetişme garantisi içermez.</string>
+    <string name="route_planned_transfer_arrival_countdown">Tarifedeki aktarma varışına %1$d dk (canlı takip değildir).</string>
+    <string name="route_planned_transfer_departure_countdown">Planlı aktarma kalkışına %1$d dk</string>
+    <string name="route_planned_transfer_arrival_local_time">Tarifedeki aktarma varışı: %1$s</string>
+    <string name="route_planned_transfer_local_time">Tarifedeki aktarma kalkışı: %1$s</string>
+    <string name="route_planned_transfer_departure_imminent">Uyarı: Tarifedeki aktarma kalkışına en fazla 2 dakika kaldı. Bu yalnız planlı saattir; gerçek araç konumu ve aktarmaya yetişme doğrulanmadı.</string>
+    <string name="route_planned_transfer_departure_past">Planlı aktarma kalkış saati geçti. Aracın gerçekten ayrıldığı doğrulanmadı; güncel seferi kontrol edin.</string>
+    <string name="route_planned_transfer_walk_map">Aktarma durakları arasında yaya haritasını aç</string>
+    <string name="route_planned_transfer_walk_privacy">Dış haritaya yalnız tarifedeki iki durak koordinatı gönderilir. Bu uygulama konumunuzu eklemez; harita kendi konum izinlerini kullanabilir. Yürüyüş süresi doğrulanmadı.</string>
+    <string name="route_planned_transfer_walk_unavailable">Yaya haritası açılamadı.</string>
+    <string name="route_planned_transfer_walk_risk">Uyarı: 1,7 m/sn hızlı yürüyüş varsayımıyla bile kuş uçuşu mesafe planlı aktarma süresini aşabilir. Gerçek yaya rotası, gecikme ve bağlantı doğrulanmadı.</string>
+    <string name="route_planned_transfer_straight_line_distance">Kuş uçuşu yaklaşık %1$d m (yaya yolu veya yürüyüş süresi değildir).</string>
+    <string name="route_planned_transfer_short_window_risk">Uyarı: Planlı aktarma yalnızca 3 dakika veya daha kısa. Yürüme, peron değişimi ve gecikmeyle yetişemeyebilirsiniz; canlı bağlantı durumu doğrulanmadı.</string>
+    <string name="route_planned_transfer_different_stops">Bu aktarmada varış ve sonraki biniş tarifede farklı duraklar olarak kayıtlı. Yürüyüşü ve peronu ayrıca kontrol edin; bağlantı doğrulanmadı.</string>
+    <string name="route_planned_transfer_calendar_action">Planlı aktarmayı takvimde aç</string>
+    <string name="route_planned_transfer_calendar_disclosure">Takvim uygulaması yalnız planlı aktarma durak adlarını ve saatlerini alır; kayıt kullanıcı onayı olmadan yapılmaz. Canlı sefer veya hatırlatma garantisi değildir.</string>
+    <string name="route_planned_transfer_calendar_unavailable">Takvim açılamadı.</string>
+    <string name="route_planned_transfer_calendar_title">Varış v2 planlı aktarma: %1$s → %2$s</string>
+</resources>

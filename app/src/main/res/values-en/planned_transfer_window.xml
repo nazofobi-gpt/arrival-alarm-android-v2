@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="route_planned_transfer_window">Scheduled transfer %1$d: %2$s → %3$s · %4$d min</string>
+    <string name="route_planned_transfer_connection">Scheduled connecting line: %1$s · towards %2$s (not a live vehicle confirmation).</string>
+    <string name="route_planned_transfer_arrival_platform">Scheduled arrival platform: %1$s</string>
+    <string name="route_planned_transfer_departure_platform">Scheduled connecting platform: %1$s</string>
+    <string name="route_planned_transfer_disclaimer">Static timetable only. Excludes transfer walking time and live delays; connection is not guaranteed.</string>
+    <string name="route_planned_transfer_arrival_countdown">Scheduled transfer arrival in %1$d min (timetable only, not live).</string>
+    <string name="route_planned_transfer_departure_countdown">Scheduled connecting departure in %1$d min</string>
+    <string name="route_planned_transfer_arrival_local_time">Scheduled arrival at transfer: %1$s</string>
+    <string name="route_planned_transfer_local_time">Scheduled connecting departure: %1$s</string>
+    <string name="route_planned_transfer_departure_imminent">Caution: the scheduled connecting departure is within 2 minutes. This is timetable time only; actual vehicle status and the connection are unverified.</string>
+    <string name="route_planned_transfer_departure_past">The scheduled connecting departure time has passed. Actual vehicle departure remains unverified; check current services.</string>
+    <string name="route_planned_transfer_walk_map">Open walking map between transfer stops</string>
+    <string name="route_planned_transfer_walk_privacy">Only the two timetable stop coordinates go to the external map. This app does not add your device location; the map app may use its own location permission. Walking time is unverified.</string>
+    <string name="route_planned_transfer_walk_unavailable">Walking map could not be opened.</string>
+    <string name="route_planned_transfer_walk_risk">Warning: Even straight-line walking at a brisk 1.7 m/s may exceed the scheduled transfer window. Pedestrian route, delays and connection are unverified.</string>
+    <string name="route_planned_transfer_straight_line_distance">Approx. %1$d m straight line (not a walking route or walking time).</string>
+    <string name="route_planned_transfer_short_window_risk">Caution: scheduled transfer window is 3 minutes or less. Walking, platforms and delays may prevent the connection; live status is unverified.</string>
+    <string name="route_planned_transfer_different_stops">The timetable identifies separate arrival and onward boarding stops. Check the walk and platform independently; the connection is unverified.</string>
+    <string name="route_planned_transfer_calendar_action">Open planned transfer in calendar</string>
+    <string name="route_planned_transfer_calendar_disclosure">Only scheduled stop names and times are passed to the calendar app. Nothing is saved without your confirmation; this is not live service or a reminder guarantee.</string>
+    <string name="route_planned_transfer_calendar_unavailable">Calendar could not be opened.</string>
+    <string name="route_planned_transfer_calendar_title">Varış v2 planned transfer: %1$s → %2$s</string>
+</resources>

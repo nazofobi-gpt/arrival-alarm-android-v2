@@ -57,6 +57,8 @@ data class RouteOption(
     // Null means this provider did not supply separately verified walking legs.
     val accessWalking: RouteWalkingLegEvidence? = null,
     val egressWalking: RouteWalkingLegEvidence? = null,
+    // Only source-backed, scheduled inter-leg gaps; never a verified live connection.
+    val transferWindows: List<RouteTransferWindowEvidence> = emptyList(),
 )
 
 interface GeocodeProvider { fun search(query: String): List<MapPoint> }

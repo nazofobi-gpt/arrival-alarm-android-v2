@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="route_planned_transfer_window">Geplanter Umstieg %1$d: %2$s → %3$s · %4$d Min.</string>
+    <string name="route_planned_transfer_connection">Planmäßige Anschlusslinie: %1$s · Richtung %2$s (keine Echtzeitbestätigung).</string>
+    <string name="route_planned_transfer_arrival_platform">Planmäßiges Ankunftsgleis: %1$s</string>
+    <string name="route_planned_transfer_departure_platform">Planmäßiges Anschlussgleis: %1$s</string>
+    <string name="route_planned_transfer_disclaimer">Nur statischer Fahrplan. Ohne Umsteige-Fußweg und Echtzeitverspätung; Anschluss nicht garantiert.</string>
+    <string name="route_planned_transfer_arrival_countdown">Planmäßige Ankunft am Umstieg in %1$d Min. (keine Echtzeit).</string>
+    <string name="route_planned_transfer_departure_countdown">Planmäßige Anschlussabfahrt in %1$d Min.</string>
+    <string name="route_planned_transfer_arrival_local_time">Planmäßige Ankunft am Umstieg: %1$s</string>
+    <string name="route_planned_transfer_local_time">Planmäßige Anschlussabfahrt: %1$s</string>
+    <string name="route_planned_transfer_departure_imminent">Achtung: Die planmäßige Anschlussabfahrt ist in höchstens 2 Minuten. Dies ist nur die Fahrplanzeit; tatsächlicher Fahrzeugstatus und Anschluss sind unbestätigt.</string>
+    <string name="route_planned_transfer_departure_past">Die planmäßige Anschlussabfahrt liegt zurück. Ob das Fahrzeug tatsächlich abgefahren ist, ist unbestätigt; bitte aktuelle Verbindungen prüfen.</string>
+    <string name="route_planned_transfer_walk_map">Fußweg zwischen den Umsteigehaltestellen öffnen</string>
+    <string name="route_planned_transfer_walk_privacy">An die externe Karte gehen nur die beiden GTFS-Haltestellenpositionen. Diese App übermittelt keinen Gerätestandort; die Karten-App kann eigene Standortrechte nutzen. Gehzeit unbestätigt.</string>
+    <string name="route_planned_transfer_walk_unavailable">Fußwegkarte konnte nicht geöffnet werden.</string>
+    <string name="route_planned_transfer_walk_risk">Warnung: Schon die Luftlinie kann bei zügigem Gehen (1,7 m/s) das geplante Umsteigefenster überschreiten. Fußweg, Verspätung und Anschluss sind ungeprüft.</string>
+    <string name="route_planned_transfer_straight_line_distance">Ca. %1$d m Luftlinie (keine Fußwegstrecke oder Gehzeit).</string>
+    <string name="route_planned_transfer_short_window_risk">Achtung: Das planmäßige Umsteigefenster beträgt höchstens 3 Minuten. Fußweg, Gleiswechsel und Verspätungen können den Anschluss verhindern; Echtzeitstatus ungeprüft.</string>
+    <string name="route_planned_transfer_different_stops">Ankunft und nächste Abfahrt sind im Fahrplan als unterschiedliche Haltestellen erfasst. Fußweg und Gleis gesondert prüfen; Anschluss ungeprüft.</string>
+    <string name="route_planned_transfer_calendar_action">Planmäßigen Umstieg im Kalender öffnen</string>
+    <string name="route_planned_transfer_calendar_disclosure">Die Kalender-App erhält nur die geplanten Umsteigehaltestellen und Zeiten. Ohne Ihre Bestätigung wird nichts gespeichert; keine Echtzeit- oder Erinnerungszusage.</string>
+    <string name="route_planned_transfer_calendar_unavailable">Kalender konnte nicht geöffnet werden.</string>
+    <string name="route_planned_transfer_calendar_title">Varış v2 · Geplanter Umstieg: %1$s → %2$s</string>
+</resources>
