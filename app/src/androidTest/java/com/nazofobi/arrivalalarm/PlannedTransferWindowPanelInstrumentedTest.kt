@@ -35,10 +35,14 @@ class PlannedTransferWindowPanelInstrumentedTest {
         rule.setContent {
             MaterialTheme {
                 PlannedTransferWindowPanel(listOf(
-                    evidence.copy(plannedDepartureLocalTime = "25.10.2026 02:30 +01:00"),
+                    evidence.copy(
+                        plannedArrivalLocalTime = "25.10.2026 02:25 +01:00",
+                        plannedDepartureLocalTime = "25.10.2026 02:30 +01:00",
+                    ),
                 ))
             }
         }
+        rule.onNodeWithTag("journey-static-transfer-arrival-time-0").assertExists()
         rule.onNodeWithTag("journey-static-transfer-local-time-0").assertExists()
     }
 
@@ -68,6 +72,7 @@ class PlannedTransferWindowPanelInstrumentedTest {
         }
         rule.onNodeWithTag("journey-static-transfer-0").assertExists()
         rule.onNodeWithTag("journey-static-transfer-countdown-0").assertDoesNotExist()
+        rule.onNodeWithTag("journey-static-transfer-arrival-time-0").assertDoesNotExist()
         rule.onNodeWithTag("journey-static-transfer-local-time-0").assertDoesNotExist()
     }
 

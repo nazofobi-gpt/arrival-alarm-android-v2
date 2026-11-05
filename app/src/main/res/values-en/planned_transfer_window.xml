@@ -3,6 +3,7 @@
     <string name="route_planned_transfer_window">Scheduled transfer %1$d: %2$s → %3$s · %4$d min</string>
     <string name="route_planned_transfer_disclaimer">Static timetable only. Excludes transfer walking time and live delays; connection is not guaranteed.</string>
     <string name="route_planned_transfer_departure_countdown">Scheduled connecting departure in %1$d min</string>
+    <string name="route_planned_transfer_arrival_local_time">Scheduled arrival at transfer: %1$s</string>
     <string name="route_planned_transfer_local_time">Scheduled connecting departure: %1$s</string>
     <string name="route_planned_transfer_departure_past">The scheduled connecting departure time has passed. Actual vehicle departure remains unverified; check current services.</string>
     <string name="route_planned_transfer_walk_map">Open walking map between transfer stops</string>

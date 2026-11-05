@@ -3,6 +3,7 @@
     <string name="route_planned_transfer_window">Planlı aktarma %1$d: %2$s → %3$s · %4$d dk</string>
     <string name="route_planned_transfer_disclaimer">Yalnız statik tarife. Yürüme süresi, canlı gecikme ve aktarmaya yetişme garantisi içermez.</string>
     <string name="route_planned_transfer_departure_countdown">Planlı aktarma kalkışına %1$d dk</string>
+    <string name="route_planned_transfer_arrival_local_time">Tarifedeki aktarma varışı: %1$s</string>
     <string name="route_planned_transfer_local_time">Tarifedeki aktarma kalkışı: %1$s</string>
     <string name="route_planned_transfer_departure_past">Planlı aktarma kalkış saati geçti. Aracın gerçekten ayrıldığı doğrulanmadı; güncel seferi kontrol edin.</string>
     <string name="route_planned_transfer_walk_map">Aktarma durakları arasında yaya haritasını aç</string>

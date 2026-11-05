@@ -7,6 +7,9 @@ data class RouteTransferWindowEvidence(
     val arrivalStopName: String,
     val departureStopName: String,
     val plannedGapMinutes: Int,
+    // Previous vehicle's GTFS UTC arrival; never derived from realtime or device time.
+    val plannedArrivalEpochMillis: Long = 0L,
+    val plannedArrivalLocalTime: String? = null,
     // Source GTFS UTC instant; absent timestamp never creates a countdown.
     val plannedDepartureEpochMillis: Long = 0L,
     // Source timetable time in the GTFS agency's zone, including DST offset.
@@ -49,6 +52,7 @@ internal fun plannedStaticTransferWindows(
             arrivalStopName = arrivalName,
             departureStopName = departureName,
             plannedGapMinutes = ((gapMillis + 59_999L) / 60_000L).toInt(),
+            plannedArrivalEpochMillis = arriving.arrivalEpochMillis,
             plannedDepartureEpochMillis = departing.departureEpochMillis,
         )
     }

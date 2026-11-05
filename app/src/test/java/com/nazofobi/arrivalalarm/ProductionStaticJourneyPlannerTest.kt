@@ -157,6 +157,7 @@ class ProductionStaticJourneyPlannerTest {
         assertEquals("Bremen Hbf", option.transferWindows.single().arrivalStopName)
         assertEquals("Bremen Hbf", option.transferWindows.single().departureStopName)
         assertEquals(5, option.transferWindows.single().plannedGapMinutes)
+        assertEquals("04.10.2026 08:20 +02:00", option.transferWindows.single().plannedArrivalLocalTime)
         assertEquals("04.10.2026 08:25 +02:00", option.transferWindows.single().plannedDepartureLocalTime)
         assertEquals(listOf("T1", "T2"), option.tripIds)
         assertEquals(listOf("A", "X", "B"), option.stops.map { it.id })

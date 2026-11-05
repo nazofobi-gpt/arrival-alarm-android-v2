@@ -23,6 +23,7 @@ class StaticTransferWindowEvidenceTest {
         assertEquals("Platform Süd", result.single().departureStopName)
         assertEquals(5, result.single().plannedGapMinutes)
         assertEquals(second.departureEpochMillis, result.single().plannedDepartureEpochMillis)
+        assertEquals(first.arrivalEpochMillis, result.single().plannedArrivalEpochMillis)
     }
 
     @Test fun roundsUpSecondsWithoutReadingAmbiguousDstLocalClocks() {

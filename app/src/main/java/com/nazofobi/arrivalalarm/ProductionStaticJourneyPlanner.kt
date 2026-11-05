@@ -122,6 +122,9 @@ internal class StaticRouteOptionMapper(
                     data.stop(window.departureStopId)?.takeIf { it.id == window.departureStopId }
                 } else null
                 window.copy(
+                    plannedArrivalLocalTime = plannedTransferDepartureLocalTime(
+                        window.plannedArrivalEpochMillis, agencyTimeZone,
+                    ),
                     plannedDepartureLocalTime = plannedTransferDepartureLocalTime(
                         window.plannedDepartureEpochMillis, agencyTimeZone,
                     ),
