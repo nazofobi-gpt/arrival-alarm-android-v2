@@ -20,8 +20,8 @@ class StaticTransferWindowEvidenceTest {
         assertNull(plannedTransferConnectingService(null, "Berlin"))
         assertNull(plannedTransferConnectingService("IC 2", null))
         assertNull(plannedTransferConnectingService("IC 2", "  "))
-        assertNull(plannedTransferConnectingService("IC\\n2", "Berlin"))
-        assertNull(plannedTransferConnectingService("IC 2", "Berlin\\u202e"))
+        assertNull(plannedTransferConnectingService("IC\n2", "Berlin"))
+        assertNull(plannedTransferConnectingService("IC 2", "Berlin\u202e"))
         assertNull(plannedTransferConnectingService("IC 2", "x".repeat(101)))
     }
 

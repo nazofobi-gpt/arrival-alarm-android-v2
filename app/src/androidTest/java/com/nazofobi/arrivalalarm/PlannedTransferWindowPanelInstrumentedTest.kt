@@ -40,7 +40,7 @@ class PlannedTransferWindowPanelInstrumentedTest {
             MaterialTheme {
                 PlannedTransferWindowPanel(listOf(evidence.copy(
                     plannedConnectionLine = "IC 2",
-                    plannedConnectionDirection = "\\u202eBerlin",
+                    plannedConnectionDirection = "\u202eBerlin",
                 )))
             }
         }
