@@ -1014,6 +1014,12 @@ internal fun PlannedWalkStartNotice(
     var reminderScheduled by remember(option.id) {
         mutableStateOf(reminderScheduler.scheduledRouteId() != null)
     }
+    // WorkManager can deliver/expire and clear a reminder while DETAIL remains open.
+    // Reconcile the cached UI flag at each existing 30-second clock tick; never
+    // claim a queued reminder after its persisted opt-in token disappears.
+    LaunchedEffect(reminderScheduler, option.id, displayNowMillis) {
+        reminderScheduled = reminderScheduler.scheduledRouteId() != null
+    }
     var reminderActionFailed by remember(option.id) { mutableStateOf(false) }
     var reminderBusy by remember(option.id) { mutableStateOf(false) }
     val reminderDelay = plannedWalkReminderDelayMillis(
