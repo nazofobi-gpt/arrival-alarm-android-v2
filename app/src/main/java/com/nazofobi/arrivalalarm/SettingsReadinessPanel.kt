@@ -160,6 +160,8 @@ fun SettingsReadinessPanel(
     onUpdateInstalledData: () -> Unit = {},
     onCancelInstalledDataUpdate: () -> Unit = {},
     manualRefreshWorkState: WorkInfo.State? = null,
+    autoUpdatesEnabled: Boolean = true,
+    onAutoUpdatesChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var themeOptionsExpanded by rememberSaveable { mutableStateOf(false) }
@@ -424,6 +426,23 @@ fun SettingsReadinessPanel(
             }
 
             if (hasUsableNationwideIndex(state.dataState)) {
+                OutlinedButton(
+                    onClick = { onAutoUpdatesChange(!autoUpdatesEnabled) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("nationwide-index-auto-updates-toggle"),
+                ) {
+                    Text(stringResource(
+                        if (autoUpdatesEnabled) R.string.offline_pack_auto_updates_disable
+                        else R.string.offline_pack_auto_updates_enable,
+                    ))
+                }
+                Text(
+                    text = stringResource(R.string.offline_pack_auto_updates_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 val refreshActive = manualRefreshWorkState == WorkInfo.State.ENQUEUED ||
                     manualRefreshWorkState == WorkInfo.State.BLOCKED ||
                     manualRefreshWorkState == WorkInfo.State.RUNNING

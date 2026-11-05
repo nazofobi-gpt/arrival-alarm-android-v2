@@ -13,4 +13,7 @@
     <string name="offline_pack_refresh_failed">Yenileme tamamlanamadı; bağlantı ve cihaz koşullarını kontrol edin.</string>
     <string name="offline_pack_refresh_cancel">Yenilemeyi iptal et</string>
     <string name="offline_pack_refresh_cancelled">Yenileme iptal edildi; zamanlanmış güncellemeler etkilenmez.</string>
+    <string name="offline_pack_auto_updates_disable">Otomatik çevrimdışı veri güncellemelerini kapat</string>
+    <string name="offline_pack_auto_updates_enable">Otomatik çevrimdışı veri güncellemelerini aç</string>
+    <string name="offline_pack_auto_updates_note">Bu seçim yalnız otomatik güncellemeleri etkiler. Yüklü veri korunur; Wi-Fi ile elle güncelleme kullanılabilir.</string>
 </resources>

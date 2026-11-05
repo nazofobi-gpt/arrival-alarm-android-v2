@@ -81,7 +81,19 @@ object NationwideFeedRefreshScheduler {
             .cancelUniqueWork(MANUAL_WORK_NAME)
     }
 
+    /** Persist an opt-out before cancelling periodic work. Manual Wi-Fi refresh remains available. */
+    fun setAutomaticUpdates(context: Context, enabled: Boolean): Boolean {
+        if (!OfflinePackAutoUpdatePreference.persist(context, enabled)) return false
+        if (enabled) ensureScheduled(context)
+        else WorkManager.getInstance(context.applicationContext).cancelUniqueWork(UNIQUE_WORK_NAME)
+        return true
+    }
+
     fun ensureScheduled(context: Context) {
+        if (!OfflinePackAutoUpdatePreference.isEnabled(context)) {
+            WorkManager.getInstance(context.applicationContext).cancelUniqueWork(UNIQUE_WORK_NAME)
+            return
+        }
         WorkManager.getInstance(context.applicationContext)
             .enqueueUniquePeriodicWork(
                 UNIQUE_WORK_NAME,

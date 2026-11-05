@@ -13,4 +13,7 @@
     <string name="offline_pack_refresh_failed">Refresh did not complete; check network and device conditions.</string>
     <string name="offline_pack_refresh_cancel">Cancel refresh</string>
     <string name="offline_pack_refresh_cancelled">Refresh cancelled; scheduled updates are unaffected.</string>
+    <string name="offline_pack_auto_updates_disable">Turn off automatic offline data updates</string>
+    <string name="offline_pack_auto_updates_enable">Turn on automatic offline data updates</string>
+    <string name="offline_pack_auto_updates_note">This changes only automatic updates. Installed data stays available; manual Wi-Fi refresh still works.</string>
 </resources>

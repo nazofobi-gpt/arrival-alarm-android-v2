@@ -279,4 +279,58 @@ class OfflinePackMetadataInstrumentedTest {
             assertTrue("Feed version must remain visible", text.contains("feed-1"))
         }
     }
+    @Test
+    fun automaticUpdatesCanBeToggledWithoutBlockingManualRefresh() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val automatic = mutableStateOf(true)
+        var manualRefreshRequests = 0
+        val state = SettingsReadinessState(
+            themeMode = ArrivalThemeMode.SYSTEM,
+            locationPermission = true,
+            notificationPermission = true,
+            locationServicesAvailable = true,
+            bluetoothPermission = true,
+            guidancePermissionState = GuidancePermissionState.GRANTED,
+            audioRoute = GuidanceAudioRoute.DEVICE,
+            dataState = NationwideDataState.Ready(12, 1_700_000_000L, "source-test"),
+            backgroundJourneyActive = false,
+            connectorConfigured = false,
+            connectorConnected = false,
+        )
+        composeRule.setContent {
+            MaterialTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    SettingsReadinessPanel(
+                        state = state,
+                        connectorBusy = false,
+                        connectorStatus = "",
+                        onThemeModeChange = {},
+                        onRequestJourneyPermissions = {},
+                        onRequestGuidancePermissions = {},
+                        onRefreshReadiness = {},
+                        onShareDiagnostics = {},
+                        onOpenAppSettings = {},
+                        onRetryData = {},
+                        onConnectorAction = {},
+                        onUpdateInstalledData = { manualRefreshRequests++ },
+                        autoUpdatesEnabled = automatic.value,
+                        onAutoUpdatesChange = { automatic.value = it },
+                    )
+                }
+            }
+        }
+        composeRule.onNodeWithTag("nationwide-index-auto-updates-toggle")
+            .performScrollTo().assertTextContains(
+                context.getString(R.string.offline_pack_auto_updates_disable),
+            ).performClick()
+        composeRule.runOnIdle { assertEquals(false, automatic.value) }
+        composeRule.onNodeWithTag("nationwide-index-refresh-now")
+            .performScrollTo().assertIsEnabled().performClick()
+        composeRule.runOnIdle { assertEquals(1, manualRefreshRequests) }
+        composeRule.onNodeWithTag("nationwide-index-auto-updates-toggle")
+            .performScrollTo().assertTextContains(
+                context.getString(R.string.offline_pack_auto_updates_enable),
+            ).performClick()
+        composeRule.runOnIdle { assertEquals(true, automatic.value) }
+    }
 }

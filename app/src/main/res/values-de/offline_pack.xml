@@ -13,4 +13,7 @@
     <string name="offline_pack_refresh_failed">Aktualisierung nicht abgeschlossen; Netzwerk und Gerätezustand prüfen.</string>
     <string name="offline_pack_refresh_cancel">Aktualisierung abbrechen</string>
     <string name="offline_pack_refresh_cancelled">Aktualisierung abgebrochen; planmäßige Aktualisierungen bleiben aktiv.</string>
+    <string name="offline_pack_auto_updates_disable">Automatische Offline-Datenaktualisierung ausschalten</string>
+    <string name="offline_pack_auto_updates_enable">Automatische Offline-Datenaktualisierung einschalten</string>
+    <string name="offline_pack_auto_updates_note">Dies betrifft nur automatische Updates. Installierte Daten bleiben verfügbar; manuelle WLAN-Aktualisierung bleibt möglich.</string>
 </resources>

@@ -282,6 +282,9 @@ fun ArrivalAlarmApp(
     // Do not report an import as successful merely because a worker returned success:
     // it may have skipped a removed pack or received an unchanged HTTP response.
     var manualRefreshWorkState by remember { mutableStateOf<WorkInfo.State?>(null) }
+    var automaticOfflineUpdates by remember(context) {
+        mutableStateOf(OfflinePackAutoUpdatePreference.isEnabled(context))
+    }
     val offlineRefreshCompletionGate = remember { OfflineRefreshCompletionGate() }
     DisposableEffect(activeScreen, context) {
         if (activeScreen != ArrivalAppScreen.SETTINGS) {
@@ -1081,6 +1084,14 @@ fun ArrivalAlarmApp(
                         NationwideFeedRefreshScheduler.cancelInstalledPackRefresh(context)
                     },
                     manualRefreshWorkState = manualRefreshWorkState,
+                    autoUpdatesEnabled = automaticOfflineUpdates,
+                    onAutoUpdatesChange = { enabled ->
+                        runCatching {
+                            NationwideFeedRefreshScheduler.setAutomaticUpdates(context, enabled)
+                        }
+                        automaticOfflineUpdates =
+                            OfflinePackAutoUpdatePreference.isEnabled(context)
+                    },
                     onConnectorAction = {
                         if (connectorConnected) disconnectConnector()
                         else beginConnectorAuthorization()
