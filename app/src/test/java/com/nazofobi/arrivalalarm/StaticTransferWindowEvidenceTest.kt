@@ -14,6 +14,16 @@ class StaticTransferWindowEvidenceTest {
     private val second = StaticTransitLeg("t2", "r2", "y", "b", t + 25 * 60_000L, t + 50 * 60_000L)
     private val names = mapOf("x" to "Bremen Hbf", "y" to "Platform Süd")
 
+    @Test fun onlyBoundedUnspoofedGtfsPlatformLabelsAreShown() {
+        assertEquals("7 B", boundedGtfsPlatformCode(" 7 B "))
+        assertEquals("2", boundedGtfsPlatformCode("2"))
+        assertNull(boundedGtfsPlatformCode(null))
+        assertNull(boundedGtfsPlatformCode("   "))
+        assertNull(boundedGtfsPlatformCode("x".repeat(25)))
+        assertNull(boundedGtfsPlatformCode("4\n5"))
+        assertNull(boundedGtfsPlatformCode("4\u202e5"))
+    }
+
     @Test fun displaysBothSourceStopsAndFiveMinuteScheduledGap() {
         val result = plannedStaticTransferWindows(listOf(first, second)) { names[it] }
         assertEquals(1, result.size)

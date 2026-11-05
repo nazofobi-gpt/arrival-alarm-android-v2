@@ -14,6 +14,9 @@ data class RouteTransferWindowEvidence(
     val plannedDepartureEpochMillis: Long = 0L,
     // Source timetable time in the GTFS agency's zone, including DST offset.
     val plannedDepartureLocalTime: String? = null,
+    // Explicit GTFS stop.platform_code values, NOT realtime platform updates.
+    val plannedArrivalPlatformCode: String? = null,
+    val plannedDeparturePlatformCode: String? = null,
     // Exact public GTFS stop coordinates only, never device location.
     val walkingCoordinates: RouteTransferWalkingCoordinates? = null,
 )
@@ -57,6 +60,16 @@ internal fun plannedStaticTransferWindows(
         )
     }
     return windows
+}
+
+/** Bound provider-supplied platform_code before showing it as timetable evidence. */
+internal fun boundedGtfsPlatformCode(value: String?): String? {
+    val code = value?.trim() ?: return null
+    return code.takeIf {
+        it.length in 1..24 && it.none { char ->
+            Character.isISOControl(char) || Character.getType(char) == Character.FORMAT.toInt()
+        }
+    }
 }
 
 /** Foreground-only scheduled departure countdown, not realtime or connection-risk advice. */

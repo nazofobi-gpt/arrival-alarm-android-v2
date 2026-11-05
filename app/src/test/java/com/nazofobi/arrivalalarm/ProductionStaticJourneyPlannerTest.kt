@@ -56,8 +56,8 @@ class ProductionStaticJourneyPlannerTest {
         val data = FakeRouteOptionData(
             routes = emptyMap(), trips = emptyMap(),
             stops = mapOf(
-                "X" to GtfsScheduleStop("X", "Arrival", 53.075, 8.808, null, 0, null, null),
-                "Y" to GtfsScheduleStop("Y", "Boarding", 53.079, 8.813, null, 0, null, null),
+                "X" to GtfsScheduleStop("X", "Arrival", 53.075, 8.808, null, 0, "3", null),
+                "Y" to GtfsScheduleStop("Y", "Boarding", 53.079, 8.813, null, 0, "7B", null),
             ),
             stopTimes = emptyMap(),
         )
@@ -77,6 +77,8 @@ class ProductionStaticJourneyPlannerTest {
         val points = option.transferWindows.single().walkingCoordinates
         assertEquals(53.075, points?.arrivalLatitude)
         assertEquals(8.813, points?.departureLongitude)
+        assertEquals("3", option.transferWindows.single().plannedArrivalPlatformCode)
+        assertEquals("7B", option.transferWindows.single().plannedDeparturePlatformCode)
 
         val unknown = FakeRouteOptionData(
             routes = emptyMap(), trips = emptyMap(),

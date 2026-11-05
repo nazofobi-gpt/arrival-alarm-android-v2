@@ -115,13 +115,18 @@ internal class StaticRouteOptionMapper(
             }.map { window ->
                 // The identity and coordinate pair must both come from the indexed GTFS feed.
                 // Never substitute current GPS, map pin or a nearby guessed boarding stop.
-                val arriving = if (window.arrivalStopId != window.departureStopId) {
-                    data.stop(window.arrivalStopId)?.takeIf { it.id == window.arrivalStopId }
-                } else null
-                val departing = if (arriving != null) {
-                    data.stop(window.departureStopId)?.takeIf { it.id == window.departureStopId }
-                } else null
+                val arrivalStop = data.stop(window.arrivalStopId)
+                    ?.takeIf { it.id == window.arrivalStopId }
+                val departureStop = data.stop(window.departureStopId)
+                    ?.takeIf { it.id == window.departureStopId }
+                val arriving = arrivalStop.takeIf {
+                    window.arrivalStopId != window.departureStopId
+                }
+                val departing = departureStop.takeIf { arriving != null }
                 window.copy(
+                    // Timetable-only platform labels; absent source data stays absent.
+                    plannedArrivalPlatformCode = boundedGtfsPlatformCode(arrivalStop?.platformCode),
+                    plannedDeparturePlatformCode = boundedGtfsPlatformCode(departureStop?.platformCode),
                     plannedArrivalLocalTime = plannedTransferDepartureLocalTime(
                         window.plannedArrivalEpochMillis, agencyTimeZone,
                     ),

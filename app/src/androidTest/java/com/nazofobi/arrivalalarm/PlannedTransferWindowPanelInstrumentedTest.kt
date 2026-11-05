@@ -46,6 +46,34 @@ class PlannedTransferWindowPanelInstrumentedTest {
         rule.onNodeWithTag("journey-static-transfer-local-time-0").assertExists()
     }
 
+    @Test fun sourcedScheduledPlatformsAppearSeparatelyWithoutLiveClaim() {
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(listOf(
+                    evidence.copy(
+                        plannedArrivalPlatformCode = "3",
+                        plannedDeparturePlatformCode = "7B",
+                    ),
+                ))
+            }
+        }
+        rule.onNodeWithTag("journey-static-transfer-arrival-platform-0").assertExists()
+        rule.onNodeWithTag("journey-static-transfer-departure-platform-0").assertExists()
+        rule.onNodeWithTag("journey-static-transfer-disclaimer").assertExists()
+    }
+
+    @Test fun unavailableOrMalformedGtfsPlatformsFailClosed() {
+        rule.setContent {
+            MaterialTheme {
+                PlannedTransferWindowPanel(listOf(
+                    evidence.copy(plannedDeparturePlatformCode = "1\n2"),
+                ))
+            }
+        }
+        rule.onNodeWithTag("journey-static-transfer-arrival-platform-0").assertDoesNotExist()
+        rule.onNodeWithTag("journey-static-transfer-departure-platform-0").assertDoesNotExist()
+    }
+
     @Test fun nearTermDepartureShowsOnlyScheduledForegroundCountdown() {
         val now = 1_800_000_000_000L
         rule.setContent {

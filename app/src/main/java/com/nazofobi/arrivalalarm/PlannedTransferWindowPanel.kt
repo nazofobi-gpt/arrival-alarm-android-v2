@@ -68,11 +68,25 @@ internal fun PlannedTransferWindowPanel(
                     modifier = Modifier.testTag("journey-static-transfer-arrival-time-" + index),
                 )
             }
+            boundedGtfsPlatformCode(evidence.plannedArrivalPlatformCode)?.let { platform ->
+                Text(
+                    text = stringResource(R.string.route_planned_transfer_arrival_platform, platform),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.testTag("journey-static-transfer-arrival-platform-" + index),
+                )
+            }
             evidence.plannedDepartureLocalTime?.takeIf { it.isNotBlank() }?.let { localTime ->
                 Text(
                     text = stringResource(R.string.route_planned_transfer_local_time, localTime),
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.testTag("journey-static-transfer-local-time-" + index),
+                )
+            }
+            boundedGtfsPlatformCode(evidence.plannedDeparturePlatformCode)?.let { platform ->
+                Text(
+                    text = stringResource(R.string.route_planned_transfer_departure_platform, platform),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.testTag("journey-static-transfer-departure-platform-" + index),
                 )
             }
             val countdownMinutes = plannedTransferDepartureCountdownMinutes(
