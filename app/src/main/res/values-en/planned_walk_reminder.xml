@@ -12,4 +12,9 @@
     <string name="route_walk_reminder_notifications_disabled">Notifications are off. A reminder cannot be scheduled. Open the app settings to enable them.</string>
     <string name="route_walk_reminder_open_notification_settings">Open notification settings</string>
     <string name="route_walk_reminder_settings_failure">Could not open notification settings. Check notifications for this app in Android settings.</string>
+    <string name="route_walk_reminder_preview_action">Test walking-reminder notification</string>
+    <string name="route_walk_reminder_preview_title">TEST — Walking reminder</string>
+    <string name="route_walk_reminder_preview_body">Test only. No journey or reminder was started.</string>
+    <string name="route_walk_reminder_preview_submitted">Test submitted to Android. Visibility and sound are not verified.</string>
+    <string name="route_walk_reminder_preview_failed">Test could not be submitted. Check Android notification settings.</string>
 </resources>
