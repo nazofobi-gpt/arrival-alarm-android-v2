@@ -20,4 +20,6 @@
     <string name="route_walk_reminder_preview_dismiss">Dismiss test notification</string>
     <string name="route_walk_reminder_preview_dismissed">Test notification dismissal requested from Android.</string>
     <string name="route_walk_reminder_preview_dismiss_failed">Could not dismiss test notification. Try again.</string>
+    <string name="route_walk_reminder_update_notice">The saved reminder time differs from the current walking estimate. Only your explicit action will update this route's reminder.</string>
+    <string name="route_walk_reminder_update">Update this route's reminder to the new time</string>
 </resources>

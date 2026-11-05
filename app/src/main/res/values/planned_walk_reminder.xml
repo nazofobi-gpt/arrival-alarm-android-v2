@@ -20,4 +20,6 @@
     <string name="route_walk_reminder_preview_dismiss">Deneme bildirimini kaldır</string>
     <string name="route_walk_reminder_preview_dismissed">Deneme bildirimi kaldırma isteği Android sistemine gönderildi.</string>
     <string name="route_walk_reminder_preview_dismiss_failed">Deneme bildirimi kaldırılamadı. Yeniden deneyin.</string>
+    <string name="route_walk_reminder_update_notice">Kaydedilen hatırlatma saati mevcut yürüyüş tahmininden farklı. Sadece siz onaylarsanız aynı rotanın hatırlatıcısı yeni saate alınır.</string>
+    <string name="route_walk_reminder_update">Bu rotanın hatırlatıcısını yeni saate güncelle</string>
 </resources>

@@ -1026,6 +1026,13 @@ internal fun PlannedWalkStartNotice(
     val reminderDelay = plannedWalkReminderDelayMillis(
         option, displayNowMillis, safetyBufferMinutes,
     )
+    // The saved opt-in is not silently rescheduled when the walking buffer or
+    // source-backed departure changes. A separate explicit action can update it.
+    val savedStart = if (reminderScheduled &&
+        reminderScheduler.isScheduledForRoute(option.id)
+    ) reminderScheduler.scheduledDetails()?.startMillis else null
+    val reminderUpdateAvailable = savedStart != null &&
+        savedStart != startEpoch && reminderDelay != null
     if (reminderScheduled || reminderDelay != null) {
         var reminderPreviewResult by remember(option.id) { mutableStateOf<Boolean?>(null) }
         var reminderPreviewDismissResult by remember(option.id) { mutableStateOf<Boolean?>(null) }
@@ -1168,6 +1175,34 @@ internal fun PlannedWalkStartNotice(
                 modifier = Modifier.testTag("route-walk-reminder-queued"),
             )
             StoredWalkReminderDetails(reminderScheduler)
+        }
+        if (reminderUpdateAvailable) {
+            Text(
+                text = stringResource(R.string.route_walk_reminder_update_notice),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("route-walk-reminder-update-notice"),
+            )
+            OutlinedButton(
+                onClick = {
+                    if (!reminderBusy) {
+                        reminderBusy = true
+                        reminderScope.launch {
+                            // Same route only; the scheduler independently refuses a
+                            // different route's still-active opt-in.
+                            val worked = withContext(Dispatchers.IO) {
+                                reminderScheduler.schedule(option, safetyBufferMinutes)
+                            }
+                            reminderScheduled = reminderScheduler.scheduledRouteId() != null
+                            reminderActionFailed = !worked
+                            reminderBusy = false
+                        }
+                    }
+                },
+                enabled = !reminderBusy && notificationsReady,
+                modifier = Modifier.heightIn(min = 48.dp)
+                    .testTag("route-walk-reminder-update"),
+            ) { Text(stringResource(R.string.route_walk_reminder_update)) }
         }
         if (reminderActionFailed) {
             Text(

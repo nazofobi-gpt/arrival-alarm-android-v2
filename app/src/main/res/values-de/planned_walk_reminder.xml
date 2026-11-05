@@ -20,4 +20,6 @@
     <string name="route_walk_reminder_preview_dismiss">Testbenachrichtigung entfernen</string>
     <string name="route_walk_reminder_preview_dismissed">Entfernen der Testbenachrichtigung an Android übermittelt.</string>
     <string name="route_walk_reminder_preview_dismiss_failed">Testbenachrichtigung konnte nicht entfernt werden. Erneut versuchen.</string>
+    <string name="route_walk_reminder_update_notice">Die gespeicherte Erinnerungszeit weicht von der aktuellen Gehschätzung ab. Nur durch deine ausdrückliche Aktion wird sie für diese Route geändert.</string>
+    <string name="route_walk_reminder_update">Erinnerung dieser Route auf die neue Zeit setzen</string>
 </resources>

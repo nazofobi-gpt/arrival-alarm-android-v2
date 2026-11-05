@@ -675,4 +675,76 @@ class PlannedWalkStartInstrumentedTest {
             manager.deleteNotificationChannel(channelId)
         }
     }
+    @Test fun sameTripChangedWalkingBufferRequiresExplicitReminderUpdate() {
+        val context = androidx.test.platform.app.InstrumentationRegistry
+            .getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences(
+            PlannedWalkReminderScheduler.PREFS, android.content.Context.MODE_PRIVATE)
+        val departure = nearFutureDeparture()
+        val initialStart = java.time.Instant.parse(departure).toEpochMilli() - 600_000L
+        prefs.edit().clear()
+            .putString(PlannedWalkReminderScheduler.KEY_TOKEN, "original-opt-in")
+            .putString(PlannedWalkReminderScheduler.KEY_DETAILS_TOKEN, "original-opt-in")
+            .putString(PlannedWalkReminderScheduler.KEY_ROUTE, "gtfs-1")
+            .putString(PlannedWalkReminderScheduler.KEY_STOP, "Lohne")
+            .putLong(PlannedWalkReminderScheduler.KEY_START, initialStart).commit()
+        try {
+            show(departure, 600, bufferMinutesForTest = 0,
+                notificationPermissionReadyForTest = true)
+            rule.onNodeWithTag("route-walk-reminder-queued").assertExists()
+            rule.onNodeWithTag("route-walk-reminder-update").assertDoesNotExist()
+            rule.onNodeWithTag("route-walk-safety-buffer").performScrollTo().performClick()
+            rule.onNodeWithTag("route-walk-reminder-update-notice").assertExists()
+            rule.onNodeWithTag("route-walk-reminder-update").assertExists()
+            // Choosing a buffer alone may not silently mutate the existing opt-in.
+            rule.runOnIdle {
+                assertEquals(initialStart, prefs.getLong(
+                    PlannedWalkReminderScheduler.KEY_START, -1L))
+                assertEquals("original-opt-in", prefs.getString(
+                    PlannedWalkReminderScheduler.KEY_TOKEN, null))
+            }
+            rule.onNodeWithTag("route-walk-reminder-update").performScrollTo().performClick()
+            rule.waitUntil(10_000L) {
+                prefs.getLong(PlannedWalkReminderScheduler.KEY_START, -1L) ==
+                    initialStart - 300_000L
+            }
+            rule.runOnIdle {
+                assertEquals("gtfs-1", prefs.getString(
+                    PlannedWalkReminderScheduler.KEY_ROUTE, null))
+                assertTrue(prefs.getString(
+                    PlannedWalkReminderScheduler.KEY_TOKEN, null) != "original-opt-in")
+            }
+            rule.onNodeWithTag("route-walk-reminder-update").assertDoesNotExist()
+            rule.onNodeWithTag("route-walk-reminder-queued").assertExists()
+        } finally {
+            PlannedWalkReminderScheduler(context).cancel()
+            prefs.edit().clear().commit()
+        }
+    }
+
+    @Test fun differentTripCanOnlyCancelNeverUpdateAnotherRoutesReminder() {
+        val context = androidx.test.platform.app.InstrumentationRegistry
+            .getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences(
+            PlannedWalkReminderScheduler.PREFS, android.content.Context.MODE_PRIVATE)
+        prefs.edit().clear()
+            .putString(PlannedWalkReminderScheduler.KEY_TOKEN, "other-route-opt-in")
+            .putString(PlannedWalkReminderScheduler.KEY_DETAILS_TOKEN, "other-route-opt-in")
+            .putString(PlannedWalkReminderScheduler.KEY_ROUTE, "different-route")
+            .putString(PlannedWalkReminderScheduler.KEY_STOP, "Other stop")
+            .putLong(PlannedWalkReminderScheduler.KEY_START,
+                System.currentTimeMillis() + 600_000L).commit()
+        try {
+            show(nearFutureDeparture(), 600, notificationPermissionReadyForTest = true)
+            rule.onNodeWithTag("route-walk-reminder-other-route").assertExists()
+            rule.onNodeWithTag("route-walk-reminder-update").assertDoesNotExist()
+            rule.onNodeWithTag("route-walk-reminder-toggle").assertTextContains(
+                context.getString(R.string.route_walk_reminder_cancel), substring = true)
+            rule.runOnIdle { assertEquals("other-route-opt-in", prefs.getString(
+                PlannedWalkReminderScheduler.KEY_TOKEN, null)) }
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
 }
