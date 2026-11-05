@@ -234,6 +234,9 @@ class PlannedTransferWindowPanelInstrumentedTest {
             }
         }
         rule.onNodeWithTag("journey-transfer-short-window-risk-0").assertDoesNotExist()
+    }
+
+    @Test fun unsourcedTransferNeverShowsShortWindowWarning() {
         rule.setContent {
             MaterialTheme {
                 PlannedTransferWindowPanel(listOf(evidence.copy(plannedGapMinutes = 3)))
