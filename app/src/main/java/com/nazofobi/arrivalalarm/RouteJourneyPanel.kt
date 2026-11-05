@@ -454,6 +454,7 @@ private fun JourneyDetailCard(option: RouteOption, routeOffline: Boolean) {
                 )
             }
 
+            PlannedTransferWindowPanel(option.transferWindows)
             HorizontalDivider()
 
             if (option.stops.isEmpty()) {

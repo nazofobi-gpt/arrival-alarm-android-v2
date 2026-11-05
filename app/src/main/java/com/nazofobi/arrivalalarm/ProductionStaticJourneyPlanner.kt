@@ -110,6 +110,9 @@ internal class StaticRouteOptionMapper(
             arrivalEpochMillis = journey.arrivalEpochMillis,
             accessWalking = walkingLegEvidence(journey.access),
             egressWalking = walkingLegEvidence(journey.egress),
+            transferWindows = plannedStaticTransferWindows(journey.legs) { stopId ->
+                data.stop(stopId)?.name
+            },
         )
     }
 
