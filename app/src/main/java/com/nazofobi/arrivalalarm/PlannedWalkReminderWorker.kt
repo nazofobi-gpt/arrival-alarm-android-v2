@@ -41,11 +41,21 @@ internal data class PlannedWalkReminderDetails(val stopName: String, val startMi
 internal class PlannedWalkReminderScheduler(private val context: Context) {
     private val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /** The one opt-in reminder may belong to a previously selected route. */
-    fun scheduledRouteId(): String? =
-        preferences.getString(KEY_ROUTE, null)?.takeIf {
+    /** Expired best-effort work must not block a new trip if Doze never wakes the worker. */
+    fun scheduledRouteId(): String? {
+        val route = preferences.getString(KEY_ROUTE, null)?.takeIf {
             it.isNotBlank() && !preferences.getString(KEY_TOKEN, null).isNullOrEmpty()
-        }
+        } ?: return null
+        val start = preferences.getLong(KEY_START, -1L)
+        val now = System.currentTimeMillis()
+        // Mirror the worker's two-minute freshness cutoff. Older records without a
+        // valid start remain cancellable rather than silently disappearing.
+        return route.takeUnless { start > 0L && now > start && now - start > 120_000L }
+    }
+
+    /** Refuse to silently replace a different trip's still-valid opt-in reminder. */
+    internal fun hasConflictingActiveReminder(routeId: String): Boolean =
+        scheduledRouteId()?.let { it != routeId } == true
 
     fun isScheduledForRoute(routeId: String): Boolean =
         routeId.isNotBlank() && scheduledRouteId() == routeId
@@ -65,7 +75,8 @@ internal class PlannedWalkReminderScheduler(private val context: Context) {
 
     /** Call on an IO dispatcher: enqueue completion is awaited before claiming success. */
     fun schedule(option: RouteOption, bufferMinutes: Int): Boolean {
-        if (option.id.isBlank() || !notificationPermissionGranted(context)) return false
+        if (option.id.isBlank() || hasConflictingActiveReminder(option.id) ||
+            !notificationPermissionGranted(context)) return false
         val start = plannedWalkStartEpochMillis(option, bufferMinutes) ?: return false
         val delay = plannedWalkReminderDelayMillis(option, System.currentTimeMillis(), bufferMinutes)
             ?: return false

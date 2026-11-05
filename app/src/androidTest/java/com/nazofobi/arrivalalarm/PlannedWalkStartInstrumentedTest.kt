@@ -516,6 +516,65 @@ class PlannedWalkStartInstrumentedTest {
         rule.onNodeWithTag("route-walk-reminder-settings").assertExists()
     }
 
+    @Test fun overdueReminderDoesNotBlockNextTripAfterWorkerFreshnessWindow() {
+        val context = androidx.test.platform.app.InstrumentationRegistry
+            .getInstrumentation().targetContext
+        val preferences = context.getSharedPreferences(
+            PlannedWalkReminderScheduler.PREFS, android.content.Context.MODE_PRIVATE)
+        preferences.edit().clear()
+            .putString(PlannedWalkReminderScheduler.KEY_TOKEN, "expired-token")
+            .putString(PlannedWalkReminderScheduler.KEY_ROUTE, "previous-gtfs-route")
+            .putString(PlannedWalkReminderScheduler.KEY_DETAILS_TOKEN, "expired-token")
+            .putString(PlannedWalkReminderScheduler.KEY_STOP, "Previous Stop")
+            .putLong(PlannedWalkReminderScheduler.KEY_START,
+                System.currentTimeMillis() - 180_000L)
+            .commit()
+        try {
+            val scheduler = PlannedWalkReminderScheduler(context)
+            assertEquals(null, scheduler.scheduledRouteId())
+            assertEquals(null, scheduler.scheduledDetails())
+            show(nearFutureDeparture(), 600)
+            rule.onNodeWithTag("route-walk-reminder-other-route").assertDoesNotExist()
+            rule.onNodeWithTag("route-walk-reminder-toggle").assertIsEnabled()
+        } finally {
+            preferences.edit().clear().commit()
+        }
+    }
+
+    @Test fun schedulerRefusesToReplaceAnotherTripsStillCurrentReminder() {
+        val context = androidx.test.platform.app.InstrumentationRegistry
+            .getInstrumentation().targetContext
+        val preferences = context.getSharedPreferences(
+            PlannedWalkReminderScheduler.PREFS, android.content.Context.MODE_PRIVATE)
+        preferences.edit().clear()
+            .putString(PlannedWalkReminderScheduler.KEY_TOKEN, "preserve-token")
+            .putString(PlannedWalkReminderScheduler.KEY_ROUTE, "previous-gtfs-route")
+            .putLong(PlannedWalkReminderScheduler.KEY_START,
+                System.currentTimeMillis() + 300_000L)
+            .commit()
+        try {
+            val scheduler = PlannedWalkReminderScheduler(context)
+            assertTrue(scheduler.hasConflictingActiveReminder("different-route"))
+            assertTrue(!scheduler.hasConflictingActiveReminder("previous-gtfs-route"))
+            val option = RouteOption(
+                id = "different-route", origin = MapPoint(52.67, 8.24, "Lohne"),
+                destination = MapPoint(53.08, 8.81, "Bremen"),
+                line = "RE", direction = "Bremen", departure = "10:30",
+                arrival = "11:30", walkingMinutes = 10, transfers = 0,
+                stops = listOf(RouteStop(id = "stop-1", name = "Lohne",
+                    plannedDeparture = nearFutureDeparture())),
+                accessWalking = RouteWalkingLegEvidence("stop-1", "Lohne", 600),
+            )
+            assertTrue(!scheduler.schedule(option, 0))
+            assertEquals("preserve-token", preferences.getString(
+                PlannedWalkReminderScheduler.KEY_TOKEN, null))
+            assertEquals("previous-gtfs-route", preferences.getString(
+                PlannedWalkReminderScheduler.KEY_ROUTE, null))
+        } finally {
+            preferences.edit().clear().commit()
+        }
+    }
+
     @Test fun onlyMutedAndroidChannelIsRejectedWhenAppWideNotificationsAreOn() {
         val context = androidx.test.platform.app.InstrumentationRegistry
             .getInstrumentation().targetContext
